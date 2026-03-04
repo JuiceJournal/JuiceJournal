@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply antialiased;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded font-medium transition-colors;
+  }
+  
+  .btn-primary {
+    @apply bg-poe-gold text-poe-dark hover:bg-poe-gold-dark;
+  }
+  
+  .btn-secondary {
+    @apply bg-poe-card text-gray-300 border border-poe-border hover:bg-poe-border;
+  }
+  
+  .card {
+    @apply bg-poe-card rounded-lg p-6;
+  }
+  
+  .input {
+    @apply w-full bg-poe-darker border border-poe-border rounded px-3 py-2 text-white 
+           focus:border-poe-gold focus:outline-none;
+  }
+  
+  .input::placeholder {
+    @apply text-gray-500;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #444;
+}
+
+/* Selection */
+::selection {
+  background: #d4a853;
+  color: #1a1a1a;
+}
+
+/* Focus visible */
+:focus-visible {
+  outline: 2px solid #d4a853;
+  outline-offset: 2px;
+}

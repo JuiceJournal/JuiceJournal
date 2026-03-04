@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PoE Farm Tracker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <span class="logo-icon">💰</span>
+        <h1>PoE Farm Tracker</h1>
+      </div>
+      <nav class="nav">
+        <button class="nav-btn active" data-page="dashboard">Dashboard</button>
+        <button class="nav-btn" data-page="sessions">Session'lar</button>
+        <button class="nav-btn" data-page="settings">Ayarlar</button>
+      </nav>
+      <div class="user-info">
+        <span id="username">Misafir</span>
+        <button id="logout-btn" class="btn btn-small">Cikis</button>
+      </div>
+    </header>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal">
+      <div class="modal-content">
+        <h2>Giris Yap</h2>
+        <form id="login-form">
+          <div class="form-group">
+            <label for="login-username">Kullanici Adi veya Email</label>
+            <input type="text" id="login-username" required>
+          </div>
+          <div class="form-group">
+            <label for="login-password">Sifre</label>
+            <input type="password" id="login-password" required>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Giris Yap</button>
+            <button type="button" class="btn btn-link" id="show-register">Hesap Olustur</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Register Modal -->
+    <div id="register-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Hesap Olustur</h2>
+        <form id="register-form">
+          <div class="form-group">
+            <label for="register-username">Kullanici Adi</label>
+            <input type="text" id="register-username" required minlength="3">
+          </div>
+          <div class="form-group">
+            <label for="register-email">Email</label>
+            <input type="email" id="register-email" required>
+          </div>
+          <div class="form-group">
+            <label for="register-password">Sifre</label>
+            <input type="password" id="register-password" required minlength="6">
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Kayit Ol</button>
+            <button type="button" class="btn btn-link" id="show-login">Giris Yap</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main">
+      <!-- Dashboard Page -->
+      <section id="dashboard-page" class="page active">
+        <div class="dashboard-grid">
+          <!-- Aktif Session Karti -->
+          <div class="card session-card">
+            <h3>Aktif Map Session</h3>
+            <div id="active-session">
+              <p class="empty-state">Aktif map yok</p>
+            </div>
+            <div class="session-actions">
+              <button id="start-session-btn" class="btn btn-primary">Yeni Map Baslat</button>
+              <button id="end-session-btn" class="btn btn-danger hidden">Map'i Bitir</button>
+            </div>
+          </div>
+
+          <!-- Hizli Istatistikler -->
+          <div class="card stats-card">
+            <h3>Bugunku Ozet</h3>
+            <div class="stats-grid">
+              <div class="stat">
+                <span class="stat-value" id="today-sessions">0</span>
+                <span class="stat-label">Map</span>
+              </div>
+              <div class="stat">
+                <span class="stat-value" id="today-profit">0c</span>
+                <span class="stat-label">Kâr</span>
+              </div>
+              <div class="stat">
+                <span class="stat-value" id="today-avg">0c</span>
+                <span class="stat-label">Ort/Map</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hizli Loot Ekle -->
+          <div class="card quick-loot-card">
+            <h3>Hizli Loot Ekle</h3>
+            <p>F9 kisayolu ile stash ekranini tarayabilirsiniz.</p>
+            <button id="scan-screen-btn" class="btn btn-secondary">Ekrani Tara</button>
+          </div>
+
+          <!-- Son Loot'lar -->
+          <div class="card recent-loot-card">
+            <h3>Son Eklenen Loot'lar</h3>
+            <div id="recent-loot-list">
+              <p class="empty-state">Henüz loot eklenmedi</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sessions Page -->
+      <section id="sessions-page" class="page">
+        <div class="page-header">
+          <h2>Map Session'lari</h2>
+          <div class="filters">
+            <select id="session-filter">
+              <option value="all">Tümü</option>
+              <option value="active">Aktif</option>
+              <option value="completed">Tamamlanmis</option>
+              <option value="abandoned">Iptal Edilmis</option>
+            </select>
+          </div>
+        </div>
+        <div id="sessions-list" class="sessions-list">
+          <p class="empty-state">Henüz session yok</p>
+        </div>
+      </section>
+
+      <!-- Settings Page -->
+      <section id="settings-page" class="page">
+        <div class="settings-container">
+          <h2>Ayarlar</h2>
+          
+          <div class="settings-group">
+            <h3>API Baglantisi</h3>
+            <div class="form-group">
+              <label for="api-url">API URL</label>
+              <input type="url" id="api-url" placeholder="http://localhost:3001">
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <h3>Path of Exile</h3>
+            <div class="form-group">
+              <label for="poe-path">Client.txt Dosya Yolu</label>
+              <input type="text" id="poe-path" placeholder="C:/Path of Exile/logs/Client.txt">
+              <button id="browse-poe-path" class="btn btn-small">Gözat</button>
+            </div>
+            <div class="form-group checkbox">
+              <label>
+                <input type="checkbox" id="auto-start-session">
+                Otomatik session baslat
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <h3>Bildirimler</h3>
+            <div class="form-group checkbox">
+              <label>
+                <input type="checkbox" id="enable-notifications" checked>
+                Masaüstü bildirimlerini etkinlestir
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-actions">
+            <button id="save-settings" class="btn btn-primary">Kaydet</button>
+            <button id="reset-settings" class="btn btn-secondary">Varsayilanlara Sifirla</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Toast Bildirimleri -->
+    <div id="toast-container"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

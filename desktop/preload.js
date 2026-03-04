@@ -1,0 +1,51 @@
+/**
+ * Preload Script
+ * Renderer process ile main process arasinda givenli iletisim
+ */
+
+const { contextBridge, ipcRenderer } = require('electron');
+
+// API'yi expose et
+contextBridge.exposeInMainWorld('electronAPI', {
+  // Ayarlar
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  setSettings: (settings) => ipcRenderer.invoke('set-settings', settings),
+
+  // Session islemleri
+  startSession: (data) => ipcRenderer.invoke('start-session', data),
+  endSession: () => ipcRenderer.invoke('end-session'),
+  getCurrentSession: () => ipcRenderer.invoke('get-current-session'),
+
+  // Loot islemleri
+  addLoot: (data) => ipcRenderer.invoke('add-loot', data),
+  scanScreen: () => ipcRenderer.invoke('scan-screen'),
+
+  // Auth
+  login: (credentials) => ipcRenderer.invoke('login', credentials),
+  logout: () => ipcRenderer.invoke('logout'),
+
+  // Olay dinleyicileri
+  onMapEntered: (callback) => {
+    ipcRenderer.on('map-entered', (event, data) => callback(data));
+  },
+  onMapExited: (callback) => {
+    ipcRenderer.on('map-exited', (event, data) => callback(data));
+  },
+  onSessionStarted: (callback) => {
+    ipcRenderer.on('session-started', (event, data) => callback(data));
+  },
+  onSessionEnded: (callback) => {
+    ipcRenderer.on('session-ended', (event, data) => callback(data));
+  },
+  onLootAdded: (callback) => {
+    ipcRenderer.on('loot-added', (event, data) => callback(data));
+  },
+  onNavigate: (callback) => {
+    ipcRenderer.on('navigate', (event, page) => callback(page));
+  },
+
+  // Dinleyicileri temizle
+  removeAllListeners: (channel) => {
+    ipcRenderer.removeAllListeners(channel);
+  }
+});
