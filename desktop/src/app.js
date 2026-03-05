@@ -3,6 +3,9 @@
  * Renderer process logic
  */
 
+// Global app state for i18n
+window._appState = { language: 'tr' };
+
 // Durum yonetimi
 const state = {
   currentUser: null,
@@ -45,12 +48,24 @@ const elements = {
   poePath: document.getElementById('poe-path'),
   autoStartSession: document.getElementById('auto-start-session'),
   enableNotifications: document.getElementById('enable-notifications'),
+  soundNotifications: document.getElementById('sound-notifications'),
+  defaultLeague: document.getElementById('default-league'),
+  scanHotkey: document.getElementById('scan-hotkey'),
+  testConnection: document.getElementById('test-connection'),
+  connectionDot: document.getElementById('connection-dot'),
+  connectionText: document.getElementById('connection-text'),
   saveSettingsBtn: document.getElementById('save-settings'),
   resetSettingsBtn: document.getElementById('reset-settings'),
+  settingsNavBtns: document.querySelectorAll('.settings-nav-btn'),
+  settingsTabs: document.querySelectorAll('.settings-tab'),
+  langBtns: document.querySelectorAll('.lang-btn'),
+  versionBtns: document.querySelectorAll('.version-btn'),
   
   // User
   username: document.getElementById('username'),
+  userAvatar: document.getElementById('user-avatar'),
   logoutBtn: document.getElementById('logout-btn'),
+  sessionBadge: document.getElementById('session-badge'),
   
   // Toast
   toastContainer: document.getElementById('toast-container')
@@ -61,10 +76,14 @@ const elements = {
  */
 async function init() {
   console.log('PoE Farm Tracker Desktop baslatiliyor...');
-  
+
   // Ayarlari yukle
   await loadSettings();
-  
+
+  // Set language from settings and apply translations
+  window._appState.language = state.settings.language || 'tr';
+  if (window.applyTranslations) window.applyTranslations();
+
   // Event listener'lari kur
   setupEventListeners();
   setupIPCListeners();
@@ -97,12 +116,27 @@ async function init() {
 async function loadSettings() {
   try {
     state.settings = await window.electronAPI.getSettings();
-    
+
     // Settings formunu doldur
-    elements.apiUrl.value = state.settings.apiUrl || '';
-    elements.poePath.value = state.settings.poePath || '';
-    elements.autoStartSession.checked = state.settings.autoStartSession || false;
-    elements.enableNotifications.checked = state.settings.notifications !== false;
+    if (elements.apiUrl) elements.apiUrl.value = state.settings.apiUrl || '';
+    if (elements.poePath) elements.poePath.value = state.settings.poePath || '';
+    if (elements.autoStartSession) elements.autoStartSession.checked = state.settings.autoStartSession || false;
+    if (elements.enableNotifications) elements.enableNotifications.checked = state.settings.notifications !== false;
+    if (elements.soundNotifications) elements.soundNotifications.checked = state.settings.soundNotifications || false;
+    if (elements.defaultLeague) elements.defaultLeague.value = state.settings.defaultLeague || '';
+    if (elements.scanHotkey) elements.scanHotkey.value = state.settings.scanHotkey || 'F9';
+
+    // Language buttons
+    const lang = state.settings.language || 'tr';
+    elements.langBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.lang === lang);
+    });
+
+    // PoE version buttons
+    const ver = state.settings.poeVersion || 'poe1';
+    elements.versionBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.version === ver);
+    });
   } catch (error) {
     console.error('Ayarlari yukleme hatasi:', error);
   }
@@ -140,6 +174,54 @@ function setupEventListeners() {
   // Settings
   elements.saveSettingsBtn.addEventListener('click', handleSaveSettings);
   elements.resetSettingsBtn.addEventListener('click', handleResetSettings);
+
+  // Settings tab navigation
+  elements.settingsNavBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.settingsTab;
+      elements.settingsNavBtns.forEach(b => {
+        b.classList.toggle('active', b === btn);
+        b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+      });
+      elements.settingsTabs.forEach(t => {
+        t.classList.toggle('active', t.id === 'settings-' + tab);
+      });
+    });
+  });
+
+  // Language switching
+  elements.langBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      elements.langBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const lang = btn.dataset.lang;
+      state.settings.language = lang;
+      window._appState.language = lang;
+      if (window.applyTranslations) window.applyTranslations();
+    });
+  });
+
+  // PoE version switching
+  elements.versionBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      elements.versionBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.settings.poeVersion = btn.dataset.version;
+    });
+  });
+
+  // Test connection
+  if (elements.testConnection) {
+    elements.testConnection.addEventListener('click', handleTestConnection);
+  }
+
+  // Window controls
+  const winMin = document.getElementById('win-minimize');
+  const winMax = document.getElementById('win-maximize');
+  const winClose = document.getElementById('win-close');
+  if (winMin) winMin.addEventListener('click', () => window.electronAPI.windowMinimize());
+  if (winMax) winMax.addEventListener('click', () => window.electronAPI.windowMaximize());
+  if (winClose) winClose.addEventListener('click', () => window.electronAPI.windowClose());
 }
 
 /**
@@ -236,12 +318,12 @@ async function handleLogin(e) {
     if (result.success) {
       setCurrentUser(result.data.user);
       elements.loginModal.classList.add('hidden');
-      showToast('Giris Basarili', 'Hosgeldiniz!');
+      showToast(window.t('login.title'), window.t('toast.loginSuccess'));
     } else {
-      showToast('Giris Basarisiz', result.error, 'error');
+      showToast(window.t('toast.loginFailed'), result.error, 'error');
     }
   } catch (error) {
-    showToast('Hata', error.message || 'Giris sirasinda hata olustu', 'error');
+    showToast(window.t('toast.error'), error.message, 'error');
   }
 }
 
@@ -261,12 +343,12 @@ async function handleRegister(e) {
     if (result.success) {
       setCurrentUser(result.data.user);
       elements.registerModal.classList.add('hidden');
-      showToast('Kayit Basarili', 'Hesabiniz olusturuldu!');
+      showToast(window.t('register.title'), window.t('toast.registerSuccess'));
     } else {
-      showToast('Kayit Basarisiz', result.error, 'error');
+      showToast(window.t('toast.registerFailed'), result.error, 'error');
     }
   } catch (error) {
-    showToast('Hata', error.message || 'Kayit sirasinda hata olustu', 'error');
+    showToast(window.t('toast.error'), error.message, 'error');
   }
 }
 
@@ -276,7 +358,8 @@ async function handleRegister(e) {
 async function handleLogout() {
   await window.electronAPI.logout();
   state.currentUser = null;
-  elements.username.textContent = 'Misafir';
+  elements.username.textContent = window.t('user.guest');
+  if (elements.userAvatar) elements.userAvatar.textContent = '?';
   showLoginModal();
 }
 
@@ -286,13 +369,16 @@ async function handleLogout() {
 function setCurrentUser(user) {
   state.currentUser = user;
   elements.username.textContent = user.username;
+  if (elements.userAvatar) {
+    elements.userAvatar.textContent = user.username.charAt(0).toUpperCase();
+  }
 }
 
 /**
  * Session baslat
  */
 async function handleStartSession() {
-  const mapName = prompt('Map adini girin:', 'Dunes Map');
+  const mapName = prompt(window.t('misc.mapPrompt'), 'Dunes Map');
   if (!mapName) return;
   
   try {
@@ -300,10 +386,10 @@ async function handleStartSession() {
     if (session) {
       state.currentSession = session;
       updateActiveSessionUI();
-      showToast('Session Basladi', `${mapName} baslatildi`);
+      showToast(window.t('dashboard.activeSession'), `${mapName} ${window.t('toast.sessionStarted')}`);
     }
   } catch (error) {
-    showToast('Hata', 'Session baslatilamadi', 'error');
+    showToast(window.t('toast.error'), window.t('toast.sessionError'), 'error');
   }
 }
 
@@ -313,14 +399,14 @@ async function handleStartSession() {
 async function handleEndSession() {
   if (!state.currentSession) return;
   
-  if (!confirm('Mevcut map session\'ini bitirmek istiyor musunuz?')) return;
+  if (!confirm(window.t('misc.endSessionConfirm'))) return;
   
   try {
     await window.electronAPI.endSession();
     state.currentSession = null;
     updateActiveSessionUI();
   } catch (error) {
-    showToast('Hata', 'Session bitirilemedi', 'error');
+    showToast(window.t('toast.error'), window.t('toast.endSessionError'), 'error');
   }
 }
 
@@ -342,29 +428,39 @@ function updateActiveSessionUI() {
     elements.activeSession.innerHTML = `
       <div class="session-info">
         <div class="session-info-item">
-          <span class="session-info-label">Map</span>
+          <span class="session-info-label">${window.t('session.map')}</span>
           <span class="session-info-value">${state.currentSession.mapName}</span>
         </div>
         <div class="session-info-item">
-          <span class="session-info-label">Tier</span>
+          <span class="session-info-label">${window.t('session.tier')}</span>
           <span class="session-info-value">${state.currentSession.mapTier || '-'}</span>
         </div>
         <div class="session-info-item">
-          <span class="session-info-label">Baslangic</span>
+          <span class="session-info-label">${window.t('session.start')}</span>
           <span class="session-info-value">${new Date(state.currentSession.startedAt).toLocaleTimeString()}</span>
         </div>
         <div class="session-info-item">
-          <span class="session-info-label">Durum</span>
-          <span class="session-info-value" style="color: #2196f3;">Aktif</span>
+          <span class="session-info-label">${window.t('session.status')}</span>
+          <span class="session-info-value" style="color: #2196f3;">${window.t('dashboard.active')}</span>
         </div>
       </div>
     `;
     elements.startSessionBtn.classList.add('hidden');
     elements.endSessionBtn.classList.remove('hidden');
+    if (elements.sessionBadge) {
+      elements.sessionBadge.textContent = window.t('dashboard.active');
+      elements.sessionBadge.style.background = 'rgba(61,220,132,0.12)';
+      elements.sessionBadge.style.color = '#3ddc84';
+    }
   } else {
-    elements.activeSession.innerHTML = '<p class="empty-state">Aktif map yok</p>';
+    elements.activeSession.innerHTML = `<p class="empty-state"><span class="empty-state-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></span>${window.t('dashboard.noActiveMap')}</p>`;
     elements.startSessionBtn.classList.remove('hidden');
     elements.endSessionBtn.classList.add('hidden');
+    if (elements.sessionBadge) {
+      elements.sessionBadge.textContent = window.t('dashboard.waiting');
+      elements.sessionBadge.style.background = '';
+      elements.sessionBadge.style.color = '';
+    }
   }
 }
 
@@ -373,21 +469,21 @@ function updateActiveSessionUI() {
  */
 async function handleScanScreen() {
   if (!state.currentSession) {
-    showToast('Hata', 'Once bir map session baslatin', 'warning');
+    showToast(window.t('toast.error'), window.t('toast.noSession'), 'warning');
     return;
   }
   
   elements.scanScreenBtn.disabled = true;
-  elements.scanScreenBtn.textContent = 'Taraniyor...';
+  elements.scanScreenBtn.textContent = window.t('dashboard.scanning');
   
   try {
     await window.electronAPI.scanScreen();
-    showToast('Tarama Tamamlandi', 'Loot basariyla eklendi');
+    showToast(window.t('dashboard.scanScreen'), window.t('toast.scanComplete'));
   } catch (error) {
-    showToast('Hata', 'Tarama sirasinda hata olustu', 'error');
+    showToast(window.t('toast.error'), window.t('toast.scanError'), 'error');
   } finally {
     elements.scanScreenBtn.disabled = false;
-    elements.scanScreenBtn.textContent = 'Ekrani Tara';
+    elements.scanScreenBtn.textContent = window.t('dashboard.scanScreen');
   }
 }
 
@@ -398,7 +494,7 @@ async function loadSessions() {
   const filter = elements.sessionFilter.value;
   // Not: Gercek implementasyonda API'den cekilecek
   // Su an placeholder
-  elements.sessionsList.innerHTML = '<p class="empty-state">Session listesi yukleniyor...</p>';
+  elements.sessionsList.innerHTML = `<p class="empty-state">${window.t('sessions.loading')}</p>`;
 }
 
 /**
@@ -423,19 +519,27 @@ async function loadRecentLoot() {
  * Ayarlari kaydet
  */
 async function handleSaveSettings() {
+  const activeLang = document.querySelector('.lang-btn.active');
+  const activeVersion = document.querySelector('.version-btn.active');
+
   const settings = {
     apiUrl: elements.apiUrl.value,
     poePath: elements.poePath.value,
     autoStartSession: elements.autoStartSession.checked,
-    notifications: elements.enableNotifications.checked
+    notifications: elements.enableNotifications.checked,
+    soundNotifications: elements.soundNotifications ? elements.soundNotifications.checked : false,
+    language: activeLang ? activeLang.dataset.lang : 'tr',
+    poeVersion: activeVersion ? activeVersion.dataset.version : 'poe1',
+    defaultLeague: elements.defaultLeague ? elements.defaultLeague.value : '',
+    scanHotkey: elements.scanHotkey ? elements.scanHotkey.value : 'F9'
   };
-  
+
   try {
     await window.electronAPI.setSettings(settings);
     state.settings = { ...state.settings, ...settings };
-    showToast('Ayarlar', 'Ayarlar basariyla kaydedildi');
+    showToast(window.t('nav.settings'), window.t('toast.settingsSaved'));
   } catch (error) {
-    showToast('Hata', 'Ayarlar kaydedilemedi', 'error');
+    showToast(window.t('toast.error'), window.t('toast.settingsError'), 'error');
   }
 }
 
@@ -443,14 +547,53 @@ async function handleSaveSettings() {
  * Ayarlari sifirla
  */
 async function handleResetSettings() {
-  if (!confirm('Tum ayarlari varsayilan degerlere sifirlamak istiyor musunuz?')) return;
-  
+  if (!confirm(window.t('settings.resetConfirm'))) return;
+
   elements.apiUrl.value = 'http://localhost:3001';
   elements.poePath.value = '';
   elements.autoStartSession.checked = true;
   elements.enableNotifications.checked = true;
-  
+  if (elements.soundNotifications) elements.soundNotifications.checked = false;
+  if (elements.defaultLeague) elements.defaultLeague.value = '';
+  if (elements.scanHotkey) elements.scanHotkey.value = 'F9';
+
+  // Reset language to TR
+  elements.langBtns.forEach(b => b.classList.toggle('active', b.dataset.lang === 'tr'));
+  window._appState.language = 'tr';
+  if (window.applyTranslations) window.applyTranslations();
+
+  // Reset PoE version to poe1
+  elements.versionBtns.forEach(b => b.classList.toggle('active', b.dataset.version === 'poe1'));
+
   await handleSaveSettings();
+}
+
+/**
+ * API baglantisini test et
+ */
+async function handleTestConnection() {
+  const btn = elements.testConnection;
+  const origText = btn.textContent;
+  btn.textContent = window.t('settings.testing');
+  btn.disabled = true;
+
+  try {
+    const response = await fetch(elements.apiUrl.value + '/api/health');
+    if (response.ok) {
+      elements.connectionDot.classList.add('connected');
+      elements.connectionText.textContent = window.t('settings.connected');
+      showToast(window.t('settings.api'), window.t('toast.connectionSuccess'), 'success');
+    } else {
+      throw new Error('Not OK');
+    }
+  } catch {
+    elements.connectionDot.classList.remove('connected');
+    elements.connectionText.textContent = window.t('settings.disconnected');
+    showToast(window.t('settings.api'), window.t('toast.connectionFailed'), 'error');
+  } finally {
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
 }
 
 /**
@@ -480,7 +623,7 @@ function formatDuration(seconds) {
   if (!seconds) return '-';
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
-  return `${mins}dk ${secs}sn`;
+  return `${mins}${window.t('misc.durationMin')} ${secs}${window.t('misc.durationSec')}`;
 }
 
 // Uygulamayi baslat

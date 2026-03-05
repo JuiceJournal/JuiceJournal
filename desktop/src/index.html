@@ -8,64 +8,94 @@
 </head>
 <body>
   <div id="app">
-    <!-- Header -->
+    <!-- Header / Custom Titlebar -->
     <header class="header">
       <div class="logo">
-        <span class="logo-icon">💰</span>
-        <h1>PoE Farm Tracker</h1>
+        <div class="logo-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0d0e12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+        <h1>PoE <span>Farm</span></h1>
       </div>
-      <nav class="nav">
-        <button class="nav-btn active" data-page="dashboard">Dashboard</button>
-        <button class="nav-btn" data-page="sessions">Session'lar</button>
-        <button class="nav-btn" data-page="settings">Ayarlar</button>
+      <nav class="nav" role="navigation" aria-label="Ana navigasyon">
+        <button class="nav-btn active" data-page="dashboard" data-i18n="nav.dashboard">Dashboard</button>
+        <button class="nav-btn" data-page="sessions" data-i18n="nav.sessions">Session'lar</button>
+        <button class="nav-btn" data-page="settings" data-i18n="nav.settings">Ayarlar</button>
       </nav>
       <div class="user-info">
-        <span id="username">Misafir</span>
-        <button id="logout-btn" class="btn btn-small">Cikis</button>
+        <span id="username" data-i18n="user.guest">Misafir</span>
+        <div class="user-avatar" id="user-avatar">?</div>
+        <button id="logout-btn" class="btn btn-ghost btn-small" aria-label="Cikis yap" data-i18n="user.logout">Cikis</button>
+      </div>
+      <div class="window-controls">
+        <button class="win-ctrl" id="win-minimize" aria-label="Kucult">
+          <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5" width="12" height="1.5" rx="0.75" fill="currentColor"/></svg>
+        </button>
+        <button class="win-ctrl" id="win-maximize" aria-label="Buyut">
+          <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        </button>
+        <button class="win-ctrl win-close" id="win-close" aria-label="Kapat">
+          <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
       </div>
     </header>
 
     <!-- Login Modal -->
-    <div id="login-modal" class="modal">
+    <div id="login-modal" class="modal" role="dialog" aria-label="Giris yap">
       <div class="modal-content">
-        <h2>Giris Yap</h2>
+        <div class="modal-logo">
+          <div class="modal-logo-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d0e12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <span>PoE Farm Tracker</span>
+        </div>
+        <h2 data-i18n="login.title">Giris Yap</h2>
+        <p class="modal-subtitle" data-i18n="login.subtitle">Hesabiniza giris yaparak devam edin</p>
         <form id="login-form">
           <div class="form-group">
-            <label for="login-username">Kullanici Adi veya Email</label>
-            <input type="text" id="login-username" required>
+            <label for="login-username" data-i18n="login.username">Kullanici Adi veya Email</label>
+            <input type="text" id="login-username" data-i18n-placeholder="login.usernamePlaceholder" placeholder="testuser" required>
           </div>
           <div class="form-group">
-            <label for="login-password">Sifre</label>
-            <input type="password" id="login-password" required>
+            <label for="login-password" data-i18n="login.password">Sifre</label>
+            <input type="password" id="login-password" data-i18n-placeholder="login.passwordPlaceholder" placeholder="Sifrenizi girin" required>
           </div>
           <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Giris Yap</button>
-            <button type="button" class="btn btn-link" id="show-register">Hesap Olustur</button>
+            <button type="submit" class="btn btn-primary" data-i18n="login.submit">Giris Yap</button>
+            <div class="form-divider" data-i18n="login.or">veya</div>
+            <button type="button" class="btn btn-secondary" id="show-register" data-i18n="login.createAccount">Yeni Hesap Olustur</button>
           </div>
         </form>
       </div>
     </div>
 
     <!-- Register Modal -->
-    <div id="register-modal" class="modal hidden">
+    <div id="register-modal" class="modal hidden" role="dialog" aria-label="Hesap olustur">
       <div class="modal-content">
-        <h2>Hesap Olustur</h2>
+        <div class="modal-logo">
+          <div class="modal-logo-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d0e12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <span>PoE Farm Tracker</span>
+        </div>
+        <h2 data-i18n="register.title">Hesap Olustur</h2>
+        <p class="modal-subtitle" data-i18n="register.subtitle">Yeni bir hesap olusturun</p>
         <form id="register-form">
           <div class="form-group">
-            <label for="register-username">Kullanici Adi</label>
-            <input type="text" id="register-username" required minlength="3">
+            <label for="register-username" data-i18n="register.username">Kullanici Adi</label>
+            <input type="text" id="register-username" data-i18n-placeholder="register.usernamePlaceholder" placeholder="En az 3 karakter" required minlength="3">
           </div>
           <div class="form-group">
-            <label for="register-email">Email</label>
-            <input type="email" id="register-email" required>
+            <label for="register-email" data-i18n="register.email">Email</label>
+            <input type="email" id="register-email" data-i18n-placeholder="register.emailPlaceholder" placeholder="ornek@email.com" required>
           </div>
           <div class="form-group">
-            <label for="register-password">Sifre</label>
-            <input type="password" id="register-password" required minlength="6">
+            <label for="register-password" data-i18n="register.password">Sifre</label>
+            <input type="password" id="register-password" data-i18n-placeholder="register.passwordPlaceholder" placeholder="En az 6 karakter" required minlength="6">
           </div>
           <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Kayit Ol</button>
-            <button type="button" class="btn btn-link" id="show-login">Giris Yap</button>
+            <button type="submit" class="btn btn-primary" data-i18n="register.submit">Kayit Ol</button>
+            <div class="form-divider" data-i18n="register.or">veya</div>
+            <button type="button" class="btn btn-secondary" id="show-login" data-i18n="register.login">Giris Yap</button>
           </div>
         </form>
       </div>
@@ -76,49 +106,97 @@
       <!-- Dashboard Page -->
       <section id="dashboard-page" class="page active">
         <div class="dashboard-grid">
-          <!-- Aktif Session Karti -->
+          <!-- Active Session -->
           <div class="card session-card">
-            <h3>Aktif Map Session</h3>
+            <div class="card-header">
+              <h3 data-i18n="dashboard.activeSession">Aktif Map Session</h3>
+              <span class="card-badge" id="session-badge" data-i18n="dashboard.waiting">Bekleniyor</span>
+            </div>
             <div id="active-session">
-              <p class="empty-state">Aktif map yok</p>
+              <p class="empty-state">
+                <span class="empty-state-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                </span>
+                Aktif map yok
+              </p>
             </div>
             <div class="session-actions">
-              <button id="start-session-btn" class="btn btn-primary">Yeni Map Baslat</button>
-              <button id="end-session-btn" class="btn btn-danger hidden">Map'i Bitir</button>
+              <button id="start-session-btn" class="btn btn-primary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span data-i18n="dashboard.newMap">Yeni Map Baslat</span>
+              </button>
+              <button id="end-session-btn" class="btn btn-danger hidden">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                <span data-i18n="dashboard.endMap">Map'i Bitir</span>
+              </button>
             </div>
           </div>
 
-          <!-- Hizli Istatistikler -->
+          <!-- Today Stats -->
           <div class="card stats-card">
-            <h3>Bugunku Ozet</h3>
+            <div class="card-header">
+              <h3 data-i18n="dashboard.todaySummary">Bugunku Ozet</h3>
+            </div>
             <div class="stats-grid">
               <div class="stat">
+                <div class="stat-left">
+                  <div class="stat-icon maps">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4c9aff" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                  </div>
+                  <span class="stat-label" data-i18n="dashboard.map">Map</span>
+                </div>
                 <span class="stat-value" id="today-sessions">0</span>
-                <span class="stat-label">Map</span>
               </div>
               <div class="stat">
+                <div class="stat-left">
+                  <div class="stat-icon profit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3ddc84" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                  </div>
+                  <span class="stat-label" data-i18n="dashboard.profit">Kar</span>
+                </div>
                 <span class="stat-value" id="today-profit">0c</span>
-                <span class="stat-label">Kâr</span>
               </div>
               <div class="stat">
+                <div class="stat-left">
+                  <div class="stat-icon avg">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff9100" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  </div>
+                  <span class="stat-label" data-i18n="dashboard.avgPerMap">Ort/Map</span>
+                </div>
                 <span class="stat-value" id="today-avg">0c</span>
-                <span class="stat-label">Ort/Map</span>
               </div>
             </div>
           </div>
 
-          <!-- Hizli Loot Ekle -->
+          <!-- Quick Loot -->
           <div class="card quick-loot-card">
-            <h3>Hizli Loot Ekle</h3>
-            <p>F9 kisayolu ile stash ekranini tarayabilirsiniz.</p>
-            <button id="scan-screen-btn" class="btn btn-secondary">Ekrani Tara</button>
+            <div class="card-header">
+              <h3 data-i18n="dashboard.quickLoot">Hizli Loot Ekle</h3>
+            </div>
+            <div class="quick-loot-content">
+              <span class="hotkey-badge">F9</span>
+              <div class="quick-loot-text">
+                <p data-i18n="dashboard.scanHint">Stash ekranini taramak icin kisayol tusunu kullanin veya butona basin.</p>
+              </div>
+              <button id="scan-screen-btn" class="btn btn-secondary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 4v-1a2 2 0 0 1 2-2h3M1 20v1a2 2 0 0 0 2 2h3M18 1h3a2 2 0 0 1 2 2v1M18 23h3a2 2 0 0 0 2-2v-1"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+                <span data-i18n="dashboard.scanScreen">Ekrani Tara</span>
+              </button>
+            </div>
           </div>
 
-          <!-- Son Loot'lar -->
+          <!-- Recent Loot -->
           <div class="card recent-loot-card">
-            <h3>Son Eklenen Loot'lar</h3>
+            <div class="card-header">
+              <h3 data-i18n="dashboard.recentLoot">Son Loot'lar</h3>
+            </div>
             <div id="recent-loot-list">
-              <p class="empty-state">Henüz loot eklenmedi</p>
+              <p class="empty-state">
+                <span class="empty-state-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                </span>
+                Henuz loot eklenmedi
+              </p>
             </div>
           </div>
         </div>
@@ -127,71 +205,220 @@
       <!-- Sessions Page -->
       <section id="sessions-page" class="page">
         <div class="page-header">
-          <h2>Map Session'lari</h2>
+          <h2 data-i18n="sessions.title">Map Session'lari</h2>
           <div class="filters">
             <select id="session-filter">
-              <option value="all">Tümü</option>
-              <option value="active">Aktif</option>
-              <option value="completed">Tamamlanmis</option>
-              <option value="abandoned">Iptal Edilmis</option>
+              <option value="all" data-i18n="sessions.all">Tumu</option>
+              <option value="active" data-i18n="sessions.active">Aktif</option>
+              <option value="completed" data-i18n="sessions.completed">Tamamlanmis</option>
+              <option value="abandoned" data-i18n="sessions.abandoned">Iptal Edilmis</option>
             </select>
           </div>
         </div>
         <div id="sessions-list" class="sessions-list">
-          <p class="empty-state">Henüz session yok</p>
+          <p class="empty-state">
+            <span class="empty-state-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            </span>
+            Henuz session yok
+          </p>
         </div>
       </section>
 
       <!-- Settings Page -->
       <section id="settings-page" class="page">
-        <div class="settings-container">
-          <h2>Ayarlar</h2>
-          
-          <div class="settings-group">
-            <h3>API Baglantisi</h3>
-            <div class="form-group">
-              <label for="api-url">API URL</label>
-              <input type="url" id="api-url" placeholder="http://localhost:3001">
-            </div>
-          </div>
+        <div class="settings-layout">
+          <!-- Settings Sidebar -->
+          <nav class="settings-nav" role="tablist" aria-label="Settings categories">
+            <button class="settings-nav-btn active" data-settings-tab="general" role="tab" aria-selected="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+              <span data-i18n="settings.general">Genel</span>
+            </button>
+            <button class="settings-nav-btn" data-settings-tab="poe" role="tab" aria-selected="false">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              <span data-i18n="settings.poe">Path of Exile</span>
+            </button>
+            <button class="settings-nav-btn" data-settings-tab="hotkeys" role="tab" aria-selected="false">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>
+              <span data-i18n="settings.hotkeys">Kisayollar</span>
+            </button>
+            <button class="settings-nav-btn" data-settings-tab="notifications" role="tab" aria-selected="false">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <span data-i18n="settings.notifications">Bildirimler</span>
+            </button>
+            <button class="settings-nav-btn" data-settings-tab="api" role="tab" aria-selected="false">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              <span data-i18n="settings.api">API Baglantisi</span>
+            </button>
+            <button class="settings-nav-btn" data-settings-tab="about" role="tab" aria-selected="false">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              <span data-i18n="settings.about">Hakkinda</span>
+            </button>
+          </nav>
 
-          <div class="settings-group">
-            <h3>Path of Exile</h3>
-            <div class="form-group">
-              <label for="poe-path">Client.txt Dosya Yolu</label>
-              <input type="text" id="poe-path" placeholder="C:/Path of Exile/logs/Client.txt">
-              <button id="browse-poe-path" class="btn btn-small">Gözat</button>
+          <!-- Settings Content -->
+          <div class="settings-content">
+            <!-- General Tab -->
+            <div class="settings-tab active" id="settings-general" role="tabpanel">
+              <div class="settings-group">
+                <h3 data-i18n="settings.language">Dil</h3>
+                <div class="form-group">
+                  <div class="language-select">
+                    <button class="lang-btn active" data-lang="tr">
+                      <span class="lang-flag">TR</span>
+                      Turkce
+                    </button>
+                    <button class="lang-btn" data-lang="en">
+                      <span class="lang-flag">EN</span>
+                      English
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="settings-group">
+                <h3 data-i18n="settings.league">Aktif Lig</h3>
+                <div class="form-group">
+                  <input type="text" id="default-league" data-i18n-placeholder="settings.leaguePlaceholder" placeholder="Standard">
+                </div>
+              </div>
             </div>
-            <div class="form-group checkbox">
-              <label>
-                <input type="checkbox" id="auto-start-session">
-                Otomatik session baslat
-              </label>
-            </div>
-          </div>
 
-          <div class="settings-group">
-            <h3>Bildirimler</h3>
-            <div class="form-group checkbox">
-              <label>
-                <input type="checkbox" id="enable-notifications" checked>
-                Masaüstü bildirimlerini etkinlestir
-              </label>
+            <!-- PoE Tab -->
+            <div class="settings-tab" id="settings-poe" role="tabpanel">
+              <div class="settings-group">
+                <h3 data-i18n="settings.poeVersion">PoE Versiyonu</h3>
+                <div class="form-group">
+                  <div class="poe-version-select">
+                    <button class="version-btn active" data-version="poe1">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/><line x1="12" y1="22" x2="12" y2="15.5"/><polyline points="22 8.5 12 15.5 2 8.5"/></svg>
+                      Path of Exile 1
+                    </button>
+                    <button class="version-btn" data-version="poe2">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/><line x1="12" y1="22" x2="12" y2="15.5"/><polyline points="22 8.5 12 15.5 2 8.5"/><line x1="2" y1="15.5" x2="22" y2="8.5"/></svg>
+                      Path of Exile 2
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="settings-group">
+                <h3 data-i18n="settings.clientTxtPath">Client.txt Dosya Yolu</h3>
+                <div class="form-group">
+                  <div class="input-with-btn">
+                    <input type="text" id="poe-path" placeholder="C:/Path of Exile/logs/Client.txt">
+                    <button id="browse-poe-path" class="btn btn-secondary btn-small" data-i18n="settings.browse">Gozat</button>
+                  </div>
+                </div>
+              </div>
+              <div class="settings-group">
+                <div class="form-group checkbox">
+                  <label>
+                    <input type="checkbox" id="auto-start-session">
+                    <span data-i18n="settings.autoStartSession">Yeni map girisinde otomatik session baslat</span>
+                  </label>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div class="settings-actions">
-            <button id="save-settings" class="btn btn-primary">Kaydet</button>
-            <button id="reset-settings" class="btn btn-secondary">Varsayilanlara Sifirla</button>
+            <!-- Hotkeys Tab -->
+            <div class="settings-tab" id="settings-hotkeys" role="tabpanel">
+              <div class="settings-group">
+                <h3 data-i18n="settings.scanHotkey">Loot Tarama</h3>
+                <p class="settings-desc" data-i18n="settings.scanHotkeyDesc">Stash ekranini taramak icin kullanilir</p>
+                <div class="form-group">
+                  <div class="hotkey-input">
+                    <span class="hotkey-badge" id="scan-hotkey-display">F9</span>
+                    <input type="text" id="scan-hotkey" value="F9" readonly class="hotkey-field">
+                  </div>
+                </div>
+              </div>
+              <div class="settings-group">
+                <h3 data-i18n="settings.stashScanHotkey">Stash Tarama</h3>
+                <p class="settings-desc" data-i18n="settings.stashScanHotkeyDesc">Alternatif stash tarama kisayolu</p>
+                <div class="form-group">
+                  <div class="hotkey-input">
+                    <span class="hotkey-badge">Ctrl+Shift+L</span>
+                    <input type="text" id="stash-scan-hotkey" value="Ctrl+Shift+L" readonly class="hotkey-field">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Notifications Tab -->
+            <div class="settings-tab" id="settings-notifications" role="tabpanel">
+              <div class="settings-group">
+                <div class="form-group checkbox">
+                  <label>
+                    <input type="checkbox" id="enable-notifications" checked>
+                    <span data-i18n="settings.desktopNotifications">Masaustu bildirimlerini etkinlestir</span>
+                  </label>
+                </div>
+                <div class="form-group checkbox">
+                  <label>
+                    <input type="checkbox" id="sound-notifications">
+                    <span data-i18n="settings.soundNotifications">Ses bildirimlerini etkinlestir</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- API Tab -->
+            <div class="settings-tab" id="settings-api" role="tabpanel">
+              <div class="settings-group">
+                <h3 data-i18n="settings.apiUrl">API URL</h3>
+                <div class="form-group">
+                  <input type="url" id="api-url" data-i18n-placeholder="settings.apiUrlPlaceholder" placeholder="http://localhost:3001">
+                </div>
+              </div>
+              <div class="settings-group">
+                <h3 data-i18n="settings.connectionStatus">Baglanti Durumu</h3>
+                <div class="connection-status">
+                  <div class="connection-dot" id="connection-dot"></div>
+                  <span id="connection-text" data-i18n="settings.disconnected">Baglanti Yok</span>
+                </div>
+                <button id="test-connection" class="btn btn-secondary btn-small" data-i18n="settings.testConnection">Baglantiyi Test Et</button>
+              </div>
+            </div>
+
+            <!-- About Tab -->
+            <div class="settings-tab" id="settings-about" role="tabpanel">
+              <div class="settings-group about-info">
+                <div class="about-logo">
+                  <div class="logo-icon large">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0d0e12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                  </div>
+                  <div>
+                    <h3>PoE Farm Tracker</h3>
+                    <span class="text-muted" data-i18n="settings.version">Versiyon</span> <span class="text-gold">1.0.0</span>
+                  </div>
+                </div>
+                <div class="about-links">
+                  <div class="about-row">
+                    <span data-i18n="settings.developer">Gelistirici</span>
+                    <span class="text-gold">PoeFarm Team</span>
+                  </div>
+                  <div class="about-row">
+                    <span data-i18n="settings.license">Lisans</span>
+                    <span class="text-muted">MIT</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Settings Actions (visible on all tabs) -->
+            <div class="settings-actions">
+              <button id="save-settings" class="btn btn-primary" data-i18n="settings.save">Kaydet</button>
+              <button id="reset-settings" class="btn btn-secondary" data-i18n="settings.reset">Varsayilanlara Sifirla</button>
+            </div>
           </div>
         </div>
       </section>
     </main>
 
-    <!-- Toast Bildirimleri -->
-    <div id="toast-container"></div>
+    <!-- Toast Notifications -->
+    <div id="toast-container" role="status" aria-live="polite"></div>
   </div>
 
+  <script src="modules/translations.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
