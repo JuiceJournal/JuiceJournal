@@ -25,7 +25,12 @@ const store = new Store({
     authToken: null,
     poePath: 'E:\\Grinding Gear Games\\Path of Exile\\logs\\Client.txt',
     autoStartSession: true,
-    notifications: true
+    notifications: true,
+    language: 'tr',
+    soundNotifications: false,
+    poeVersion: 'poe1',
+    defaultLeague: '',
+    scanHotkey: 'F9'
   }
 });
 
@@ -49,7 +54,9 @@ function createMainWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    show: false, // Ilk baslangicta gizli
+    show: false,
+    frame: false,
+    backgroundColor: '#0d0e12',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -406,6 +413,20 @@ function setupLogParser() {
  * IPC handler'lari tanimla
  */
 function setupIPC() {
+  // Window controls
+  ipcMain.handle('window-minimize', () => {
+    if (mainWindow) mainWindow.minimize();
+  });
+  ipcMain.handle('window-maximize', () => {
+    if (mainWindow) {
+      if (mainWindow.isMaximized()) mainWindow.unmaximize();
+      else mainWindow.maximize();
+    }
+  });
+  ipcMain.handle('window-close', () => {
+    if (mainWindow) mainWindow.close();
+  });
+
   // Ayarlari getir
   ipcMain.handle('get-settings', () => {
     return store.store;

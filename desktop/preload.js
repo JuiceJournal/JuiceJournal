@@ -7,6 +7,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // API'yi expose et
 contextBridge.exposeInMainWorld('electronAPI', {
+  // Window controls
+  windowMinimize: () => ipcRenderer.invoke('window-minimize'),
+  windowMaximize: () => ipcRenderer.invoke('window-maximize'),
+  windowClose: () => ipcRenderer.invoke('window-close'),
+
   // Ayarlar
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSettings: (settings) => ipcRenderer.invoke('set-settings', settings),
