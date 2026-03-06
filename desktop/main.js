@@ -26,13 +26,19 @@ const store = new Store({
     poePath: 'E:\\Grinding Gear Games\\Path of Exile\\logs\\Client.txt',
     autoStartSession: true,
     notifications: true,
-    language: 'tr',
+    language: 'en',
     soundNotifications: false,
     poeVersion: 'poe1',
     defaultLeague: '',
     scanHotkey: 'F9'
-  }
+  },
 });
+
+// Migrate old 'tr' default to 'en' (one-time)
+if (!store.get('_langMigrated')) {
+  store.set('language', 'en');
+  store.set('_langMigrated', true);
+}
 
 // Global degiskenler
 let mainWindow = null;

@@ -303,8 +303,8 @@ window.Translations = {
  * Get translation for a key
  */
 window.t = function(key) {
-  const lang = (window._appState && window._appState.language) || 'tr';
-  return window.Translations[lang]?.[key] || window.Translations['tr']?.[key] || key;
+  const lang = (window._appState && window._appState.language) || 'en';
+  return window.Translations[lang]?.[key] || window.Translations['en']?.[key] || key;
 };
 
 /**
@@ -320,6 +320,6 @@ window.applyTranslations = function() {
   document.querySelectorAll('[data-i18n-aria]').forEach(function(el) {
     el.setAttribute('aria-label', window.t(el.getAttribute('data-i18n-aria')));
   });
-  var lang = (window._appState && window._appState.language) || 'tr';
+  var lang = (window._appState && window._appState.language) || 'en';
   document.documentElement.lang = lang;
 };

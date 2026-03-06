@@ -4,12 +4,12 @@ import { Toaster } from 'react-hot-toast';
 
 export const metadata = {
   title: 'PoE Farm Tracker',
-  description: 'Path of Exile farm takip uygulamasi',
+  description: 'Path of Exile Farm Tracker',
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="tr">
+    <html lang="en">
       <body className="bg-poe-dark text-gray-100 min-h-screen">
         <AuthProvider>
           {children}
