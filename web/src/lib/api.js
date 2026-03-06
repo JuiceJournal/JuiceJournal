@@ -79,10 +79,10 @@ export const lootAPI = {
 
 export const priceAPI = {
   getCurrent: (params) => apiClient.get('/prices/current', { params }),
-  getItem: (itemName, league) => 
-    apiClient.get(`/prices/item/${encodeURIComponent(itemName)}`, { params: { league } }),
-  getTypes: () => apiClient.get('/prices/types'),
-  getLeagues: () => apiClient.get('/prices/leagues'),
+  getItem: (itemName, params) =>
+    apiClient.get(`/prices/item/${encodeURIComponent(itemName)}`, { params }),
+  getTypes: (params) => apiClient.get('/prices/types', { params }),
+  getLeagues: (params) => apiClient.get('/prices/leagues', { params }),
   sync: (data) => apiClient.post('/prices/sync', data),
 };
 

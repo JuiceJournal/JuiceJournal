@@ -12,6 +12,7 @@ export default function Navbar() {
   const navItems = [
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/dashboard/sessions', label: 'Session\'lar' },
+    { href: '/dashboard/currency', label: 'Currency' },
     { href: '/dashboard/leaderboard', label: 'Leaderboard' },
   ];
 
