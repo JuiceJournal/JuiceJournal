@@ -224,9 +224,9 @@ class APIClient {
   /**
    * Belirli item'in fiyatini getir
    */
-  async getItemPrice(itemName, league) {
+  async getItemPrice(itemName, params = {}) {
     const response = await this.client.get(`/api/prices/item/${encodeURIComponent(itemName)}`, {
-      params: { league }
+      params
     });
     return response.data?.price;
   }
@@ -234,11 +234,24 @@ class APIClient {
   /**
    * Fiyatlari senkronize et
    */
-  async syncPrices(league, types) {
-    const response = await this.client.post('/api/prices/sync', {
-      league,
-      types
-    });
+  async syncPrices(data = {}) {
+    const response = await this.client.post('/api/prices/sync', data);
+    return response.data;
+  }
+
+  /**
+   * Mevcut ligleri getir
+   */
+  async getLeagues(params = {}) {
+    const response = await this.client.get('/api/prices/leagues', { params });
+    return response.data;
+  }
+
+  /**
+   * Mevcut item tiplerini getir
+   */
+  async getTypes(params = {}) {
+    const response = await this.client.get('/api/prices/types', { params });
     return response.data;
   }
 

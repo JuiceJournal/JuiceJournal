@@ -86,6 +86,7 @@ async function init() {
 
   // Event listener'lari kur
   setupEventListeners();
+  setupCurrencyListeners();
   setupIPCListeners();
   
   // Mevcut kullaniciyi kontrol et
@@ -313,6 +314,8 @@ function navigateTo(page) {
     loadSessions();
   } else if (page === 'dashboard') {
     loadDashboardStats();
+  } else if (page === 'currency') {
+    loadCurrencyPage();
   }
 }
 
@@ -643,6 +646,289 @@ function showToast(title, message, type = 'info') {
     toast.style.animation = 'fadeOut 0.3s ease';
     setTimeout(() => toast.remove(), 300);
   }, 5000);
+}
+
+// ==================== CURRENCY PAGE ====================
+
+// PoE 1 item category types with representative icons
+const POE1_CATEGORY_TYPES = [
+  { value: '', label: 'All', icon: null },
+  { value: 'currency', label: 'Currency', icon: 'chaos' },
+  { value: 'fragment', label: 'Fragment', icon: 'vaal' },
+  { value: 'scarab', label: 'Scarab', icon: 'chance' },
+  { value: 'map', label: 'Map', icon: 'alchemy' },
+  { value: 'divination_card', label: 'Div Card', icon: 'divine' },
+  { value: 'gem', label: 'Gem', icon: 'gcp' },
+  { value: 'unique', label: 'Unique', icon: 'exalted' },
+  { value: 'oil', label: 'Oil', icon: 'blessed' },
+  { value: 'incubator', label: 'Incubator', icon: 'regret' },
+  { value: 'delirium_orb', label: 'Delirium Orb', icon: 'chromatic' },
+  { value: 'catalyst', label: 'Catalyst', icon: 'scouring' },
+  { value: 'other', label: 'Other', icon: 'alteration' },
+];
+
+// PoE 2 item category types with representative icons
+const POE2_CATEGORY_TYPES = [
+  { value: '', label: 'All', icon: null },
+  { value: 'currency', label: 'Currency', icon: 'exalted' },
+  { value: 'fragment', label: 'Fragment', icon: 'vaal' },
+  { value: 'scarab', label: 'Scarab', icon: 'chance' },
+  { value: 'map', label: 'Map', icon: 'alchemy' },
+  { value: 'divination_card', label: 'Div Card', icon: 'divine' },
+  { value: 'gem', label: 'Gem', icon: 'gcp' },
+  { value: 'unique', label: 'Unique', icon: 'mirror' },
+  { value: 'catalyst', label: 'Catalyst', icon: 'scouring' },
+  { value: 'other', label: 'Other', icon: 'alteration' },
+];
+
+const currencyState = {
+  poeVersion: 'poe1',
+  league: '',
+  type: '',
+  search: '',
+  sortField: 'chaosValue',
+  sortDir: 'desc',
+  prices: [],
+  searchTimer: null
+};
+
+function updateTypeFilterDropdown() {
+  const container = document.getElementById('currency-type-filter');
+  if (!container) return;
+  const types = currencyState.poeVersion === 'poe2' ? POE2_CATEGORY_TYPES : POE1_CATEGORY_TYPES;
+
+  // If current type doesn't exist in new version, reset
+  if (!types.find(t => t.value === currencyState.type)) {
+    currencyState.type = '';
+  }
+
+  container.innerHTML = types.map(t => {
+    const active = currencyState.type === t.value ? ' active' : '';
+    const iconHTML = t.icon
+      ? `<img src="assets/currency/${t.icon}.png" class="currency-tab-icon" width="14" height="14" draggable="false">`
+      : '';
+    return `<button class="currency-type-btn${active}" data-type="${t.value}">${iconHTML}<span>${t.label}</span></button>`;
+  }).join('');
+
+  // Bind click events
+  container.querySelectorAll('.currency-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.currency-type-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currencyState.type = btn.dataset.type;
+      loadCurrencyPrices();
+    });
+  });
+}
+
+function setupCurrencyListeners() {
+  // PoE version toggle
+  document.querySelectorAll('.poe-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.poe-toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currencyState.poeVersion = btn.dataset.poe;
+      currencyState.league = '';
+      currencyState.type = '';
+      updateTypeFilterDropdown();
+      loadCurrencyLeagues();
+      loadCurrencyPrices();
+    });
+  });
+
+  // League select
+  const leagueSelect = document.getElementById('currency-league');
+  if (leagueSelect) {
+    leagueSelect.addEventListener('change', () => {
+      currencyState.league = leagueSelect.value;
+      loadCurrencyPrices();
+    });
+  }
+
+  // Search
+  const searchInput = document.getElementById('currency-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      clearTimeout(currencyState.searchTimer);
+      currencyState.searchTimer = setTimeout(() => {
+        currencyState.search = searchInput.value;
+        loadCurrencyPrices();
+      }, 300);
+    });
+  }
+
+  // Sync button
+  const syncBtn = document.getElementById('currency-sync-btn');
+  if (syncBtn) {
+    syncBtn.addEventListener('click', handleCurrencySync);
+  }
+
+  // Sort headers
+  document.querySelectorAll('.currency-table th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const field = th.dataset.sort;
+      if (currencyState.sortField === field) {
+        currencyState.sortDir = currencyState.sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        currencyState.sortField = field;
+        currencyState.sortDir = 'desc';
+      }
+      document.querySelectorAll('.currency-table th.sortable').forEach(h => h.classList.remove('active', 'asc'));
+      th.classList.add('active');
+      if (currencyState.sortDir === 'asc') th.classList.add('asc');
+      renderCurrencyTable();
+    });
+  });
+}
+
+async function loadCurrencyPage() {
+  updateTypeFilterDropdown();
+  await loadCurrencyLeagues();
+  await loadCurrencyPrices();
+}
+
+async function loadCurrencyLeagues() {
+  try {
+    const apiUrl = state.settings.apiUrl || 'http://localhost:3001';
+    const res = await fetch(`${apiUrl}/api/prices/leagues?poeVersion=${currencyState.poeVersion}`);
+    const json = await res.json();
+    const leagues = json.data?.leagues || [];
+    const select = document.getElementById('currency-league');
+    if (select) {
+      select.innerHTML = leagues.map(l => `<option value="${l}">${l}</option>`).join('') || '<option value="">Standard</option>';
+      if (leagues.length > 0) currencyState.league = leagues[0];
+    }
+  } catch (e) {
+    console.error('Currency leagues error:', e);
+  }
+}
+
+async function loadCurrencyPrices() {
+  const tbody = document.getElementById('currency-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="7" class="currency-empty">${window.t('currency.loading')}</td></tr>`;
+
+  try {
+    const apiUrl = state.settings.apiUrl || 'http://localhost:3001';
+    const params = new URLSearchParams({ poeVersion: currencyState.poeVersion, limit: '500' });
+    if (currencyState.league) params.set('league', currencyState.league);
+    if (currencyState.type) params.set('type', currencyState.type);
+    if (currencyState.search) params.set('search', currencyState.search);
+
+    const res = await fetch(`${apiUrl}/api/prices/current?${params}`);
+    const json = await res.json();
+    currencyState.prices = json.data?.prices || [];
+    renderCurrencyTable();
+
+    const footer = document.getElementById('currency-footer');
+    if (footer) {
+      const count = json.data?.count || 0;
+      const updated = json.data?.updatedAt;
+      footer.textContent = `${count} items` + (updated ? ` · Last synced: ${timeAgo(updated)}` : '');
+    }
+  } catch (e) {
+    console.error('Currency prices error:', e);
+    tbody.innerHTML = `<tr><td colspan="7" class="currency-empty">${window.t('currency.loadError')}</td></tr>`;
+  }
+}
+
+function renderCurrencyTable() {
+  const tbody = document.getElementById('currency-table-body');
+  if (!tbody) return;
+
+  const sorted = [...currencyState.prices].sort((a, b) => {
+    if (currencyState.sortField === 'itemName') {
+      const av = (a.itemName || '').toLowerCase();
+      const bv = (b.itemName || '').toLowerCase();
+      return currencyState.sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    }
+    const av = parseFloat(a[currencyState.sortField]) || 0;
+    const bv = parseFloat(b[currencyState.sortField]) || 0;
+    return currencyState.sortDir === 'asc' ? av - bv : bv - av;
+  });
+
+  if (sorted.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="currency-empty">${window.t('currency.noData')}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = sorted.map((item, i) => {
+    const icon = item.iconUrl
+      ? `<img src="${item.iconUrl}" class="currency-row-icon" loading="lazy">`
+      : '<div class="currency-row-icon-placeholder"></div>';
+    const chaos = parseFloat(item.chaosValue) || 0;
+    const divine = parseFloat(item.divineValue);
+    const spark = renderSparklineSVG(item.sparklineData);
+    return `<tr>
+      <td class="currency-td-num">${i + 1}</td>
+      <td class="currency-td-icon">${icon}</td>
+      <td class="currency-td-name">${escapeHTML(item.itemName)}</td>
+      <td class="currency-td-type"><span class="currency-type-badge">${item.itemType || '-'}</span></td>
+      <td class="currency-td-chaos">${currencyHTML(chaos)}</td>
+      <td class="currency-td-divine">${divine ? currencyHTML(divine, 'divine') : '<span class="text-muted">-</span>'}</td>
+      <td class="currency-td-trend">${spark}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSparklineSVG(sparkData) {
+  if (!sparkData || !sparkData.data || sparkData.data.length < 2) return '';
+  const values = sparkData.data.filter(v => v !== null);
+  if (values.length < 2) return '';
+
+  const w = 70, h = 20, pad = 2;
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = max - min || 1;
+  const points = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * (w - pad * 2);
+    const y = pad + (h - pad * 2) - ((v - min) / range) * (h - pad * 2);
+    return `${x},${y}`;
+  }).join(' ');
+
+  const color = values[values.length - 1] >= values[0] ? '#3ddc84' : '#ff5252';
+  return `<svg width="${w}" height="${h}"><polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function escapeHTML(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function timeAgo(date) {
+  const diff = Date.now() - new Date(date).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+async function handleCurrencySync() {
+  const btn = document.getElementById('currency-sync-btn');
+  if (btn) { btn.disabled = true; btn.textContent = window.t('currency.syncing'); }
+
+  try {
+    const apiUrl = state.settings.apiUrl || 'http://localhost:3001';
+    const token = state.settings.authToken;
+    const res = await fetch(`${apiUrl}/api/prices/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ league: currencyState.league, poeVersion: currencyState.poeVersion })
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast('Currency', window.t('currency.syncSuccess'), 'success');
+      await loadCurrencyPrices();
+    } else {
+      showToast('Currency', window.t('currency.syncFailed'), 'error');
+    }
+  } catch (e) {
+    showToast('Currency', window.t('currency.syncFailed'), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = window.t('currency.sync'); }
+  }
 }
 
 /**

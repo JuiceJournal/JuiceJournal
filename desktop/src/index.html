@@ -19,6 +19,7 @@
       <nav class="nav" role="navigation" aria-label="Ana navigasyon">
         <button class="nav-btn active" data-page="dashboard" data-i18n="nav.dashboard">Dashboard</button>
         <button class="nav-btn" data-page="sessions" data-i18n="nav.sessions">Session'lar</button>
+        <button class="nav-btn" data-page="currency" data-i18n="nav.currency">Currency</button>
         <button class="nav-btn" data-page="settings" data-i18n="nav.settings">Ayarlar</button>
       </nav>
       <div class="user-info">
@@ -223,6 +224,46 @@
             Henuz session yok
           </p>
         </div>
+      </section>
+
+      <!-- Currency Page -->
+      <section id="currency-page" class="page">
+        <div class="currency-header">
+          <div class="currency-header-top">
+            <h2 data-i18n="currency.title">Currency Prices</h2>
+            <div class="currency-header-actions">
+              <div class="poe-toggle">
+                <button class="poe-toggle-btn active" data-poe="poe1">PoE 1</button>
+                <button class="poe-toggle-btn" data-poe="poe2">PoE 2</button>
+              </div>
+              <select id="currency-league" class="currency-select">
+                <option value="">Standard</option>
+              </select>
+              <input type="text" id="currency-search" class="currency-search" data-i18n-placeholder="currency.searchPlaceholder" placeholder="Search items...">
+              <button id="currency-sync-btn" class="btn btn-primary btn-small" data-i18n="currency.sync">Sync</button>
+            </div>
+          </div>
+          <div id="currency-type-filter" class="currency-type-tabs"></div>
+        </div>
+        <div class="currency-table-wrap">
+          <table class="currency-table">
+            <thead>
+              <tr>
+                <th class="currency-th-num">#</th>
+                <th class="currency-th-icon"></th>
+                <th class="currency-th-name sortable" data-sort="itemName" data-i18n="currency.name">Name</th>
+                <th class="currency-th-type" data-i18n="currency.type">Type</th>
+                <th class="currency-th-chaos sortable active" data-sort="chaosValue">Chaos</th>
+                <th class="currency-th-divine sortable" data-sort="divineValue">Divine</th>
+                <th class="currency-th-trend" data-i18n="currency.trend">Trend</th>
+              </tr>
+            </thead>
+            <tbody id="currency-table-body">
+              <tr><td colspan="7" class="currency-empty" data-i18n="currency.noData">No price data. Click Sync to fetch.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="currency-footer" id="currency-footer"></div>
       </section>
 
       <!-- Settings Page -->

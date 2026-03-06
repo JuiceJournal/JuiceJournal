@@ -144,6 +144,22 @@ window.Translations = {
     'toast.connectionSuccess': 'API baglantisi basarili',
     'toast.connectionFailed': 'API baglantisi basarisiz',
 
+    // Currency
+    'nav.currency': 'Currency',
+    'currency.title': 'Currency Fiyatlari',
+    'currency.allTypes': 'Tumu',
+    'currency.searchPlaceholder': 'Item ara...',
+    'currency.sync': 'Senkronize Et',
+    'currency.syncing': 'Senkronize ediliyor...',
+    'currency.syncSuccess': 'Fiyatlar basariyla senkronize edildi',
+    'currency.syncFailed': 'Senkronizasyon basarisiz',
+    'currency.name': 'Ad',
+    'currency.type': 'Tip',
+    'currency.trend': 'Trend',
+    'currency.noData': 'Fiyat verisi yok. Senkronize butonuna basin.',
+    'currency.loading': 'Fiyatlar yukleniyor...',
+    'currency.loadError': 'Fiyatlar yuklenirken hata olustu',
+
     // Misc
     'misc.mapPrompt': 'Map adini girin:',
     'misc.endSessionConfirm': "Mevcut map session'ini bitirmek istiyor musunuz?",
@@ -290,6 +306,22 @@ window.Translations = {
     'toast.error': 'Error',
     'toast.connectionSuccess': 'API connection successful',
     'toast.connectionFailed': 'API connection failed',
+
+    // Currency
+    'nav.currency': 'Currency',
+    'currency.title': 'Currency Prices',
+    'currency.allTypes': 'All',
+    'currency.searchPlaceholder': 'Search items...',
+    'currency.sync': 'Sync',
+    'currency.syncing': 'Syncing...',
+    'currency.syncSuccess': 'Prices synced successfully',
+    'currency.syncFailed': 'Sync failed',
+    'currency.name': 'Name',
+    'currency.type': 'Type',
+    'currency.trend': 'Trend',
+    'currency.noData': 'No price data. Click Sync to fetch.',
+    'currency.loading': 'Loading prices...',
+    'currency.loadError': 'Failed to load prices',
 
     // Misc
     'misc.mapPrompt': 'Enter map name:',
