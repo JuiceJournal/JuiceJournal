@@ -4,7 +4,7 @@
  */
 
 // Global app state for i18n
-window._appState = { language: 'tr' };
+window._appState = { language: 'en' };
 
 // Durum yonetimi
 const state = {
@@ -81,7 +81,7 @@ async function init() {
   await loadSettings();
 
   // Set language from settings and apply translations
-  window._appState.language = state.settings.language || 'tr';
+  window._appState.language = state.settings.language || 'en';
   if (window.applyTranslations) window.applyTranslations();
 
   // Event listener'lari kur
@@ -127,7 +127,7 @@ async function loadSettings() {
     if (elements.scanHotkey) elements.scanHotkey.value = state.settings.scanHotkey || 'F9';
 
     // Language buttons
-    const lang = state.settings.language || 'tr';
+    const lang = state.settings.language || 'en';
     elements.langBtns.forEach(btn => {
       btn.classList.toggle('active', btn.dataset.lang === lang);
     });
@@ -140,6 +140,35 @@ async function loadSettings() {
   } catch (error) {
     console.error('Ayarlari yukleme hatasi:', error);
   }
+}
+
+/**
+ * PoE currency icon image paths
+ */
+const CURRENCY_IMAGES = {
+  chaos: 'assets/currency/chaos.png',
+  divine: 'assets/currency/divine.png',
+  exalted: 'assets/currency/exalted.png',
+  mirror: 'assets/currency/mirror.png',
+  vaal: 'assets/currency/vaal.png',
+  alchemy: 'assets/currency/alchemy.png',
+  fusing: 'assets/currency/fusing.png',
+  chromatic: 'assets/currency/chromatic.png',
+  alteration: 'assets/currency/alteration.png',
+  jewellers: 'assets/currency/jewellers.png',
+  scouring: 'assets/currency/scouring.png',
+  blessed: 'assets/currency/blessed.png',
+  regal: 'assets/currency/regal.png',
+  regret: 'assets/currency/regret.png',
+  gcp: 'assets/currency/gcp.png',
+  chance: 'assets/currency/chance.png'
+};
+
+function currencyHTML(value, type = 'chaos', iconSize = 18) {
+  const num = parseFloat(value);
+  const imgPath = CURRENCY_IMAGES[type] || CURRENCY_IMAGES.chaos;
+  const formatted = isNaN(num) ? '0' : (type === 'divine' ? num.toFixed(2) : num.toFixed(1));
+  return `<span class="currency-value">${formatted} <img src="${imgPath}" class="currency-icon" width="${iconSize}" height="${iconSize}" alt="${type}" draggable="false"></span>`;
 }
 
 /**
@@ -504,8 +533,8 @@ async function loadDashboardStats() {
   // Not: Gercek implementasyonda API'den cekilecek
   // Su an placeholder degerler
   elements.todaySessions.textContent = '0';
-  elements.todayProfit.textContent = '0c';
-  elements.todayAvg.textContent = '0c';
+  elements.todayProfit.innerHTML = currencyHTML(0);
+  elements.todayAvg.innerHTML = currencyHTML(0);
 }
 
 /**
@@ -528,7 +557,7 @@ async function handleSaveSettings() {
     autoStartSession: elements.autoStartSession.checked,
     notifications: elements.enableNotifications.checked,
     soundNotifications: elements.soundNotifications ? elements.soundNotifications.checked : false,
-    language: activeLang ? activeLang.dataset.lang : 'tr',
+    language: activeLang ? activeLang.dataset.lang : 'en',
     poeVersion: activeVersion ? activeVersion.dataset.version : 'poe1',
     defaultLeague: elements.defaultLeague ? elements.defaultLeague.value : '',
     scanHotkey: elements.scanHotkey ? elements.scanHotkey.value : 'F9'
@@ -557,9 +586,9 @@ async function handleResetSettings() {
   if (elements.defaultLeague) elements.defaultLeague.value = '';
   if (elements.scanHotkey) elements.scanHotkey.value = 'F9';
 
-  // Reset language to TR
-  elements.langBtns.forEach(b => b.classList.toggle('active', b.dataset.lang === 'tr'));
-  window._appState.language = 'tr';
+  // Reset language to EN
+  elements.langBtns.forEach(b => b.classList.toggle('active', b.dataset.lang === 'en'));
+  window._appState.language = 'en';
   if (window.applyTranslations) window.applyTranslations();
 
   // Reset PoE version to poe1

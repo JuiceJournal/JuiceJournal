@@ -9,7 +9,8 @@ import ProfitChart from '@/components/ProfitChart';
 import SessionList from '@/components/SessionList';
 import AddLootModal from '@/components/AddLootModal';
 import { sessionAPI, statsAPI } from '@/lib/api';
-import { formatChaos, getProfitColorClass } from '@/lib/utils';
+import { getProfitColorClass } from '@/lib/utils';
+import { CurrencyValue } from '@/components/CurrencyIcon';
 import toast from 'react-hot-toast';
 
 export default function DashboardPage() {
@@ -94,9 +95,10 @@ export default function DashboardPage() {
       const response = await sessionAPI.end(activeSession.id);
       if (response.success) {
         const profit = parseFloat(response.data.session.profitChaos);
+        const profitVal = profit >= 0 ? profit.toFixed(1) : Math.abs(profit).toFixed(1);
         const message = profit >= 0
-          ? `Kâr: ${formatChaos(profit)}`
-          : `Zarar: ${formatChaos(Math.abs(profit))}`;
+          ? `Kâr: ${profitVal}c`
+          : `Zarar: ${profitVal}c`;
         toast[profit >= 0 ? 'success' : 'warning'](message);
         loadDashboardData();
       }
@@ -131,7 +133,7 @@ export default function DashboardPage() {
           <div className="card">
             <p className="text-gray-400 text-sm">Bugunku Kâr</p>
             <p className={`text-2xl font-bold mt-1 ${getProfitColorClass(stats?.summary?.totalProfit || 0)}`}>
-              {formatChaos(stats?.summary?.totalProfit || 0)}
+              <CurrencyValue value={stats?.summary?.totalProfit || 0} type="chaos" size={20} />
             </p>
           </div>
           
@@ -145,14 +147,14 @@ export default function DashboardPage() {
           <div className="card">
             <p className="text-gray-400 text-sm">Ort. Kâr/Map</p>
             <p className={`text-2xl font-bold mt-1 ${getProfitColorClass(stats?.summary?.avgProfitPerMap || 0)}`}>
-              {formatChaos(stats?.summary?.avgProfitPerMap || 0)}
+              <CurrencyValue value={stats?.summary?.avgProfitPerMap || 0} type="chaos" size={20} />
             </p>
           </div>
           
           <div className="card">
             <p className="text-gray-400 text-sm">Saatlik Kâr</p>
             <p className={`text-2xl font-bold mt-1 ${getProfitColorClass(stats?.summary?.avgProfitPerHour || 0)}`}>
-              {formatChaos(stats?.summary?.avgProfitPerHour || 0)}
+              <CurrencyValue value={stats?.summary?.avgProfitPerHour || 0} type="chaos" size={20} />
             </p>
           </div>
         </div>
@@ -184,7 +186,7 @@ export default function DashboardPage() {
                     <div className="bg-poe-darker rounded p-3">
                       <p className="text-gray-400 text-xs">Kâr</p>
                       <p className={`font-medium ${getProfitColorClass(activeSession.profitChaos)}`}>
-                        {formatChaos(activeSession.profitChaos)}
+                        <CurrencyValue value={activeSession.profitChaos} type="chaos" size={16} />
                       </p>
                     </div>
                   </div>

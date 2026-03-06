@@ -588,6 +588,18 @@ body {
   color: var(--gold-light);
 }
 
+/* Currency Icons */
+.currency-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.currency-icon {
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
 .stat-icon {
   width: 32px;
   height: 32px;

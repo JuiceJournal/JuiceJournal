@@ -1,6 +1,7 @@
 'use client';
 
-import { formatChaos, formatNumber } from '@/lib/utils';
+import { formatNumber } from '@/lib/utils';
+import { CurrencyValue } from '@/components/CurrencyIcon';
 
 export default function LeaderboardTable({ data, currentUserId }) {
   if (!data || data.length === 0) {
@@ -71,14 +72,14 @@ export default function LeaderboardTable({ data, currentUserId }) {
                   </td>
                   <td className="py-3 px-4 text-right">
                     <span className="font-medium text-poe-gold">
-                      {formatChaos(entry.totalProfit)}
+                      <CurrencyValue value={entry.totalProfit} type="chaos" size={14} />
                     </span>
                   </td>
                   <td className="py-3 px-4 text-right text-gray-300">
-                    {formatChaos(entry.avgProfit)}
+                    <CurrencyValue value={entry.avgProfit} type="chaos" size={14} />
                   </td>
                   <td className="py-3 px-4 text-right text-gray-300">
-                    {formatChaos(entry.profitPerHour)}
+                    <CurrencyValue value={entry.profitPerHour} type="chaos" size={14} />
                   </td>
                 </tr>
               );

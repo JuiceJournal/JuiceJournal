@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import CurrencyIcon from '@/components/CurrencyIcon';
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -21,7 +22,7 @@ export default function Navbar() {
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/dashboard" className="flex items-center space-x-2">
-              <span className="text-2xl">💰</span>
+              <CurrencyIcon type="exalted" size={28} />
               <span className="text-xl font-bold text-poe-gold">
                 PoE Farm Tracker
               </span>

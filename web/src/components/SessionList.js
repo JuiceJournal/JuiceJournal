@@ -5,11 +5,11 @@ import {
   formatDate,
   formatTime,
   formatDuration,
-  formatChaos,
   getProfitColorClass,
   getStatusColorClass,
   getStatusLabel,
 } from '@/lib/utils';
+import { CurrencyValue } from '@/components/CurrencyIcon';
 
 export default function SessionList({ sessions, showActions = false, onEndSession }) {
   if (!sessions || sessions.length === 0) {
@@ -62,7 +62,7 @@ export default function SessionList({ sessions, showActions = false, onEndSessio
                 </td>
                 <td className="py-3 px-4 text-right">
                   <span className={`font-medium ${getProfitColorClass(session.profitChaos)}`}>
-                    {formatChaos(session.profitChaos)}
+                    <CurrencyValue value={session.profitChaos} type="chaos" size={14} />
                   </span>
                 </td>
                 <td className="py-3 px-4 text-center">
