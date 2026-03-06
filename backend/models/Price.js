@@ -61,6 +61,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: 'Standard'
     },
+    poeVersion: {
+      type: DataTypes.ENUM('poe1', 'poe2'),
+      allowNull: false,
+      defaultValue: 'poe1',
+      field: 'poe_version'
+    },
     iconUrl: {
       type: DataTypes.STRING(500),
       allowNull: true,
@@ -92,7 +98,7 @@ module.exports = (sequelize, DataTypes) => {
     underscored: true,
     indexes: [
       {
-        fields: ['item_name', 'league'],
+        fields: ['item_name', 'league', 'poe_version'],
         unique: true
       },
       {
@@ -100,6 +106,9 @@ module.exports = (sequelize, DataTypes) => {
       },
       {
         fields: ['league']
+      },
+      {
+        fields: ['poe_version']
       },
       {
         fields: ['active']
@@ -110,22 +119,23 @@ module.exports = (sequelize, DataTypes) => {
     ]
   });
 
-  // Statik metodlar
-  Price.findByName = async function(itemName, league = 'Standard') {
+  Price.findByName = async function(itemName, league = 'Standard', poeVersion = 'poe1') {
     return await this.findOne({
       where: {
         itemName,
         league,
+        poeVersion,
         active: true
       }
     });
   };
 
-  Price.findByType = async function(itemType, league = 'Standard', limit = 100) {
+  Price.findByType = async function(itemType, league = 'Standard', limit = 100, poeVersion = 'poe1') {
     return await this.findAll({
       where: {
         itemType,
         league,
+        poeVersion,
         active: true
       },
       order: [['chaosValue', 'DESC']],
@@ -133,29 +143,30 @@ module.exports = (sequelize, DataTypes) => {
     });
   };
 
-  Price.getCurrentLeague = async function() {
-    // Aktif ligleri bul - en son guncellenen
+  Price.getCurrentLeague = async function(poeVersion = 'poe1') {
+    const where = { poeVersion };
     const result = await this.findOne({
       attributes: ['league'],
+      where,
       order: [['updatedAt', 'DESC']],
       raw: true
     });
-    
+
     return result?.league || process.env.DEFAULT_LEAGUE || 'Standard';
   };
 
   Price.upsertPrice = async function(itemData) {
     const [price, created] = await this.upsert(itemData, {
       returning: true,
-      conflictFields: ['item_name', 'league']
+      conflictFields: ['item_name', 'league', 'poe_version']
     });
-    
+
     return { price, created };
   };
 
-  Price.bulkUpsert = async function(items, league) {
+  Price.bulkUpsert = async function(items, league, poeVersion = 'poe1') {
     const results = [];
-    
+
     for (const item of items) {
       try {
         const result = await this.upsertPrice({
@@ -164,6 +175,7 @@ module.exports = (sequelize, DataTypes) => {
           chaosValue: item.chaosValue,
           divineValue: item.divineValue,
           league,
+          poeVersion,
           iconUrl: item.iconUrl,
           sparklineData: item.sparklineData,
           active: true,
@@ -174,19 +186,19 @@ module.exports = (sequelize, DataTypes) => {
         console.error(`Fiyat kaydetme hatasi (${item.name}):`, error.message);
       }
     }
-    
+
     return results;
   };
 
-  // Eski fiyatlari pasif yap
-  Price.deactivateOldPrices = async function(league, olderThanMinutes = 120) {
+  Price.deactivateOldPrices = async function(league, olderThanMinutes = 120, poeVersion = 'poe1') {
     const cutoffDate = new Date(Date.now() - olderThanMinutes * 60 * 1000);
-    
+
     const [updatedCount] = await this.update(
       { active: false },
       {
         where: {
           league,
+          poeVersion,
           updatedAt: {
             [Op.lt]: cutoffDate
           },
@@ -194,7 +206,7 @@ module.exports = (sequelize, DataTypes) => {
         }
       }
     );
-    
+
     return updatedCount;
   };
 

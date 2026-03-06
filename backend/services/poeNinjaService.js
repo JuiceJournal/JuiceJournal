@@ -1,15 +1,17 @@
 /**
  * PoeNinja Service
  * poe.ninja API entegrasyonu ve fiyat senkronizasyonu
+ * PoE 1 ve PoE 2 destegi
  */
 
 const axios = require('axios');
 const { Price } = require('../models');
 
-const POE_NINJA_BASE_URL = 'https://poe.ninja/api/data';
+const POE1_BASE_URL = 'https://poe.ninja/api/data';
+const POE2_BASE_URL = 'https://poe.ninja/poe2/api/economy';
 
-// Item tipi mapping'i
-const ITEM_TYPE_MAPPING = {
+// PoE 1 item tipi mapping
+const POE1_ITEM_TYPE_MAPPING = {
   'Currency': 'currency',
   'Fragment': 'fragment',
   'Scarab': 'scarab',
@@ -31,29 +33,72 @@ const ITEM_TYPE_MAPPING = {
   'Essence': 'other'
 };
 
+// PoE 2 item tipi mapping
+const POE2_ITEM_TYPE_MAPPING = {
+  'Currency': 'currency',
+  'Fragment': 'fragment',
+  'Scarab': 'scarab',
+  'Map': 'map',
+  'DivinationCard': 'divination_card',
+  'SkillGem': 'gem',
+  'UniqueWeapon': 'unique',
+  'UniqueArmour': 'unique',
+  'UniqueAccessory': 'unique',
+  'UniqueJewel': 'unique',
+  'UniqueFlask': 'unique',
+  'UniqueMap': 'map',
+  'Catalyst': 'catalyst',
+  'Essence': 'other',
+  'Rune': 'other'
+};
+
+// PoE 1 sync tipleri
+const POE1_SYNC_TYPES = [
+  'Currency', 'Fragment', 'Scarab', 'Map', 'DivinationCard',
+  'SkillGem', 'UniqueMap', 'Oil', 'Incubator', 'DeliriumOrb', 'Catalyst'
+];
+
+// PoE 2 sync tipleri
+const POE2_SYNC_TYPES = [
+  'Currency', 'Fragment', 'Scarab', 'Map', 'DivinationCard',
+  'SkillGem', 'UniqueWeapon', 'UniqueArmour', 'UniqueAccessory'
+];
+
+function getTypeMapping(poeVersion) {
+  return poeVersion === 'poe2' ? POE2_ITEM_TYPE_MAPPING : POE1_ITEM_TYPE_MAPPING;
+}
+
+function getDefaultSyncTypes(poeVersion) {
+  return poeVersion === 'poe2' ? POE2_SYNC_TYPES : POE1_SYNC_TYPES;
+}
+
 /**
  * Currency verilerini poe.ninja'dan cek
  */
-const getCurrencyOverview = async (league = 'Ancestor', type = 'Currency') => {
+const getCurrencyOverview = async (league = 'Standard', type = 'Currency', poeVersion = 'poe1') => {
   try {
-    const response = await axios.get(
-      `${POE_NINJA_BASE_URL}/currencyoverview`,
-      {
-        params: {
-          league,
-          type
-        },
-        timeout: 30000,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'PoE-Farm-Tracker/1.0'
-        }
+    let url, params;
+
+    if (poeVersion === 'poe2') {
+      url = `${POE2_BASE_URL}/currencyexchange/overview`;
+      params = { leagueName: league, overviewName: type };
+    } else {
+      url = `${POE1_BASE_URL}/currencyoverview`;
+      params = { league, type };
+    }
+
+    const response = await axios.get(url, {
+      params,
+      timeout: 30000,
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'PoE-Farm-Tracker/1.0'
       }
-    );
+    });
 
     return response.data;
   } catch (error) {
-    console.error(`Poe.ninja currency cekme hatasi (${type}):`, error.message);
+    console.error(`Poe.ninja currency cekme hatasi (${type}, ${poeVersion}):`, error.message);
     throw new Error(`Currency verisi alinamadi: ${error.message}`);
   }
 };
@@ -61,26 +106,30 @@ const getCurrencyOverview = async (league = 'Ancestor', type = 'Currency') => {
 /**
  * Item verilerini poe.ninja'dan cek
  */
-const getItemOverview = async (league = 'Ancestor', type = 'Map') => {
+const getItemOverview = async (league = 'Standard', type = 'Map', poeVersion = 'poe1') => {
   try {
-    const response = await axios.get(
-      `${POE_NINJA_BASE_URL}/itemoverview`,
-      {
-        params: {
-          league,
-          type
-        },
-        timeout: 30000,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'PoE-Farm-Tracker/1.0'
-        }
+    let url, params;
+
+    if (poeVersion === 'poe2') {
+      url = `${POE2_BASE_URL}/item/overview`;
+      params = { leagueName: league, overviewName: type };
+    } else {
+      url = `${POE1_BASE_URL}/itemoverview`;
+      params = { league, type };
+    }
+
+    const response = await axios.get(url, {
+      params,
+      timeout: 30000,
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'PoE-Farm-Tracker/1.0'
       }
-    );
+    });
 
     return response.data;
   } catch (error) {
-    console.error(`Poe.ninja item cekme hatasi (${type}):`, error.message);
+    console.error(`Poe.ninja item cekme hatasi (${type}, ${poeVersion}):`, error.message);
     throw new Error(`Item verisi alinamadi: ${error.message}`);
   }
 };
@@ -88,16 +137,17 @@ const getItemOverview = async (league = 'Ancestor', type = 'Map') => {
 /**
  * Currency verilerini normalize et
  */
-const normalizeCurrencyData = (data, type) => {
+const normalizeCurrencyData = (data, type, poeVersion = 'poe1') => {
   const items = [];
-  
+  const typeMapping = getTypeMapping(poeVersion);
+
   if (!data || !data.lines) {
     return items;
   }
 
   data.lines.forEach(line => {
-    const itemType = ITEM_TYPE_MAPPING[type] || 'currency';
-    
+    const itemType = typeMapping[type] || 'currency';
+
     items.push({
       name: line.currencyTypeName || line.name,
       type: itemType,
@@ -108,29 +158,43 @@ const normalizeCurrencyData = (data, type) => {
     });
   });
 
+  // PoE 2 currency details may include icon URLs separately
+  if (data.currencyDetails && data.currencyDetails.length > 0) {
+    const iconMap = {};
+    data.currencyDetails.forEach(detail => {
+      if (detail.name && detail.icon) {
+        iconMap[detail.name] = detail.icon;
+      }
+    });
+    items.forEach(item => {
+      if (!item.iconUrl && iconMap[item.name]) {
+        item.iconUrl = iconMap[item.name];
+      }
+    });
+  }
+
   return items;
 };
 
 /**
  * Item verilerini normalize et
  */
-const normalizeItemData = (data, type) => {
+const normalizeItemData = (data, type, poeVersion = 'poe1') => {
   const items = [];
-  
+  const typeMapping = getTypeMapping(poeVersion);
+
   if (!data || !data.lines) {
     return items;
   }
 
   data.lines.forEach(line => {
-    const itemType = ITEM_TYPE_MAPPING[type] || 'other';
-    
-    // Chaos degerini al - farkli formatlar olabilir
+    const itemType = typeMapping[type] || 'other';
+
     let chaosValue = line.chaosValue || 0;
     let divineValue = line.divineValue || null;
-    
-    // Eger chaos degeri yoksa exalted'dan hesapla (eski ligler icin)
+
     if (!chaosValue && line.exaltedValue) {
-      chaosValue = line.exaltedValue * 15; // Yaklasik eski oran
+      chaosValue = line.exaltedValue * 15;
     }
 
     items.push({
@@ -149,18 +213,16 @@ const normalizeItemData = (data, type) => {
 /**
  * Belirli bir tip icin fiyatlari senkronize et
  */
-const syncPricesByType = async (league, type) => {
+const syncPricesByType = async (league, type, poeVersion = 'poe1') => {
   try {
     let items = [];
-    
-    // Currency ve Fragment icin currencyoverview kullan
+
     if (type === 'Currency' || type === 'Fragment') {
-      const data = await getCurrencyOverview(league, type);
-      items = normalizeCurrencyData(data, type);
+      const data = await getCurrencyOverview(league, type, poeVersion);
+      items = normalizeCurrencyData(data, type, poeVersion);
     } else {
-      // Diger tipler icin itemoverview kullan
-      const data = await getItemOverview(league, type);
-      items = normalizeItemData(data, type);
+      const data = await getItemOverview(league, type, poeVersion);
+      items = normalizeItemData(data, type, poeVersion);
     }
 
     if (items.length === 0) {
@@ -171,16 +233,15 @@ const syncPricesByType = async (league, type) => {
       };
     }
 
-    // Bulk upsert yap
-    const results = await Price.bulkUpsert(items, league);
-    
+    const results = await Price.bulkUpsert(items, league, poeVersion);
+
     return {
       type,
       synced: results.length,
       message: 'Basariyla senkronize edildi'
     };
   } catch (error) {
-    console.error(`${type} senkronizasyon hatasi:`, error.message);
+    console.error(`${type} senkronizasyon hatasi (${poeVersion}):`, error.message);
     return {
       type,
       synced: 0,
@@ -192,61 +253,45 @@ const syncPricesByType = async (league, type) => {
 /**
  * Tum fiyatlari senkronize et
  */
-const syncAllPrices = async (league = 'Ancestor', types = null) => {
-  const targetTypes = types || [
-    'Currency',
-    'Fragment',
-    'Scarab',
-    'Map',
-    'DivinationCard',
-    'SkillGem',
-    'UniqueMap',
-    'Oil',
-    'Incubator',
-    'DeliriumOrb',
-    'Catalyst'
-  ];
+const syncAllPrices = async (league = 'Standard', types = null, poeVersion = 'poe1') => {
+  const targetTypes = types || getDefaultSyncTypes(poeVersion);
 
   const results = {
     league,
+    poeVersion,
     startedAt: new Date(),
     types: []
   };
 
-  // Sirayla her tipi senkronize et (rate limiting icin)
   for (const type of targetTypes) {
-    console.log(`${type} senkronizasyonu basliyor...`);
-    
-    const result = await syncPricesByType(league, type);
+    console.log(`${type} senkronizasyonu basliyor (${poeVersion})...`);
+
+    const result = await syncPricesByType(league, type, poeVersion);
     results.types.push(result);
-    
-    // Rate limiting icin bekle
+
+    // Rate limiting
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
-  // Eski fiyatlari pasif yap (2 saatten eski)
-  const deactivatedCount = await Price.deactivateOldPrices(league, 120);
+  const deactivatedCount = await Price.deactivateOldPrices(league, 120, poeVersion);
   results.deactivatedOldPrices = deactivatedCount;
-  
+
   results.completedAt = new Date();
-  
-  console.log(`Fiyat senkronizasyonu tamamlandi: ${results.types.reduce((sum, t) => sum + t.synced, 0)} item`);
-  
+
+  console.log(`Fiyat senkronizasyonu tamamlandi (${poeVersion}): ${results.types.reduce((sum, t) => sum + t.synced, 0)} item`);
+
   return results;
 };
 
 /**
  * Chaos Orb degerini bul (Divine/Chaos orani icin)
  */
-const getChaosOrbValue = async (league = 'Ancestor') => {
+const getChaosOrbValue = async (league = 'Standard', poeVersion = 'poe1') => {
   try {
-    const data = await getCurrencyOverview(league, 'Currency');
-    
-    // Chaos Orb'u bul (her zaman chaosEquivalent = 1)
-    // Divine Orb'u bul
-    const divineOrb = data.lines.find(line => 
-      line.currencyTypeName === 'Divine Orb' || 
-      line.name === 'Divine Orb'
+    const data = await getCurrencyOverview(league, 'Currency', poeVersion);
+
+    const divineOrb = data.lines.find(line =>
+      (line.currencyTypeName || line.name) === 'Divine Orb'
     );
 
     if (divineOrb) {
@@ -256,28 +301,20 @@ const getChaosOrbValue = async (league = 'Ancestor') => {
       };
     }
 
-    // Varsayilan degerler
-    return {
-      divineToChaos: 180,
-      chaosToDivine: 1/180
-    };
+    return { divineToChaos: 180, chaosToDivine: 1/180 };
   } catch (error) {
     console.error('Chaos orb degeri alma hatasi:', error.message);
-    return {
-      divineToChaos: 180,
-      chaosToDivine: 1/180
-    };
+    return { divineToChaos: 180, chaosToDivine: 1/180 };
   }
 };
 
 /**
  * Belirli bir item'in fiyatini bul
  */
-const getItemPrice = async (itemName, itemType = null, league = 'Ancestor') => {
+const getItemPrice = async (itemName, itemType = null, league = 'Standard', poeVersion = 'poe1') => {
   try {
-    // Once veritabaninda ara
-    const cachedPrice = await Price.findByName(itemName, league);
-    
+    const cachedPrice = await Price.findByName(itemName, league, poeVersion);
+
     if (cachedPrice) {
       return {
         name: cachedPrice.itemName,
@@ -288,8 +325,6 @@ const getItemPrice = async (itemName, itemType = null, league = 'Ancestor') => {
       };
     }
 
-    // Cache'de yoksa poe.ninja'dan cek
-    // Item tipine gore uygun endpoint'i sec
     let searchType = 'Item';
     if (itemType === 'currency' || itemType === 'fragment') {
       searchType = 'Currency';
@@ -297,12 +332,11 @@ const getItemPrice = async (itemName, itemType = null, league = 'Ancestor') => {
       searchType = 'Map';
     }
 
-    const data = searchType === 'Currency' 
-      ? await getCurrencyOverview(league, searchType)
-      : await getItemOverview(league, searchType);
+    const data = searchType === 'Currency'
+      ? await getCurrencyOverview(league, searchType, poeVersion)
+      : await getItemOverview(league, searchType, poeVersion);
 
-    // Item'i bul
-    const item = data.lines.find(line => 
+    const item = data.lines.find(line =>
       (line.currencyTypeName || line.name).toLowerCase() === itemName.toLowerCase()
     );
 
@@ -331,5 +365,6 @@ module.exports = {
   getChaosOrbValue,
   getItemPrice,
   normalizeCurrencyData,
-  normalizeItemData
+  normalizeItemData,
+  getDefaultSyncTypes
 };
