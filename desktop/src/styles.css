@@ -709,13 +709,21 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.9rem;
   flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.05);
 }
 
 .stat-icon.maps { background: var(--blue-dim); }
 .stat-icon.profit { background: var(--green-dim); }
 .stat-icon.avg { background: var(--orange-dim); }
+
+.stat-icon img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(198, 161, 91, 0.2));
+}
 
 .stat-left {
   display: flex;

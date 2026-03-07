@@ -83,6 +83,7 @@ async function init() {
   // Set language from settings and apply translations
   window._appState.language = state.settings.language || 'en';
   if (window.applyTranslations) window.applyTranslations();
+  syncDesktopCurrencyIcons();
 
   // Event listener'lari kur
   setupEventListeners();
@@ -107,6 +108,7 @@ async function init() {
   
   // Aktif session'i kontrol et
   await loadCurrentSession();
+  await loadDashboardStats();
   
   console.log('Uygulama basarili bir sekilde baslatildi');
 }
@@ -146,28 +148,57 @@ async function loadSettings() {
 /**
  * PoE currency icon image paths
  */
-const CURRENCY_IMAGES = {
-  chaos: 'assets/currency/chaos.png',
-  divine: 'assets/currency/divine.png',
-  exalted: 'assets/currency/exalted.png',
-  mirror: 'assets/currency/mirror.png',
-  vaal: 'assets/currency/vaal.png',
-  alchemy: 'assets/currency/alchemy.png',
-  fusing: 'assets/currency/fusing.png',
-  chromatic: 'assets/currency/chromatic.png',
-  alteration: 'assets/currency/alteration.png',
-  jewellers: 'assets/currency/jewellers.png',
-  scouring: 'assets/currency/scouring.png',
-  blessed: 'assets/currency/blessed.png',
-  regal: 'assets/currency/regal.png',
-  regret: 'assets/currency/regret.png',
-  gcp: 'assets/currency/gcp.png',
-  chance: 'assets/currency/chance.png'
+const CURRENCY_IMAGE_VARIANTS = {
+  poe1: {
+    chaos: 'assets/currency/poe1/chaos.png',
+    divine: 'assets/currency/poe1/divine.png',
+  },
+  poe2: {
+    chaos: 'assets/currency/poe2/chaos.png',
+    divine: 'assets/currency/poe2/divine.webp',
+  }
 };
 
-function currencyHTML(value, type = 'chaos', iconSize = 18) {
+const CURRENCY_IMAGES = {
+  chaos: 'assets/currency/poe1/chaos.png',
+  divine: 'assets/currency/poe1/divine.png',
+  exalted: 'assets/currency/poe1/exalted.png',
+  mirror: 'assets/currency/poe1/mirror.png',
+  vaal: 'assets/currency/poe1/vaal.png',
+  alchemy: 'assets/currency/poe1/alchemy.png',
+  fusing: 'assets/currency/poe1/fusing.png',
+  chromatic: 'assets/currency/poe1/chromatic.png',
+  alteration: 'assets/currency/poe1/alteration.png',
+  jewellers: 'assets/currency/poe1/jewellers.png',
+  scouring: 'assets/currency/poe1/scouring.png',
+  blessed: 'assets/currency/poe1/blessed.png',
+  regal: 'assets/currency/poe1/regal.png',
+  regret: 'assets/currency/poe1/regret.png',
+  gcp: 'assets/currency/poe1/gcp.png',
+  chance: 'assets/currency/poe1/chance.png'
+};
+
+function getCurrencyAssetPath(type = 'chaos', poeVersion = state.settings.poeVersion || 'poe1') {
+  return CURRENCY_IMAGE_VARIANTS[poeVersion]?.[type] || CURRENCY_IMAGES[type] || CURRENCY_IMAGES.chaos;
+}
+
+function syncDesktopCurrencyIcons() {
+  const poeVersion = state.settings.poeVersion || 'poe1';
+  const statProfitIcon = document.getElementById('stat-profit-icon');
+  const statAvgIcon = document.getElementById('stat-avg-icon');
+
+  if (statProfitIcon) {
+    statProfitIcon.src = getCurrencyAssetPath('chaos', poeVersion);
+  }
+
+  if (statAvgIcon) {
+    statAvgIcon.src = getCurrencyAssetPath('divine', poeVersion);
+  }
+}
+
+function currencyHTML(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1') {
   const num = parseFloat(value);
-  const imgPath = CURRENCY_IMAGES[type] || CURRENCY_IMAGES.chaos;
+  const imgPath = getCurrencyAssetPath(type, poeVersion);
   const formatted = isNaN(num) ? '0' : (type === 'divine' ? num.toFixed(2) : num.toFixed(1));
   return `<span class="currency-value">${formatted} <img src="${imgPath}" class="currency-icon" width="${iconSize}" height="${iconSize}" alt="${type}" draggable="false"></span>`;
 }
@@ -237,6 +268,7 @@ function setupEventListeners() {
       elements.versionBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.settings.poeVersion = btn.dataset.version;
+      syncDesktopCurrencyIcons();
     });
   });
 
@@ -558,8 +590,8 @@ async function loadDashboardStats() {
   // Not: Gercek implementasyonda API'den cekilecek
   // Su an placeholder degerler
   elements.todaySessions.textContent = '0';
-  elements.todayProfit.innerHTML = currencyHTML(0);
-  elements.todayAvg.innerHTML = currencyHTML(0);
+  elements.todayProfit.innerHTML = currencyHTML(0, 'chaos', 18, state.settings.poeVersion || 'poe1');
+  elements.todayAvg.innerHTML = currencyHTML(0, 'divine', 18, state.settings.poeVersion || 'poe1');
 }
 
 /**
@@ -692,7 +724,7 @@ const POE1_CATEGORY_TYPES = [
 // PoE 2 item category types with representative icons
 const POE2_CATEGORY_TYPES = [
   { value: '', label: 'All', icon: null },
-  { value: 'currency', label: 'Currency', icon: 'exalted' },
+  { value: 'currency', label: 'Currency', icon: 'chaos' },
   { value: 'fragment', label: 'Fragment', icon: 'vaal' },
   { value: 'scarab', label: 'Scarab', icon: 'chance' },
   { value: 'map', label: 'Map', icon: 'alchemy' },
@@ -727,7 +759,7 @@ function updateTypeFilterDropdown() {
   container.innerHTML = types.map(t => {
     const active = currencyState.type === t.value ? ' active' : '';
     const iconHTML = t.icon
-      ? `<img src="assets/currency/${t.icon}.png" class="currency-tab-icon" width="14" height="14" draggable="false">`
+      ? `<img src="${getCurrencyAssetPath(t.icon, currencyState.poeVersion)}" class="currency-tab-icon" width="14" height="14" draggable="false">`
       : '';
     return `<button class="currency-type-btn${active}" data-type="${t.value}">${iconHTML}<span>${t.label}</span></button>`;
   }).join('');
@@ -804,6 +836,10 @@ function setupCurrencyListeners() {
 }
 
 async function loadCurrencyPage() {
+  currencyState.poeVersion = state.settings.poeVersion || 'poe1';
+  document.querySelectorAll('.poe-toggle-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.poe === currencyState.poeVersion);
+  });
   updateTypeFilterDropdown();
   await loadCurrencyLeagues();
   await loadCurrencyPrices();
@@ -886,8 +922,8 @@ function renderCurrencyTable() {
       <td class="currency-td-icon">${icon}</td>
       <td class="currency-td-name">${escapeHTML(item.itemName)}</td>
       <td class="currency-td-type"><span class="currency-type-badge">${item.itemType || '-'}</span></td>
-      <td class="currency-td-chaos">${currencyHTML(chaos)}</td>
-      <td class="currency-td-divine">${divine ? currencyHTML(divine, 'divine') : '<span class="text-muted">-</span>'}</td>
+      <td class="currency-td-chaos">${currencyHTML(chaos, 'chaos', 18, currencyState.poeVersion)}</td>
+      <td class="currency-td-divine">${divine ? currencyHTML(divine, 'divine', 18, currencyState.poeVersion) : '<span class="text-muted">-</span>'}</td>
       <td class="currency-td-trend">${spark}</td>
     </tr>`;
   }).join('');
