@@ -3,27 +3,27 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useTrackerContext } from '@/hooks/useTrackerContext';
 import Navbar from '@/components/Navbar';
 import LeaderboardTable from '@/components/LeaderboardTable';
 import { statsAPI } from '@/lib/api';
+import { getPoeVersionLabel } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
 const PERIODS = [
-  { value: 'daily', label: 'Gunluk' },
-  { value: 'weekly', label: 'Haftalik' },
-  { value: 'monthly', label: 'Aylik' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
 ];
-
-const LEAGUES = ['Ancestor', 'Standard', 'Hardcore'];
 
 export default function LeaderboardPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  
+  const { poeVersion, league } = useTrackerContext();
+
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('weekly');
-  const [league, setLeague] = useState('Ancestor');
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -34,16 +34,16 @@ export default function LeaderboardPage() {
     if (user) {
       loadLeaderboard();
     }
-  }, [user, authLoading, router, period, league]);
+  }, [user, authLoading, router, period, league, poeVersion]);
 
   const loadLeaderboard = async () => {
     try {
       setLoading(true);
-      const response = await statsAPI.getLeaderboard(league, period, 50);
+      const response = await statsAPI.getLeaderboard(league, period, 50, { poeVersion });
       setLeaderboard(response.data?.leaderboard || []);
     } catch (error) {
-      console.error('Leaderboard yukleme hatasi:', error);
-      toast.error('Leaderboard yuklenirken hata olustu');
+      console.error('Leaderboard loading error:', error);
+      toast.error('Failed to load leaderboard');
     } finally {
       setLoading(false);
     }
@@ -52,7 +52,7 @@ export default function LeaderboardPage() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-poe-gold text-xl">Yukleniyor...</div>
+        <div className="text-poe-gold text-xl">Loading...</div>
       </div>
     );
   }
@@ -60,86 +60,66 @@ export default function LeaderboardPage() {
   return (
     <div className="min-h-screen bg-poe-dark">
       <Navbar />
-      
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">
               Leaderboard
             </h1>
-            <p className="text-gray-400 mt-1">
-              En basarili farmer'lar
+            <p className="mt-1 text-gray-400">
+              Comparing {getPoeVersionLabel(poeVersion)} farmers in {league}
             </p>
           </div>
-          
-          <div className="flex items-center space-x-4 mt-4 sm:mt-0">
-            {/* League Select */}
-            <select
-              value={league}
-              onChange={(e) => setLeague(e.target.value)}
-              className="bg-poe-card border border-poe-border rounded px-3 py-2 text-white focus:border-poe-gold focus:outline-none"
-            >
-              {LEAGUES.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
-            </select>
 
-            {/* Period Select */}
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="bg-poe-card border border-poe-border rounded px-3 py-2 text-white focus:border-poe-gold focus:outline-none"
-            >
-              {PERIODS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+            className="bg-poe-card border border-poe-border rounded px-3 py-2 text-white focus:border-poe-gold focus:outline-none"
+          >
+            {PERIODS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Stats Summary */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="card">
-            <p className="text-gray-400 text-sm">Toplam Katilimci</p>
+            <p className="text-gray-400 text-sm">Total Participants</p>
             <p className="text-2xl font-bold text-white mt-1">
               {leaderboard.length}
             </p>
           </div>
-          
+
           <div className="card">
-            <p className="text-gray-400 text-sm">Toplam Map</p>
+            <p className="text-gray-400 text-sm">Total Maps</p>
             <p className="text-2xl font-bold text-poe-gold mt-1">
-              {leaderboard.reduce((sum, e) => sum + e.sessionCount, 0).toLocaleString()}
+              {leaderboard.reduce((sum, entry) => sum + entry.sessionCount, 0).toLocaleString()}
             </p>
           </div>
-          
+
           <div className="card">
-            <p className="text-gray-400 text-sm">Toplam Kâr</p>
+            <p className="text-gray-400 text-sm">Total Profit</p>
             <p className="text-2xl font-bold text-green-400 mt-1">
-              {leaderboard.reduce((sum, e) => sum + e.totalProfit, 0).toLocaleString()}c
+              {leaderboard.reduce((sum, entry) => sum + entry.totalProfit, 0).toLocaleString()}c
             </p>
           </div>
         </div>
 
-        {/* Leaderboard Table */}
-        <LeaderboardTable 
-          data={leaderboard} 
+        <LeaderboardTable
+          data={leaderboard}
           currentUserId={user?.id}
         />
 
-        {/* Empty State */}
         {leaderboard.length === 0 && !loading && (
           <div className="text-center py-12">
             <p className="text-gray-400">
-              Bu donem icin henüz veri bulunmuyor.
+              No data available for this period.
             </p>
             <p className="text-gray-500 text-sm mt-2">
-              Map farm etmeye baslayarak liderlik tablosuna katilin!
+              Start farming maps in {league} to join the leaderboard.
             </p>
           </div>
         )}

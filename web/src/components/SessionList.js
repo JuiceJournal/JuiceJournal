@@ -6,6 +6,7 @@ import {
   formatTime,
   formatDuration,
   getProfitColorClass,
+  getPoeVersionLabel,
   getStatusColorClass,
   getStatusLabel,
 } from '@/lib/utils';
@@ -15,7 +16,7 @@ export default function SessionList({ sessions, showActions = false, onEndSessio
   if (!sessions || sessions.length === 0) {
     return (
       <div className="bg-poe-card rounded-lg p-8 text-center">
-        <p className="text-gray-400">Henüz session bulunmuyor</p>
+        <p className="text-gray-400">No sessions yet</p>
       </div>
     );
   }
@@ -28,11 +29,11 @@ export default function SessionList({ sessions, showActions = false, onEndSessio
             <tr className="bg-poe-darker text-gray-400 text-sm">
               <th className="text-left py-3 px-4">Map</th>
               <th className="text-left py-3 px-4">Tier</th>
-              <th className="text-left py-3 px-4">Baslangic</th>
-              <th className="text-left py-3 px-4">Sure</th>
-              <th className="text-right py-3 px-4">Kâr</th>
-              <th className="text-center py-3 px-4">Durum</th>
-              {showActions && <th className="text-center py-3 px-4">Islem</th>}
+              <th className="text-left py-3 px-4">Started</th>
+              <th className="text-left py-3 px-4">Duration</th>
+              <th className="text-right py-3 px-4">Profit</th>
+              <th className="text-center py-3 px-4">Status</th>
+              {showActions && <th className="text-center py-3 px-4">Action</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-poe-border">
@@ -45,6 +46,14 @@ export default function SessionList({ sessions, showActions = false, onEndSessio
                       ({session.mapType})
                     </span>
                   )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="inline-flex rounded-full bg-sky-500/15 px-2 py-1 text-xs font-medium text-sky-300">
+                      {getPoeVersionLabel(session.poeVersion)}
+                    </span>
+                    <span className="inline-flex rounded-full bg-poe-border px-2 py-1 text-xs font-medium text-gray-300">
+                      {session.league}
+                    </span>
+                  </div>
                 </td>
                 <td className="py-3 px-4 text-gray-300">
                   {session.mapTier || '-'}
@@ -80,7 +89,7 @@ export default function SessionList({ sessions, showActions = false, onEndSessio
                       onClick={() => onEndSession?.(session.id)}
                       className="text-red-400 hover:text-red-300 text-sm transition-colors"
                     >
-                      Bitir
+                      End
                     </button>
                   </td>
                 )}

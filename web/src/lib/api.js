@@ -1,13 +1,13 @@
 /**
  * API Client
- * Backend API ile iletisim
+ * Backend API communication
  */
 
 import axios from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-// Axios instance olustur
+// Create Axios instance
 const apiClient = axios.create({
   baseURL: `${API_URL}/api`,
   headers: {
@@ -15,7 +15,7 @@ const apiClient = axios.create({
   },
 });
 
-// Request interceptor - token ekle
+// Request interceptor - attach token
 apiClient.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
@@ -29,12 +29,12 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor - hata yonetimi
+// Response interceptor - error handling
 apiClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
     if (error.response?.status === 401) {
-      // Token gecersiz, cikis yap
+      // Token invalid, logout
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
         window.location.href = '/login';
@@ -89,10 +89,13 @@ export const priceAPI = {
 // ==================== STATS ====================
 
 export const statsAPI = {
-  getPersonal: (period) => apiClient.get('/stats/personal', { params: { period } }),
-  getLeaderboard: (league, period, limit) => 
-    apiClient.get(`/stats/leaderboard/${league}/${period}`, { params: { limit } }),
-  getSummary: () => apiClient.get('/stats/summary'),
+  getPersonal: (period, filters = {}) =>
+    apiClient.get('/stats/personal', { params: { period, ...filters } }),
+  getLeaderboard: (league, period, limit, filters = {}) =>
+    apiClient.get(`/stats/leaderboard/${encodeURIComponent(league)}/${period}`, {
+      params: { limit, ...filters },
+    }),
+  getSummary: (filters = {}) => apiClient.get('/stats/summary', { params: filters }),
 };
 
 export default apiClient;

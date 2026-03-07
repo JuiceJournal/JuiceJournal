@@ -3,14 +3,14 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useTrackerContext } from '@/hooks/useTrackerContext';
 import Navbar from '@/components/Navbar';
 import CurrencyIcon, { CurrencyValue } from '@/components/CurrencyIcon';
 import SparklineChart from '@/components/SparklineChart';
 import { priceAPI } from '@/lib/api';
-import { getItemTypeLabel } from '@/lib/utils';
+import { getItemTypeLabel, getPoeVersionLabel } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
-// PoE 1 category types with representative icons
 const POE1_TYPES = [
   { value: '', label: 'All', icon: null },
   { value: 'currency', label: 'Currency', icon: 'chaos' },
@@ -27,7 +27,6 @@ const POE1_TYPES = [
   { value: 'other', label: 'Other', icon: 'alteration' },
 ];
 
-// PoE 2 category types with representative icons
 const POE2_TYPES = [
   { value: '', label: 'All', icon: null },
   { value: 'currency', label: 'Currency', icon: 'exalted' },
@@ -41,7 +40,6 @@ const POE2_TYPES = [
   { value: 'other', label: 'Other', icon: 'alteration' },
 ];
 
-// Skeleton row for loading state
 function SkeletonRow() {
   return (
     <tr className="animate-pulse">
@@ -60,6 +58,7 @@ function SkeletonRow() {
 export default function CurrencyPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const { poeVersion, league } = useTrackerContext();
 
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -68,9 +67,6 @@ export default function CurrencyPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState('chaosValue');
   const [sortDir, setSortDir] = useState('desc');
-  const [league, setLeague] = useState('');
-  const [leagues, setLeagues] = useState([]);
-  const [poeVersion, setPoeVersion] = useState('poe1');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -82,41 +78,27 @@ export default function CurrencyPage() {
     }
   }, [user, authLoading, router]);
 
-  // Load leagues when version changes
   useEffect(() => {
-    if (user) {
-      loadLeagues();
+    const supportedTypes = poeVersion === 'poe2' ? POE2_TYPES : POE1_TYPES;
+    if (!supportedTypes.some((tab) => tab.value === selectedType)) {
+      setSelectedType('');
     }
-  }, [user, poeVersion]);
+  }, [poeVersion, selectedType]);
 
-  // Load prices when filters change
   useEffect(() => {
     if (user) {
       loadPrices();
     }
   }, [user, league, selectedType, poeVersion]);
 
-  const loadLeagues = async () => {
-    try {
-      const response = await priceAPI.getLeagues({ poeVersion });
-      const leagueList = response.data?.leagues || [];
-      setLeagues(leagueList);
-      if (leagueList.length > 0 && !leagueList.includes(league)) {
-        setLeague(leagueList[0]);
-      }
-    } catch (error) {
-      console.error('League loading error:', error);
-    }
-  };
-
   const loadPrices = async (search = searchQuery) => {
     try {
       setLoading(true);
       const params = {
         poeVersion,
+        league,
         limit: 500,
       };
-      if (league) params.league = league;
       if (selectedType) params.type = selectedType;
       if (search) params.search = search;
 
@@ -125,9 +107,6 @@ export default function CurrencyPage() {
       setPrices(data.prices || []);
       setTotalCount(data.count || 0);
       setLastUpdated(data.updatedAt);
-      if (data.league && !league) {
-        setLeague(data.league);
-      }
     } catch (error) {
       console.error('Price loading error:', error);
       toast.error('Failed to load prices');
@@ -166,21 +145,16 @@ export default function CurrencyPage() {
     }
   };
 
-  const handleVersionChange = (version) => {
-    setPoeVersion(version);
-    setLeague('');
-    setSelectedType('');
-    setSearchQuery('');
-  };
-
-  // Client-side sort
   const sortedPrices = [...prices].sort((a, b) => {
-    let aVal, bVal;
+    let aVal;
+    let bVal;
+
     if (sortField === 'itemName') {
       aVal = (a.itemName || '').toLowerCase();
       bVal = (b.itemName || '').toLowerCase();
       return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
     }
+
     aVal = parseFloat(a[sortField]) || 0;
     bVal = parseFloat(b[sortField]) || 0;
     return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
@@ -196,7 +170,12 @@ export default function CurrencyPage() {
         aria-sort={ariaSort}
         role="columnheader"
         tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSort(field); } }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleSort(field);
+          }
+        }}
       >
         <span className="inline-flex items-center gap-1">
           {children}
@@ -232,74 +211,36 @@ export default function CurrencyPage() {
       <Navbar />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-          <h1 className="text-2xl font-bold text-white">Currency Prices</h1>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* PoE Version Toggle */}
-            <div className="flex rounded-lg overflow-hidden border border-poe-border" role="radiogroup" aria-label="Game version">
-              <button
-                onClick={() => handleVersionChange('poe1')}
-                role="radio"
-                aria-checked={poeVersion === 'poe1'}
-                className={`px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-poe-gold focus-visible:ring-offset-1 focus-visible:ring-offset-poe-dark ${
-                  poeVersion === 'poe1'
-                    ? 'bg-poe-gold text-poe-dark'
-                    : 'bg-poe-card text-gray-400 hover:text-white'
-                }`}
-              >
-                PoE 1
-              </button>
-              <button
-                onClick={() => handleVersionChange('poe2')}
-                role="radio"
-                aria-checked={poeVersion === 'poe2'}
-                className={`px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-poe-gold focus-visible:ring-offset-1 focus-visible:ring-offset-poe-dark ${
-                  poeVersion === 'poe2'
-                    ? 'bg-poe-gold text-poe-dark'
-                    : 'bg-poe-card text-gray-400 hover:text-white'
-                }`}
-              >
-                PoE 2
-              </button>
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Currency Prices</h1>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className="inline-flex rounded-full bg-sky-500/15 px-3 py-1 text-xs font-medium text-sky-300">
+                {getPoeVersionLabel(poeVersion)}
+              </span>
+              <span className="inline-flex rounded-full bg-poe-card px-3 py-1 text-xs font-medium text-gray-300">
+                {league}
+              </span>
             </div>
-
-            {/* League Select */}
-            {leagues.length > 0 && (
-              <select
-                value={league}
-                onChange={(e) => setLeague(e.target.value)}
-                aria-label="Select league"
-                className="bg-poe-card border border-poe-border rounded-lg px-3 py-2 text-sm text-white cursor-pointer focus:border-poe-gold focus:outline-none focus-visible:ring-2 focus-visible:ring-poe-gold"
-              >
-                {leagues.map((l) => (
-                  <option key={l} value={l}>{l}</option>
-                ))}
-              </select>
-            )}
-
-            {/* Sync Button */}
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              aria-label={syncing ? 'Syncing prices' : 'Sync prices from poe.ninja'}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-poe-gold text-poe-dark text-sm font-medium rounded-lg hover:bg-poe-gold/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-poe-gold focus-visible:ring-offset-2 focus-visible:ring-offset-poe-dark"
-            >
-              {syncing && (
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              )}
-              {syncing ? 'Syncing...' : 'Sync'}
-            </button>
           </div>
+
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            aria-label={syncing ? 'Syncing prices' : 'Sync prices from poe.ninja'}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-poe-gold text-poe-dark text-sm font-medium rounded-lg hover:bg-poe-gold/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-poe-gold focus-visible:ring-offset-2 focus-visible:ring-offset-poe-dark"
+          >
+            {syncing && (
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            )}
+            {syncing ? 'Syncing...' : 'Sync'}
+          </button>
         </div>
 
-        {/* Filter Bar */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          {/* Type Tabs */}
           <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filter by item type">
             {(poeVersion === 'poe2' ? POE2_TYPES : POE1_TYPES).map((tab) => (
               <button
@@ -319,7 +260,6 @@ export default function CurrencyPage() {
             ))}
           </div>
 
-          {/* Search */}
           <div className="sm:ml-auto relative">
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none"
@@ -342,7 +282,6 @@ export default function CurrencyPage() {
           </div>
         </div>
 
-        {/* Data Table */}
         <div className="bg-poe-card border border-poe-border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full" role="table">
@@ -385,17 +324,14 @@ export default function CurrencyPage() {
                         <p className="text-gray-400 text-sm">
                           {searchQuery
                             ? 'No items found matching your search.'
-                            : 'No price data available. Click Sync to fetch prices.'}
+                            : 'No price data available for this game and league. Click Sync to fetch prices.'}
                         </p>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   sortedPrices.map((item, index) => (
-                    <tr
-                      key={item.id}
-                      className="hover:bg-poe-border/20 transition-colors group"
-                    >
+                    <tr key={item.id} className="hover:bg-poe-border/20 transition-colors group">
                       <td className="px-3 py-2.5 text-xs text-gray-500 tabular-nums">
                         {index + 1}
                       </td>
@@ -422,21 +358,11 @@ export default function CurrencyPage() {
                         </span>
                       </td>
                       <td className="px-3 py-2.5">
-                        <CurrencyValue
-                          value={item.chaosValue}
-                          type="chaos"
-                          size={14}
-                          className="text-sm tabular-nums"
-                        />
+                        <CurrencyValue value={item.chaosValue} type="chaos" size={14} className="text-sm tabular-nums" />
                       </td>
                       <td className="px-3 py-2.5">
                         {item.divineValue ? (
-                          <CurrencyValue
-                            value={item.divineValue}
-                            type="divine"
-                            size={14}
-                            className="text-sm tabular-nums"
-                          />
+                          <CurrencyValue value={item.divineValue} type="divine" size={14} className="text-sm tabular-nums" />
                         ) : (
                           <span className="text-xs text-gray-600">-</span>
                         )}
@@ -454,7 +380,6 @@ export default function CurrencyPage() {
             </table>
           </div>
 
-          {/* Footer */}
           {!loading && sortedPrices.length > 0 && (
             <div className="px-4 py-3 border-t border-poe-border flex items-center justify-between text-xs text-gray-500">
               <span>Showing {sortedPrices.length} of {totalCount} items</span>
