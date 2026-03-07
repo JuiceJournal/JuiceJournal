@@ -7,7 +7,7 @@ export default function LeaderboardTable({ data, currentUserId }) {
   if (!data || data.length === 0) {
     return (
       <div className="bg-poe-card rounded-lg p-8 text-center">
-        <p className="text-gray-400">Henüz veri bulunmuyor</p>
+        <p className="text-gray-400">No data available</p>
       </div>
     );
   }
@@ -32,11 +32,11 @@ export default function LeaderboardTable({ data, currentUserId }) {
           <thead>
             <tr className="bg-poe-darker text-gray-400 text-sm">
               <th className="text-center py-3 px-4 w-16">#</th>
-              <th className="text-left py-3 px-4">Kullanici</th>
-              <th className="text-center py-3 px-4">Map</th>
-              <th className="text-right py-3 px-4">Toplam Kâr</th>
-              <th className="text-right py-3 px-4">Ort. Kâr</th>
-              <th className="text-right py-3 px-4">Saatlik</th>
+              <th className="text-left py-3 px-4">User</th>
+              <th className="text-center py-3 px-4">Maps</th>
+              <th className="text-right py-3 px-4">Total Profit</th>
+              <th className="text-right py-3 px-4">Avg. Profit</th>
+              <th className="text-right py-3 px-4">Hourly</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-poe-border">
@@ -64,7 +64,7 @@ export default function LeaderboardTable({ data, currentUserId }) {
                       {entry.username}
                     </span>
                     {isCurrentUser && (
-                      <span className="ml-2 text-xs text-poe-gold">(Siz)</span>
+                      <span className="ml-2 text-xs text-poe-gold">(You)</span>
                     )}
                   </td>
                   <td className="py-3 px-4 text-center text-gray-300">

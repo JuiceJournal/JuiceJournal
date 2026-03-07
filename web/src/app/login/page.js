@@ -32,13 +32,13 @@ export default function LoginPage() {
         : await register(formData);
 
       if (response.success) {
-        toast.success(isLogin ? 'Giris basarili!' : 'Hesap olusturuldu!');
+        toast.success(isLogin ? 'Welcome!' : 'Account created!');
         router.push('/dashboard');
       } else {
-        toast.error(response.error || 'Bir hata olustu');
+        toast.error(response.error || 'An error occurred');
       }
     } catch (error) {
-      toast.error(error.error || 'Islem sirasinda hata olustu');
+      toast.error(error.error || 'An error occurred during the operation');
     } finally {
       setLoading(false);
     }
@@ -54,20 +54,20 @@ export default function LoginPage() {
             PoE Farm Tracker
           </h1>
           <p className="mt-2 text-gray-400">
-            Path of Exile farm takip uygulamasi
+            Path of Exile farm tracking application
           </p>
         </div>
 
         {/* Form */}
         <div className="bg-poe-card rounded-lg p-8">
           <h2 className="text-xl font-semibold text-white mb-6">
-            {isLogin ? 'Giris Yap' : 'Hesap Olustur'}
+            {isLogin ? 'Sign In' : 'Create Account'}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-gray-400 text-sm mb-1">
-                {isLogin ? 'Kullanici Adi veya Email' : 'Kullanici Adi'}
+                {isLogin ? 'Username or Email' : 'Username'}
               </label>
               <input
                 type="text"
@@ -96,7 +96,7 @@ export default function LoginPage() {
 
             <div>
               <label className="block text-gray-400 text-sm mb-1">
-                Sifre
+                Password
               </label>
               <input
                 type="password"
@@ -113,7 +113,7 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full btn btn-primary py-3 disabled:opacity-50"
             >
-              {loading ? 'Islem yapiliyor...' : isLogin ? 'Giris Yap' : 'Kayit Ol'}
+              {loading ? 'Processing...' : isLogin ? 'Sign In' : 'Sign Up'}
             </button>
           </form>
 
@@ -123,8 +123,8 @@ export default function LoginPage() {
               className="text-poe-gold hover:text-poe-gold-dark text-sm"
             >
               {isLogin
-                ? 'Hesabiniz yok mu? Kayit olun'
-                : 'Zaten hesabiniz var mi? Giris yapin'}
+                ? "Don't have an account? Sign up"
+                : 'Already have an account? Sign in'}
             </button>
           </div>
         </div>

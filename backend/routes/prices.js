@@ -1,6 +1,6 @@
 /**
  * Price Routes
- * Fiyat endpoint'leri
+ * Price endpoints
  */
 
 const express = require('express');
@@ -31,7 +31,7 @@ const poeVersionValidator = query('poeVersion').optional().isIn(['poe1', 'poe2']
 
 /**
  * GET /api/prices/current
- * Guncel fiyatlari getir
+ * Get current prices
  */
 router.get('/current',
   [
@@ -56,7 +56,7 @@ router.get('/current',
         poeVersion = 'poe1'
       } = req.query;
 
-      // Aktif ligi bul
+      // Find active league
       const activeLeague = league || await Price.getCurrentLeague(poeVersion) || 'Standard';
 
       const where = {
@@ -93,11 +93,11 @@ router.get('/current',
         error: null
       });
     } catch (error) {
-      console.error('Fiyat getirme hatasi:', error);
+      console.error('Price fetch error:', error);
       res.status(500).json({
         success: false,
         data: null,
-        error: 'Fiyatlar alinirken hata olustu'
+        error: 'Failed to get prices'
       });
     }
   }
@@ -105,7 +105,7 @@ router.get('/current',
 
 /**
  * GET /api/prices/:itemName
- * Belirli bir item'in fiyatini getir
+ * Get price for a specific item
  */
 router.get('/item/:itemName',
   [
@@ -135,7 +135,7 @@ router.get('/item/:itemName',
         return res.status(404).json({
           success: false,
           data: null,
-          error: 'Item fiyati bulunamadi'
+          error: 'Item price not found'
         });
       }
 
@@ -145,11 +145,11 @@ router.get('/item/:itemName',
         error: null
       });
     } catch (error) {
-      console.error('Fiyat getirme hatasi:', error);
+      console.error('Price fetch error:', error);
       res.status(500).json({
         success: false,
         data: null,
-        error: 'Fiyat alinirken hata olustu'
+        error: 'Failed to get price'
       });
     }
   }
@@ -157,7 +157,7 @@ router.get('/item/:itemName',
 
 /**
  * GET /api/prices/types
- * Mevcut item tiplerini getir
+ * Get available item types
  */
 router.get('/types',
   [
@@ -183,11 +183,11 @@ router.get('/types',
         error: null
       });
     } catch (error) {
-      console.error('Tip getirme hatasi:', error);
+      console.error('Type fetch error:', error);
       res.status(500).json({
         success: false,
         data: null,
-        error: 'Tipler alinirken hata olustu'
+        error: 'Failed to get types'
       });
     }
   }
@@ -195,7 +195,7 @@ router.get('/types',
 
 /**
  * GET /api/prices/leagues
- * Mevcut ligleri getir
+ * Get available leagues
  */
 router.get('/leagues',
   [
@@ -221,11 +221,11 @@ router.get('/leagues',
         error: null
       });
     } catch (error) {
-      console.error('Lig getirme hatasi:', error);
+      console.error('League fetch error:', error);
       res.status(500).json({
         success: false,
         data: null,
-        error: 'Ligler alinirken hata olustu'
+        error: 'Failed to get leagues'
       });
     }
   }
@@ -233,7 +233,7 @@ router.get('/leagues',
 
 /**
  * POST /api/prices/sync
- * poe.ninja'dan fiyatlari senkronize et (Admin/Internal)
+ * Sync prices from poe.ninja (Admin/Internal)
  */
 router.post('/sync',
   authenticate,
@@ -250,11 +250,11 @@ router.post('/sync',
       const targetLeague = league || await Price.getCurrentLeague(poeVersion) || 'Standard';
       const targetTypes = types || poeNinjaService.getDefaultSyncTypes(poeVersion);
 
-      console.log(`Fiyat senkronizasyonu basladi: ${targetLeague} (${poeVersion})`);
+      console.log(`Price sync started: ${targetLeague} (${poeVersion})`);
 
       const results = await poeNinjaService.syncAllPrices(targetLeague, targetTypes, poeVersion);
 
-      // WebSocket uzerinden broadcast
+      // Broadcast via WebSocket
       if (req.app.broadcast) {
         req.app.broadcast({
           type: 'PRICES_SYNCED',
@@ -270,7 +270,7 @@ router.post('/sync',
       res.json({
         success: true,
         data: {
-          message: 'Fiyat senkronizasyonu tamamlandi',
+          message: 'Price sync completed',
           league: targetLeague,
           poeVersion,
           results
@@ -278,11 +278,11 @@ router.post('/sync',
         error: null
       });
     } catch (error) {
-      console.error('Fiyat senkronizasyon hatasi:', error);
+      console.error('Price sync error:', error);
       res.status(500).json({
         success: false,
         data: null,
-        error: 'Fiyatlar senkronize edilirken hata olustu'
+        error: 'Failed to sync prices'
       });
     }
   }
@@ -290,7 +290,7 @@ router.post('/sync',
 
 /**
  * GET /api/prices/currency-overview
- * Poe.ninja currency overview (Ham veri)
+ * Poe.ninja currency overview (raw data)
  */
 router.get('/currency-overview',
   [
@@ -311,11 +311,11 @@ router.get('/currency-overview',
         error: null
       });
     } catch (error) {
-      console.error('Currency overview hatasi:', error);
+      console.error('Currency overview error:', error);
       res.status(500).json({
         success: false,
         data: null,
-        error: 'Currency overview alinirken hata olustu'
+        error: 'Failed to get currency overview'
       });
     }
   }
@@ -323,7 +323,7 @@ router.get('/currency-overview',
 
 /**
  * GET /api/prices/item-overview
- * Poe.ninja item overview (Ham veri)
+ * Poe.ninja item overview (raw data)
  */
 router.get('/item-overview',
   [
@@ -344,11 +344,11 @@ router.get('/item-overview',
         error: null
       });
     } catch (error) {
-      console.error('Item overview hatasi:', error);
+      console.error('Item overview error:', error);
       res.status(500).json({
         success: false,
         data: null,
-        error: 'Item overview alinirken hata olustu'
+        error: 'Failed to get item overview'
       });
     }
   }

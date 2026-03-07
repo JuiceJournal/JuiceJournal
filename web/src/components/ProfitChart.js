@@ -15,7 +15,7 @@ export default function ProfitChart({ data }) {
   if (!data || data.length === 0) {
     return (
       <div className="bg-poe-card rounded-lg p-6 h-80 flex items-center justify-center">
-        <p className="text-gray-400">Veri bulunmuyor</p>
+        <p className="text-gray-400">No data available</p>
       </div>
     );
   }
@@ -32,7 +32,7 @@ export default function ProfitChart({ data }) {
         <div className="bg-poe-darker border border-poe-border rounded-lg p-3">
           <p className="text-gray-300 text-sm mb-1">{label}</p>
           <p className="text-poe-gold font-medium">
-            Kâr: {payload[0].value.toFixed(1)}c
+            Profit: {payload[0].value.toFixed(1)}c
           </p>
           <p className="text-gray-400 text-sm">
             {payload[0].payload.sessions} map
@@ -46,7 +46,7 @@ export default function ProfitChart({ data }) {
   return (
     <div className="bg-poe-card rounded-lg p-6">
       <h3 className="text-lg font-semibold text-white mb-4">
-        Kâr Trendi (Son 7 Gün)
+        Profit Trend (Last 7 Days)
       </h3>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
