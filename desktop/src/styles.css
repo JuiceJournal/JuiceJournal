@@ -1,28 +1,28 @@
-/* PoE Farm Tracker - Modern Dark Gaming UI */
+/* PoE Farm Tracker - Desktop atlas console */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
-  --gold: #c8a94e;
-  --gold-light: #e4cc6a;
-  --gold-dim: #a08030;
-  --gold-glow: rgba(200, 169, 78, 0.15);
-  --gold-glow-strong: rgba(200, 169, 78, 0.3);
+  --gold: #c6a15b;
+  --gold-light: #e8c98d;
+  --gold-dim: #8c6a39;
+  --gold-glow: rgba(198, 161, 91, 0.18);
+  --gold-glow-strong: rgba(198, 161, 91, 0.35);
 
-  --bg-base: #0d0e12;
-  --bg-panel: #13141a;
-  --bg-card: #181a22;
-  --bg-card-hover: #1e2029;
-  --bg-input: #10111a;
-  --bg-elevated: #1c1e28;
+  --bg-base: #0f0c0a;
+  --bg-panel: rgba(14, 11, 10, 0.92);
+  --bg-card: rgba(24, 19, 16, 0.92);
+  --bg-card-hover: rgba(33, 27, 23, 0.96);
+  --bg-input: rgba(12, 10, 9, 0.92);
+  --bg-elevated: rgba(30, 24, 21, 0.9);
 
-  --border: rgba(255, 255, 255, 0.06);
-  --border-light: rgba(255, 255, 255, 0.1);
-  --border-gold: rgba(200, 169, 78, 0.25);
+  --border: rgba(255, 255, 255, 0.05);
+  --border-light: rgba(255, 255, 255, 0.09);
+  --border-gold: rgba(198, 161, 91, 0.28);
 
-  --text: #e8e6e3;
-  --text-secondary: #9b9a97;
-  --text-muted: #5c5b58;
+  --text: #ece7df;
+  --text-secondary: #b0a18c;
+  --text-muted: #6f6559;
   --text-bright: #ffffff;
 
   --green: #3ddc84;
@@ -42,7 +42,8 @@
   --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
 
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font: 'Source Sans 3', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Cormorant SC', serif;
   --font-mono: 'JetBrains Mono', 'Consolas', monospace;
 }
 
@@ -50,7 +51,10 @@
 
 body {
   font-family: var(--font);
-  background: var(--bg-base);
+  background:
+    radial-gradient(circle at top, rgba(145, 73, 42, 0.16), transparent 28%),
+    radial-gradient(circle at 80% 18%, rgba(198, 161, 91, 0.12), transparent 18%),
+    linear-gradient(180deg, #15110f 0%, #0f0c0a 40%, #080706 100%);
   color: var(--text);
   line-height: 1.5;
   min-height: 100vh;
@@ -64,9 +68,10 @@ body {
   align-items: center;
   gap: 1rem;
   padding: 0 1.5rem;
-  height: 52px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
+  height: 60px;
+  background: linear-gradient(180deg, rgba(18,14,12,0.96), rgba(10,8,7,0.9));
+  border-bottom: 1px solid var(--border-gold);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
   -webkit-app-region: drag;
   position: sticky;
   top: 0;
@@ -81,22 +86,25 @@ body {
 }
 
 .logo-icon {
-  width: 28px;
-  height: 28px;
-  background: linear-gradient(135deg, var(--gold), var(--gold-dim));
-  border-radius: var(--radius-sm);
+  width: 34px;
+  height: 34px;
+  background: radial-gradient(circle at 30% 30%, var(--gold-light), var(--gold-dim));
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.85rem;
-  box-shadow: 0 0 12px var(--gold-glow);
+  box-shadow: 0 0 18px var(--gold-glow);
 }
 
 .logo h1 {
-  font-size: 0.9rem;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--text-bright);
-  letter-spacing: -0.02em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .logo h1 span {
@@ -113,40 +121,34 @@ body {
 
 .nav-btn {
   position: relative;
-  padding: 0.55rem 1.1rem;
-  min-height: 36px;
-  background: transparent;
-  border: none;
+  padding: 0.58rem 1rem;
+  min-height: 38px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid transparent;
   color: var(--text-secondary);
   cursor: pointer;
   font-family: var(--font);
-  font-size: 0.8rem;
-  font-weight: 500;
-  border-radius: var(--radius-sm);
+  font-size: 0.74rem;
+  font-weight: 700;
+  border-radius: 999px;
   transition: var(--transition);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
 }
 
 .nav-btn:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--border-gold);
 }
 
 .nav-btn.active {
   color: var(--gold-light);
   background: var(--gold-glow);
-}
-
-.nav-btn.active::after {
-  content: '';
-  position: absolute;
-  bottom: -9px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 20px;
-  height: 2px;
-  background: var(--gold);
-  border-radius: 1px;
+  border-color: var(--border-gold);
 }
 
 /* User Info */
@@ -212,28 +214,30 @@ body {
 
 /* ==================== BUTTONS ==================== */
 .btn {
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: var(--radius-sm);
+  padding: 0.7rem 1rem;
+  border-radius: 12px;
   cursor: pointer;
   font-family: var(--font);
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: 0.76rem;
+  font-weight: 700;
   transition: var(--transition);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
   white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--gold), var(--gold-dim));
+  border: 1px solid rgba(255, 232, 197, 0.12);
+  background: linear-gradient(180deg, #d2b071, #8a6734);
   color: var(--bg-base);
-  box-shadow: 0 2px 8px rgba(200, 169, 78, 0.2);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
 }
 .btn-primary:hover {
-  box-shadow: 0 4px 16px rgba(200, 169, 78, 0.35);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.35);
   transform: translateY(-1px);
 }
 .btn-primary:active { transform: translateY(0); }
@@ -241,11 +245,11 @@ body {
 .btn-secondary {
   background: var(--bg-elevated);
   color: var(--text);
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-gold);
 }
 .btn-secondary:hover {
   background: var(--bg-card-hover);
-  border-color: var(--border-gold);
+  color: var(--gold-light);
 }
 
 .btn-danger {
@@ -310,14 +314,43 @@ body {
 .modal.hidden { display: none; }
 
 .modal-content {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-light);
-  padding: 2rem;
+  background: linear-gradient(180deg, rgba(20,16,14,0.98), rgba(12,10,9,0.98));
+  border: 1px solid var(--border-gold);
+  padding: 1.25rem;
   border-radius: var(--radius-lg);
   width: 100%;
-  max-width: 380px;
+  max-width: 960px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
   animation: modalIn 250ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-shell {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 1.25rem;
+}
+
+.modal-art,
+.modal-panel {
+  background: rgba(11, 9, 8, 0.64);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 1.6rem;
+}
+
+.modal-art {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top, rgba(198,161,91,0.16), transparent 28%),
+    linear-gradient(180deg, rgba(32,26,22,0.96), rgba(13,10,9,0.96));
+}
+
+.modal-content h2,
+.modal-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .modal-content h2 {
@@ -327,23 +360,45 @@ body {
   margin-bottom: 0.4rem;
 }
 
+.modal-display {
+  font-size: 2.2rem;
+  line-height: 0.95;
+  color: var(--text-bright);
+  margin-top: 0.85rem;
+}
+
+.modal-kicker {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+  margin-top: 1.4rem;
+}
+
 .modal-subtitle {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-top: 0.85rem;
+  line-height: 1.6;
+}
+
+.modal-subtitle.compact {
   font-size: 0.82rem;
-  color: var(--text-muted);
-  margin-bottom: 1.5rem;
+  margin: 0 0 1.4rem;
 }
 
 .modal-logo {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 1.75rem;
+  margin-bottom: 0.5rem;
 }
 
 .modal-logo-icon {
   width: 36px;
   height: 36px;
-  background: linear-gradient(135deg, var(--gold), var(--gold-dim));
+  background: linear-gradient(135deg, var(--gold-light), var(--gold-dim));
   border-radius: var(--radius);
   display: flex;
   align-items: center;
@@ -356,6 +411,50 @@ body {
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--text-bright);
+}
+
+.modal-feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin-top: 1.8rem;
+}
+
+.modal-feature {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.8rem;
+  align-items: start;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+}
+
+.modal-feature-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--gold-glow);
+  color: var(--gold-light);
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.modal-feature strong {
+  display: block;
+  font-size: 0.84rem;
+  color: var(--text-bright);
+  margin-bottom: 0.2rem;
+}
+
+.modal-feature p {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
 }
 
 @keyframes modalBgIn { from { opacity: 0; } to { opacity: 1; } }
@@ -372,18 +471,20 @@ body {
 .form-group label {
   display: block;
   margin-bottom: 0.4rem;
-  font-size: 0.78rem;
-  font-weight: 500;
+  font-size: 0.72rem;
+  font-weight: 700;
   color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
 }
 
 .form-group input,
 .form-group select {
   width: 100%;
-  padding: 0.6rem 0.85rem;
+  padding: 0.75rem 0.9rem;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   color: var(--text);
   font-family: var(--font);
   font-size: 0.85rem;
@@ -460,11 +561,12 @@ body {
 
 /* Cards */
 .card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(29,24,21,0.94), rgba(17,14,12,0.98));
+  border: 1px solid var(--border-gold);
+  border-radius: 18px;
   padding: 1.25rem;
   transition: var(--transition);
+  box-shadow: 0 24px 70px rgba(0,0,0,0.32);
 }
 
 .card:hover {
@@ -479,11 +581,11 @@ body {
 }
 
 .card h3 {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--gold-light);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.18em;
 }
 
 .card-badge {
@@ -693,9 +795,12 @@ body {
 }
 
 .page-header h2 {
-  font-size: 1.1rem;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--text-bright);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 .filters select {
@@ -1369,6 +1474,9 @@ body {
 
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 900px) {
+  .modal-shell {
+    grid-template-columns: 1fr;
+  }
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
