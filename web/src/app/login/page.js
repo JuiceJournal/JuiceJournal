@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import PoeChromeIcon from '@/components/PoeChromeIcon';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
@@ -32,42 +33,82 @@ export default function LoginPage() {
         : await register(formData);
 
       if (response.success) {
-        toast.success(isLogin ? 'Giris basarili!' : 'Hesap olusturuldu!');
+        toast.success(isLogin ? 'Welcome back to the atlas.' : 'Account created!');
         router.push('/dashboard');
       } else {
-        toast.error(response.error || 'Bir hata olustu');
+        toast.error(response.error || 'An error occurred');
       }
     } catch (error) {
-      toast.error(error.error || 'Islem sirasinda hata olustu');
+      toast.error(error.error || 'An error occurred during the operation');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-poe-dark px-4">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <span className="text-5xl">💰</span>
-          <h1 className="mt-4 text-2xl font-bold text-poe-gold">
-            PoE Farm Tracker
+    <div className="relative min-h-screen overflow-hidden bg-poe-dark px-4 py-10">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(152,78,42,0.18),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(198,161,91,0.12),transparent_20%)]" />
+      <div className="relative mx-auto grid min-h-[calc(100vh-5rem)] max-w-6xl items-center gap-10 lg:grid-cols-[1.15fr_0.85fr]">
+        <section className="hidden lg:block">
+          <p className="section-kicker">Occult Atlas Ledger</p>
+          <h1 className="mt-4 max-w-3xl font-display text-6xl uppercase leading-[0.92] text-stone-100">
+            Production-grade tracking for Path of Exile economies.
           </h1>
-          <p className="mt-2 text-gray-400">
-            Path of Exile farm takip uygulamasi
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-poe-mist">
+            Keep league context, session profit, and market movement in one coherent command surface built for long-term progression.
           </p>
-        </div>
 
-        {/* Form */}
-        <div className="bg-poe-card rounded-lg p-8">
-          <h2 className="text-xl font-semibold text-white mb-6">
-            {isLogin ? 'Giris Yap' : 'Hesap Olustur'}
-          </h2>
+          <div className="mt-8 grid max-w-2xl gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-poe-border bg-[rgba(20,16,14,0.78)] p-4">
+              <p className="section-kicker inline-flex items-center gap-2">
+                <PoeChromeIcon type="atlas" size={14} className="text-poe-gold/80" />
+                <span>Maps</span>
+              </p>
+              <p className="mt-3 font-display text-2xl uppercase text-poe-gold">Tracked</p>
+              <p className="mt-2 text-sm text-poe-mist">Record session tempo and route quality.</p>
+            </div>
+            <div className="rounded-2xl border border-poe-border bg-[rgba(20,16,14,0.78)] p-4">
+              <p className="section-kicker inline-flex items-center gap-2">
+                <PoeChromeIcon type="market" size={14} className="text-poe-gold/80" />
+                <span>Market</span>
+              </p>
+              <p className="mt-3 font-display text-2xl uppercase text-poe-gold">Synced</p>
+              <p className="mt-2 text-sm text-poe-mist">Read current value by game and league.</p>
+            </div>
+            <div className="rounded-2xl border border-poe-border bg-[rgba(20,16,14,0.78)] p-4">
+              <p className="section-kicker inline-flex items-center gap-2">
+                <PoeChromeIcon type="sigil" size={14} className="text-poe-gold/80" />
+                <span>Goal</span>
+              </p>
+              <p className="mt-3 font-display text-2xl uppercase text-poe-gold">Refined</p>
+              <p className="mt-2 text-sm text-poe-mist">A tracker that feels native to PoE.</p>
+            </div>
+          </div>
+        </section>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <section className="card mx-auto w-full max-w-lg">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-poe-border bg-[radial-gradient(circle_at_30%_30%,rgba(214,180,110,0.22),rgba(22,18,15,0.94))] shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+              <PoeChromeIcon type="gate" size={30} className="text-poe-gold drop-shadow-[0_0_12px_rgba(198,161,91,0.22)]" />
+            </div>
             <div>
-              <label className="block text-gray-400 text-sm mb-1">
-                {isLogin ? 'Kullanici Adi veya Email' : 'Kullanici Adi'}
+              <p className="section-kicker">{isLogin ? 'Return To Command' : 'Create Ledger Access'}</p>
+              <h2 className="mt-1 font-display text-3xl uppercase tracking-[0.12em] text-stone-100">
+                {isLogin ? 'Sign In' : 'Create Account'}
+              </h2>
+            </div>
+          </div>
+
+          <p className="mt-5 text-sm leading-6 text-poe-mist">
+            {isLogin
+              ? 'Enter the atlas control panel and continue tracking your current farming context.'
+              : 'Create a new operator account for session tracking, pricing, and leaderboard progression.'}
+          </p>
+
+          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+            <div>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-poe-mist">
+                {isLogin ? 'Username or Email' : 'Username'}
               </label>
               <input
                 type="text"
@@ -81,7 +122,7 @@ export default function LoginPage() {
 
             {!isLogin && (
               <div>
-                <label className="block text-gray-400 text-sm mb-1">
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-poe-mist">
                   Email
                 </label>
                 <input
@@ -95,8 +136,8 @@ export default function LoginPage() {
             )}
 
             <div>
-              <label className="block text-gray-400 text-sm mb-1">
-                Sifre
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-poe-mist">
+                Password
               </label>
               <input
                 type="password"
@@ -111,28 +152,21 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full btn btn-primary py-3 disabled:opacity-50"
+              className="btn btn-primary mt-4 w-full disabled:opacity-50"
             >
-              {loading ? 'Islem yapiliyor...' : isLogin ? 'Giris Yap' : 'Kayit Ol'}
+              {loading ? 'Processing...' : isLogin ? 'Enter Dashboard' : 'Create Account'}
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-6 border-t border-poe-border/70 pt-5 text-center">
             <button
               onClick={() => setIsLogin(!isLogin)}
-              className="text-poe-gold hover:text-poe-gold-dark text-sm"
+              className="text-sm font-semibold uppercase tracking-[0.14em] text-poe-gold transition-colors hover:text-amber-200"
             >
-              {isLogin
-                ? 'Hesabiniz yok mu? Kayit olun'
-                : 'Zaten hesabiniz var mi? Giris yapin'}
+              {isLogin ? 'Need a new account?' : 'Already have access?'}
             </button>
           </div>
-        </div>
-
-        {/* Footer */}
-        <p className="mt-8 text-center text-gray-500 text-sm">
-          PoE Farm Tracker &copy; {new Date().getFullYear()}
-        </p>
+        </section>
       </div>
     </div>
   );

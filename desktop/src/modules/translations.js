@@ -94,6 +94,17 @@ window.Translations = {
     'settings.poeVersion': 'PoE Versiyonu',
     'settings.defaultLeague': 'Varsayilan Lig',
     'settings.defaultLeaguePlaceholder': 'Standard',
+    'settings.poeAccount': 'Path of Exile Hesabi',
+    'settings.poeNotLinked': 'Bagli Degil',
+    'settings.poeNoAccount': 'Henuz bagli bir Path of Exile hesabi yok.',
+    'settings.poeMockMode': 'Gercek GGG OAuth istemcisi gelene kadar mock mod kullanilacak.',
+    'settings.poeSignInRequired': 'Giris gerekli',
+    'settings.poeSignInHint': 'Path of Exile baglantisini yonetmek icin once yerel uygulama hesabi ile giris yapin.',
+    'settings.poeLinked': 'Baglandi',
+    'settings.poeLinkedMock': 'Baglandi (Mock)',
+    'settings.poeLiveMode': 'Yapilandirilmis Path of Exile OAuth uygulamasi uzerinden baglandi.',
+    'settings.connectPoe': 'Path of Exile Bagla',
+    'settings.disconnectPoe': 'Baglantiyi Kaldir',
 
     // Settings - Hotkeys
     'settings.scanHotkey': 'Loot Tarama',
@@ -143,6 +154,12 @@ window.Translations = {
     'toast.error': 'Hata',
     'toast.connectionSuccess': 'API baglantisi basarili',
     'toast.connectionFailed': 'API baglantisi basarisiz',
+    'toast.poeLinked': 'Path of Exile hesabi baglandi',
+    'toast.poeLinkedMock': 'Mock Path of Exile hesabi baglandi',
+    'toast.poeDisconnected': 'Path of Exile hesabi baglantisi kaldirildi',
+    'toast.poeSignInFirst': 'Once yerel uygulama hesabiyla giris yapin',
+    'toast.poeConnectError': 'Path of Exile hesabi baglanamadi',
+    'toast.poeDisconnectError': 'Path of Exile hesabi baglantisi kaldirilamadi',
 
     // Currency
     'nav.currency': 'Currency',
@@ -257,6 +274,17 @@ window.Translations = {
     'settings.poeVersion': 'PoE Version',
     'settings.defaultLeague': 'Default League',
     'settings.defaultLeaguePlaceholder': 'Standard',
+    'settings.poeAccount': 'Path of Exile Account',
+    'settings.poeNotLinked': 'Not linked',
+    'settings.poeNoAccount': 'No Path of Exile account connected yet.',
+    'settings.poeMockMode': 'Mock mode will be used until a real GGG OAuth client is configured.',
+    'settings.poeSignInRequired': 'Sign in required',
+    'settings.poeSignInHint': 'Sign in with your local app account to manage Path of Exile linking.',
+    'settings.poeLinked': 'Linked',
+    'settings.poeLinkedMock': 'Linked (Mock)',
+    'settings.poeLiveMode': 'Connected through the configured Path of Exile OAuth application.',
+    'settings.connectPoe': 'Connect Path of Exile',
+    'settings.disconnectPoe': 'Disconnect',
 
     // Settings - Hotkeys
     'settings.scanHotkey': 'Loot Scan',
@@ -306,6 +334,12 @@ window.Translations = {
     'toast.error': 'Error',
     'toast.connectionSuccess': 'API connection successful',
     'toast.connectionFailed': 'API connection failed',
+    'toast.poeLinked': 'Path of Exile account linked',
+    'toast.poeLinkedMock': 'Mock Path of Exile account linked',
+    'toast.poeDisconnected': 'Path of Exile account disconnected',
+    'toast.poeSignInFirst': 'Sign in with your local app account first',
+    'toast.poeConnectError': 'Failed to connect Path of Exile account',
+    'toast.poeDisconnectError': 'Failed to disconnect Path of Exile account',
 
     // Currency
     'nav.currency': 'Currency',

@@ -9,7 +9,9 @@
  * - OCR ile stash tarama
  */
 
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen, shell } = require('electron');
+const crypto = require('crypto');
+const http = require('http');
 const path = require('path');
 const Store = require('electron-store');
 
@@ -29,7 +31,7 @@ const store = new Store({
     language: 'en',
     soundNotifications: false,
     poeVersion: 'poe1',
-    defaultLeague: '',
+    defaultLeague: 'Standard',
     scanHotkey: 'F9'
   },
 });
@@ -47,6 +49,94 @@ let logParser = null;
 let ocrScanner = null;
 let apiClient = null;
 let currentSession = null;
+let poeAuthServer = null;
+
+async function closePoeAuthServer() {
+  if (!poeAuthServer) return;
+
+  await new Promise((resolve) => {
+    poeAuthServer.close(() => resolve());
+  });
+  poeAuthServer = null;
+}
+
+async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expectedState, codeVerifier }) {
+  await closePoeAuthServer();
+
+  return await new Promise((resolve, reject) => {
+    const timeout = setTimeout(async () => {
+      await closePoeAuthServer();
+      reject(new Error('Path of Exile linking timed out'));
+    }, 3 * 60 * 1000);
+
+    poeAuthServer = http.createServer(async (req, res) => {
+      const url = new URL(req.url, redirectUri);
+
+      if (url.pathname !== redirectUrl.pathname) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not found');
+        return;
+      }
+
+      const error = url.searchParams.get('error');
+      const code = url.searchParams.get('code');
+      const state = url.searchParams.get('state');
+
+      if (error) {
+        clearTimeout(timeout);
+        res.writeHead(400, { 'Content-Type': 'text/html' });
+        res.end('<h1>Path of Exile linking failed.</h1><p>You can close this window.</p>');
+        await closePoeAuthServer();
+        reject(new Error(error));
+        return;
+      }
+
+      if (!code || state !== expectedState) {
+        clearTimeout(timeout);
+        res.writeHead(400, { 'Content-Type': 'text/html' });
+        res.end('<h1>Invalid callback.</h1><p>You can close this window.</p>');
+        await closePoeAuthServer();
+        reject(new Error('Invalid callback state'));
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end('<h1>Path of Exile account linked.</h1><p>You can close this window and return to the app.</p>');
+
+      try {
+        const result = await apiClient.completePoeConnect({
+          code,
+          codeVerifier,
+          redirectUri,
+          state,
+        });
+        clearTimeout(timeout);
+        await closePoeAuthServer();
+        resolve(result);
+      } catch (requestError) {
+        clearTimeout(timeout);
+        await closePoeAuthServer();
+        reject(new Error(requestError.message || 'Failed to complete Path of Exile linking'));
+      }
+    });
+
+    poeAuthServer.on('error', async (error) => {
+      clearTimeout(timeout);
+      await closePoeAuthServer();
+      reject(error);
+    });
+
+    poeAuthServer.listen(Number(redirectUrl.port), redirectUrl.hostname, async () => {
+      try {
+        await shell.openExternal(startResponse.authUrl);
+      } catch (error) {
+        clearTimeout(timeout);
+        await closePoeAuthServer();
+        reject(error);
+      }
+    });
+  });
+}
 
 // Development mod kontrolu
 const isDev = process.argv.includes('--dev');
@@ -252,21 +342,28 @@ async function captureAndScan() {
 /**
  * Yeni map session baslat
  */
-async function startNewSession() {
+async function startNewSession(input = {}) {
   try {
     // Aktif session varsa bitir
     if (currentSession) {
       await endCurrentSession();
     }
 
+    const poeVersion = input.poeVersion || store.get('poeVersion') || 'poe1';
+    const league = (input.league || store.get('defaultLeague') || 'Standard').trim() || 'Standard';
+
     // Map adi al
-    const mapName = await promptMapName();
+    const mapName = input.mapName || await promptMapName();
     if (!mapName) return;
 
     // Session olustur
     const session = await apiClient.startSession({
       mapName,
-      costChaos: 0 // Kullanici sonradan girebilir
+      mapTier: input.mapTier || null,
+      mapType: input.mapType || null,
+      costChaos: input.costChaos || 0,
+      poeVersion,
+      league
     });
 
     currentSession = session;
@@ -383,7 +480,9 @@ function setupLogParser() {
       // Otomatik session baslat
       apiClient.startSession({
         mapName: data.mapName,
-        mapTier: data.mapTier
+        mapTier: data.mapTier,
+        poeVersion: store.get('poeVersion') || 'poe1',
+        league: (store.get('defaultLeague') || 'Standard').trim() || 'Standard'
       }).then(session => {
         currentSession = session;
         showNotification('Otomatik Session', `${data.mapName} map'i baslatildi`);
@@ -448,7 +547,7 @@ function setupIPC() {
 
   // Session baslat
   ipcMain.handle('start-session', async (event, data) => {
-    return await startNewSession();
+    return await startNewSession(data || {});
   });
 
   // Session bitir
@@ -491,6 +590,71 @@ function setupIPC() {
       console.error('Login hatasi:', error);
       throw error;
     }
+  });
+
+  ipcMain.handle('register', async (event, payload) => {
+    const result = await apiClient.register(payload);
+    const token = result?.token;
+    if (token) {
+      store.set('authToken', token);
+      apiClient.setToken(token);
+    }
+    return {
+      success: true,
+      data: result,
+      error: null
+    };
+  });
+
+  ipcMain.handle('get-current-user', async () => {
+    return await apiClient.getMe();
+  });
+
+  ipcMain.handle('start-poe-connect', async () => {
+    const redirectUri = process.env.POE_REDIRECT_URI || 'http://127.0.0.1:34127/oauth/poe/callback';
+    const redirectUrl = new URL(redirectUri);
+    const state = crypto.randomUUID();
+    const codeVerifier = crypto.randomBytes(32).toString('base64url');
+    const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+
+    const startResponse = await apiClient.startPoeConnect({
+      redirectUri,
+      codeChallenge,
+      codeChallengeMethod: 'S256',
+      state,
+    });
+
+    if (startResponse?.mode === 'mock') {
+      return await apiClient.completePoeConnect({
+        code: startResponse.mockCode,
+        codeVerifier,
+        redirectUri,
+        state,
+      });
+    }
+
+    if (!startResponse?.authUrl) {
+      throw new Error('Path of Exile authorization URL could not be created');
+    }
+
+    return await openPoeLinkFlow(startResponse, {
+      redirectUrl,
+      redirectUri,
+      expectedState: state,
+      codeVerifier,
+    });
+  });
+
+  ipcMain.handle('complete-poe-connect', async (event, data) => {
+    return await apiClient.completePoeConnect(data || {});
+  });
+
+  ipcMain.handle('get-poe-link-status', async () => {
+    return await apiClient.getPoeLinkStatus();
+  });
+
+  ipcMain.handle('disconnect-poe-account', async () => {
+    return await apiClient.disconnectPoeAccount();
   });
 
   // Logout

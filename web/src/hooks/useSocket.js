@@ -10,7 +10,7 @@ export function useSocket() {
   const socketRef = useRef(null);
 
   useEffect(() => {
-    // WebSocket baglantisi kur
+    // Establish WebSocket connection
     const connect = () => {
       try {
         const ws = new WebSocket(WS_URL);
@@ -33,7 +33,7 @@ export function useSocket() {
         ws.onclose = () => {
           console.log('WebSocket disconnected');
           setConnected(false);
-          // 5 saniye sonra yeniden baglan
+          // Reconnect after 5 seconds
           setTimeout(connect, 5000);
         };
 

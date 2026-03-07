@@ -1,9 +1,9 @@
 /**
- * Yardimci fonksiyonlar
+ * Utility functions
  */
 
 /**
- * Chaos degerini formatla
+ * Format chaos value
  */
 export function formatChaos(value) {
   const num = parseFloat(value);
@@ -12,7 +12,7 @@ export function formatChaos(value) {
 }
 
 /**
- * Divine degerini formatla
+ * Format divine value
  */
 export function formatDivine(value) {
   const num = parseFloat(value);
@@ -21,64 +21,64 @@ export function formatDivine(value) {
 }
 
 /**
- * Sureyi formatla (saniye -> mm:ss veya hh:mm:ss)
+ * Format duration (seconds -> mm:ss or hh:mm:ss)
  */
 export function formatDuration(seconds) {
   if (!seconds) return '-';
-  
+
   const hours = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
-  
+
   if (hours > 0) {
-    return `${hours}s ${mins}d ${secs}sn`;
+    return `${hours}h ${mins}m ${secs}s`;
   }
-  return `${mins}d ${secs}sn`;
+  return `${mins}m ${secs}s`;
 }
 
 /**
- * Tarihi formatla
+ * Format date
  */
 export function formatDate(date, options = {}) {
   if (!date) return '-';
-  
+
   const d = new Date(date);
   if (isNaN(d.getTime())) return '-';
-  
+
   const defaultOptions = {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     ...options,
   };
-  
-  return d.toLocaleDateString('tr-TR', defaultOptions);
+
+  return d.toLocaleDateString('en-US', defaultOptions);
 }
 
 /**
- * Saati formatla
+ * Format time
  */
 export function formatTime(date) {
   if (!date) return '-';
-  
+
   const d = new Date(date);
   if (isNaN(d.getTime())) return '-';
-  
-  return d.toLocaleTimeString('tr-TR', {
+
+  return d.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
   });
 }
 
 /**
- * Kisa tarih formati
+ * Short date format
  */
 export function formatShortDate(date) {
   return formatDate(date, { month: 'short', day: 'numeric' });
 }
 
 /**
- * Para birimi formatla (buyuk degerler icin)
+ * Format currency (for large values)
  */
 export function formatCurrency(value) {
   const num = parseFloat(value);
@@ -94,14 +94,14 @@ export function formatCurrency(value) {
 }
 
 /**
- * Sayiyi formatla
+ * Format number
  */
 export function formatNumber(num) {
-  return new Intl.NumberFormat('tr-TR').format(num);
+  return new Intl.NumberFormat('en-US').format(num);
 }
 
 /**
- * Profit degerine gore renk sinifi dondur
+ * Return color class based on profit value
  */
 export function getProfitColorClass(value) {
   const num = parseFloat(value);
@@ -111,7 +111,7 @@ export function getProfitColorClass(value) {
 }
 
 /**
- * Status degerine gore renk sinifi dondur
+ * Return color class based on status
  */
 export function getStatusColorClass(status) {
   switch (status) {
@@ -127,19 +127,26 @@ export function getStatusColorClass(status) {
 }
 
 /**
- * Status etiketini Turkcelestir
+ * Return status label
  */
 export function getStatusLabel(status) {
   const labels = {
-    active: 'Aktif',
-    completed: 'Tamamlandi',
-    abandoned: 'Iptal Edildi',
+    active: 'Active',
+    completed: 'Completed',
+    abandoned: 'Abandoned',
   };
   return labels[status] || status;
 }
 
 /**
- * Item tipini Turkcelestir
+ * Return the display label for a Path of Exile version.
+ */
+export function getPoeVersionLabel(poeVersion) {
+  return poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1';
+}
+
+/**
+ * Return item type label
  */
 export function getItemTypeLabel(type) {
   const labels = {
@@ -154,13 +161,13 @@ export function getItemTypeLabel(type) {
     incubator: 'Incubator',
     delirium_orb: 'Delirium Orb',
     catalyst: 'Catalyst',
-    other: 'Diger',
+    other: 'Other',
   };
   return labels[type] || type;
 }
 
 /**
- * Array'i gruplandir
+ * Group array by key
  */
 export function groupBy(array, key) {
   return array.reduce((result, item) => {
@@ -174,7 +181,7 @@ export function groupBy(array, key) {
 }
 
 /**
- * Array'den unique degerler al
+ * Get unique values from array
  */
 export function uniqueBy(array, key) {
   const seen = new Set();
@@ -187,7 +194,7 @@ export function uniqueBy(array, key) {
 }
 
 /**
- * Local storage'a kaydet
+ * Save to local storage
  */
 export function setStorage(key, value) {
   if (typeof window !== 'undefined') {
@@ -196,7 +203,7 @@ export function setStorage(key, value) {
 }
 
 /**
- * Local storage'dan al
+ * Get from local storage
  */
 export function getStorage(key, defaultValue = null) {
   if (typeof window !== 'undefined') {
@@ -207,7 +214,7 @@ export function getStorage(key, defaultValue = null) {
 }
 
 /**
- * Local storage'dan sil
+ * Remove from local storage
  */
 export function removeStorage(key) {
   if (typeof window !== 'undefined') {

@@ -12,7 +12,8 @@ const state = {
   currentSession: null,
   settings: {},
   sessions: [],
-  recentLoot: []
+  recentLoot: [],
+  poeLink: null
 };
 
 // DOM Elementleri
@@ -58,8 +59,13 @@ const elements = {
   resetSettingsBtn: document.getElementById('reset-settings'),
   settingsNavBtns: document.querySelectorAll('.settings-nav-btn'),
   settingsTabs: document.querySelectorAll('.settings-tab'),
-  langBtns: document.querySelectorAll('.lang-btn'),
+  globalLanguage: document.getElementById('global-language'),
   versionBtns: document.querySelectorAll('.version-btn'),
+  poeLinkStatus: document.getElementById('poe-link-status'),
+  poeAccountName: document.getElementById('poe-account-name'),
+  poeLinkMode: document.getElementById('poe-link-mode'),
+  poeConnectBtn: document.getElementById('poe-connect-btn'),
+  poeDisconnectBtn: document.getElementById('poe-disconnect-btn'),
   
   // User
   username: document.getElementById('username'),
@@ -83,6 +89,7 @@ async function init() {
   // Set language from settings and apply translations
   window._appState.language = state.settings.language || 'en';
   if (window.applyTranslations) window.applyTranslations();
+  syncDesktopCurrencyIcons();
 
   // Event listener'lari kur
   setupEventListeners();
@@ -93,9 +100,10 @@ async function init() {
   const token = state.settings.authToken;
   if (token) {
     try {
-      const user = await window.electronAPI.login({});
-      if (user) {
-        setCurrentUser(user);
+      const me = await window.electronAPI.getCurrentUser();
+      if (me?.user) {
+        setCurrentUser(me.user);
+        await loadPoeLinkStatus();
       }
     } catch (error) {
       console.log('Otomatik giris basarisiz');
@@ -107,6 +115,7 @@ async function init() {
   
   // Aktif session'i kontrol et
   await loadCurrentSession();
+  await loadDashboardStats();
   
   console.log('Uygulama basarili bir sekilde baslatildi');
 }
@@ -127,11 +136,8 @@ async function loadSettings() {
     if (elements.defaultLeague) elements.defaultLeague.value = state.settings.defaultLeague || '';
     if (elements.scanHotkey) elements.scanHotkey.value = state.settings.scanHotkey || 'F9';
 
-    // Language buttons
     const lang = state.settings.language || 'en';
-    elements.langBtns.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.lang === lang);
-    });
+    if (elements.globalLanguage) elements.globalLanguage.value = lang;
 
     // PoE version buttons
     const ver = state.settings.poeVersion || 'poe1';
@@ -146,28 +152,57 @@ async function loadSettings() {
 /**
  * PoE currency icon image paths
  */
-const CURRENCY_IMAGES = {
-  chaos: 'assets/currency/chaos.png',
-  divine: 'assets/currency/divine.png',
-  exalted: 'assets/currency/exalted.png',
-  mirror: 'assets/currency/mirror.png',
-  vaal: 'assets/currency/vaal.png',
-  alchemy: 'assets/currency/alchemy.png',
-  fusing: 'assets/currency/fusing.png',
-  chromatic: 'assets/currency/chromatic.png',
-  alteration: 'assets/currency/alteration.png',
-  jewellers: 'assets/currency/jewellers.png',
-  scouring: 'assets/currency/scouring.png',
-  blessed: 'assets/currency/blessed.png',
-  regal: 'assets/currency/regal.png',
-  regret: 'assets/currency/regret.png',
-  gcp: 'assets/currency/gcp.png',
-  chance: 'assets/currency/chance.png'
+const CURRENCY_IMAGE_VARIANTS = {
+  poe1: {
+    chaos: 'assets/currency/poe1/chaos.png',
+    divine: 'assets/currency/poe1/divine.png',
+  },
+  poe2: {
+    chaos: 'assets/currency/poe2/chaos.png',
+    divine: 'assets/currency/poe2/divine.webp',
+  }
 };
 
-function currencyHTML(value, type = 'chaos', iconSize = 18) {
+const CURRENCY_IMAGES = {
+  chaos: 'assets/currency/poe1/chaos.png',
+  divine: 'assets/currency/poe1/divine.png',
+  exalted: 'assets/currency/poe1/exalted.png',
+  mirror: 'assets/currency/poe1/mirror.png',
+  vaal: 'assets/currency/poe1/vaal.png',
+  alchemy: 'assets/currency/poe1/alchemy.png',
+  fusing: 'assets/currency/poe1/fusing.png',
+  chromatic: 'assets/currency/poe1/chromatic.png',
+  alteration: 'assets/currency/poe1/alteration.png',
+  jewellers: 'assets/currency/poe1/jewellers.png',
+  scouring: 'assets/currency/poe1/scouring.png',
+  blessed: 'assets/currency/poe1/blessed.png',
+  regal: 'assets/currency/poe1/regal.png',
+  regret: 'assets/currency/poe1/regret.png',
+  gcp: 'assets/currency/poe1/gcp.png',
+  chance: 'assets/currency/poe1/chance.png'
+};
+
+function getCurrencyAssetPath(type = 'chaos', poeVersion = state.settings.poeVersion || 'poe1') {
+  return CURRENCY_IMAGE_VARIANTS[poeVersion]?.[type] || CURRENCY_IMAGES[type] || CURRENCY_IMAGES.chaos;
+}
+
+function syncDesktopCurrencyIcons() {
+  const poeVersion = state.settings.poeVersion || 'poe1';
+  const statProfitIcon = document.getElementById('stat-profit-icon');
+  const statAvgIcon = document.getElementById('stat-avg-icon');
+
+  if (statProfitIcon) {
+    statProfitIcon.src = getCurrencyAssetPath('chaos', poeVersion);
+  }
+
+  if (statAvgIcon) {
+    statAvgIcon.src = getCurrencyAssetPath('divine', poeVersion);
+  }
+}
+
+function currencyHTML(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1') {
   const num = parseFloat(value);
-  const imgPath = CURRENCY_IMAGES[type] || CURRENCY_IMAGES.chaos;
+  const imgPath = getCurrencyAssetPath(type, poeVersion);
   const formatted = isNaN(num) ? '0' : (type === 'divine' ? num.toFixed(2) : num.toFixed(1));
   return `<span class="currency-value">${formatted} <img src="${imgPath}" class="currency-icon" width="${iconSize}" height="${iconSize}" alt="${type}" draggable="false"></span>`;
 }
@@ -204,6 +239,8 @@ function setupEventListeners() {
   // Settings
   elements.saveSettingsBtn.addEventListener('click', handleSaveSettings);
   elements.resetSettingsBtn.addEventListener('click', handleResetSettings);
+  if (elements.poeConnectBtn) elements.poeConnectBtn.addEventListener('click', handlePoeConnect);
+  if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.addEventListener('click', handlePoeDisconnect);
 
   // Settings tab navigation
   elements.settingsNavBtns.forEach(btn => {
@@ -219,17 +256,15 @@ function setupEventListeners() {
     });
   });
 
-  // Language switching
-  elements.langBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      elements.langBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const lang = btn.dataset.lang;
+  // Global language selector
+  if (elements.globalLanguage) {
+    elements.globalLanguage.addEventListener('change', () => {
+      const lang = elements.globalLanguage.value || 'en';
       state.settings.language = lang;
       window._appState.language = lang;
       if (window.applyTranslations) window.applyTranslations();
     });
-  });
+  }
 
   // PoE version switching
   elements.versionBtns.forEach(btn => {
@@ -237,6 +272,7 @@ function setupEventListeners() {
       elements.versionBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.settings.poeVersion = btn.dataset.version;
+      syncDesktopCurrencyIcons();
     });
   });
 
@@ -350,6 +386,7 @@ async function handleLogin(e) {
     if (result.success) {
       setCurrentUser(result.data.user);
       elements.loginModal.classList.add('hidden');
+      await loadPoeLinkStatus();
       showToast(window.t('login.title'), window.t('toast.loginSuccess'));
     } else {
       showToast(window.t('toast.loginFailed'), result.error, 'error');
@@ -375,6 +412,7 @@ async function handleRegister(e) {
     if (result.success) {
       setCurrentUser(result.data.user);
       elements.registerModal.classList.add('hidden');
+      await loadPoeLinkStatus();
       showToast(window.t('register.title'), window.t('toast.registerSuccess'));
     } else {
       showToast(window.t('toast.registerFailed'), result.error, 'error');
@@ -390,8 +428,10 @@ async function handleRegister(e) {
 async function handleLogout() {
   await window.electronAPI.logout();
   state.currentUser = null;
+  state.poeLink = null;
   elements.username.textContent = window.t('user.guest');
   if (elements.userAvatar) elements.userAvatar.textContent = '?';
+  renderPoeLinkStatus();
   showLoginModal();
 }
 
@@ -406,19 +446,134 @@ function setCurrentUser(user) {
   }
 }
 
+function renderPoeLinkStatus() {
+  const status = state.poeLink;
+
+  if (!elements.poeLinkStatus || !elements.poeAccountName || !elements.poeLinkMode) return;
+
+  if (!state.currentUser) {
+    elements.poeLinkStatus.textContent = window.t('settings.poeSignInRequired');
+    elements.poeAccountName.textContent = window.t('settings.poeSignInHint');
+    elements.poeLinkMode.textContent = window.t('settings.poeMockMode');
+    if (elements.poeConnectBtn) elements.poeConnectBtn.classList.remove('hidden');
+    if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.classList.add('hidden');
+    return;
+  }
+
+  if (status?.linked) {
+    elements.poeLinkStatus.textContent = status.mock ? window.t('settings.poeLinkedMock') : window.t('settings.poeLinked');
+    elements.poeAccountName.textContent = status.accountName || window.t('settings.poeLinked');
+    elements.poeLinkMode.textContent = status.mock
+      ? window.t('settings.poeMockMode')
+      : window.t('settings.poeLiveMode');
+    if (elements.poeConnectBtn) elements.poeConnectBtn.classList.add('hidden');
+    if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.classList.remove('hidden');
+    return;
+  }
+
+  elements.poeLinkStatus.textContent = window.t('settings.poeNotLinked');
+  elements.poeAccountName.textContent = window.t('settings.poeNoAccount');
+  elements.poeLinkMode.textContent = window.t('settings.poeMockMode');
+  if (elements.poeConnectBtn) elements.poeConnectBtn.classList.remove('hidden');
+  if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.classList.add('hidden');
+}
+
+async function loadPoeLinkStatus() {
+  if (!state.currentUser) {
+    renderPoeLinkStatus();
+    return;
+  }
+
+  try {
+    const response = await window.electronAPI.getPoeLinkStatus();
+    state.poeLink = response?.poe || null;
+  } catch (error) {
+    state.poeLink = null;
+    console.error('PoE link status load error:', error);
+  } finally {
+    renderPoeLinkStatus();
+  }
+}
+
+async function handlePoeConnect() {
+  if (!state.currentUser) {
+    showToast(window.t('toast.error'), window.t('toast.poeSignInFirst'), 'warning');
+    return;
+  }
+
+  if (elements.poeConnectBtn) {
+    elements.poeConnectBtn.disabled = true;
+    elements.poeConnectBtn.textContent = 'Connecting...';
+  }
+
+  try {
+    const response = await window.electronAPI.startPoeConnect();
+    state.poeLink = response?.poe || null;
+    renderPoeLinkStatus();
+    showToast('Path of Exile', state.poeLink?.mock ? window.t('toast.poeLinkedMock') : window.t('toast.poeLinked'), 'success');
+  } catch (error) {
+    showToast(window.t('toast.error'), error.message || window.t('toast.poeConnectError'), 'error');
+  } finally {
+    if (elements.poeConnectBtn) {
+      elements.poeConnectBtn.disabled = false;
+      elements.poeConnectBtn.textContent = window.t('settings.connectPoe');
+    }
+  }
+}
+
+async function handlePoeDisconnect() {
+  if (!state.currentUser) return;
+
+  if (elements.poeDisconnectBtn) {
+    elements.poeDisconnectBtn.disabled = true;
+    elements.poeDisconnectBtn.textContent = 'Disconnecting...';
+  }
+
+  try {
+    const response = await window.electronAPI.disconnectPoeAccount();
+    state.poeLink = response?.poe || null;
+    renderPoeLinkStatus();
+    showToast('Path of Exile', window.t('toast.poeDisconnected'), 'success');
+  } catch (error) {
+    showToast(window.t('toast.error'), error.message || window.t('toast.poeDisconnectError'), 'error');
+  } finally {
+    if (elements.poeDisconnectBtn) {
+      elements.poeDisconnectBtn.disabled = false;
+      elements.poeDisconnectBtn.textContent = window.t('settings.disconnectPoe');
+    }
+  }
+}
+
+function getSelectedTrackerContext() {
+  const poeVersion = state.settings.poeVersion || 'poe1';
+  const league = (state.settings.defaultLeague || 'Standard').trim() || 'Standard';
+
+  return {
+    poeVersion,
+    league,
+    label: `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} • ${league}`
+  };
+}
+
 /**
  * Session baslat
  */
 async function handleStartSession() {
   const mapName = prompt(window.t('misc.mapPrompt'), 'Dunes Map');
   if (!mapName) return;
-  
+
+  const trackerContext = getSelectedTrackerContext();
+
   try {
-    const session = await window.electronAPI.startSession({ mapName });
+    const session = await window.electronAPI.startSession({
+      mapName,
+      poeVersion: trackerContext.poeVersion,
+      league: trackerContext.league
+    });
     if (session) {
       state.currentSession = session;
       updateActiveSessionUI();
-      showToast(window.t('dashboard.activeSession'), `${mapName} ${window.t('toast.sessionStarted')}`);
+      showToast(window.t('dashboard.activeSession'), `${mapName} ${window.t('toast.sessionStarted')} (${trackerContext.label})`);
     }
   } catch (error) {
     showToast(window.t('toast.error'), window.t('toast.sessionError'), 'error');
@@ -457,6 +612,7 @@ async function loadCurrentSession() {
 
 function updateActiveSessionUI() {
   if (state.currentSession) {
+    const contextLabel = `${state.currentSession.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} • ${state.currentSession.league || 'Standard'}`;
     elements.activeSession.innerHTML = `
       <div class="session-info">
         <div class="session-info-item">
@@ -474,6 +630,10 @@ function updateActiveSessionUI() {
         <div class="session-info-item">
           <span class="session-info-label">${window.t('session.status')}</span>
           <span class="session-info-value" style="color: #2196f3;">${window.t('dashboard.active')}</span>
+        </div>
+        <div class="session-info-item">
+          <span class="session-info-label">Game</span>
+          <span class="session-info-value">${contextLabel}</span>
         </div>
       </div>
     `;
@@ -536,8 +696,8 @@ async function loadDashboardStats() {
   // Not: Gercek implementasyonda API'den cekilecek
   // Su an placeholder degerler
   elements.todaySessions.textContent = '0';
-  elements.todayProfit.innerHTML = currencyHTML(0);
-  elements.todayAvg.innerHTML = currencyHTML(0);
+  elements.todayProfit.innerHTML = currencyHTML(0, 'chaos', 18, state.settings.poeVersion || 'poe1');
+  elements.todayAvg.innerHTML = currencyHTML(0, 'divine', 18, state.settings.poeVersion || 'poe1');
 }
 
 /**
@@ -551,7 +711,6 @@ async function loadRecentLoot() {
  * Ayarlari kaydet
  */
 async function handleSaveSettings() {
-  const activeLang = document.querySelector('.lang-btn.active');
   const activeVersion = document.querySelector('.version-btn.active');
 
   const settings = {
@@ -560,9 +719,9 @@ async function handleSaveSettings() {
     autoStartSession: elements.autoStartSession.checked,
     notifications: elements.enableNotifications.checked,
     soundNotifications: elements.soundNotifications ? elements.soundNotifications.checked : false,
-    language: activeLang ? activeLang.dataset.lang : 'en',
+    language: elements.globalLanguage ? elements.globalLanguage.value : 'en',
     poeVersion: activeVersion ? activeVersion.dataset.version : 'poe1',
-    defaultLeague: elements.defaultLeague ? elements.defaultLeague.value : '',
+    defaultLeague: elements.defaultLeague ? (elements.defaultLeague.value.trim() || 'Standard') : 'Standard',
     scanHotkey: elements.scanHotkey ? elements.scanHotkey.value : 'F9'
   };
 
@@ -586,11 +745,11 @@ async function handleResetSettings() {
   elements.autoStartSession.checked = true;
   elements.enableNotifications.checked = true;
   if (elements.soundNotifications) elements.soundNotifications.checked = false;
-  if (elements.defaultLeague) elements.defaultLeague.value = '';
+  if (elements.defaultLeague) elements.defaultLeague.value = 'Standard';
   if (elements.scanHotkey) elements.scanHotkey.value = 'F9';
 
   // Reset language to EN
-  elements.langBtns.forEach(b => b.classList.toggle('active', b.dataset.lang === 'en'));
+  if (elements.globalLanguage) elements.globalLanguage.value = 'en';
   window._appState.language = 'en';
   if (window.applyTranslations) window.applyTranslations();
 
@@ -670,7 +829,7 @@ const POE1_CATEGORY_TYPES = [
 // PoE 2 item category types with representative icons
 const POE2_CATEGORY_TYPES = [
   { value: '', label: 'All', icon: null },
-  { value: 'currency', label: 'Currency', icon: 'exalted' },
+  { value: 'currency', label: 'Currency', icon: 'chaos' },
   { value: 'fragment', label: 'Fragment', icon: 'vaal' },
   { value: 'scarab', label: 'Scarab', icon: 'chance' },
   { value: 'map', label: 'Map', icon: 'alchemy' },
@@ -705,7 +864,7 @@ function updateTypeFilterDropdown() {
   container.innerHTML = types.map(t => {
     const active = currencyState.type === t.value ? ' active' : '';
     const iconHTML = t.icon
-      ? `<img src="assets/currency/${t.icon}.png" class="currency-tab-icon" width="14" height="14" draggable="false">`
+      ? `<img src="${getCurrencyAssetPath(t.icon, currencyState.poeVersion)}" class="currency-tab-icon" width="14" height="14" draggable="false">`
       : '';
     return `<button class="currency-type-btn${active}" data-type="${t.value}">${iconHTML}<span>${t.label}</span></button>`;
   }).join('');
@@ -782,6 +941,10 @@ function setupCurrencyListeners() {
 }
 
 async function loadCurrencyPage() {
+  currencyState.poeVersion = state.settings.poeVersion || 'poe1';
+  document.querySelectorAll('.poe-toggle-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.poe === currencyState.poeVersion);
+  });
   updateTypeFilterDropdown();
   await loadCurrencyLeagues();
   await loadCurrencyPrices();
@@ -864,8 +1027,8 @@ function renderCurrencyTable() {
       <td class="currency-td-icon">${icon}</td>
       <td class="currency-td-name">${escapeHTML(item.itemName)}</td>
       <td class="currency-td-type"><span class="currency-type-badge">${item.itemType || '-'}</span></td>
-      <td class="currency-td-chaos">${currencyHTML(chaos)}</td>
-      <td class="currency-td-divine">${divine ? currencyHTML(divine, 'divine') : '<span class="text-muted">-</span>'}</td>
+      <td class="currency-td-chaos">${currencyHTML(chaos, 'chaos', 18, currencyState.poeVersion)}</td>
+      <td class="currency-td-divine">${divine ? currencyHTML(divine, 'divine', 18, currencyState.poeVersion) : '<span class="text-muted">-</span>'}</td>
       <td class="currency-td-trend">${spark}</td>
     </tr>`;
   }).join('');

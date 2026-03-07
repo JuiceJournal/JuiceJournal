@@ -41,6 +41,43 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       field: 'password_hash'
     },
+    poeSub: {
+      type: DataTypes.STRING(120),
+      allowNull: true,
+      unique: true,
+      field: 'poe_sub'
+    },
+    poeAccountName: {
+      type: DataTypes.STRING(120),
+      allowNull: true,
+      field: 'poe_account_name'
+    },
+    poeAccessToken: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: 'poe_access_token'
+    },
+    poeRefreshToken: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: 'poe_refresh_token'
+    },
+    poeTokenExpiresAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: 'poe_token_expires_at'
+    },
+    poeLinkedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: 'poe_linked_at'
+    },
+    poeMock: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      field: 'poe_mock'
+    },
     createdAt: {
       type: DataTypes.DATE,
       field: 'created_at',
@@ -79,11 +116,25 @@ module.exports = (sequelize, DataTypes) => {
     return await this.findOne({ where: { email } });
   };
 
+  User.prototype.getPoeStatus = function() {
+    return {
+      linked: Boolean(this.poeSub),
+      accountName: this.poeAccountName || null,
+      linkedAt: this.poeLinkedAt || null,
+      mock: Boolean(this.poeMock),
+    };
+  };
+
   // JSON'da password hash'i gosterme
   User.prototype.toJSON = function() {
     const values = { ...this.get() };
     delete values.passwordHash;
     delete values.password_hash;
+    delete values.poeAccessToken;
+    delete values.poe_access_token;
+    delete values.poeRefreshToken;
+    delete values.poe_refresh_token;
+    values.poe = this.getPoeStatus();
     return values;
   };
 

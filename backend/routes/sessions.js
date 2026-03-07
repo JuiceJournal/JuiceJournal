@@ -34,17 +34,25 @@ router.get('/',
   authenticate,
   [
     query('status').optional().isIn(['active', 'completed', 'abandoned']),
+    query('poeVersion').optional().isIn(['poe1', 'poe2']),
+    query('league').optional().trim().notEmpty().isLength({ max: 50 }),
     query('limit').optional().isInt({ min: 1, max: 100 }),
     query('offset').optional().isInt({ min: 0 }),
     handleValidationErrors
   ],
   async (req, res) => {
     try {
-      const { status, limit = 20, offset = 0 } = req.query;
+      const { status, poeVersion, league, limit = 20, offset = 0 } = req.query;
 
       const where = { userId: req.userId };
       if (status) {
         where.status = status;
+      }
+      if (poeVersion) {
+        where.poeVersion = poeVersion;
+      }
+      if (league) {
+        where.league = league;
       }
 
       const { count, rows: sessions } = await Session.findAndCountAll({
@@ -173,6 +181,14 @@ router.post('/start',
       .notEmpty()
       .withMessage('Map adi gereklidir')
       .isLength({ max: 100 }),
+    body('poeVersion')
+      .isIn(['poe1', 'poe2'])
+      .withMessage('PoE versiyonu gereklidir'),
+    body('league')
+      .trim()
+      .notEmpty()
+      .withMessage('Lig gereklidir')
+      .isLength({ max: 50 }),
     body('mapTier').optional().isInt({ min: 1, max: 21 }),
     body('mapType').optional().trim().isLength({ max: 50 }),
     body('costChaos').optional().isFloat({ min: 0 }),
@@ -180,7 +196,7 @@ router.post('/start',
   ],
   async (req, res) => {
     try {
-      const { mapName, mapTier, mapType, costChaos = 0 } = req.body;
+      const { mapName, mapTier, mapType, costChaos = 0, poeVersion, league } = req.body;
 
       // Aktif session kontrolu
       const activeSession = await Session.findOne({
@@ -204,6 +220,8 @@ router.post('/start',
         mapName,
         mapTier: mapTier || null,
         mapType: mapType || null,
+        poeVersion,
+        league,
         costChaos,
         status: 'active',
         startedAt: new Date()

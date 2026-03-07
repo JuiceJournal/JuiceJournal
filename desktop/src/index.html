@@ -12,15 +12,27 @@
     <header class="header">
       <div class="logo">
         <div class="logo-icon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0d0e12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#120f0d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/><path d="M12 7.25 16 9.5v5L12 16.75 8 14.5v-5Z"/></svg>
         </div>
         <h1>PoE <span>Farm</span></h1>
       </div>
       <nav class="nav" role="navigation" aria-label="Ana navigasyon">
-        <button class="nav-btn active" data-page="dashboard" data-i18n="nav.dashboard">Dashboard</button>
-        <button class="nav-btn" data-page="sessions" data-i18n="nav.sessions">Session'lar</button>
-        <button class="nav-btn" data-page="currency" data-i18n="nav.currency">Currency</button>
-        <button class="nav-btn" data-page="settings" data-i18n="nav.settings">Ayarlar</button>
+        <button class="nav-btn active" data-page="dashboard">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 4.5v9L12 21 4.5 16.5v-9L12 3z"/><path d="M12 3v18"/><path d="M4.5 7.5 12 12l7.5-4.5"/></svg>
+          <span data-i18n="nav.dashboard">Dashboard</span>
+        </button>
+        <button class="nav-btn" data-page="sessions">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14v13H5z"/><path d="M5 9.5h14"/><path d="M9 9.5v9"/></svg>
+          <span data-i18n="nav.sessions">Session'lar</span>
+        </button>
+        <button class="nav-btn" data-page="currency">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18.5h14"/><path d="M7 18.5V9.5"/><path d="M12 18.5V5.5"/><path d="M17 18.5v-6"/><path d="M5 12.5 9.5 8 13 10.5 19 4.5"/></svg>
+          <span data-i18n="nav.currency">Currency</span>
+        </button>
+        <button class="nav-btn" data-page="settings">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1.75v2.5"/><path d="M12 19.75v2.5"/><path d="M4.75 4.75l1.8 1.8"/><path d="M17.45 17.45l1.8 1.8"/><path d="M1.75 12h2.5"/><path d="M19.75 12h2.5"/><path d="M4.75 19.25l1.8-1.8"/><path d="M17.45 6.55l1.8-1.8"/></svg>
+          <span data-i18n="nav.settings">Ayarlar</span>
+        </button>
       </nav>
       <div class="user-info">
         <span id="username" data-i18n="user.guest">Misafir</span>
@@ -43,62 +55,105 @@
     <!-- Login Modal -->
     <div id="login-modal" class="modal" role="dialog" aria-label="Giris yap">
       <div class="modal-content">
-        <div class="modal-logo">
-          <div class="modal-logo-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d0e12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <div class="modal-shell">
+          <div class="modal-art">
+            <div class="modal-logo">
+              <div class="modal-logo-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#120f0d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/><path d="M12 7.25 16 9.5v5L12 16.75 8 14.5v-5Z"/></svg>
+              </div>
+              <span>PoE Farm Tracker</span>
+            </div>
+            <p class="modal-kicker">Atlas Command</p>
+            <h2 class="modal-display">Track every run like an occult ledger.</h2>
+            <p class="modal-subtitle">Desktop-first farming control for league context, session pacing, and loot capture.</p>
+            <div class="modal-feature-list">
+              <div class="modal-feature">
+                <span class="modal-feature-icon">I</span>
+                <div>
+                  <strong>Session Intelligence</strong>
+                  <p>Start, end, and review maps with league-aware context.</p>
+                </div>
+              </div>
+              <div class="modal-feature">
+                <span class="modal-feature-icon">II</span>
+                <div>
+                  <strong>Live Capture</strong>
+                  <p>Use log parsing and OCR flows without losing visual clarity.</p>
+                </div>
+              </div>
+              <div class="modal-feature">
+                <span class="modal-feature-icon">III</span>
+                <div>
+                  <strong>Production Surface</strong>
+                  <p>A tighter shell aligned with the Path of Exile atmosphere.</p>
+                </div>
+              </div>
+            </div>
           </div>
-          <span>PoE Farm Tracker</span>
+
+          <div class="modal-panel">
+            <h2 data-i18n="login.title">Giris Yap</h2>
+            <p class="modal-subtitle compact" data-i18n="login.subtitle">Hesabiniza giris yaparak devam edin</p>
+            <form id="login-form">
+              <div class="form-group">
+                <label for="login-username" data-i18n="login.username">Kullanici Adi veya Email</label>
+                <input type="text" id="login-username" data-i18n-placeholder="login.usernamePlaceholder" placeholder="testuser" required>
+              </div>
+              <div class="form-group">
+                <label for="login-password" data-i18n="login.password">Sifre</label>
+                <input type="password" id="login-password" data-i18n-placeholder="login.passwordPlaceholder" placeholder="Sifrenizi girin" required>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary" data-i18n="login.submit">Giris Yap</button>
+                <div class="form-divider" data-i18n="login.or">veya</div>
+                <button type="button" class="btn btn-secondary" id="show-register" data-i18n="login.createAccount">Yeni Hesap Olustur</button>
+              </div>
+            </form>
+          </div>
         </div>
-        <h2 data-i18n="login.title">Giris Yap</h2>
-        <p class="modal-subtitle" data-i18n="login.subtitle">Hesabiniza giris yaparak devam edin</p>
-        <form id="login-form">
-          <div class="form-group">
-            <label for="login-username" data-i18n="login.username">Kullanici Adi veya Email</label>
-            <input type="text" id="login-username" data-i18n-placeholder="login.usernamePlaceholder" placeholder="testuser" required>
-          </div>
-          <div class="form-group">
-            <label for="login-password" data-i18n="login.password">Sifre</label>
-            <input type="password" id="login-password" data-i18n-placeholder="login.passwordPlaceholder" placeholder="Sifrenizi girin" required>
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary" data-i18n="login.submit">Giris Yap</button>
-            <div class="form-divider" data-i18n="login.or">veya</div>
-            <button type="button" class="btn btn-secondary" id="show-register" data-i18n="login.createAccount">Yeni Hesap Olustur</button>
-          </div>
-        </form>
       </div>
     </div>
 
     <!-- Register Modal -->
     <div id="register-modal" class="modal hidden" role="dialog" aria-label="Hesap olustur">
       <div class="modal-content">
-        <div class="modal-logo">
-          <div class="modal-logo-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d0e12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <div class="modal-shell">
+          <div class="modal-art">
+            <div class="modal-logo">
+              <div class="modal-logo-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#120f0d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/><path d="M12 7.25 16 9.5v5L12 16.75 8 14.5v-5Z"/></svg>
+              </div>
+              <span>PoE Farm Tracker</span>
+            </div>
+            <p class="modal-kicker">Operator Access</p>
+            <h2 class="modal-display">Open a fresh ledger for your farming routes.</h2>
+            <p class="modal-subtitle">Create a new desktop operator profile and enter the command surface.</p>
           </div>
-          <span>PoE Farm Tracker</span>
+
+          <div class="modal-panel">
+            <h2 data-i18n="register.title">Hesap Olustur</h2>
+            <p class="modal-subtitle compact" data-i18n="register.subtitle">Yeni bir hesap olusturun</p>
+            <form id="register-form">
+              <div class="form-group">
+                <label for="register-username" data-i18n="register.username">Kullanici Adi</label>
+                <input type="text" id="register-username" data-i18n-placeholder="register.usernamePlaceholder" placeholder="En az 3 karakter" required minlength="3">
+              </div>
+              <div class="form-group">
+                <label for="register-email" data-i18n="register.email">Email</label>
+                <input type="email" id="register-email" data-i18n-placeholder="register.emailPlaceholder" placeholder="ornek@email.com" required>
+              </div>
+              <div class="form-group">
+                <label for="register-password" data-i18n="register.password">Sifre</label>
+                <input type="password" id="register-password" data-i18n-placeholder="register.passwordPlaceholder" placeholder="En az 6 karakter" required minlength="6">
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary" data-i18n="register.submit">Kayit Ol</button>
+                <div class="form-divider" data-i18n="register.or">veya</div>
+                <button type="button" class="btn btn-secondary" id="show-login" data-i18n="register.login">Giris Yap</button>
+              </div>
+            </form>
+          </div>
         </div>
-        <h2 data-i18n="register.title">Hesap Olustur</h2>
-        <p class="modal-subtitle" data-i18n="register.subtitle">Yeni bir hesap olusturun</p>
-        <form id="register-form">
-          <div class="form-group">
-            <label for="register-username" data-i18n="register.username">Kullanici Adi</label>
-            <input type="text" id="register-username" data-i18n-placeholder="register.usernamePlaceholder" placeholder="En az 3 karakter" required minlength="3">
-          </div>
-          <div class="form-group">
-            <label for="register-email" data-i18n="register.email">Email</label>
-            <input type="email" id="register-email" data-i18n-placeholder="register.emailPlaceholder" placeholder="ornek@email.com" required>
-          </div>
-          <div class="form-group">
-            <label for="register-password" data-i18n="register.password">Sifre</label>
-            <input type="password" id="register-password" data-i18n-placeholder="register.passwordPlaceholder" placeholder="En az 6 karakter" required minlength="6">
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary" data-i18n="register.submit">Kayit Ol</button>
-            <div class="form-divider" data-i18n="register.or">veya</div>
-            <button type="button" class="btn btn-secondary" id="show-login" data-i18n="register.login">Giris Yap</button>
-          </div>
-        </form>
       </div>
     </div>
 
@@ -142,7 +197,7 @@
               <div class="stat">
                 <div class="stat-left">
                   <div class="stat-icon maps">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4c9aff" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c6a15b" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 19.5 7.5v9L12 21 4.5 16.5v-9Z"/><path d="M12 3v18"/><path d="M4.5 7.5 12 12l7.5-4.5"/></svg>
                   </div>
                   <span class="stat-label" data-i18n="dashboard.map">Map</span>
                 </div>
@@ -151,7 +206,7 @@
               <div class="stat">
                 <div class="stat-left">
                   <div class="stat-icon profit">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3ddc84" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    <img id="stat-profit-icon" src="assets/currency/poe1/chaos.png" alt="Profit currency icon" draggable="false">
                   </div>
                   <span class="stat-label" data-i18n="dashboard.profit">Kar</span>
                 </div>
@@ -160,7 +215,7 @@
               <div class="stat">
                 <div class="stat-left">
                   <div class="stat-icon avg">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff9100" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    <img id="stat-avg-icon" src="assets/currency/poe1/divine.png" alt="Average currency icon" draggable="false">
                   </div>
                   <span class="stat-label" data-i18n="dashboard.avgPerMap">Ort/Map</span>
                 </div>
@@ -304,16 +359,10 @@
               <div class="settings-group">
                 <h3 data-i18n="settings.language">Dil</h3>
                 <div class="form-group">
-                  <div class="language-select">
-                    <button class="lang-btn" data-lang="tr">
-                      <span class="lang-flag">TR</span>
-                      Turkce
-                    </button>
-                    <button class="lang-btn active" data-lang="en">
-                      <span class="lang-flag">EN</span>
-                      English
-                    </button>
-                  </div>
+                  <select id="global-language">
+                    <option value="tr">Turkce</option>
+                    <option value="en">English</option>
+                  </select>
                 </div>
               </div>
               <div class="settings-group">
@@ -356,6 +405,20 @@
                     <input type="checkbox" id="auto-start-session">
                     <span data-i18n="settings.autoStartSession">Yeni map girisinde otomatik session baslat</span>
                   </label>
+                </div>
+              </div>
+              <div class="settings-group">
+                <h3 data-i18n="settings.poeAccount">Path of Exile Account</h3>
+                <div class="poe-account-card">
+                  <div class="poe-account-copy">
+                    <p id="poe-link-status" class="poe-link-status" data-i18n="settings.poeNotLinked">Not linked</p>
+                    <p id="poe-account-name" class="poe-account-name" data-i18n="settings.poeNoAccount">No Path of Exile account connected yet.</p>
+                    <p id="poe-link-mode" class="poe-link-mode" data-i18n="settings.poeMockMode">Mock mode will be used until a real GGG OAuth client is configured.</p>
+                  </div>
+                  <div class="poe-account-actions">
+                    <button id="poe-connect-btn" class="btn btn-primary" data-i18n="settings.connectPoe">Connect Path of Exile</button>
+                    <button id="poe-disconnect-btn" class="btn btn-secondary hidden" data-i18n="settings.disconnectPoe">Disconnect</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -425,7 +488,7 @@
               <div class="settings-group about-info">
                 <div class="about-logo">
                   <div class="logo-icon large">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0d0e12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#120f0d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/><path d="M12 7.25 16 9.5v5L12 16.75 8 14.5v-5Z"/></svg>
                   </div>
                   <div>
                     <h3>PoE Farm Tracker</h3>
