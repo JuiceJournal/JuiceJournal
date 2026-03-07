@@ -82,6 +82,8 @@ router.post('/',
             itemName: {
               [Op.iLike]: itemName
             },
+            league: session.league,
+            poeVersion: session.poeVersion,
             active: true
           },
           order: [['updatedAt', 'DESC']]
@@ -400,6 +402,8 @@ router.post('/bulk',
               itemName: {
                 [Op.iLike]: item.itemName
               },
+              league: session.league,
+              poeVersion: session.poeVersion,
               active: true
             }
           });

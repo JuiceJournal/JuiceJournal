@@ -3,6 +3,8 @@
  * PoE map oturumlarini temsil eder
  */
 
+const { Op } = require('sequelize');
+
 module.exports = (sequelize, DataTypes) => {
   const Session = sequelize.define('Session', {
     id: {
@@ -48,6 +50,28 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(50),
       allowNull: true,
       field: 'map_type'
+    },
+    league: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+      defaultValue: 'Standard',
+      validate: {
+        notEmpty: {
+          msg: 'Lig gereklidir'
+        }
+      }
+    },
+    poeVersion: {
+      type: DataTypes.ENUM('poe1', 'poe2'),
+      allowNull: false,
+      defaultValue: 'poe1',
+      field: 'poe_version',
+      validate: {
+        isIn: {
+          args: [['poe1', 'poe2']],
+          msg: 'Gecersiz PoE versiyonu'
+        }
+      }
     },
     costChaos: {
       type: DataTypes.DECIMAL(10, 2),
@@ -123,6 +147,9 @@ module.exports = (sequelize, DataTypes) => {
       },
       {
         fields: ['started_at']
+      },
+      {
+        fields: ['poe_version', 'league']
       }
     ]
   });
@@ -181,8 +208,8 @@ module.exports = (sequelize, DataTypes) => {
       where: {
         userId,
         startedAt: {
-          [sequelize.Op.gte]: startDate,
-          [sequelize.Op.lte]: endDate
+          [Op.gte]: startDate,
+          [Op.lte]: endDate
         }
       },
       order: [['startedAt', 'DESC']]

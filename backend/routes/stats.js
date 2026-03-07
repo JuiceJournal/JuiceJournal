@@ -1,6 +1,6 @@
 /**
  * Stats Routes
- * Istatistik ve leaderboard endpoint'leri
+ * Statistics and leaderboard endpoints
  */
 
 const express = require('express');
@@ -26,8 +26,18 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
+const applySessionFilters = (where, { poeVersion, league }) => {
+  if (poeVersion) {
+    where.poeVersion = poeVersion;
+  }
+  if (league) {
+    where.league = league;
+  }
+  return where;
+};
+
 /**
- * Yardimci fonksiyon - Tarih araligi olustur
+ * Helper - Create date range
  */
 const getDateRange = (period) => {
   const end = new Date();
@@ -52,28 +62,31 @@ const getDateRange = (period) => {
 
 /**
  * GET /api/stats/personal
- * Kisisel istatistikler
+ * Personal statistics
  */
 router.get('/personal',
   authenticate,
   [
     query('period').optional().isIn(['daily', 'weekly', 'monthly']),
+    query('poeVersion').optional().isIn(['poe1', 'poe2']),
+    query('league').optional().trim().notEmpty().isLength({ max: 50 }),
     handleValidationErrors
   ],
   async (req, res) => {
     try {
-      const { period = 'weekly' } = req.query;
+      const { period = 'weekly', poeVersion, league } = req.query;
       const { start, end } = getDateRange(period);
-
-      // Temel istatistikler
-      const sessions = await Session.findAll({
-        where: {
-          userId: req.userId,
-          status: 'completed',
-          startedAt: {
-            [Op.between]: [start, end]
-          }
+      const baseWhere = applySessionFilters({
+        userId: req.userId,
+        status: 'completed',
+        startedAt: {
+          [Op.between]: [start, end]
         }
+      }, { poeVersion, league });
+
+      // Basic statistics
+      const sessions = await Session.findAll({
+        where: baseWhere
       });
 
       const stats = {
@@ -89,7 +102,7 @@ router.get('/personal',
       };
 
       if (sessions.length > 0) {
-        // Hesaplamalar
+        // Calculations
         sessions.forEach(session => {
           stats.totalCost += parseFloat(session.costChaos) || 0;
           stats.totalLoot += parseFloat(session.totalLootChaos) || 0;
@@ -98,30 +111,24 @@ router.get('/personal',
         });
 
         stats.avgProfitPerMap = stats.totalProfit / sessions.length;
-        
+
         const hours = stats.totalDuration / 3600;
         if (hours > 0) {
           stats.avgProfitPerHour = stats.totalProfit / hours;
         }
 
-        // En iyi ve en kotu map
-        const sortedByProfit = [...sessions].sort((a, b) => 
+        // Best and worst map
+        const sortedByProfit = [...sessions].sort((a, b) =>
           parseFloat(b.profitChaos) - parseFloat(a.profitChaos)
         );
-        
+
         stats.bestMap = sortedByProfit[0];
         stats.worstMap = sortedByProfit[sortedByProfit.length - 1];
       }
 
-      // Gunluk kazanc grafigi icin veri
+      // Daily profit chart data
       const dailyStats = await Session.findAll({
-        where: {
-          userId: req.userId,
-          status: 'completed',
-          startedAt: {
-            [Op.between]: [start, end]
-          }
-        },
+        where: baseWhere,
         attributes: [
           [sequelize.fn('DATE', sequelize.col('started_at')), 'date'],
           [sequelize.fn('COUNT', sequelize.col('id')), 'sessionCount'],
@@ -133,15 +140,9 @@ router.get('/personal',
         raw: true
       });
 
-      // Map bazli istatistikler
+      // Per-map statistics
       const mapStats = await Session.findAll({
-        where: {
-          userId: req.userId,
-          status: 'completed',
-          startedAt: {
-            [Op.between]: [start, end]
-          }
-        },
+        where: baseWhere,
         attributes: [
           'mapName',
           [sequelize.fn('COUNT', sequelize.col('id')), 'runCount'],
@@ -157,6 +158,8 @@ router.get('/personal',
         success: true,
         data: {
           period,
+          poeVersion: poeVersion || null,
+          league: league || null,
           dateRange: { start, end },
           summary: stats,
           dailyStats,
@@ -165,11 +168,11 @@ router.get('/personal',
         error: null
       });
     } catch (error) {
-      console.error('Istatistik hatasi:', error);
+      console.error('Statistics error:', error);
       res.status(500).json({
         success: false,
         data: null,
-        error: 'Istatistikler alinirken hata olustu'
+        error: 'Failed to get statistics'
       });
     }
   }
@@ -177,29 +180,32 @@ router.get('/personal',
 
 /**
  * GET /api/stats/leaderboard/:league/:period
- * Liderlik tablosu
+ * Leaderboard
  */
 router.get('/leaderboard/:league/:period',
   [
     param('league').trim().notEmpty(),
     param('period').isIn(['daily', 'weekly', 'monthly']),
+    query('poeVersion').optional().isIn(['poe1', 'poe2']),
     query('limit').optional().isInt({ min: 1, max: 100 }),
     handleValidationErrors
   ],
   async (req, res) => {
     try {
       const { league, period } = req.params;
-      const { limit = 50 } = req.query;
+      const { limit = 50, poeVersion } = req.query;
       const { start, end } = getDateRange(period);
+      const where = applySessionFilters({
+        status: 'completed',
+        league,
+        startedAt: {
+          [Op.between]: [start, end]
+        }
+      }, { poeVersion });
 
-      // Kullanici bazli toplam kazanc (sadece tamamlanmis session'lar)
+      // Per-user total profit (completed sessions only)
       const leaderboard = await Session.findAll({
-        where: {
-          status: 'completed',
-          startedAt: {
-            [Op.between]: [start, end]
-          }
-        },
+        where,
         include: [{
           model: User,
           as: 'user',
@@ -219,15 +225,16 @@ router.get('/leaderboard/:league/:period',
         nest: true
       });
 
-      // Siralama ekle
+      // Add ranking
       const rankedLeaderboard = leaderboard.map((entry, index) => ({
         rank: index + 1,
+        userId: entry.userId,
         username: entry.user.username,
         sessionCount: parseInt(entry.sessionCount),
         totalProfit: parseFloat(entry.totalProfit) || 0,
         avgProfit: parseFloat(entry.avgProfit) || 0,
         totalDuration: parseInt(entry.totalDuration) || 0,
-        profitPerHour: entry.totalDuration > 0 
+        profitPerHour: entry.totalDuration > 0
           ? (parseFloat(entry.totalProfit) / (parseInt(entry.totalDuration) / 3600))
           : 0
       }));
@@ -236,6 +243,7 @@ router.get('/leaderboard/:league/:period',
         success: true,
         data: {
           league,
+          poeVersion: poeVersion || null,
           period,
           dateRange: { start, end },
           leaderboard: rankedLeaderboard
@@ -243,11 +251,11 @@ router.get('/leaderboard/:league/:period',
         error: null
       });
     } catch (error) {
-      console.error('Leaderboard hatasi:', error);
+      console.error('Leaderboard error:', error);
       res.status(500).json({
         success: false,
         data: null,
-        error: 'Leaderboard alinirken hata olustu'
+        error: 'Failed to get leaderboard'
       });
     }
   }
@@ -255,68 +263,84 @@ router.get('/leaderboard/:league/:period',
 
 /**
  * GET /api/stats/summary
- * Genel ozet istatistikler
+ * General summary statistics
  */
-router.get('/summary', async (req, res) => {
-  try {
-    // Toplam kullanici sayisi
-    const totalUsers = await User.count();
+router.get('/summary',
+  [
+    query('poeVersion').optional().isIn(['poe1', 'poe2']),
+    query('league').optional().trim().notEmpty().isLength({ max: 50 }),
+    handleValidationErrors
+  ],
+  async (req, res) => {
+    try {
+      const { poeVersion, league } = req.query;
+      const completedWhere = applySessionFilters({ status: 'completed' }, { poeVersion, league });
 
-    // Toplam session sayisi
-    const totalSessions = await Session.count({
-      where: { status: 'completed' }
-    });
+      // Total user count in selected context
+      const totalUsers = await Session.count({
+        where: completedWhere,
+        distinct: true,
+        col: 'user_id'
+      });
 
-    // Toplam kazanc
-    const profitResult = await Session.sum('profitChaos', {
-      where: { status: 'completed' }
-    });
+      // Total session count
+      const totalSessions = await Session.count({
+        where: completedWhere
+      });
 
-    // Bugunun kazanci
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const todayProfit = await Session.sum('profitChaos', {
-      where: {
-        status: 'completed',
-        startedAt: {
-          [Op.gte]: today
+      // Total profit
+      const profitResult = await Session.sum('profitChaos', {
+        where: completedWhere
+      });
+
+      // Today's profit
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const todayProfit = await Session.sum('profitChaos', {
+        where: {
+          ...completedWhere,
+          startedAt: {
+            [Op.gte]: today
+          }
         }
-      }
-    });
+      });
 
-    // En populer map'ler
-    const popularMaps = await Session.findAll({
-      where: { status: 'completed' },
-      attributes: [
-        'mapName',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'runCount']
-      ],
-      group: ['mapName'],
-      order: [[sequelize.fn('COUNT', sequelize.col('id')), 'DESC']],
-      limit: 5,
-      raw: true
-    });
+      // Most popular maps
+      const popularMaps = await Session.findAll({
+        where: completedWhere,
+        attributes: [
+          'mapName',
+          [sequelize.fn('COUNT', sequelize.col('id')), 'runCount']
+        ],
+        group: ['mapName'],
+        order: [[sequelize.fn('COUNT', sequelize.col('id')), 'DESC']],
+        limit: 5,
+        raw: true
+      });
 
-    res.json({
-      success: true,
-      data: {
-        totalUsers,
-        totalSessions,
-        totalProfit: profitResult || 0,
-        todayProfit: todayProfit || 0,
-        popularMaps
-      },
-      error: null
-    });
-  } catch (error) {
-    console.error('Ozet istatistik hatasi:', error);
-    res.status(500).json({
-      success: false,
-      data: null,
-      error: 'Ozet istatistikler alinirken hata olustu'
-    });
+      res.json({
+        success: true,
+        data: {
+          totalUsers,
+          totalSessions,
+          totalProfit: profitResult || 0,
+          todayProfit: todayProfit || 0,
+          poeVersion: poeVersion || null,
+          league: league || null,
+          popularMaps
+        },
+        error: null
+      });
+    } catch (error) {
+      console.error('Summary statistics error:', error);
+      res.status(500).json({
+        success: false,
+        data: null,
+        error: 'Failed to get summary statistics'
+      });
+    }
   }
-});
+);
 
 module.exports = router;

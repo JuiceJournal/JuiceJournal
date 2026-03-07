@@ -9,9 +9,10 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const WebSocket = require('ws');
 const http = require('http');
+const { Op } = require('sequelize');
 require('dotenv').config();
 
-const { sequelize } = require('./models');
+const { sequelize, Session } = require('./models');
 const cronService = require('./services/cronService');
 
 // Route importları
@@ -149,6 +150,25 @@ const startServer = async () => {
 
     await sequelize.sync({ alter: true });
     console.log('Veritabani modelleri senkronize edildi.');
+
+    const [backfilledSessions] = await Session.update(
+      {
+        poeVersion: 'poe1',
+        league: 'Standard'
+      },
+      {
+        where: {
+          [Op.or]: [
+            { poeVersion: null },
+            { league: null }
+          ]
+        }
+      }
+    );
+
+    if (backfilledSessions > 0) {
+      console.log(`${backfilledSessions} mevcut session poe1/Standard olarak guncellendi.`);
+    }
 
     server.listen(PORT, () => {
       console.log(`Sunucu ${PORT} portunda calisiyor`);
