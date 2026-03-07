@@ -29,7 +29,7 @@ const store = new Store({
     language: 'en',
     soundNotifications: false,
     poeVersion: 'poe1',
-    defaultLeague: '',
+    defaultLeague: 'Standard',
     scanHotkey: 'F9'
   },
 });
@@ -252,21 +252,28 @@ async function captureAndScan() {
 /**
  * Yeni map session baslat
  */
-async function startNewSession() {
+async function startNewSession(input = {}) {
   try {
     // Aktif session varsa bitir
     if (currentSession) {
       await endCurrentSession();
     }
 
+    const poeVersion = input.poeVersion || store.get('poeVersion') || 'poe1';
+    const league = (input.league || store.get('defaultLeague') || 'Standard').trim() || 'Standard';
+
     // Map adi al
-    const mapName = await promptMapName();
+    const mapName = input.mapName || await promptMapName();
     if (!mapName) return;
 
     // Session olustur
     const session = await apiClient.startSession({
       mapName,
-      costChaos: 0 // Kullanici sonradan girebilir
+      mapTier: input.mapTier || null,
+      mapType: input.mapType || null,
+      costChaos: input.costChaos || 0,
+      poeVersion,
+      league
     });
 
     currentSession = session;
@@ -383,7 +390,9 @@ function setupLogParser() {
       // Otomatik session baslat
       apiClient.startSession({
         mapName: data.mapName,
-        mapTier: data.mapTier
+        mapTier: data.mapTier,
+        poeVersion: store.get('poeVersion') || 'poe1',
+        league: (store.get('defaultLeague') || 'Standard').trim() || 'Standard'
       }).then(session => {
         currentSession = session;
         showNotification('Otomatik Session', `${data.mapName} map'i baslatildi`);
@@ -448,7 +457,7 @@ function setupIPC() {
 
   // Session baslat
   ipcMain.handle('start-session', async (event, data) => {
-    return await startNewSession();
+    return await startNewSession(data || {});
   });
 
   // Session bitir

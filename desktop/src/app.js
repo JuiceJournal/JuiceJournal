@@ -406,19 +406,36 @@ function setCurrentUser(user) {
   }
 }
 
+function getSelectedTrackerContext() {
+  const poeVersion = state.settings.poeVersion || 'poe1';
+  const league = (state.settings.defaultLeague || 'Standard').trim() || 'Standard';
+
+  return {
+    poeVersion,
+    league,
+    label: `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} • ${league}`
+  };
+}
+
 /**
  * Session baslat
  */
 async function handleStartSession() {
   const mapName = prompt(window.t('misc.mapPrompt'), 'Dunes Map');
   if (!mapName) return;
-  
+
+  const trackerContext = getSelectedTrackerContext();
+
   try {
-    const session = await window.electronAPI.startSession({ mapName });
+    const session = await window.electronAPI.startSession({
+      mapName,
+      poeVersion: trackerContext.poeVersion,
+      league: trackerContext.league
+    });
     if (session) {
       state.currentSession = session;
       updateActiveSessionUI();
-      showToast(window.t('dashboard.activeSession'), `${mapName} ${window.t('toast.sessionStarted')}`);
+      showToast(window.t('dashboard.activeSession'), `${mapName} ${window.t('toast.sessionStarted')} (${trackerContext.label})`);
     }
   } catch (error) {
     showToast(window.t('toast.error'), window.t('toast.sessionError'), 'error');
@@ -457,6 +474,7 @@ async function loadCurrentSession() {
 
 function updateActiveSessionUI() {
   if (state.currentSession) {
+    const contextLabel = `${state.currentSession.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} • ${state.currentSession.league || 'Standard'}`;
     elements.activeSession.innerHTML = `
       <div class="session-info">
         <div class="session-info-item">
@@ -474,6 +492,10 @@ function updateActiveSessionUI() {
         <div class="session-info-item">
           <span class="session-info-label">${window.t('session.status')}</span>
           <span class="session-info-value" style="color: #2196f3;">${window.t('dashboard.active')}</span>
+        </div>
+        <div class="session-info-item">
+          <span class="session-info-label">Game</span>
+          <span class="session-info-value">${contextLabel}</span>
         </div>
       </div>
     `;
@@ -562,7 +584,7 @@ async function handleSaveSettings() {
     soundNotifications: elements.soundNotifications ? elements.soundNotifications.checked : false,
     language: activeLang ? activeLang.dataset.lang : 'en',
     poeVersion: activeVersion ? activeVersion.dataset.version : 'poe1',
-    defaultLeague: elements.defaultLeague ? elements.defaultLeague.value : '',
+    defaultLeague: elements.defaultLeague ? (elements.defaultLeague.value.trim() || 'Standard') : 'Standard',
     scanHotkey: elements.scanHotkey ? elements.scanHotkey.value : 'F9'
   };
 
@@ -586,7 +608,7 @@ async function handleResetSettings() {
   elements.autoStartSession.checked = true;
   elements.enableNotifications.checked = true;
   if (elements.soundNotifications) elements.soundNotifications.checked = false;
-  if (elements.defaultLeague) elements.defaultLeague.value = '';
+  if (elements.defaultLeague) elements.defaultLeague.value = 'Standard';
   if (elements.scanHotkey) elements.scanHotkey.value = 'F9';
 
   // Reset language to EN
