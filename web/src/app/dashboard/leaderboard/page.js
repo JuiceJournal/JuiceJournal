@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useTrackerContext } from '@/hooks/useTrackerContext';
 import Navbar from '@/components/Navbar';
+import PoeChromeIcon from '@/components/PoeChromeIcon';
 import LeaderboardTable from '@/components/LeaderboardTable';
 import { statsAPI } from '@/lib/api';
 import { getPoeVersionLabel } from '@/lib/utils';
@@ -61,68 +62,102 @@ export default function LeaderboardPage() {
     <div className="min-h-screen bg-poe-dark">
       <Navbar />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">
-              Leaderboard
-            </h1>
-            <p className="mt-1 text-gray-400">
-              Comparing {getPoeVersionLabel(poeVersion)} farmers in {league}
-            </p>
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <section className="card mb-8">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="section-kicker inline-flex items-center gap-2">
+                <PoeChromeIcon type="ladder" size={14} className="text-poe-gold/80" />
+                <span>League Rankings</span>
+              </p>
+              <h1 className="mt-3 font-display text-4xl uppercase leading-none text-stone-100">
+                Profit Ladder
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-7 text-poe-mist">
+                Compare farmers within the same economy context, not across incompatible leagues or games.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <span className="context-chip border-sky-500/30 bg-sky-500/10 text-sky-200">
+                  {getPoeVersionLabel(poeVersion)}
+                </span>
+                <span className="context-chip border-poe-border bg-poe-gold/10 text-stone-200">
+                  {league}
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-poe-border bg-[rgba(10,8,7,0.78)] p-4">
+              <p className="section-kicker inline-flex items-center gap-2">
+                <PoeChromeIcon type="vault" size={14} className="text-poe-gold/80" />
+                <span>Ranking Window</span>
+              </p>
+              <select
+                value={period}
+                onChange={(e) => setPeriod(e.target.value)}
+                className="input mt-3 min-w-[12rem] text-sm"
+              >
+                {PERIODS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+        </section>
 
-          <select
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="bg-poe-card border border-poe-border rounded px-3 py-2 text-white focus:border-poe-gold focus:outline-none"
-          >
-            {PERIODS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
           <div className="card">
-            <p className="text-gray-400 text-sm">Total Participants</p>
-            <p className="text-2xl font-bold text-white mt-1">
+            <p className="section-kicker inline-flex items-center gap-2">
+              <PoeChromeIcon type="gate" size={14} className="text-poe-gold/80" />
+              <span>Participants</span>
+            </p>
+            <p className="mt-3 text-3xl font-semibold text-white">
               {leaderboard.length}
             </p>
+            <p className="mt-3 text-sm text-poe-mist">Tracked accounts in the selected ranking window.</p>
           </div>
 
           <div className="card">
-            <p className="text-gray-400 text-sm">Total Maps</p>
-            <p className="text-2xl font-bold text-poe-gold mt-1">
+            <p className="section-kicker inline-flex items-center gap-2">
+              <PoeChromeIcon type="atlas" size={14} className="text-poe-gold/80" />
+              <span>Maps Counted</span>
+            </p>
+            <p className="mt-3 text-3xl font-semibold text-poe-gold">
               {leaderboard.reduce((sum, entry) => sum + entry.sessionCount, 0).toLocaleString()}
             </p>
+            <p className="mt-3 text-sm text-poe-mist">All completed runs contributing to this ladder.</p>
           </div>
 
           <div className="card">
-            <p className="text-gray-400 text-sm">Total Profit</p>
-            <p className="text-2xl font-bold text-green-400 mt-1">
+            <p className="section-kicker inline-flex items-center gap-2">
+              <PoeChromeIcon type="market" size={14} className="text-poe-gold/80" />
+              <span>Aggregate Profit</span>
+            </p>
+            <p className="mt-3 text-3xl font-semibold text-emerald-300">
               {leaderboard.reduce((sum, entry) => sum + entry.totalProfit, 0).toLocaleString()}c
             </p>
+            <p className="mt-3 text-sm text-poe-mist">Combined value generated across ranked players.</p>
           </div>
         </div>
 
-        <LeaderboardTable
-          data={leaderboard}
-          currentUserId={user?.id}
-        />
+        <div className="card">
+          <LeaderboardTable
+            data={leaderboard}
+            currentUserId={user?.id}
+          />
 
-        {leaderboard.length === 0 && !loading && (
-          <div className="text-center py-12">
-            <p className="text-gray-400">
-              No data available for this period.
-            </p>
-            <p className="text-gray-500 text-sm mt-2">
-              Start farming maps in {league} to join the leaderboard.
-            </p>
-          </div>
-        )}
+          {leaderboard.length === 0 && !loading && (
+            <div className="pt-8 text-center">
+              <p className="text-gray-400">
+                No data available for this period.
+              </p>
+              <p className="mt-2 text-sm text-poe-mist">
+                Start farming maps in {league} to join the leaderboard.
+              </p>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

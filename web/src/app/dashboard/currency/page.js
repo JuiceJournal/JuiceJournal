@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useTrackerContext } from '@/hooks/useTrackerContext';
 import Navbar from '@/components/Navbar';
+import PoeChromeIcon from '@/components/PoeChromeIcon';
 import CurrencyIcon, { CurrencyValue } from '@/components/CurrencyIcon';
 import SparklineChart from '@/components/SparklineChart';
 import { priceAPI } from '@/lib/api';
@@ -43,14 +44,14 @@ const POE2_TYPES = [
 function SkeletonRow() {
   return (
     <tr className="animate-pulse">
-      <td className="px-3 py-2.5"><div className="h-3 w-5 bg-poe-border/40 rounded" /></td>
-      <td className="px-3 py-2.5"><div className="h-6 w-6 bg-poe-border/40 rounded" /></td>
-      <td className="px-3 py-2.5"><div className="h-3.5 w-32 bg-poe-border/40 rounded" /></td>
-      <td className="px-3 py-2.5"><div className="h-4 w-16 bg-poe-border/40 rounded-full" /></td>
-      <td className="px-3 py-2.5"><div className="h-3.5 w-16 bg-poe-border/40 rounded" /></td>
-      <td className="px-3 py-2.5"><div className="h-3.5 w-14 bg-poe-border/40 rounded" /></td>
-      <td className="px-3 py-2.5"><div className="h-4 w-16 bg-poe-border/40 rounded" /></td>
-      <td className="px-3 py-2.5"><div className="h-3 w-12 bg-poe-border/40 rounded" /></td>
+      <td className="px-4 py-4"><div className="h-3 w-5 rounded bg-poe-border/40" /></td>
+      <td className="px-4 py-4"><div className="h-8 w-8 rounded-xl bg-poe-border/40" /></td>
+      <td className="px-4 py-4"><div className="h-4 w-40 rounded bg-poe-border/40" /></td>
+      <td className="px-4 py-4"><div className="h-4 w-20 rounded-full bg-poe-border/40" /></td>
+      <td className="px-4 py-4"><div className="h-4 w-20 rounded bg-poe-border/40" /></td>
+      <td className="px-4 py-4"><div className="h-4 w-20 rounded bg-poe-border/40" /></td>
+      <td className="px-4 py-4"><div className="h-4 w-16 rounded bg-poe-border/40" /></td>
+      <td className="px-4 py-4"><div className="h-4 w-14 rounded bg-poe-border/40" /></td>
     </tr>
   );
 }
@@ -165,7 +166,7 @@ export default function CurrencyPage() {
     const ariaSort = isActive ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none';
     return (
       <th
-        className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-poe-gold select-none transition-colors"
+        className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist cursor-pointer hover:text-poe-gold select-none transition-colors"
         onClick={() => handleSort(field)}
         aria-sort={ariaSort}
         role="columnheader"
@@ -210,104 +211,111 @@ export default function CurrencyPage() {
     <div className="min-h-screen bg-poe-dark">
       <Navbar />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Currency Prices</h1>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <span className="inline-flex rounded-full bg-sky-500/15 px-3 py-1 text-xs font-medium text-sky-300">
-                {getPoeVersionLabel(poeVersion)}
-              </span>
-              <span className="inline-flex rounded-full bg-poe-card px-3 py-1 text-xs font-medium text-gray-300">
-                {league}
-              </span>
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <section className="card mb-8">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="section-kicker inline-flex items-center gap-2">
+                <PoeChromeIcon type="market" size={14} className="text-poe-gold/80" />
+                <span>Market Observatory</span>
+              </p>
+              <h1 className="mt-3 font-display text-4xl uppercase leading-none text-stone-100">
+                Currency Archive
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-7 text-poe-mist">
+                Review synced item values through a league-aware market panel rather than a generic pricing table.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <span className="context-chip border-sky-500/30 bg-sky-500/10 text-sky-200">
+                  {getPoeVersionLabel(poeVersion)}
+                </span>
+                <span className="context-chip border-poe-border bg-poe-gold/10 text-stone-200">
+                  {league}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="btn btn-primary disabled:opacity-50"
+            >
+              <PoeChromeIcon type="market" size={16} />
+              {syncing ? 'Syncing...' : 'Sync Prices'}
+            </button>
+          </div>
+        </section>
+
+        <section className="card mb-6">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filter by item type">
+              {(poeVersion === 'poe2' ? POE2_TYPES : POE1_TYPES).map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => setSelectedType(tab.value)}
+                  role="tab"
+                  aria-selected={selectedType === tab.value}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] transition-colors ${
+                    selectedType === tab.value
+                      ? 'border-poe-gold/50 bg-poe-gold/15 text-poe-gold'
+                      : 'border-poe-border bg-[rgba(24,19,16,0.68)] text-stone-300 hover:border-poe-gold/25 hover:text-stone-100'
+                  }`}
+                >
+                  {tab.icon && <CurrencyIcon type={tab.icon} size={14} />}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative ml-auto w-full sm:w-72">
+              <svg
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-poe-mist"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder="Search items..."
+                aria-label="Search currency items"
+                className="input pl-9 text-sm"
+              />
             </div>
           </div>
+        </section>
 
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            aria-label={syncing ? 'Syncing prices' : 'Sync prices from poe.ninja'}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-poe-gold text-poe-dark text-sm font-medium rounded-lg hover:bg-poe-gold/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-poe-gold focus-visible:ring-offset-2 focus-visible:ring-offset-poe-dark"
-          >
-            {syncing && (
-              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            )}
-            {syncing ? 'Syncing...' : 'Sync'}
-          </button>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filter by item type">
-            {(poeVersion === 'poe2' ? POE2_TYPES : POE1_TYPES).map((tab) => (
-              <button
-                key={tab.value}
-                onClick={() => setSelectedType(tab.value)}
-                role="tab"
-                aria-selected={selectedType === tab.value}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-poe-gold ${
-                  selectedType === tab.value
-                    ? 'bg-poe-gold text-poe-dark shadow-sm shadow-poe-gold/20'
-                    : 'bg-poe-card text-gray-400 hover:text-white border border-poe-border hover:border-poe-border/80'
-                }`}
-              >
-                {tab.icon && <CurrencyIcon type={tab.icon} size={14} />}
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="sm:ml-auto relative">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-              aria-hidden="true"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              placeholder="Search items..."
-              aria-label="Search currency items"
-              className="w-full sm:w-64 bg-poe-card border border-poe-border rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:border-poe-gold focus:outline-none focus-visible:ring-2 focus-visible:ring-poe-gold transition-colors"
-            />
-          </div>
-        </div>
-
-        <div className="bg-poe-card border border-poe-border rounded-lg overflow-hidden">
+        <div className="overflow-hidden rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.62)]">
           <div className="overflow-x-auto">
-            <table className="w-full" role="table">
-              <thead className="bg-poe-darker border-b border-poe-border">
+            <table className="w-full min-w-[920px]" role="table">
+              <thead className="border-b border-poe-border bg-[rgba(255,255,255,0.02)]">
                 <tr>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-10" scope="col">
+                  <th className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist w-12" scope="col">
                     #
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-10" scope="col">
+                  <th className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist w-12" scope="col">
                     <span className="sr-only">Icon</span>
                   </th>
                   <SortHeader field="itemName">Name</SortHeader>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" scope="col">
+                  <th className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist" scope="col">
                     Type
                   </th>
                   <SortHeader field="chaosValue">Chaos</SortHeader>
                   <SortHeader field="divineValue">Divine</SortHeader>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" scope="col">
+                  <th className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist" scope="col">
                     Trend
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" scope="col">
+                  <th className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist" scope="col">
                     Updated
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-poe-border/50">
+              <tbody className="divide-y divide-poe-border/70">
                 {loading ? (
                   <>
                     {Array.from({ length: 12 }).map((_, i) => (
@@ -316,61 +324,59 @@ export default function CurrencyPage() {
                   </>
                 ) : sortedPrices.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-16 text-center">
-                      <div className="flex flex-col items-center gap-3">
-                        <svg className="h-10 w-10 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                        </svg>
-                        <p className="text-gray-400 text-sm">
-                          {searchQuery
-                            ? 'No items found matching your search.'
-                            : 'No price data available for this game and league. Click Sync to fetch prices.'}
-                        </p>
-                      </div>
+                    <td colSpan={8} className="px-4 py-16 text-center">
+                      <p className="font-display text-xl uppercase tracking-[0.14em] text-stone-200">
+                        {searchQuery ? 'No matching relics found' : 'No market data in this context'}
+                      </p>
+                      <p className="mt-3 text-sm text-poe-mist">
+                        {searchQuery
+                          ? 'Try a broader item name or switch category.'
+                          : 'Sync prices to populate this market archive.'}
+                      </p>
                     </td>
                   </tr>
                 ) : (
                   sortedPrices.map((item, index) => (
-                    <tr key={item.id} className="hover:bg-poe-border/20 transition-colors group">
-                      <td className="px-3 py-2.5 text-xs text-gray-500 tabular-nums">
+                    <tr key={item.id} className="transition-colors hover:bg-[rgba(255,255,255,0.03)]">
+                      <td className="px-4 py-4 text-xs text-poe-mist tabular-nums">
                         {index + 1}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-4 py-4">
                         {item.iconUrl ? (
                           <img
                             src={item.iconUrl}
                             alt={item.itemName}
-                            className="w-7 h-7 object-contain"
+                            className="h-8 w-8 rounded-xl border border-poe-border/70 bg-[rgba(255,255,255,0.02)] object-contain p-1"
                             loading="lazy"
                           />
                         ) : (
-                          <div className="w-7 h-7 bg-poe-border/30 rounded flex items-center justify-center">
-                            <span className="text-gray-600 text-xs">?</span>
+                          <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-poe-border/70 bg-[rgba(255,255,255,0.02)] text-xs text-poe-mist">
+                            ?
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-sm text-white font-medium group-hover:text-poe-gold transition-colors">
+                      <td className="px-4 py-4 text-sm font-semibold text-stone-100">
                         {item.itemName}
                       </td>
-                      <td className="px-3 py-2.5">
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-poe-border/30 text-gray-400 border border-poe-border/50">
+                      <td className="px-4 py-4">
+                        <span className="context-chip border-poe-border bg-[rgba(255,255,255,0.03)] text-stone-300">
                           {getItemTypeLabel(item.itemType)}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">
-                        <CurrencyValue value={item.chaosValue} type="chaos" size={14} className="text-sm tabular-nums" />
+                      <td className="px-4 py-4">
+                        <CurrencyValue value={item.chaosValue} type="chaos" size={14} className="text-sm font-semibold text-stone-200 tabular-nums" />
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-4 py-4">
                         {item.divineValue ? (
-                          <CurrencyValue value={item.divineValue} type="divine" size={14} className="text-sm tabular-nums" />
+                          <CurrencyValue value={item.divineValue} type="divine" size={14} className="text-sm font-semibold text-stone-200 tabular-nums" />
                         ) : (
-                          <span className="text-xs text-gray-600">-</span>
+                          <span className="text-xs text-poe-mist">-</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-4 py-4">
                         <SparklineChart data={item.sparklineData} />
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-gray-500">
+                      <td className="px-4 py-4 text-xs uppercase tracking-[0.14em] text-poe-mist">
                         {formatTimeAgo(item.updatedAt)}
                       </td>
                     </tr>
@@ -381,7 +387,7 @@ export default function CurrencyPage() {
           </div>
 
           {!loading && sortedPrices.length > 0 && (
-            <div className="px-4 py-3 border-t border-poe-border flex items-center justify-between text-xs text-gray-500">
+            <div className="flex items-center justify-between border-t border-poe-border px-4 py-4 text-xs uppercase tracking-[0.14em] text-poe-mist">
               <span>Showing {sortedPrices.length} of {totalCount} items</span>
               <span>Last synced: {formatTimeAgo(lastUpdated)}</span>
             </div>

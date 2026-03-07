@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSocket } from '@/hooks/useSocket';
 import { useTrackerContext } from '@/hooks/useTrackerContext';
 import Navbar from '@/components/Navbar';
+import PoeChromeIcon from '@/components/PoeChromeIcon';
 import ProfitChart from '@/components/ProfitChart';
 import SessionList from '@/components/SessionList';
 import AddLootModal from '@/components/AddLootModal';
@@ -95,9 +96,7 @@ export default function DashboardPage() {
       if (response.success) {
         const profit = parseFloat(response.data.session.profitChaos);
         const profitVal = profit >= 0 ? profit.toFixed(1) : Math.abs(profit).toFixed(1);
-        const message = profit >= 0
-          ? `Profit: ${profitVal}c`
-          : `Loss: ${profitVal}c`;
+        const message = profit >= 0 ? `Profit: ${profitVal}c` : `Loss: ${profitVal}c`;
         if (profit >= 0) {
           toast.success(message);
         } else {
@@ -126,77 +125,143 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-poe-dark">
       <Navbar />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <span className="inline-flex rounded-full bg-sky-500/15 px-3 py-1 text-xs font-medium text-sky-300">
-                {getPoeVersionLabel(poeVersion)}
-              </span>
-              <span className="inline-flex rounded-full bg-poe-card px-3 py-1 text-xs font-medium text-gray-300">
-                {league}
-              </span>
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <section className="card mb-8 overflow-visible">
+          <div className="relative z-[1] grid gap-8 lg:grid-cols-[1.4fr_0.9fr] lg:items-end">
+            <div>
+              <p className="section-kicker">Campaign Control</p>
+              <h1 className="mt-3 max-w-3xl font-display text-4xl uppercase leading-none text-stone-100 sm:text-5xl">
+                Build a sharper atlas ledger with a UI that feels like Path of Exile.
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-7 text-poe-mist">
+                Track route efficiency, preserve league-specific context, and turn every session into a readable economic story instead of a flat dashboard table.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <span className="context-chip border-sky-500/30 bg-sky-500/10 text-sky-200">
+                  {getPoeVersionLabel(poeVersion)}
+                </span>
+                <span className="context-chip border-poe-border bg-poe-gold/10 text-stone-200">
+                  {league}
+                </span>
+                <span className={`context-chip ${connected ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}>
+                  {connected ? 'Live Feed Active' : 'Socket Offline'}
+                </span>
+              </div>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <button onClick={handleStartSession} className="btn btn-primary">
+                  <PoeChromeIcon type="atlas" size={16} />
+                  Start New Map
+                </button>
+                {activeSession && (
+                  <button onClick={() => setShowLootModal(true)} className="btn btn-secondary">
+                    <PoeChromeIcon type="vault" size={16} />
+                    Add Loot
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.88)] p-4">
+                <p className="section-kicker inline-flex items-center gap-2">
+                  <PoeChromeIcon type="pulse" size={14} className="text-poe-gold/80" />
+                  <span>Connection</span>
+                </p>
+                <div className="mt-3 flex items-center gap-3">
+                  <span className={`h-3 w-3 rounded-full ${connected ? 'bg-emerald-400 shadow-[0_0_14px_rgba(74,222,128,0.55)]' : 'bg-red-400 shadow-[0_0_14px_rgba(248,113,113,0.4)]'}`} />
+                  <span className="text-sm font-semibold uppercase tracking-[0.14em] text-stone-200">
+                    {connected ? 'WebSocket linked' : 'Realtime interrupted'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.88)] p-4">
+                <p className="section-kicker inline-flex items-center gap-2">
+                  <PoeChromeIcon type="route" size={14} className="text-poe-gold/80" />
+                  <span>Session Status</span>
+                </p>
+                <p className="mt-3 text-lg font-display uppercase tracking-[0.12em] text-poe-gold">
+                  {activeSession ? activeSession.mapName : 'No active run'}
+                </p>
+                <p className="mt-1 text-sm text-poe-mist">
+                  {activeSession ? `${activeSession.league} • ${getPoeVersionLabel(activeSession.poeVersion)}` : 'Open a fresh route to start tracking.'}
+                </p>
+              </div>
             </div>
           </div>
+        </section>
 
-          <div className={`flex items-center space-x-2 text-sm ${connected ? 'text-green-400' : 'text-red-400'}`}>
-            <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-red-400'}`} />
-            <span>{connected ? 'Live' : 'Disconnected'}</span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-4">
           <div className="card">
-            <p className="text-gray-400 text-sm">Context Profit</p>
-            <p className={`text-2xl font-bold mt-1 ${getProfitColorClass(stats?.summary?.totalProfit || 0)}`}>
+            <p className="section-kicker inline-flex items-center gap-2">
+              <PoeChromeIcon type="market" size={14} className="text-poe-gold/80" />
+              <span>Context Profit</span>
+            </p>
+            <p className={`mt-3 text-3xl font-semibold ${getProfitColorClass(stats?.summary?.totalProfit || 0)}`}>
               <CurrencyValue value={stats?.summary?.totalProfit || 0} type="chaos" size={20} />
             </p>
+            <p className="mt-3 text-sm text-poe-mist">Net value in the selected league and game context.</p>
           </div>
 
           <div className="card">
-            <p className="text-gray-400 text-sm">Total Maps</p>
-            <p className="text-2xl font-bold text-white mt-1">
+            <p className="section-kicker inline-flex items-center gap-2">
+              <PoeChromeIcon type="atlas" size={14} className="text-poe-gold/80" />
+              <span>Maps Cleared</span>
+            </p>
+            <p className="mt-3 text-3xl font-semibold text-white">
               {stats?.summary?.totalSessions || 0}
             </p>
+            <p className="mt-3 text-sm text-poe-mist">Completed sessions contributing to this ledger.</p>
           </div>
 
           <div className="card">
-            <p className="text-gray-400 text-sm">Avg. Profit/Map</p>
-            <p className={`text-2xl font-bold mt-1 ${getProfitColorClass(stats?.summary?.avgProfitPerMap || 0)}`}>
+            <p className="section-kicker inline-flex items-center gap-2">
+              <PoeChromeIcon type="route" size={14} className="text-poe-gold/80" />
+              <span>Average Route</span>
+            </p>
+            <p className={`mt-3 text-3xl font-semibold ${getProfitColorClass(stats?.summary?.avgProfitPerMap || 0)}`}>
               <CurrencyValue value={stats?.summary?.avgProfitPerMap || 0} type="chaos" size={20} />
             </p>
+            <p className="mt-3 text-sm text-poe-mist">Expected payout per map before route adjustments.</p>
           </div>
 
           <div className="card">
-            <p className="text-gray-400 text-sm">Hourly Profit</p>
-            <p className={`text-2xl font-bold mt-1 ${getProfitColorClass(stats?.summary?.avgProfitPerHour || 0)}`}>
+            <p className="section-kicker inline-flex items-center gap-2">
+              <PoeChromeIcon type="pulse" size={14} className="text-poe-gold/80" />
+              <span>Hourly Tempo</span>
+            </p>
+            <p className={`mt-3 text-3xl font-semibold ${getProfitColorClass(stats?.summary?.avgProfitPerHour || 0)}`}>
               <CurrencyValue value={stats?.summary?.avgProfitPerHour || 0} type="chaos" size={20} />
             </p>
+            <p className="mt-3 text-sm text-poe-mist">Sustained earning rate across the current farming loop.</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-1">
             <div className="card">
-              <h2 className="text-lg font-semibold text-poe-gold mb-4">
+              <p className="section-kicker inline-flex items-center gap-2">
+                <PoeChromeIcon type="sessions" size={14} className="text-poe-gold/80" />
+                <span>Current Expedition</span>
+              </p>
+              <h2 className="panel-title">
                 Active Session
               </h2>
 
               {activeSession ? (
                 <div className="space-y-4">
-                  <div className="bg-poe-darker rounded p-4">
+                  <div className="rounded-2xl border border-poe-border bg-[rgba(10,8,7,0.78)] p-4">
                     <p className="text-gray-400 text-sm">Map</p>
-                    <p className="text-xl font-medium text-white">{activeSession.mapName}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <span className="inline-flex rounded-full bg-sky-500/15 px-2 py-1 text-xs font-medium text-sky-300">
+                    <p className="mt-2 text-2xl font-display uppercase tracking-[0.1em] text-white">{activeSession.mapName}</p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <span className="context-chip border-sky-500/30 bg-sky-500/10 text-sky-200">
                         {getPoeVersionLabel(activeSession.poeVersion)}
                       </span>
-                      <span className="inline-flex rounded-full bg-poe-card px-2 py-1 text-xs font-medium text-gray-300">
+                      <span className="context-chip border-poe-border bg-poe-gold/10 text-stone-200">
                         {activeSession.league}
                       </span>
                       {activeSession.mapTier && (
-                        <span className="inline-flex rounded-full bg-poe-border px-2 py-1 text-xs font-medium text-gray-300">
+                        <span className="context-chip border-poe-border bg-[rgba(255,255,255,0.04)] text-stone-300">
                           Tier {activeSession.mapTier}
                         </span>
                       )}
@@ -204,19 +269,19 @@ export default function DashboardPage() {
                   </div>
 
                   {!activeSessionMatchesContext && (
-                    <p className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+                    <p className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-300">
                       This active session is outside the currently selected dashboard context.
                     </p>
                   )}
 
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-poe-darker rounded p-3">
-                      <p className="text-gray-400 text-xs">Started</p>
-                      <p className="text-white">{new Date(activeSession.startedAt).toLocaleTimeString()}</p>
+                    <div className="rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.76)] p-4">
+                      <p className="section-kicker">Started</p>
+                      <p className="mt-2 text-base font-semibold text-white">{new Date(activeSession.startedAt).toLocaleTimeString()}</p>
                     </div>
-                    <div className="bg-poe-darker rounded p-3">
-                      <p className="text-gray-400 text-xs">Profit</p>
-                      <p className={`font-medium ${getProfitColorClass(activeSession.profitChaos)}`}>
+                    <div className="rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.76)] p-4">
+                      <p className="section-kicker">Profit</p>
+                      <p className={`mt-2 text-base font-semibold ${getProfitColorClass(activeSession.profitChaos)}`}>
                         <CurrencyValue value={activeSession.profitChaos} type="chaos" size={16} />
                       </p>
                     </div>
@@ -225,24 +290,26 @@ export default function DashboardPage() {
                   <div className="flex space-x-3">
                     <button
                       onClick={() => setShowLootModal(true)}
-                      className="flex-1 btn btn-primary py-2"
+                      className="flex-1 btn btn-primary"
                     >
+                      <PoeChromeIcon type="vault" size={16} />
                       Add Loot
                     </button>
                     <button
                       onClick={handleEndSession}
-                      className="flex-1 px-4 py-2 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 transition-colors"
+                      className="flex-1 rounded-md border border-red-500/25 bg-red-500/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.16em] text-red-300 transition-colors hover:bg-red-500/20"
                     >
                       End
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <p className="text-gray-400 mb-4">No active map</p>
+                <div className="rounded-2xl border border-dashed border-poe-border bg-[rgba(10,8,7,0.65)] px-6 py-10 text-center">
+                  <p className="font-display text-xl uppercase tracking-[0.14em] text-stone-200">No active map</p>
+                  <p className="mt-3 text-sm text-poe-mist">Start a run to begin capturing route value, loot, and pace.</p>
                   <button
                     onClick={handleStartSession}
-                    className="btn btn-primary"
+                    className="btn btn-primary mt-6"
                   >
                     Start New Map
                   </button>
@@ -256,21 +323,25 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div>
+        <div className="card">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-white">
+              <p className="section-kicker inline-flex items-center gap-2">
+                <PoeChromeIcon type="sessions" size={14} className="text-poe-gold/80" />
+                <span>Ledger History</span>
+              </p>
+              <h2 className="panel-title">
                 Recent Sessions
               </h2>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-poe-mist">
                 Filtered to {getPoeVersionLabel(poeVersion)} / {league}
               </p>
             </div>
             <button
               onClick={() => router.push('/dashboard/sessions')}
-              className="text-poe-gold hover:text-poe-gold-dark text-sm"
+              className="rounded-full border border-poe-border bg-[rgba(20,17,14,0.7)] px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-poe-gold transition-colors hover:border-poe-gold/35 hover:text-amber-200"
             >
-              View All →
+              View All
             </button>
           </div>
 

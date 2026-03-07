@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useTrackerContext } from '@/hooks/useTrackerContext';
 import Navbar from '@/components/Navbar';
+import PoeChromeIcon from '@/components/PoeChromeIcon';
 import SessionList from '@/components/SessionList';
 import { sessionAPI } from '@/lib/api';
 import { formatChaos, getPoeVersionLabel } from '@/lib/utils';
@@ -102,51 +103,71 @@ export default function SessionsPage() {
     <div className="min-h-screen bg-poe-dark">
       <Navbar />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">
-              Map Sessions
-            </h1>
-            <p className="mt-1 text-gray-400">
-              Showing {getPoeVersionLabel(poeVersion)} sessions in {league}
-            </p>
-          </div>
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <section className="card mb-8">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="section-kicker inline-flex items-center gap-2">
+                <PoeChromeIcon type="sessions" size={14} className="text-poe-gold/80" />
+                <span>Run Archive</span>
+              </p>
+              <h1 className="mt-3 font-display text-4xl uppercase leading-none text-stone-100">
+                Session Ledger
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-7 text-poe-mist">
+                Review completed routes, current expeditions, and abandoned runs without losing the active game and league context.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <span className="context-chip border-sky-500/30 bg-sky-500/10 text-sky-200">
+                  {getPoeVersionLabel(poeVersion)}
+                </span>
+                <span className="context-chip border-poe-border bg-poe-gold/10 text-stone-200">
+                  {league}
+                </span>
+              </div>
+            </div>
 
-          <div className="flex items-center space-x-4">
-            <select
-              value={filter}
-              onChange={(e) => {
-                setFilter(e.target.value);
-                setPage(1);
-              }}
-              className="bg-poe-card border border-poe-border rounded px-3 py-2 text-white focus:border-poe-gold focus:outline-none"
-            >
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="completed">Completed</option>
-              <option value="abandoned">Abandoned</option>
-            </select>
+            <div className="rounded-2xl border border-poe-border bg-[rgba(10,8,7,0.78)] p-4">
+              <p className="section-kicker inline-flex items-center gap-2">
+                <PoeChromeIcon type="vault" size={14} className="text-poe-gold/80" />
+                <span>Status Filter</span>
+              </p>
+              <select
+                value={filter}
+                onChange={(e) => {
+                  setFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="input mt-3 min-w-[12rem] text-sm"
+              >
+                <option value="all">All</option>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="abandoned">Abandoned</option>
+              </select>
+            </div>
           </div>
+        </section>
+
+        <div className="card">
+          <SessionList
+            sessions={sessions}
+            showActions={filter === 'active' || filter === 'all'}
+            onEndSession={handleEndSession}
+          />
+
+          {hasMore && (
+            <div className="mt-6 text-center">
+              <button
+                onClick={loadMore}
+                disabled={loading}
+                className="btn btn-secondary disabled:opacity-50"
+              >
+                {loading ? 'Loading...' : 'Load More'}
+              </button>
+            </div>
+          )}
         </div>
-
-        <SessionList
-          sessions={sessions}
-          showActions={filter === 'active' || filter === 'all'}
-          onEndSession={handleEndSession}
-        />
-
-        {hasMore && (
-          <div className="mt-6 text-center">
-            <button
-              onClick={loadMore}
-              disabled={loading}
-              className="px-6 py-2 bg-poe-card border border-poe-border text-gray-300 rounded hover:bg-poe-border transition-colors disabled:opacity-50"
-            >
-              {loading ? 'Loading...' : 'Load More'}
-            </button>
-          </div>
-        )}
       </main>
     </div>
   );
