@@ -8,6 +8,8 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { User } = require('../models');
 const { authenticate, generateToken } = require('../middleware/auth');
+const poeAuthService = require('../services/poeAuthService');
+const { Op } = require('sequelize');
 
 /**
  * Validation middleware
@@ -53,7 +55,7 @@ router.post('/register',
       // Kullanici adi veya email kontrolu
       const existingUser = await User.findOne({
         where: {
-          [require('sequelize').Op.or]: [
+          [Op.or]: [
             { username },
             { email }
           ]
@@ -124,7 +126,7 @@ router.post('/login',
       // Kullaniciyi bul (username veya email ile)
       const user = await User.findOne({
         where: {
-          [require('sequelize').Op.or]: [
+          [Op.or]: [
             { username },
             { email: username }
           ]
@@ -191,6 +193,222 @@ router.get('/me', authenticate, async (req, res) => {
       success: false,
       data: null,
       error: 'Profil bilgileri alinirken hata olustu'
+    });
+  }
+});
+
+/**
+ * POST /api/auth/poe/connect/start
+ * Path of Exile account linking flow start
+ */
+router.post('/poe/connect/start',
+  authenticate,
+  [
+    body('redirectUri').optional().isString(),
+    body('codeChallenge').optional().isString(),
+    body('codeChallengeMethod').optional().isString(),
+    body('state').optional().isString(),
+    handleValidationErrors
+  ],
+  async (req, res) => {
+    try {
+      const { redirectUri, codeChallenge, state } = req.body;
+
+      if (poeAuthService.isMockMode()) {
+        return res.json({
+          success: true,
+          data: {
+            mode: 'mock',
+            requiresBrowser: false,
+            state: state || `mock-${Date.now()}`,
+            mockCode: 'poe-mock-code'
+          },
+          error: null
+        });
+      }
+
+      if (!poeAuthService.isConfigured()) {
+        return res.status(400).json({
+          success: false,
+          data: null,
+          error: 'Path of Exile OAuth is not configured'
+        });
+      }
+
+      if (!redirectUri || redirectUri !== process.env.POE_REDIRECT_URI) {
+        return res.status(400).json({
+          success: false,
+          data: null,
+          error: 'Invalid redirect URI'
+        });
+      }
+
+      const authUrl = poeAuthService.buildAuthorizationUrl({
+        redirectUri,
+        codeChallenge,
+        state,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          mode: 'live',
+          requiresBrowser: true,
+          state,
+          authUrl,
+          scopes: poeAuthService.getScopes()
+        },
+        error: null
+      });
+    } catch (error) {
+      console.error('PoE connect start error:', error);
+      res.status(500).json({
+        success: false,
+        data: null,
+        error: 'Failed to start Path of Exile linking'
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/auth/poe/connect/complete
+ * Complete Path of Exile account linking
+ */
+router.post('/poe/connect/complete',
+  authenticate,
+  [
+    body('redirectUri').optional().isString(),
+    body('code').optional().isString(),
+    body('codeVerifier').optional().isString(),
+    body('state').optional().isString(),
+    handleValidationErrors
+  ],
+  async (req, res) => {
+    try {
+      const { redirectUri, code, codeVerifier } = req.body;
+
+      if (poeAuthService.isMockMode()) {
+        const linkedUser = await poeAuthService.persistPoeLink(
+          req.user,
+          poeAuthService.createMockLinkPayload(req.user)
+        );
+
+        return res.json({
+          success: true,
+          data: {
+            poe: linkedUser.getPoeStatus()
+          },
+          error: null
+        });
+      }
+
+      if (!poeAuthService.isConfigured()) {
+        return res.status(400).json({
+          success: false,
+          data: null,
+          error: 'Path of Exile OAuth is not configured'
+        });
+      }
+
+      if (!redirectUri || redirectUri !== process.env.POE_REDIRECT_URI) {
+        return res.status(400).json({
+          success: false,
+          data: null,
+          error: 'Invalid redirect URI'
+        });
+      }
+
+      if (!code || !codeVerifier) {
+        return res.status(400).json({
+          success: false,
+          data: null,
+          error: 'Authorization code and PKCE verifier are required'
+        });
+      }
+
+      const tokenPayload = await poeAuthService.exchangeCode({
+        code,
+        codeVerifier,
+        redirectUri
+      });
+
+      const profile = await poeAuthService.fetchProfile(tokenPayload.access_token);
+      const linkedUser = await poeAuthService.persistPoeLink(req.user, {
+        sub: profile.uuid,
+        accountName: profile.name,
+        accessToken: tokenPayload.access_token,
+        refreshToken: tokenPayload.refresh_token,
+        expiresAt: new Date(Date.now() + ((tokenPayload.expires_in || 0) * 1000)),
+        linkedAt: new Date(),
+        mock: false,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          mode: 'live',
+          poe: linkedUser.getPoeStatus()
+        },
+        error: null
+      });
+    } catch (error) {
+      console.error('PoE connect complete error:', error);
+      res.status(500).json({
+        success: false,
+        data: null,
+        error: 'Failed to complete Path of Exile linking'
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/auth/poe/status
+ * Get Path of Exile linking status
+ */
+router.get('/poe/status', authenticate, async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        mode: poeAuthService.isMockMode() ? 'mock' : 'live',
+        configured: poeAuthService.isConfigured(),
+        poe: req.user.getPoeStatus()
+      },
+      error: null
+    });
+  } catch (error) {
+    console.error('PoE status error:', error);
+    res.status(500).json({
+      success: false,
+      data: null,
+      error: 'Failed to get Path of Exile link status'
+    });
+  }
+});
+
+/**
+ * DELETE /api/auth/poe/disconnect
+ * Remove Path of Exile link
+ */
+router.delete('/poe/disconnect', authenticate, async (req, res) => {
+  try {
+    const updatedUser = await poeAuthService.clearPoeLink(req.user);
+
+    res.json({
+      success: true,
+      data: {
+        poe: updatedUser.getPoeStatus()
+      },
+      error: null
+    });
+  } catch (error) {
+    console.error('PoE disconnect error:', error);
+    res.status(500).json({
+      success: false,
+      data: null,
+      error: 'Failed to disconnect Path of Exile account'
     });
   }
 });
