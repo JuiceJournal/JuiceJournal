@@ -359,16 +359,10 @@
               <div class="settings-group">
                 <h3 data-i18n="settings.language">Dil</h3>
                 <div class="form-group">
-                  <div class="language-select">
-                    <button class="lang-btn" data-lang="tr">
-                      <span class="lang-flag">TR</span>
-                      Turkce
-                    </button>
-                    <button class="lang-btn active" data-lang="en">
-                      <span class="lang-flag">EN</span>
-                      English
-                    </button>
-                  </div>
+                  <select id="global-language">
+                    <option value="tr">Turkce</option>
+                    <option value="en">English</option>
+                  </select>
                 </div>
               </div>
               <div class="settings-group">
@@ -411,6 +405,20 @@
                     <input type="checkbox" id="auto-start-session">
                     <span data-i18n="settings.autoStartSession">Yeni map girisinde otomatik session baslat</span>
                   </label>
+                </div>
+              </div>
+              <div class="settings-group">
+                <h3 data-i18n="settings.poeAccount">Path of Exile Account</h3>
+                <div class="poe-account-card">
+                  <div class="poe-account-copy">
+                    <p id="poe-link-status" class="poe-link-status" data-i18n="settings.poeNotLinked">Not linked</p>
+                    <p id="poe-account-name" class="poe-account-name" data-i18n="settings.poeNoAccount">No Path of Exile account connected yet.</p>
+                    <p id="poe-link-mode" class="poe-link-mode" data-i18n="settings.poeMockMode">Mock mode will be used until a real GGG OAuth client is configured.</p>
+                  </div>
+                  <div class="poe-account-actions">
+                    <button id="poe-connect-btn" class="btn btn-primary" data-i18n="settings.connectPoe">Connect Path of Exile</button>
+                    <button id="poe-disconnect-btn" class="btn btn-secondary hidden" data-i18n="settings.disconnectPoe">Disconnect</button>
+                  </div>
                 </div>
               </div>
             </div>

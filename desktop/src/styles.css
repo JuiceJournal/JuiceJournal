@@ -980,63 +980,66 @@ body {
 }
 
 /* Language Select */
-.language-select {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.lang-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.65rem 1rem;
-  background: var(--bg-base);
+#global-language {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-secondary);
-  cursor: pointer;
+  border-radius: 12px;
+  color: var(--text);
   font-family: var(--font);
-  font-size: 0.82rem;
-  font-weight: 500;
+  font-size: 0.84rem;
   transition: var(--transition);
 }
 
-.lang-btn:hover {
-  border-color: var(--border-light);
-  color: var(--text);
-}
-
-.lang-btn.active {
+#global-language:focus {
+  outline: none;
   border-color: var(--gold-dim);
-  color: var(--gold-light);
-  background: var(--gold-glow);
-  box-shadow: 0 0 12px var(--gold-glow);
-}
-
-.lang-flag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 20px;
-  background: var(--bg-elevated);
-  border-radius: 3px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-}
-
-.lang-btn.active .lang-flag {
-  background: var(--gold-dim);
-  color: var(--bg-base);
+  box-shadow: 0 0 0 3px var(--gold-glow);
 }
 
 /* PoE Version Select */
 .poe-version-select {
   display: flex;
   gap: 0.5rem;
+}
+
+.poe-account-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.02);
+}
+
+.poe-link-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+}
+
+.poe-account-name {
+  margin-top: 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.poe-link-mode {
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.poe-account-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
 }
 
 .version-btn {

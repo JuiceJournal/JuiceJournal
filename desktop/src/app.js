@@ -12,7 +12,8 @@ const state = {
   currentSession: null,
   settings: {},
   sessions: [],
-  recentLoot: []
+  recentLoot: [],
+  poeLink: null
 };
 
 // DOM Elementleri
@@ -58,8 +59,13 @@ const elements = {
   resetSettingsBtn: document.getElementById('reset-settings'),
   settingsNavBtns: document.querySelectorAll('.settings-nav-btn'),
   settingsTabs: document.querySelectorAll('.settings-tab'),
-  langBtns: document.querySelectorAll('.lang-btn'),
+  globalLanguage: document.getElementById('global-language'),
   versionBtns: document.querySelectorAll('.version-btn'),
+  poeLinkStatus: document.getElementById('poe-link-status'),
+  poeAccountName: document.getElementById('poe-account-name'),
+  poeLinkMode: document.getElementById('poe-link-mode'),
+  poeConnectBtn: document.getElementById('poe-connect-btn'),
+  poeDisconnectBtn: document.getElementById('poe-disconnect-btn'),
   
   // User
   username: document.getElementById('username'),
@@ -94,9 +100,10 @@ async function init() {
   const token = state.settings.authToken;
   if (token) {
     try {
-      const user = await window.electronAPI.login({});
-      if (user) {
-        setCurrentUser(user);
+      const me = await window.electronAPI.getCurrentUser();
+      if (me?.user) {
+        setCurrentUser(me.user);
+        await loadPoeLinkStatus();
       }
     } catch (error) {
       console.log('Otomatik giris basarisiz');
@@ -129,11 +136,8 @@ async function loadSettings() {
     if (elements.defaultLeague) elements.defaultLeague.value = state.settings.defaultLeague || '';
     if (elements.scanHotkey) elements.scanHotkey.value = state.settings.scanHotkey || 'F9';
 
-    // Language buttons
     const lang = state.settings.language || 'en';
-    elements.langBtns.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.lang === lang);
-    });
+    if (elements.globalLanguage) elements.globalLanguage.value = lang;
 
     // PoE version buttons
     const ver = state.settings.poeVersion || 'poe1';
@@ -235,6 +239,8 @@ function setupEventListeners() {
   // Settings
   elements.saveSettingsBtn.addEventListener('click', handleSaveSettings);
   elements.resetSettingsBtn.addEventListener('click', handleResetSettings);
+  if (elements.poeConnectBtn) elements.poeConnectBtn.addEventListener('click', handlePoeConnect);
+  if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.addEventListener('click', handlePoeDisconnect);
 
   // Settings tab navigation
   elements.settingsNavBtns.forEach(btn => {
@@ -250,17 +256,15 @@ function setupEventListeners() {
     });
   });
 
-  // Language switching
-  elements.langBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      elements.langBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const lang = btn.dataset.lang;
+  // Global language selector
+  if (elements.globalLanguage) {
+    elements.globalLanguage.addEventListener('change', () => {
+      const lang = elements.globalLanguage.value || 'en';
       state.settings.language = lang;
       window._appState.language = lang;
       if (window.applyTranslations) window.applyTranslations();
     });
-  });
+  }
 
   // PoE version switching
   elements.versionBtns.forEach(btn => {
@@ -382,6 +386,7 @@ async function handleLogin(e) {
     if (result.success) {
       setCurrentUser(result.data.user);
       elements.loginModal.classList.add('hidden');
+      await loadPoeLinkStatus();
       showToast(window.t('login.title'), window.t('toast.loginSuccess'));
     } else {
       showToast(window.t('toast.loginFailed'), result.error, 'error');
@@ -407,6 +412,7 @@ async function handleRegister(e) {
     if (result.success) {
       setCurrentUser(result.data.user);
       elements.registerModal.classList.add('hidden');
+      await loadPoeLinkStatus();
       showToast(window.t('register.title'), window.t('toast.registerSuccess'));
     } else {
       showToast(window.t('toast.registerFailed'), result.error, 'error');
@@ -422,8 +428,10 @@ async function handleRegister(e) {
 async function handleLogout() {
   await window.electronAPI.logout();
   state.currentUser = null;
+  state.poeLink = null;
   elements.username.textContent = window.t('user.guest');
   if (elements.userAvatar) elements.userAvatar.textContent = '?';
+  renderPoeLinkStatus();
   showLoginModal();
 }
 
@@ -435,6 +443,104 @@ function setCurrentUser(user) {
   elements.username.textContent = user.username;
   if (elements.userAvatar) {
     elements.userAvatar.textContent = user.username.charAt(0).toUpperCase();
+  }
+}
+
+function renderPoeLinkStatus() {
+  const status = state.poeLink;
+
+  if (!elements.poeLinkStatus || !elements.poeAccountName || !elements.poeLinkMode) return;
+
+  if (!state.currentUser) {
+    elements.poeLinkStatus.textContent = window.t('settings.poeSignInRequired');
+    elements.poeAccountName.textContent = window.t('settings.poeSignInHint');
+    elements.poeLinkMode.textContent = window.t('settings.poeMockMode');
+    if (elements.poeConnectBtn) elements.poeConnectBtn.classList.remove('hidden');
+    if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.classList.add('hidden');
+    return;
+  }
+
+  if (status?.linked) {
+    elements.poeLinkStatus.textContent = status.mock ? window.t('settings.poeLinkedMock') : window.t('settings.poeLinked');
+    elements.poeAccountName.textContent = status.accountName || window.t('settings.poeLinked');
+    elements.poeLinkMode.textContent = status.mock
+      ? window.t('settings.poeMockMode')
+      : window.t('settings.poeLiveMode');
+    if (elements.poeConnectBtn) elements.poeConnectBtn.classList.add('hidden');
+    if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.classList.remove('hidden');
+    return;
+  }
+
+  elements.poeLinkStatus.textContent = window.t('settings.poeNotLinked');
+  elements.poeAccountName.textContent = window.t('settings.poeNoAccount');
+  elements.poeLinkMode.textContent = window.t('settings.poeMockMode');
+  if (elements.poeConnectBtn) elements.poeConnectBtn.classList.remove('hidden');
+  if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.classList.add('hidden');
+}
+
+async function loadPoeLinkStatus() {
+  if (!state.currentUser) {
+    renderPoeLinkStatus();
+    return;
+  }
+
+  try {
+    const response = await window.electronAPI.getPoeLinkStatus();
+    state.poeLink = response?.poe || null;
+  } catch (error) {
+    state.poeLink = null;
+    console.error('PoE link status load error:', error);
+  } finally {
+    renderPoeLinkStatus();
+  }
+}
+
+async function handlePoeConnect() {
+  if (!state.currentUser) {
+    showToast(window.t('toast.error'), window.t('toast.poeSignInFirst'), 'warning');
+    return;
+  }
+
+  if (elements.poeConnectBtn) {
+    elements.poeConnectBtn.disabled = true;
+    elements.poeConnectBtn.textContent = 'Connecting...';
+  }
+
+  try {
+    const response = await window.electronAPI.startPoeConnect();
+    state.poeLink = response?.poe || null;
+    renderPoeLinkStatus();
+    showToast('Path of Exile', state.poeLink?.mock ? window.t('toast.poeLinkedMock') : window.t('toast.poeLinked'), 'success');
+  } catch (error) {
+    showToast(window.t('toast.error'), error.message || window.t('toast.poeConnectError'), 'error');
+  } finally {
+    if (elements.poeConnectBtn) {
+      elements.poeConnectBtn.disabled = false;
+      elements.poeConnectBtn.textContent = window.t('settings.connectPoe');
+    }
+  }
+}
+
+async function handlePoeDisconnect() {
+  if (!state.currentUser) return;
+
+  if (elements.poeDisconnectBtn) {
+    elements.poeDisconnectBtn.disabled = true;
+    elements.poeDisconnectBtn.textContent = 'Disconnecting...';
+  }
+
+  try {
+    const response = await window.electronAPI.disconnectPoeAccount();
+    state.poeLink = response?.poe || null;
+    renderPoeLinkStatus();
+    showToast('Path of Exile', window.t('toast.poeDisconnected'), 'success');
+  } catch (error) {
+    showToast(window.t('toast.error'), error.message || window.t('toast.poeDisconnectError'), 'error');
+  } finally {
+    if (elements.poeDisconnectBtn) {
+      elements.poeDisconnectBtn.disabled = false;
+      elements.poeDisconnectBtn.textContent = window.t('settings.disconnectPoe');
+    }
   }
 }
 
@@ -605,7 +711,6 @@ async function loadRecentLoot() {
  * Ayarlari kaydet
  */
 async function handleSaveSettings() {
-  const activeLang = document.querySelector('.lang-btn.active');
   const activeVersion = document.querySelector('.version-btn.active');
 
   const settings = {
@@ -614,7 +719,7 @@ async function handleSaveSettings() {
     autoStartSession: elements.autoStartSession.checked,
     notifications: elements.enableNotifications.checked,
     soundNotifications: elements.soundNotifications ? elements.soundNotifications.checked : false,
-    language: activeLang ? activeLang.dataset.lang : 'en',
+    language: elements.globalLanguage ? elements.globalLanguage.value : 'en',
     poeVersion: activeVersion ? activeVersion.dataset.version : 'poe1',
     defaultLeague: elements.defaultLeague ? (elements.defaultLeague.value.trim() || 'Standard') : 'Standard',
     scanHotkey: elements.scanHotkey ? elements.scanHotkey.value : 'F9'
@@ -644,7 +749,7 @@ async function handleResetSettings() {
   if (elements.scanHotkey) elements.scanHotkey.value = 'F9';
 
   // Reset language to EN
-  elements.langBtns.forEach(b => b.classList.toggle('active', b.dataset.lang === 'en'));
+  if (elements.globalLanguage) elements.globalLanguage.value = 'en';
   window._appState.language = 'en';
   if (window.applyTranslations) window.applyTranslations();
 

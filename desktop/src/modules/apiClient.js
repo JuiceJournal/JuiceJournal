@@ -105,6 +105,38 @@ class APIClient {
     return response.data;
   }
 
+  /**
+   * Path of Exile linking flow start
+   */
+  async startPoeConnect(data = {}) {
+    const response = await this.client.post('/api/auth/poe/connect/start', data);
+    return response.data;
+  }
+
+  /**
+   * Complete Path of Exile linking
+   */
+  async completePoeConnect(data = {}) {
+    const response = await this.client.post('/api/auth/poe/connect/complete', data);
+    return response.data;
+  }
+
+  /**
+   * Get Path of Exile link status
+   */
+  async getPoeLinkStatus() {
+    const response = await this.client.get('/api/auth/poe/status');
+    return response.data;
+  }
+
+  /**
+   * Disconnect Path of Exile account
+   */
+  async disconnectPoeAccount() {
+    const response = await this.client.delete('/api/auth/poe/disconnect');
+    return response.data;
+  }
+
   // ==================== SESSIONS ====================
 
   /**
