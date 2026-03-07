@@ -1,7 +1,20 @@
 import './globals.css';
+import { Cormorant_SC, Source_Sans_3 } from 'next/font/google';
 import { AuthProvider } from '@/hooks/useAuth';
 import { TrackerContextProvider } from '@/hooks/useTrackerContext';
 import { Toaster } from 'react-hot-toast';
+
+const displayFont = Cormorant_SC({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-display',
+});
+
+const bodyFont = Source_Sans_3({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-body',
+});
 
 export const metadata = {
   title: 'PoE Farm Tracker',
@@ -11,7 +24,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className="bg-poe-dark text-gray-100 min-h-screen">
+      <body className={`${displayFont.variable} ${bodyFont.variable} bg-poe-dark text-gray-100 min-h-screen font-sans`}>
         <AuthProvider>
           <TrackerContextProvider>
             {children}

@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useTrackerContext } from '@/hooks/useTrackerContext';
-import CurrencyIcon from '@/components/CurrencyIcon';
+import PoeChromeIcon from '@/components/PoeChromeIcon';
+import { getPoeVersionLabel } from '@/lib/utils';
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -18,10 +19,10 @@ export default function Navbar() {
   }, [league]);
 
   const navItems = [
-    { href: '/dashboard', label: 'Dashboard' },
-    { href: '/dashboard/sessions', label: 'Sessions' },
-    { href: '/dashboard/currency', label: 'Currency' },
-    { href: '/dashboard/leaderboard', label: 'Leaderboard' },
+    { href: '/dashboard', label: 'Dashboard', icon: 'atlas' },
+    { href: '/dashboard/sessions', label: 'Sessions', icon: 'sessions' },
+    { href: '/dashboard/currency', label: 'Currency', icon: 'market' },
+    { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: 'ladder' },
   ];
 
   const commitLeague = () => {
@@ -29,36 +30,87 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="bg-poe-dark border-b border-poe-border">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex min-h-16 flex-col gap-3 py-3 lg:h-16 lg:flex-row lg:items-center lg:justify-between lg:py-0">
-          {/* Logo */}
-          <div className="flex items-center">
-            <Link href="/dashboard" className="flex items-center space-x-2">
-              <CurrencyIcon type="exalted" size={28} />
-              <span className="text-xl font-bold text-poe-gold">
-                PoE Farm Tracker
-              </span>
-            </Link>
+    <nav className="border-b border-poe-border/70 bg-[rgba(8,7,6,0.86)] backdrop-blur-xl">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-4 py-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-4">
+              <Link href="/dashboard" className="group flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-poe-border bg-[radial-gradient(circle_at_30%_30%,rgba(214,180,110,0.22),rgba(22,18,15,0.94))] shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition-transform duration-200 group-hover:scale-[1.03]">
+                  <PoeChromeIcon type="sigil" size={28} className="text-poe-gold drop-shadow-[0_0_12px_rgba(198,161,91,0.22)]" />
+                </div>
+                <div>
+                  <p className="section-kicker">Atlas Ledger</p>
+                  <p className="font-display text-2xl uppercase tracking-[0.18em] text-poe-gold">
+                    PoE Farm Tracker
+                  </p>
+                </div>
+              </Link>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`rounded-full border px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] transition-all ${
+                    pathname === item.href
+                      ? 'border-poe-gold/50 bg-poe-gold/15 text-poe-gold shadow-[0_0_0_1px_rgba(198,161,91,0.1)_inset]'
+                      : 'border-poe-border bg-[rgba(28,23,20,0.6)] text-stone-300 hover:border-poe-gold/30 hover:text-stone-100'
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <PoeChromeIcon type={item.icon} size={15} />
+                    <span>{item.label}</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-4">
+              {user ? (
+                <>
+                  <div className="text-right">
+                    <p className="section-kicker inline-flex items-center gap-2">
+                      <PoeChromeIcon type="gate" size={13} className="text-poe-gold/80" />
+                      <span>Account</span>
+                    </p>
+                    <p className="text-sm font-semibold text-stone-200">{user.username}</p>
+                  </div>
+                  <button
+                    onClick={logout}
+                    className="rounded-full border border-poe-border bg-[rgba(32,26,22,0.82)] px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-stone-300 transition-colors hover:border-poe-gold/35 hover:text-stone-100"
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <Link
+                  href="/login"
+                  className="rounded-full border border-poe-border bg-[rgba(32,26,22,0.82)] px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-poe-gold transition-colors hover:border-poe-gold/35 hover:text-amber-200"
+                >
+                  Sign In
+                </Link>
+              )}
+            </div>
           </div>
 
-          {/* Navigation */}
-          <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="hidden md:block">
-              <div className="flex items-center space-x-4">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      pathname === item.href
-                        ? 'text-poe-gold bg-poe-card'
-                        : 'text-gray-300 hover:text-white hover:bg-poe-card'
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
+          <div className="grid gap-3 rounded-2xl border border-poe-border bg-[linear-gradient(180deg,rgba(30,25,21,0.92),rgba(17,14,12,0.96))] p-4 shadow-[0_18px_40px_rgba(0,0,0,0.28)] lg:grid-cols-[1fr_auto] lg:items-center">
+            <div>
+              <p className="section-kicker inline-flex items-center gap-2">
+                <PoeChromeIcon type="vault" size={13} className="text-poe-gold/80" />
+                <span>Tracking Context</span>
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="context-chip border-sky-500/30 bg-sky-500/10 text-sky-200">
+                  {getPoeVersionLabel(poeVersion)}
+                </span>
+                <span className="context-chip border-poe-border bg-[rgba(198,161,91,0.08)] text-stone-200">
+                  {league}
+                </span>
+                <span className="text-sm text-poe-mist">
+                  Use one league context across dashboard, prices, sessions, and rankings.
+                </span>
               </div>
             </div>
 
@@ -66,7 +118,7 @@ export default function Navbar() {
               <select
                 value={poeVersion}
                 onChange={(e) => setPoeVersion(e.target.value)}
-                className="bg-poe-card border border-poe-border rounded-md px-3 py-2 text-sm text-white focus:border-poe-gold focus:outline-none"
+                className="input min-w-[9rem] text-sm"
                 aria-label="Select game version"
               >
                 <option value="poe1">PoE 1</option>
@@ -86,7 +138,7 @@ export default function Navbar() {
                     }
                   }}
                   placeholder={loadingLeagues ? 'Loading leagues...' : 'League'}
-                  className="bg-poe-card border border-poe-border rounded-md px-3 py-2 text-sm text-white focus:border-poe-gold focus:outline-none"
+                  className="input min-w-[12rem] text-sm"
                   aria-label="League"
                 />
                 <datalist id="tracker-league-options">
@@ -96,28 +148,6 @@ export default function Navbar() {
                 </datalist>
               </div>
             </div>
-          </div>
-
-          {/* User */}
-          <div className="flex items-center justify-end space-x-4">
-            {user ? (
-              <>
-                <span className="text-gray-300 text-sm">{user.username}</span>
-                <button
-                  onClick={logout}
-                  className="text-sm text-gray-400 hover:text-white transition-colors"
-                >
-                  Logout
-                </button>
-              </>
-            ) : (
-              <Link
-                href="/login"
-                className="text-sm text-poe-gold hover:text-poe-gold-dark transition-colors"
-              >
-                Sign In
-              </Link>
-            )}
           </div>
         </div>
       </div>

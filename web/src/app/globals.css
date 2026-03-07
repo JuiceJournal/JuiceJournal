@@ -2,39 +2,101 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom styles */
+:root {
+  --poe-bg: #120f0d;
+  --poe-bg-deep: #0b0908;
+  --poe-surface: rgba(27, 22, 18, 0.9);
+  --poe-surface-strong: rgba(18, 14, 12, 0.96);
+  --poe-border: rgba(141, 113, 76, 0.28);
+  --poe-border-strong: rgba(198, 161, 91, 0.42);
+  --poe-text-soft: #a79a87;
+  --poe-glow: rgba(198, 161, 91, 0.18);
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
   }
-  
+
   body {
-    @apply antialiased;
+    @apply antialiased text-stone-100;
+    background:
+      radial-gradient(circle at top, rgba(140, 70, 36, 0.18), transparent 32%),
+      radial-gradient(circle at 85% 18%, rgba(198, 161, 91, 0.12), transparent 20%),
+      linear-gradient(180deg, #171210 0%, #100d0b 42%, #090807 100%);
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.35;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 72px 72px;
+    mask-image: radial-gradient(circle at center, black, transparent 90%);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-[0.08em];
   }
 }
 
 @layer components {
   .btn {
-    @apply px-4 py-2 rounded font-medium transition-colors;
+    @apply inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 font-semibold uppercase tracking-[0.12em] transition-all duration-200;
   }
-  
+
   .btn-primary {
-    @apply bg-poe-gold text-poe-dark hover:bg-poe-gold-dark;
+    @apply border-amber-700/50 bg-gradient-to-b from-[#d2b071] to-[#8a6734] text-[#140f0b] shadow-[0_0_0_1px_rgba(255,226,171,0.1)_inset,0_12px_30px_rgba(0,0,0,0.28)] hover:brightness-110;
   }
-  
+
   .btn-secondary {
-    @apply bg-poe-card text-gray-300 border border-poe-border hover:bg-poe-border;
+    @apply border-poe-border bg-[rgba(33,27,23,0.88)] text-stone-300 hover:border-amber-700/40 hover:bg-[rgba(43,35,29,0.92)] hover:text-stone-100;
   }
-  
+
   .card {
-    @apply bg-poe-card rounded-lg p-6;
+    @apply relative overflow-hidden rounded-2xl border border-poe-border/80 bg-[linear-gradient(180deg,rgba(33,27,23,0.96),rgba(22,18,15,0.98))] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45),0_0_0_1px_rgba(255,214,148,0.03)_inset];
   }
-  
+
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.04), transparent 28%),
+      linear-gradient(180deg, transparent, rgba(0,0,0,0.18));
+  }
+
+  .card::after {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    border-radius: 1rem;
+    pointer-events: none;
+    border: 1px solid rgba(198, 161, 91, 0.08);
+  }
+
+  .panel-title {
+    @apply mb-2 font-display text-xl uppercase tracking-[0.14em] text-stone-100;
+  }
+
+  .section-kicker {
+    @apply text-[0.72rem] font-semibold uppercase tracking-[0.3em] text-poe-gold/80;
+  }
+
+  .context-chip {
+    @apply inline-flex items-center rounded-full border px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.16em];
+  }
+
   .input {
-    @apply w-full bg-poe-darker border border-poe-border rounded px-3 py-2 text-white 
-           focus:border-poe-gold focus:outline-none;
+    @apply w-full rounded-xl border border-poe-border bg-[rgba(15,12,10,0.88)] px-3 py-2 text-white shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] focus:border-poe-gold focus:outline-none;
   }
-  
+
   .input::placeholder {
     @apply text-gray-500;
   }
@@ -61,12 +123,12 @@
 
 /* Selection */
 ::selection {
-  background: #d4a853;
-  color: #1a1a1a;
+  background: #c6a15b;
+  color: #120f0d;
 }
 
 /* Focus visible */
 :focus-visible {
-  outline: 2px solid #d4a853;
+  outline: 2px solid #c6a15b;
   outline-offset: 2px;
 }

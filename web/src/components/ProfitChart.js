@@ -14,8 +14,11 @@ import { formatShortDate } from '@/lib/utils';
 export default function ProfitChart({ data }) {
   if (!data || data.length === 0) {
     return (
-      <div className="bg-poe-card rounded-lg p-6 h-80 flex items-center justify-center">
-        <p className="text-gray-400">No data available</p>
+      <div className="card h-80 flex items-center justify-center">
+        <div className="text-center">
+          <p className="section-kicker">Profit Trend</p>
+          <p className="mt-3 text-gray-400">No chart data available in this context</p>
+        </div>
       </div>
     );
   }
@@ -29,12 +32,12 @@ export default function ProfitChart({ data }) {
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-poe-darker border border-poe-border rounded-lg p-3">
-          <p className="text-gray-300 text-sm mb-1">{label}</p>
-          <p className="text-poe-gold font-medium">
+        <div className="rounded-2xl border border-poe-border bg-[rgba(14,11,10,0.96)] px-4 py-3 shadow-[0_20px_40px_rgba(0,0,0,0.45)]">
+          <p className="section-kicker mb-2">{label}</p>
+          <p className="text-poe-gold font-semibold">
             Profit: {payload[0].value.toFixed(1)}c
           </p>
-          <p className="text-gray-400 text-sm">
+          <p className="mt-1 text-sm text-gray-400">
             {payload[0].payload.sessions} map
           </p>
         </div>
@@ -44,32 +47,47 @@ export default function ProfitChart({ data }) {
   };
 
   return (
-    <div className="bg-poe-card rounded-lg p-6">
-      <h3 className="text-lg font-semibold text-white mb-4">
-        Profit Trend (Last 7 Days)
+    <div className="card">
+      <p className="section-kicker">Market Trail</p>
+      <h3 className="panel-title">
+        Profit Trend
       </h3>
+      <p className="mb-5 max-w-xl text-sm text-poe-mist">
+        A seven-day reading of how efficiently this farming context converted runs into value.
+      </p>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+            <defs>
+              <linearGradient id="profitStroke" x1="0" x2="1" y1="0" y2="0">
+                <stop offset="0%" stopColor="#7f3326" />
+                <stop offset="45%" stopColor="#c6a15b" />
+                <stop offset="100%" stopColor="#f2d18d" />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="2 10" stroke="rgba(198, 161, 91, 0.12)" vertical={false} />
             <XAxis
               dataKey="date"
-              stroke="#666"
-              tick={{ fill: '#888', fontSize: 12 }}
+              axisLine={false}
+              tickLine={false}
+              stroke="#7f7466"
+              tick={{ fill: '#9b8b76', fontSize: 12 }}
             />
             <YAxis
-              stroke="#666"
-              tick={{ fill: '#888', fontSize: 12 }}
+              axisLine={false}
+              tickLine={false}
+              stroke="#7f7466"
+              tick={{ fill: '#9b8b76', fontSize: 12 }}
               tickFormatter={(value) => `${value}c`}
             />
             <Tooltip content={<CustomTooltip />} />
             <Line
               type="monotone"
               dataKey="profit"
-              stroke="#d4a853"
-              strokeWidth={2}
-              dot={{ fill: '#d4a853', strokeWidth: 2 }}
-              activeDot={{ r: 6, fill: '#d4a853' }}
+              stroke="url(#profitStroke)"
+              strokeWidth={3}
+              dot={{ fill: '#120f0d', stroke: '#c6a15b', strokeWidth: 2, r: 4 }}
+              activeDot={{ r: 7, fill: '#f2d18d', stroke: '#120f0d', strokeWidth: 2 }}
             />
           </LineChart>
         </ResponsiveContainer>
