@@ -294,6 +294,59 @@
         </div>
       </section>
 
+      <aside id="session-detail-drawer" class="session-drawer hidden" aria-hidden="true">
+        <div class="session-drawer-backdrop" id="session-drawer-backdrop"></div>
+        <div class="session-drawer-panel">
+          <div class="session-drawer-header">
+            <div>
+              <span class="session-drawer-kicker" data-i18n="sessions.detailKicker">Run Detail</span>
+              <h3 id="session-drawer-title">Session</h3>
+            </div>
+            <button id="session-drawer-close" class="session-drawer-close" type="button" aria-label="Close">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </div>
+
+          <div class="session-drawer-body">
+            <div class="session-drawer-summary" id="session-drawer-summary"></div>
+
+            <div class="session-drawer-section">
+              <div class="session-drawer-section-header">
+                <h4 data-i18n="sessions.sessionNotes">Session Notes</h4>
+              </div>
+              <div class="session-drawer-form">
+                <div class="session-drawer-field">
+                  <label for="session-drawer-strategy" data-i18n="sessions.strategyTag">Strategy Tag</label>
+                  <input id="session-drawer-strategy" class="session-drawer-input" type="text" maxlength="50" data-i18n-placeholder="sessions.strategyPlaceholder" placeholder="e.g. Strongbox / Legion / Ritual">
+                </div>
+                <div class="session-drawer-field">
+                  <label for="session-drawer-notes" data-i18n="sessions.notes">Notes</label>
+                  <textarea id="session-drawer-notes" class="session-drawer-textarea" rows="5" maxlength="2000" data-i18n-placeholder="sessions.notesPlaceholder" placeholder="Important drops, mistakes, atlas setup, scarabs..."></textarea>
+                </div>
+                <div class="session-drawer-actions">
+                  <button id="session-drawer-save" class="btn btn-primary" type="button" data-i18n="sessions.saveNotes">Save Notes</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="session-drawer-section">
+              <div class="session-drawer-section-header">
+                <h4 data-i18n="sessions.categoryAnalytics">Category Analytics</h4>
+              </div>
+              <div id="session-drawer-analytics" class="session-drawer-analytics"></div>
+            </div>
+
+            <div class="session-drawer-section">
+              <div class="session-drawer-section-header">
+                <h4 data-i18n="sessions.lootBreakdown">Loot Breakdown</h4>
+                <span id="session-drawer-loot-count" class="session-drawer-count">0</span>
+              </div>
+              <div id="session-drawer-loot" class="session-drawer-loot"></div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
       <!-- Currency Page -->
       <section id="currency-page" class="page">
         <div class="currency-header">

@@ -51,6 +51,15 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       field: 'map_type'
     },
+    strategyTag: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      field: 'strategy_tag'
+    },
+    notes: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
     league: {
       type: DataTypes.STRING(50),
       allowNull: false,

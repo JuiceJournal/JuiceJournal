@@ -20,10 +20,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startSession: (data) => ipcRenderer.invoke('start-session', data),
   endSession: () => ipcRenderer.invoke('end-session'),
   getCurrentSession: () => ipcRenderer.invoke('get-current-session'),
+  getSessionDetails: (sessionId) => ipcRenderer.invoke('get-session-details', sessionId),
+  updateSessionDetails: (sessionId, payload) => ipcRenderer.invoke('update-session-details', sessionId, payload),
+  getSessions: (params) => ipcRenderer.invoke('get-sessions', params),
+  getDashboardStats: () => ipcRenderer.invoke('get-dashboard-stats'),
 
   // Loot islemleri
   addLoot: (data) => ipcRenderer.invoke('add-loot', data),
   scanScreen: () => ipcRenderer.invoke('scan-screen'),
+  getRecentLoot: (params) => ipcRenderer.invoke('get-recent-loot', params),
 
   // Auth
   login: (credentials) => ipcRenderer.invoke('login', credentials),

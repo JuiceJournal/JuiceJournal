@@ -11,6 +11,19 @@ const { authenticate } = require('../middleware/auth');
 
 const { Op } = require('sequelize');
 
+function normalizeOptionalText(value, maxLength) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.slice(0, maxLength);
+}
+
 /**
  * Validation middleware
  */
@@ -191,6 +204,8 @@ router.post('/start',
       .isLength({ max: 50 }),
     body('mapTier').optional().isInt({ min: 1, max: 21 }),
     body('mapType').optional().trim().isLength({ max: 50 }),
+    body('strategyTag').optional({ nullable: true }).trim().isLength({ max: 50 }),
+    body('notes').optional({ nullable: true }).trim().isLength({ max: 2000 }),
     body('costChaos').optional().isFloat({ min: 0 }),
     handleValidationErrors
   ],
@@ -220,6 +235,8 @@ router.post('/start',
         mapName,
         mapTier: mapTier || null,
         mapType: mapType || null,
+        strategyTag: normalizeOptionalText(req.body.strategyTag, 50),
+        notes: normalizeOptionalText(req.body.notes, 2000),
         poeVersion,
         league,
         costChaos,
@@ -246,6 +263,73 @@ router.post('/start',
         success: false,
         data: null,
         error: 'Session baslatilirken hata olustu'
+      });
+    }
+  }
+);
+
+/**
+ * PUT /api/sessions/:id
+ * Session metadata guncelle
+ */
+router.put('/:id',
+  authenticate,
+  [
+    param('id').isUUID().withMessage('Gecerli bir session ID giriniz'),
+    body('strategyTag').optional({ nullable: true }).trim().isLength({ max: 50 }),
+    body('notes').optional({ nullable: true }).trim().isLength({ max: 2000 }),
+    handleValidationErrors
+  ],
+  async (req, res) => {
+    try {
+      const session = await Session.findOne({
+        where: {
+          id: req.params.id,
+          userId: req.userId
+        }
+      });
+
+      if (!session) {
+        return res.status(404).json({
+          success: false,
+          data: null,
+          error: 'Session bulunamadi'
+        });
+      }
+
+      const updates = {};
+      if (Object.prototype.hasOwnProperty.call(req.body, 'strategyTag')) {
+        updates.strategyTag = normalizeOptionalText(req.body.strategyTag, 50);
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body, 'notes')) {
+        updates.notes = normalizeOptionalText(req.body.notes, 2000);
+      }
+
+      await session.update(updates);
+
+      const updatedSession = await Session.findOne({
+        where: {
+          id: req.params.id,
+          userId: req.userId
+        },
+        include: [{
+          model: LootEntry,
+          as: 'lootEntries',
+          order: [['createdAt', 'DESC']]
+        }]
+      });
+
+      res.json({
+        success: true,
+        data: { session: updatedSession },
+        error: null
+      });
+    } catch (error) {
+      console.error('Session guncelleme hatasi:', error);
+      res.status(500).json({
+        success: false,
+        data: null,
+        error: 'Session guncellenirken hata olustu'
       });
     }
   }

@@ -51,6 +51,38 @@ let apiClient = null;
 let currentSession = null;
 let poeAuthServer = null;
 
+function normalizeErrorMessage(error, fallback = 'Unexpected error') {
+  if (!error) return fallback;
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  if (error instanceof Error && error.message?.trim()) return error.message.trim();
+  if (typeof error.message === 'string' && error.message.trim() && error.message !== '[object Object]') {
+    return error.message.trim();
+  }
+  if (typeof error.error === 'string' && error.error.trim()) return error.error.trim();
+  if (typeof error.data?.error === 'string' && error.data.error.trim()) return error.data.error.trim();
+  return fallback;
+}
+
+function toRendererError(error, fallback) {
+  return new Error(normalizeErrorMessage(error, fallback));
+}
+
+function getTrackerContextDefaults(overrides = {}) {
+  const poeVersion = overrides.poeVersion || store.get('poeVersion') || 'poe1';
+  const league = (overrides.league || store.get('defaultLeague') || 'Standard').trim() || 'Standard';
+
+  return {
+    poeVersion,
+    league
+  };
+}
+
+async function getCurrentSessionFromBackend() {
+  const session = await apiClient.getActiveSession();
+  currentSession = session || null;
+  return currentSession;
+}
+
 async function closePoeAuthServer() {
   if (!poeAuthServer) return;
 
@@ -270,17 +302,13 @@ function createTray() {
 function registerGlobalShortcuts() {
   // F9 - Hizli loot ekle
   globalShortcut.register('F9', () => {
-    console.log('F9 kisayolu tetiklendi - Loot tarama basliyor');
     captureAndScan();
   });
 
   // Ctrl+Shift+L - Stash tarama
   globalShortcut.register('CommandOrControl+Shift+L', () => {
-    console.log('Ctrl+Shift+L kisayolu tetiklendi - Stash tarama basliyor');
     captureAndScan();
   });
-
-  console.log('Global kisayollar tanimlandi: F9, Ctrl+Shift+L');
 }
 
 /**
@@ -464,9 +492,7 @@ function setupLogParser() {
     if (require('fs').existsSync(defaultPath)) {
       poePath = defaultPath;
       store.set('poePath', defaultPath);
-      console.log('PoE yolu otomatik bulundu:', defaultPath);
     } else {
-      console.log('PoE Client.txt bulunamadi, log parser pasif');
       return;
     }
   }
@@ -474,8 +500,6 @@ function setupLogParser() {
   logParser = new LogParser(poePath);
 
   logParser.on('mapEntered', (data) => {
-    console.log('Map girisi tespit edildi:', data);
-
     if (store.get('autoStartSession') && !currentSession) {
       // Otomatik session baslat
       apiClient.startSession({
@@ -500,8 +524,6 @@ function setupLogParser() {
   });
 
   logParser.on('mapExited', (data) => {
-    console.log('Map cikisi tespit edildi:', data);
-
     if (currentSession) {
       endCurrentSession();
     }
@@ -542,6 +564,10 @@ function setupIPC() {
     for (const [key, value] of Object.entries(settings)) {
       store.set(key, value);
     }
+
+    if (settings.apiUrl && apiClient) {
+      apiClient.setBaseURL(settings.apiUrl);
+    }
     return true;
   });
 
@@ -557,7 +583,45 @@ function setupIPC() {
 
   // Aktif session'i getir
   ipcMain.handle('get-current-session', () => {
-    return currentSession;
+    return getCurrentSessionFromBackend();
+  });
+
+  ipcMain.handle('get-session-details', async (event, sessionId) => {
+    try {
+      return await apiClient.getSession(sessionId);
+    } catch (error) {
+      throw toRendererError(error, 'Session detaylari alinamadi');
+    }
+  });
+
+  ipcMain.handle('update-session-details', async (event, sessionId, payload = {}) => {
+    try {
+      return await apiClient.updateSession(sessionId, payload);
+    } catch (error) {
+      throw toRendererError(error, 'Session detaylari guncellenemedi');
+    }
+  });
+
+  ipcMain.handle('get-sessions', async (event, params = {}) => {
+    const trackerContext = getTrackerContextDefaults(params);
+    return await apiClient.getSessions({
+      ...params,
+      ...trackerContext
+    });
+  });
+
+  ipcMain.handle('get-dashboard-stats', async () => {
+    const trackerContext = getTrackerContextDefaults();
+    return await apiClient.getPersonalStats('daily', trackerContext);
+  });
+
+  ipcMain.handle('get-recent-loot', async (event, params = {}) => {
+    const trackerContext = getTrackerContextDefaults(params);
+    return await apiClient.getRecentLoot({
+      limit: 8,
+      ...params,
+      ...trackerContext
+    });
   });
 
   // Manuel loot ekle
@@ -565,7 +629,18 @@ function setupIPC() {
     if (!currentSession) {
       throw new Error('Aktif session yok');
     }
-    return await apiClient.addLoot(currentSession.id, data);
+    try {
+      const result = await apiClient.addLoot(currentSession.id, data);
+      if (mainWindow) {
+        mainWindow.webContents.send('loot-added', {
+          items: [result.lootEntry],
+          totalValue: parseFloat(result.lootEntry?.chaosValue || 0) * parseInt(result.lootEntry?.quantity || 1, 10)
+        });
+      }
+      return result;
+    } catch (error) {
+      throw toRendererError(error, 'Loot eklenemedi');
+    }
   });
 
   // Ekran tara
@@ -575,10 +650,8 @@ function setupIPC() {
 
   // Login
   ipcMain.handle('login', async (event, credentials) => {
-    console.log('Login istegi alindi:', credentials);
     try {
       const result = await apiClient.login(credentials);
-      console.log('Login sonucu:', result);
       // API yanıt formatı: { success: true, data: { user, token }, error: null }
       const token = result?.data?.token;
       if (token) {
@@ -588,26 +661,34 @@ function setupIPC() {
       return result;
     } catch (error) {
       console.error('Login hatasi:', error);
-      throw error;
+      throw toRendererError(error, 'Giris yapilamadi');
     }
   });
 
   ipcMain.handle('register', async (event, payload) => {
-    const result = await apiClient.register(payload);
-    const token = result?.token;
-    if (token) {
-      store.set('authToken', token);
-      apiClient.setToken(token);
+    try {
+      const result = await apiClient.register(payload);
+      const token = result?.token;
+      if (token) {
+        store.set('authToken', token);
+        apiClient.setToken(token);
+      }
+      return {
+        success: true,
+        data: result,
+        error: null
+      };
+    } catch (error) {
+      throw toRendererError(error, 'Kayit islemi basarisiz');
     }
-    return {
-      success: true,
-      data: result,
-      error: null
-    };
   });
 
   ipcMain.handle('get-current-user', async () => {
-    return await apiClient.getMe();
+    try {
+      return await apiClient.getMe();
+    } catch (error) {
+      throw toRendererError(error, 'Kullanici bilgileri alinamadi');
+    }
   });
 
   ipcMain.handle('start-poe-connect', async () => {
@@ -646,15 +727,27 @@ function setupIPC() {
   });
 
   ipcMain.handle('complete-poe-connect', async (event, data) => {
-    return await apiClient.completePoeConnect(data || {});
+    try {
+      return await apiClient.completePoeConnect(data || {});
+    } catch (error) {
+      throw toRendererError(error, 'Path of Exile baglantisi tamamlanamadi');
+    }
   });
 
   ipcMain.handle('get-poe-link-status', async () => {
-    return await apiClient.getPoeLinkStatus();
+    try {
+      return await apiClient.getPoeLinkStatus();
+    } catch (error) {
+      throw toRendererError(error, 'Path of Exile baglanti durumu alinamadi');
+    }
   });
 
   ipcMain.handle('disconnect-poe-account', async () => {
-    return await apiClient.disconnectPoeAccount();
+    try {
+      return await apiClient.disconnectPoeAccount();
+    } catch (error) {
+      throw toRendererError(error, 'Path of Exile baglantisi kaldirilamadi');
+    }
   });
 
   // Logout
@@ -685,8 +778,10 @@ app.whenReady().then(() => {
   // createTray();
   registerGlobalShortcuts();
   setupLogParser();
+  getCurrentSessionFromBackend().catch((error) => {
+    console.error('Aktif session backend senkron hatasi:', error.message);
+  });
 
-  console.log('PoE Farm Tracker Desktop baslatildi');
 });
 
 /**
@@ -714,5 +809,4 @@ app.on('will-quit', () => {
     logParser.stop();
   }
 
-  console.log('PoE Farm Tracker Desktop kapaniyor...');
 });

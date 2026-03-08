@@ -13,8 +13,11 @@ const state = {
   settings: {},
   sessions: [],
   recentLoot: [],
-  poeLink: null
+  poeLink: null,
+  selectedSession: null
 };
+
+let sessionClockInterval = null;
 
 // DOM Elementleri
 const elements = {
@@ -43,6 +46,17 @@ const elements = {
   // Sessions
   sessionsList: document.getElementById('sessions-list'),
   sessionFilter: document.getElementById('session-filter'),
+  sessionDrawer: document.getElementById('session-detail-drawer'),
+  sessionDrawerBackdrop: document.getElementById('session-drawer-backdrop'),
+  sessionDrawerClose: document.getElementById('session-drawer-close'),
+  sessionDrawerTitle: document.getElementById('session-drawer-title'),
+  sessionDrawerSummary: document.getElementById('session-drawer-summary'),
+  sessionDrawerStrategy: document.getElementById('session-drawer-strategy'),
+  sessionDrawerNotes: document.getElementById('session-drawer-notes'),
+  sessionDrawerSave: document.getElementById('session-drawer-save'),
+  sessionDrawerAnalytics: document.getElementById('session-drawer-analytics'),
+  sessionDrawerLoot: document.getElementById('session-drawer-loot'),
+  sessionDrawerLootCount: document.getElementById('session-drawer-loot-count'),
   
   // Settings
   apiUrl: document.getElementById('api-url'),
@@ -81,8 +95,6 @@ const elements = {
  * Uygulamayi baslat
  */
 async function init() {
-  console.log('PoE Farm Tracker Desktop baslatiliyor...');
-
   // Ayarlari yukle
   await loadSettings();
 
@@ -106,18 +118,27 @@ async function init() {
         await loadPoeLinkStatus();
       }
     } catch (error) {
-      console.log('Otomatik giris basarisiz');
       showLoginModal();
     }
   } else {
     showLoginModal();
   }
   
-  // Aktif session'i kontrol et
-  await loadCurrentSession();
-  await loadDashboardStats();
+  // Aktif session ve dashboard verilerini senkronize et
+  await refreshTrackerData();
   
-  console.log('Uygulama basarili bir sekilde baslatildi');
+}
+
+function ensureSessionClock() {
+  if (sessionClockInterval) {
+    clearInterval(sessionClockInterval);
+  }
+
+  sessionClockInterval = setInterval(() => {
+    if (state.currentSession && !document.hidden) {
+      updateActiveSessionUI();
+    }
+  }, 1000);
 }
 
 /**
@@ -196,7 +217,7 @@ function syncDesktopCurrencyIcons() {
   }
 
   if (statAvgIcon) {
-    statAvgIcon.src = getCurrencyAssetPath('divine', poeVersion);
+    statAvgIcon.src = getCurrencyAssetPath('chaos', poeVersion);
   }
 }
 
@@ -235,6 +256,9 @@ function setupEventListeners() {
   
   // Sessions filter
   elements.sessionFilter.addEventListener('change', loadSessions);
+  if (elements.sessionDrawerClose) elements.sessionDrawerClose.addEventListener('click', closeSessionDrawer);
+  if (elements.sessionDrawerBackdrop) elements.sessionDrawerBackdrop.addEventListener('click', closeSessionDrawer);
+  if (elements.sessionDrawerSave) elements.sessionDrawerSave.addEventListener('click', handleSessionMetadataSave);
   
   // Settings
   elements.saveSettingsBtn.addEventListener('click', handleSaveSettings);
@@ -288,6 +312,11 @@ function setupEventListeners() {
   if (winMin) winMin.addEventListener('click', () => window.electronAPI.windowMinimize());
   if (winMax) winMax.addEventListener('click', () => window.electronAPI.windowMaximize());
   if (winClose) winClose.addEventListener('click', () => window.electronAPI.windowClose());
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.selectedSession) {
+      closeSessionDrawer();
+    }
+  });
 }
 
 /**
@@ -301,7 +330,7 @@ function setupIPCListeners() {
   
   window.electronAPI.onMapExited((data) => {
     showToast('Map Cikisi', `${data.mapName} tamamlandi. Sure: ${formatDuration(data.duration)}`);
-    loadCurrentSession();
+    refreshTrackerData({ includeSessions: true });
   });
   
   // Session olaylari
@@ -309,6 +338,7 @@ function setupIPCListeners() {
     state.currentSession = session;
     updateActiveSessionUI();
     showToast('Session Basladi', `${session.mapName} baslatildi`);
+    refreshTrackerData({ includeSessions: true });
   });
   
   window.electronAPI.onSessionEnded((session) => {
@@ -317,12 +347,14 @@ function setupIPCListeners() {
     const profit = parseFloat(session.profitChaos);
     const message = profit >= 0 ? `Kâr: ${profit.toFixed(1)}c` : `Zarar: ${Math.abs(profit).toFixed(1)}c`;
     showToast('Session Tamamlandi', message, profit >= 0 ? 'success' : 'warning');
+    refreshTrackerData({ includeSessions: true });
   });
   
   // Loot olaylari
   window.electronAPI.onLootAdded((data) => {
-    showToast('Loot Eklendi', `${data.items.length} item eklendi`);
-    loadRecentLoot();
+    const itemCount = Array.isArray(data.items) ? data.items.length : 1;
+    showToast('Loot Eklendi', `${itemCount} item eklendi`);
+    refreshTrackerData({ includeSessions: isPageActive('sessions') });
   });
   
   // Navigation
@@ -335,6 +367,10 @@ function setupIPCListeners() {
  * Sayfa navigasyonu
  */
 function navigateTo(page) {
+  if (page !== 'sessions') {
+    closeSessionDrawer();
+  }
+
   // Nav butonlarini guncelle
   elements.navButtons.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.page === page);
@@ -349,7 +385,7 @@ function navigateTo(page) {
   if (page === 'sessions') {
     loadSessions();
   } else if (page === 'dashboard') {
-    loadDashboardStats();
+    refreshTrackerData();
   } else if (page === 'currency') {
     loadCurrencyPage();
   }
@@ -387,12 +423,13 @@ async function handleLogin(e) {
       setCurrentUser(result.data.user);
       elements.loginModal.classList.add('hidden');
       await loadPoeLinkStatus();
+      await refreshTrackerData();
       showToast(window.t('login.title'), window.t('toast.loginSuccess'));
     } else {
       showToast(window.t('toast.loginFailed'), result.error, 'error');
     }
   } catch (error) {
-    showToast(window.t('toast.error'), error.message, 'error');
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error), 'error');
   }
 }
 
@@ -413,12 +450,13 @@ async function handleRegister(e) {
       setCurrentUser(result.data.user);
       elements.registerModal.classList.add('hidden');
       await loadPoeLinkStatus();
+      await refreshTrackerData();
       showToast(window.t('register.title'), window.t('toast.registerSuccess'));
     } else {
       showToast(window.t('toast.registerFailed'), result.error, 'error');
     }
   } catch (error) {
-    showToast(window.t('toast.error'), error.message, 'error');
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error), 'error');
   }
 }
 
@@ -428,9 +466,17 @@ async function handleRegister(e) {
 async function handleLogout() {
   await window.electronAPI.logout();
   state.currentUser = null;
+  state.currentSession = null;
+  state.sessions = [];
+  state.recentLoot = [];
   state.poeLink = null;
+  closeSessionDrawer();
   elements.username.textContent = window.t('user.guest');
   if (elements.userAvatar) elements.userAvatar.textContent = '?';
+  resetDashboardSummary();
+  updateActiveSessionUI();
+  renderSessionsList();
+  renderRecentLoot();
   renderPoeLinkStatus();
   showLoginModal();
 }
@@ -512,7 +558,7 @@ async function handlePoeConnect() {
     renderPoeLinkStatus();
     showToast('Path of Exile', state.poeLink?.mock ? window.t('toast.poeLinkedMock') : window.t('toast.poeLinked'), 'success');
   } catch (error) {
-    showToast(window.t('toast.error'), error.message || window.t('toast.poeConnectError'), 'error');
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.poeConnectError'), 'error');
   } finally {
     if (elements.poeConnectBtn) {
       elements.poeConnectBtn.disabled = false;
@@ -535,7 +581,7 @@ async function handlePoeDisconnect() {
     renderPoeLinkStatus();
     showToast('Path of Exile', window.t('toast.poeDisconnected'), 'success');
   } catch (error) {
-    showToast(window.t('toast.error'), error.message || window.t('toast.poeDisconnectError'), 'error');
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.poeDisconnectError'), 'error');
   } finally {
     if (elements.poeDisconnectBtn) {
       elements.poeDisconnectBtn.disabled = false;
@@ -553,6 +599,43 @@ function getSelectedTrackerContext() {
     league,
     label: `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} • ${league}`
   };
+}
+
+function isPageActive(page) {
+  const pageElement = document.getElementById(`${page}-page`);
+  return Boolean(pageElement?.classList.contains('active'));
+}
+
+function resetDashboardSummary() {
+  elements.todaySessions.textContent = '0';
+  elements.todayProfit.innerHTML = currencyHTML(0, 'chaos', 18, state.settings.poeVersion || 'poe1');
+  elements.todayAvg.innerHTML = currencyHTML(0, 'chaos', 18, state.settings.poeVersion || 'poe1');
+}
+
+async function refreshTrackerData({ includeSessions = false, includeCurrency = false } = {}) {
+  if (!state.currentUser) {
+    resetDashboardSummary();
+    renderRecentLoot();
+    renderSessionsList();
+    updateActiveSessionUI();
+    return;
+  }
+
+  const tasks = [
+    loadCurrentSession(),
+    loadDashboardStats(),
+    loadRecentLoot()
+  ];
+
+  if (includeSessions || isPageActive('sessions')) {
+    tasks.push(loadSessions());
+  }
+
+  if (includeCurrency || isPageActive('currency')) {
+    tasks.push(loadCurrencyPage());
+  }
+
+  await Promise.allSettled(tasks);
 }
 
 /**
@@ -573,6 +656,7 @@ async function handleStartSession() {
     if (session) {
       state.currentSession = session;
       updateActiveSessionUI();
+      await refreshTrackerData({ includeSessions: true });
       showToast(window.t('dashboard.activeSession'), `${mapName} ${window.t('toast.sessionStarted')} (${trackerContext.label})`);
     }
   } catch (error) {
@@ -592,6 +676,7 @@ async function handleEndSession() {
     await window.electronAPI.endSession();
     state.currentSession = null;
     updateActiveSessionUI();
+    await refreshTrackerData({ includeSessions: true });
   } catch (error) {
     showToast(window.t('toast.error'), window.t('toast.endSessionError'), 'error');
   }
@@ -606,11 +691,18 @@ async function loadCurrentSession() {
     state.currentSession = session;
     updateActiveSessionUI();
   } catch (error) {
-    console.log('Aktif session bulunamadi');
+    state.currentSession = null;
+    updateActiveSessionUI();
   }
 }
 
 function updateActiveSessionUI() {
+  const lootEntries = Array.isArray(state.currentSession?.lootEntries) ? state.currentSession.lootEntries : [];
+  const totalLootChaos = parseFloat(state.currentSession?.totalLootChaos || 0);
+  const profitChaos = parseFloat(state.currentSession?.profitChaos || 0);
+  const itemCount = lootEntries.reduce((sum, loot) => sum + parseInt(loot.quantity || 0, 10), 0);
+  const liveDuration = getLiveDuration(state.currentSession);
+  const profitClass = profitChaos >= 0 ? 'session-info-value positive' : 'session-info-value negative';
   if (state.currentSession) {
     const contextLabel = `${state.currentSession.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} • ${state.currentSession.league || 'Standard'}`;
     elements.activeSession.innerHTML = `
@@ -634,6 +726,22 @@ function updateActiveSessionUI() {
         <div class="session-info-item">
           <span class="session-info-label">Game</span>
           <span class="session-info-value">${contextLabel}</span>
+        </div>
+        <div class="session-info-item">
+          <span class="session-info-label">${window.t('dashboard.elapsed')}</span>
+          <span class="session-info-value">${formatDuration(liveDuration)}</span>
+        </div>
+        <div class="session-info-item session-info-item--metric">
+          <span class="session-info-label">${window.t('dashboard.liveLoot')}</span>
+          <span class="session-info-value">${currencyHTML(totalLootChaos, 'chaos', 16, state.currentSession.poeVersion || state.settings.poeVersion || 'poe1')}</span>
+        </div>
+        <div class="session-info-item session-info-item--metric">
+          <span class="session-info-label">${window.t('dashboard.liveProfit')}</span>
+          <span class="${profitClass}">${currencyHTML(profitChaos, 'chaos', 16, state.currentSession.poeVersion || state.settings.poeVersion || 'poe1')}</span>
+        </div>
+        <div class="session-info-item">
+          <span class="session-info-label">${window.t('dashboard.itemsCollected')}</span>
+          <span class="session-info-value">${itemCount}</span>
         </div>
       </div>
     `;
@@ -684,27 +792,163 @@ async function handleScanScreen() {
  */
 async function loadSessions() {
   const filter = elements.sessionFilter.value;
-  // Not: Gercek implementasyonda API'den cekilecek
-  // Su an placeholder
+  if (!state.currentUser) {
+    state.sessions = [];
+    renderSessionsList();
+    return;
+  }
+
   elements.sessionsList.innerHTML = `<p class="empty-state">${window.t('sessions.loading')}</p>`;
+
+  try {
+    const params = { limit: 50 };
+    if (filter && filter !== 'all') {
+      params.status = filter;
+    }
+
+    const response = await window.electronAPI.getSessions(params);
+    state.sessions = response?.sessions || [];
+    renderSessionsList();
+  } catch (error) {
+    console.error('Session load error:', error);
+    elements.sessionsList.innerHTML = `<p class="empty-state">${window.t('sessions.loadError')}</p>`;
+  }
 }
 
 /**
  * Dashboard istatistiklerini yukle
  */
 async function loadDashboardStats() {
-  // Not: Gercek implementasyonda API'den cekilecek
-  // Su an placeholder degerler
-  elements.todaySessions.textContent = '0';
-  elements.todayProfit.innerHTML = currencyHTML(0, 'chaos', 18, state.settings.poeVersion || 'poe1');
-  elements.todayAvg.innerHTML = currencyHTML(0, 'divine', 18, state.settings.poeVersion || 'poe1');
+  if (!state.currentUser) {
+    resetDashboardSummary();
+    return;
+  }
+
+  const poeVersion = state.settings.poeVersion || 'poe1';
+  elements.todaySessions.textContent = '...';
+  elements.todayProfit.textContent = '...';
+  elements.todayAvg.textContent = '...';
+
+  try {
+    const response = await window.electronAPI.getDashboardStats();
+    const summary = response?.summary || {};
+    const totalSessions = parseInt(summary.totalSessions || 0, 10);
+    const totalProfit = parseFloat(summary.totalProfit || 0);
+    const avgProfitPerMap = parseFloat(summary.avgProfitPerMap || 0);
+
+    elements.todaySessions.textContent = String(totalSessions);
+    elements.todayProfit.innerHTML = currencyHTML(totalProfit, 'chaos', 18, poeVersion);
+    elements.todayAvg.innerHTML = currencyHTML(avgProfitPerMap, 'chaos', 18, poeVersion);
+  } catch (error) {
+    console.error('Dashboard stats load error:', error);
+    resetDashboardSummary();
+  }
 }
 
 /**
  * Son loot'lari yukle
  */
 async function loadRecentLoot() {
-  // Not: Gercek implementasyonda API'den cekilecek
+  if (!state.currentUser) {
+    state.recentLoot = [];
+    renderRecentLoot();
+    return;
+  }
+
+  elements.recentLootList.innerHTML = `<p class="empty-state">${window.t('sessions.loading')}</p>`;
+
+  try {
+    const response = await window.electronAPI.getRecentLoot({ limit: 6 });
+    state.recentLoot = response?.lootEntries || [];
+    renderRecentLoot();
+  } catch (error) {
+    console.error('Recent loot load error:', error);
+    state.recentLoot = [];
+    elements.recentLootList.innerHTML = `<p class="empty-state">${window.t('dashboard.noLoot')}</p>`;
+  }
+}
+
+function renderSessionsList() {
+  if (!elements.sessionsList) return;
+
+  if (!state.currentUser) {
+    elements.sessionsList.innerHTML = `<p class="empty-state">${window.t('sessions.empty')}</p>`;
+    closeSessionDrawer();
+    return;
+  }
+
+  if (!state.sessions.length) {
+    elements.sessionsList.innerHTML = `<p class="empty-state">${window.t('sessions.empty')}</p>`;
+    closeSessionDrawer();
+    return;
+  }
+
+  elements.sessionsList.innerHTML = state.sessions.map((session) => {
+    const profit = parseFloat(session.profitChaos || 0);
+    const lootCount = Array.isArray(session.lootEntries)
+      ? session.lootEntries.reduce((sum, loot) => sum + parseInt(loot.quantity || 0, 10), 0)
+      : 0;
+    const contextLabel = `${session.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${session.league || 'Standard'}`;
+    const duration = session.durationSec ? formatDuration(session.durationSec) : '-';
+    const tier = session.mapTier ? `T${session.mapTier}` : '-';
+    const startedAt = session.startedAt ? timeAgo(session.startedAt) : '-';
+
+    return `
+      <button class="session-item" type="button" data-session-id="${session.id}">
+        <div class="session-primary">
+          <div class="session-name">${escapeHTML(session.mapName || 'Unknown Map')}</div>
+          <div class="session-tier">${tier} / ${contextLabel} / ${startedAt}</div>
+        </div>
+        <div class="session-secondary">
+          <span class="session-secondary-label">${window.t('sessions.duration')}</span>
+          <span class="session-secondary-value">${duration}</span>
+        </div>
+        <div class="session-secondary">
+          <span class="session-secondary-label">${window.t('sessions.lootCount')}</span>
+          <span class="session-secondary-value">${lootCount}</span>
+        </div>
+        <div class="session-profit ${profit >= 0 ? 'positive' : 'negative'}">${currencyHTML(profit, 'chaos', 16, session.poeVersion || state.settings.poeVersion || 'poe1')}</div>
+        <div class="session-status ${session.status}">${window.t(`sessions.${session.status}`)}</div>
+      </button>
+    `;
+  }).join('');
+
+  elements.sessionsList.querySelectorAll('[data-session-id]').forEach((sessionButton) => {
+    sessionButton.addEventListener('click', () => {
+      openSessionDrawer(sessionButton.dataset.sessionId);
+    });
+  });
+}
+
+function renderRecentLoot() {
+  if (!elements.recentLootList) return;
+
+  if (!state.currentUser || !state.recentLoot.length) {
+    elements.recentLootList.innerHTML = `<p class="empty-state">${window.t('dashboard.noLoot')}</p>`;
+    return;
+  }
+
+  elements.recentLootList.innerHTML = state.recentLoot.map((loot) => {
+    const session = loot.session || {};
+    const totalValue = (parseFloat(loot.chaosValue || 0) * parseInt(loot.quantity || 1, 10)) || 0;
+    const contextLabel = `${session.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${session.league || 'Standard'}`;
+
+    return `
+      <article class="recent-loot-item">
+        <div class="recent-loot-main">
+          <div class="recent-loot-name-row">
+            <span class="recent-loot-quantity">x${parseInt(loot.quantity || 1, 10)}</span>
+            <span class="recent-loot-name">${escapeHTML(loot.itemName || 'Unknown Item')}</span>
+          </div>
+          <div class="recent-loot-meta">${escapeHTML(session.mapName || 'Unknown Map')} / ${contextLabel}</div>
+        </div>
+        <div class="recent-loot-side">
+          <div class="recent-loot-value">${currencyHTML(totalValue, 'chaos', 14, session.poeVersion || state.settings.poeVersion || 'poe1')}</div>
+          <div class="recent-loot-time">${timeAgo(loot.createdAt)}</div>
+        </div>
+      </article>
+    `;
+  }).join('');
 }
 
 /**
@@ -712,6 +956,7 @@ async function loadRecentLoot() {
  */
 async function handleSaveSettings() {
   const activeVersion = document.querySelector('.version-btn.active');
+  const previousContext = getSelectedTrackerContext();
 
   const settings = {
     apiUrl: elements.apiUrl.value,
@@ -728,6 +973,15 @@ async function handleSaveSettings() {
   try {
     await window.electronAPI.setSettings(settings);
     state.settings = { ...state.settings, ...settings };
+    syncDesktopCurrencyIcons();
+
+    const contextChanged =
+      previousContext.poeVersion !== settings.poeVersion ||
+      previousContext.league !== settings.defaultLeague;
+
+    if (contextChanged && state.currentUser) {
+      await refreshTrackerData({ includeSessions: true, includeCurrency: true });
+    }
     showToast(window.t('nav.settings'), window.t('toast.settingsSaved'));
   } catch (error) {
     showToast(window.t('toast.error'), window.t('toast.settingsError'), 'error');
@@ -805,6 +1059,266 @@ function showToast(title, message, type = 'info') {
     toast.style.animation = 'fadeOut 0.3s ease';
     setTimeout(() => toast.remove(), 300);
   }, 5000);
+}
+
+function getUserFacingErrorMessage(error, fallbackKey = 'toast.unexpectedError') {
+  const fallback = window.t(fallbackKey);
+
+  if (!error) return fallback;
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  if (typeof error.message === 'string' && error.message.trim() && error.message !== '[object Object]') {
+    return error.message.trim();
+  }
+  if (typeof error.error === 'string' && error.error.trim()) return error.error.trim();
+  if (typeof error.data?.error === 'string' && error.data.error.trim()) return error.data.error.trim();
+  return fallback;
+}
+
+async function openSessionDrawer(sessionId) {
+  if (!elements.sessionDrawer || !sessionId) return;
+
+  elements.sessionDrawer.classList.remove('hidden');
+  elements.sessionDrawer.setAttribute('aria-hidden', 'false');
+  elements.sessionDrawerTitle.textContent = window.t('sessions.detailKicker');
+  elements.sessionDrawerSummary.innerHTML = `<p class="empty-state">${window.t('sessions.detailLoading')}</p>`;
+  if (elements.sessionDrawerStrategy) elements.sessionDrawerStrategy.value = '';
+  if (elements.sessionDrawerNotes) elements.sessionDrawerNotes.value = '';
+  if (elements.sessionDrawerSave) elements.sessionDrawerSave.disabled = true;
+  if (elements.sessionDrawerAnalytics) elements.sessionDrawerAnalytics.innerHTML = '';
+  elements.sessionDrawerLoot.innerHTML = '';
+  elements.sessionDrawerLootCount.textContent = '...';
+
+  try {
+    const session = await window.electronAPI.getSessionDetails(sessionId);
+    state.selectedSession = session;
+    renderSessionDrawer();
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'sessions.loadError'), 'error');
+    closeSessionDrawer();
+  }
+}
+
+function closeSessionDrawer() {
+  state.selectedSession = null;
+  if (!elements.sessionDrawer) return;
+  elements.sessionDrawer.classList.add('hidden');
+  elements.sessionDrawer.setAttribute('aria-hidden', 'true');
+  if (elements.sessionDrawerStrategy) elements.sessionDrawerStrategy.value = '';
+  if (elements.sessionDrawerNotes) elements.sessionDrawerNotes.value = '';
+  if (elements.sessionDrawerSave) elements.sessionDrawerSave.disabled = false;
+  if (elements.sessionDrawerAnalytics) elements.sessionDrawerAnalytics.innerHTML = '';
+}
+
+function renderSessionDrawer() {
+  const session = state.selectedSession;
+  if (!session || !elements.sessionDrawerSummary || !elements.sessionDrawerLoot || !elements.sessionDrawerAnalytics) return;
+
+  const contextLabel = `${session.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${session.league || 'Standard'}`;
+  const lootEntries = Array.isArray(session.lootEntries) ? session.lootEntries : [];
+  const totalLoot = parseFloat(session.totalLootChaos || 0);
+  const profit = parseFloat(session.profitChaos || 0);
+  const cost = parseFloat(session.costChaos || 0);
+  const poeVersion = session.poeVersion || state.settings.poeVersion || 'poe1';
+  const analytics = buildSessionAnalytics(lootEntries);
+
+  elements.sessionDrawerTitle.textContent = session.mapName || 'Session';
+  elements.sessionDrawerLootCount.textContent = String(lootEntries.length);
+  elements.sessionDrawerSummary.innerHTML = `
+    <div class="session-drawer-metric">
+      <span class="session-drawer-label">${window.t('session.status')}</span>
+      <span class="session-status ${session.status}">${window.t(`sessions.${session.status}`)}</span>
+    </div>
+    <div class="session-drawer-metric">
+      <span class="session-drawer-label">${window.t('sessions.game')}</span>
+      <span class="session-drawer-value">${contextLabel}</span>
+    </div>
+    <div class="session-drawer-metric">
+      <span class="session-drawer-label">${window.t('session.tier')}</span>
+      <span class="session-drawer-value">${session.mapTier ? `T${session.mapTier}` : '-'}</span>
+    </div>
+    <div class="session-drawer-metric">
+      <span class="session-drawer-label">${window.t('sessions.duration')}</span>
+      <span class="session-drawer-value">${session.durationSec ? formatDuration(session.durationSec) : '-'}</span>
+    </div>
+    <div class="session-drawer-metric">
+      <span class="session-drawer-label">${window.t('sessions.cost')}</span>
+      <span class="session-drawer-value">${currencyHTML(cost, 'chaos', 15, poeVersion)}</span>
+    </div>
+    <div class="session-drawer-metric">
+      <span class="session-drawer-label">${window.t('sessions.totalLoot')}</span>
+      <span class="session-drawer-value">${currencyHTML(totalLoot, 'chaos', 15, poeVersion)}</span>
+    </div>
+    <div class="session-drawer-metric">
+      <span class="session-drawer-label">${window.t('dashboard.liveProfit')}</span>
+      <span class="session-drawer-value ${profit >= 0 ? 'positive' : 'negative'}">${currencyHTML(profit, 'chaos', 15, poeVersion)}</span>
+    </div>
+    <div class="session-drawer-metric">
+      <span class="session-drawer-label">${window.t('sessions.startedAt')}</span>
+      <span class="session-drawer-value">${session.startedAt ? new Date(session.startedAt).toLocaleString() : '-'}</span>
+    </div>
+    <div class="session-drawer-metric">
+      <span class="session-drawer-label">${window.t('sessions.endedAt')}</span>
+      <span class="session-drawer-value">${session.endedAt ? new Date(session.endedAt).toLocaleString() : '-'}</span>
+    </div>
+  `;
+
+  if (elements.sessionDrawerStrategy) {
+    elements.sessionDrawerStrategy.value = session.strategyTag || '';
+  }
+  if (elements.sessionDrawerNotes) {
+    elements.sessionDrawerNotes.value = session.notes || '';
+  }
+  if (elements.sessionDrawerSave) {
+    elements.sessionDrawerSave.disabled = false;
+  }
+
+  if (!analytics.length) {
+    elements.sessionDrawerAnalytics.innerHTML = `<p class="empty-state">${window.t('sessions.analyticsEmpty')}</p>`;
+  } else {
+    const maxValue = Math.max(...analytics.map((entry) => entry.totalValue), 1);
+    elements.sessionDrawerAnalytics.innerHTML = analytics
+      .map((entry) => {
+        const barWidth = Math.max(12, Math.round((entry.totalValue / maxValue) * 100));
+        return `
+          <article class="session-analytics-item">
+            <div class="session-analytics-main">
+              <div class="session-analytics-row">
+                <span class="session-analytics-name">${escapeHTML(entry.label)}</span>
+                <span class="session-analytics-value">${currencyHTML(entry.totalValue, 'chaos', 14, poeVersion)}</span>
+              </div>
+              <div class="session-analytics-meta">${entry.quantity} ${window.t('sessions.analyticsItems')} / ${entry.entries} ${window.t('sessions.analyticsEntries')}</div>
+              <div class="session-analytics-bar">
+                <span style="width: ${barWidth}%"></span>
+              </div>
+            </div>
+          </article>
+        `;
+      })
+      .join('');
+  }
+
+  if (!lootEntries.length) {
+    elements.sessionDrawerLoot.innerHTML = `<p class="empty-state">${window.t('sessions.detailEmptyLoot')}</p>`;
+    return;
+  }
+
+  elements.sessionDrawerLoot.innerHTML = lootEntries
+    .slice()
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .map((loot) => {
+      const totalValue = (parseFloat(loot.chaosValue || 0) * parseInt(loot.quantity || 1, 10)) || 0;
+      const typeLabel = loot.itemType ? escapeHTML(loot.itemType.replace(/_/g, ' ')) : '-';
+      return `
+        <article class="session-drawer-loot-item">
+          <div class="session-drawer-loot-main">
+            <div class="session-drawer-loot-name-row">
+              <span class="recent-loot-quantity">x${parseInt(loot.quantity || 1, 10)}</span>
+              <span class="session-drawer-loot-name">${escapeHTML(loot.itemName || 'Unknown Item')}</span>
+            </div>
+            <div class="session-drawer-loot-meta">${typeLabel} / ${loot.createdAt ? timeAgo(loot.createdAt) : '-'}</div>
+          </div>
+          <div class="session-drawer-loot-value">${currencyHTML(totalValue, 'chaos', 14, poeVersion)}</div>
+        </article>
+      `;
+    })
+    .join('');
+}
+
+async function handleSessionMetadataSave() {
+  if (!state.selectedSession?.id || !elements.sessionDrawerSave) {
+    return;
+  }
+
+  const payload = {
+    strategyTag: elements.sessionDrawerStrategy ? elements.sessionDrawerStrategy.value : '',
+    notes: elements.sessionDrawerNotes ? elements.sessionDrawerNotes.value : ''
+  };
+
+  const originalLabel = elements.sessionDrawerSave.textContent;
+  elements.sessionDrawerSave.disabled = true;
+
+  try {
+    const updatedSession = await window.electronAPI.updateSessionDetails(state.selectedSession.id, payload);
+    state.selectedSession = updatedSession;
+
+    if (state.currentSession?.id === updatedSession.id) {
+      state.currentSession = {
+        ...state.currentSession,
+        strategyTag: updatedSession.strategyTag,
+        notes: updatedSession.notes
+      };
+      updateActiveSessionUI();
+    }
+
+    state.sessions = state.sessions.map((session) => (
+      session.id === updatedSession.id ? { ...session, ...updatedSession } : session
+    ));
+
+    renderSessionDrawer();
+    renderSessionsList();
+    showToast(window.t('sessions.detailKicker'), window.t('toast.sessionUpdated'), 'success');
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.sessionUpdateError'), 'error');
+  } finally {
+    if (elements.sessionDrawerSave) {
+      elements.sessionDrawerSave.disabled = false;
+      elements.sessionDrawerSave.textContent = originalLabel;
+      if (window.applyTranslations) window.applyTranslations();
+    }
+  }
+}
+
+function buildSessionAnalytics(lootEntries) {
+  const grouped = new Map();
+
+  lootEntries.forEach((loot) => {
+    const key = normalizeLootCategory(loot.itemType);
+    const current = grouped.get(key) || {
+      key,
+      label: formatLootCategoryLabel(key),
+      quantity: 0,
+      entries: 0,
+      totalValue: 0
+    };
+
+    current.quantity += parseInt(loot.quantity || 0, 10) || 0;
+    current.entries += 1;
+    current.totalValue += (parseFloat(loot.chaosValue || 0) * (parseInt(loot.quantity || 1, 10) || 1)) || 0;
+    grouped.set(key, current);
+  });
+
+  return Array.from(grouped.values()).sort((left, right) => {
+    if (right.totalValue !== left.totalValue) {
+      return right.totalValue - left.totalValue;
+    }
+
+    if (right.quantity !== left.quantity) {
+      return right.quantity - left.quantity;
+    }
+
+    return left.label.localeCompare(right.label);
+  });
+}
+
+function normalizeLootCategory(itemType) {
+  if (typeof itemType !== 'string') {
+    return 'other';
+  }
+
+  const normalized = itemType.trim().toLowerCase();
+  return normalized || 'other';
+}
+
+function formatLootCategoryLabel(itemType) {
+  const normalized = normalizeLootCategory(itemType);
+  if (normalized === 'divination_card') return 'Divination Card';
+  if (normalized === 'delirium_orb') return 'Delirium Orb';
+  if (normalized === 'other') return 'Other';
+
+  return normalized
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 // ==================== CURRENCY PAGE ====================
@@ -1098,11 +1612,21 @@ async function handleCurrencySync() {
  * Sureyi formatla
  */
 function formatDuration(seconds) {
-  if (!seconds) return '-';
+  if (seconds === null || seconds === undefined || Number.isNaN(seconds)) return '-';
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}${window.t('misc.durationMin')} ${secs}${window.t('misc.durationSec')}`;
 }
 
+function getLiveDuration(session) {
+  if (!session?.startedAt) return 0;
+  const endTime = session.endedAt ? new Date(session.endedAt).getTime() : Date.now();
+  const startTime = new Date(session.startedAt).getTime();
+  return Math.max(0, Math.floor((endTime - startTime) / 1000));
+}
+
 // Uygulamayi baslat
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  ensureSessionClock();
+  init();
+});

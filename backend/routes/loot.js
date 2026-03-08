@@ -204,6 +204,76 @@ router.get('/session/:sessionId',
 );
 
 /**
+ * GET /api/loot/recent
+ * Kullaniciya ait son loot entry'lerini getir
+ */
+router.get('/recent',
+  authenticate,
+  [
+    query('limit').optional().isInt({ min: 1, max: 50 }),
+    query('poeVersion').optional().isIn(['poe1', 'poe2']),
+    query('league').optional().trim().notEmpty().isLength({ max: 50 }),
+    handleValidationErrors
+  ],
+  async (req, res) => {
+    try {
+      const { limit = 10, poeVersion, league } = req.query;
+
+      const sessionWhere = {
+        userId: req.userId
+      };
+
+      if (poeVersion) {
+        sessionWhere.poeVersion = poeVersion;
+      }
+
+      if (league) {
+        sessionWhere.league = league;
+      }
+
+      const lootEntries = await LootEntry.findAll({
+        include: [{
+          model: Session,
+          as: 'session',
+          attributes: [
+            'id',
+            'mapName',
+            'mapTier',
+            'mapType',
+            'status',
+            'poeVersion',
+            'league',
+            'startedAt',
+            'endedAt'
+          ],
+          where: sessionWhere
+        }],
+        order: [['createdAt', 'DESC']],
+        limit: parseInt(limit)
+      });
+
+      res.json({
+        success: true,
+        data: {
+          lootEntries,
+          count: lootEntries.length,
+          poeVersion: poeVersion || null,
+          league: league || null
+        },
+        error: null
+      });
+    } catch (error) {
+      console.error('Son loot listeleme hatasi:', error);
+      res.status(500).json({
+        success: false,
+        data: null,
+        error: 'Son loot entry\'ler alinirken hata olustu'
+      });
+    }
+  }
+);
+
+/**
  * GET /api/loot/:id
  * Loot entry detayini getir
  */

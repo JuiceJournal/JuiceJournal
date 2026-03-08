@@ -609,7 +609,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   margin-bottom: 1rem;
-  min-height: 80px;
+  min-height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -617,7 +617,7 @@ body {
 
 .session-info {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
   width: 100%;
 }
@@ -641,6 +641,21 @@ body {
   font-weight: 700;
   font-family: var(--font-mono);
   color: var(--text-bright);
+}
+
+.session-info-value.positive {
+  color: var(--green);
+}
+
+.session-info-value.negative {
+  color: var(--red);
+}
+
+.session-info-item--metric {
+  padding: 0.75rem 0.85rem;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 .session-actions {
@@ -780,6 +795,76 @@ body {
   grid-row: 2;
 }
 
+#recent-loot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.recent-loot-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+
+.recent-loot-main,
+.recent-loot-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.recent-loot-side {
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.recent-loot-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.recent-loot-quantity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(214, 179, 96, 0.12);
+  color: var(--gold-light);
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+}
+
+.recent-loot-name {
+  color: var(--text-bright);
+  font-size: 0.86rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-loot-meta,
+.recent-loot-time {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.recent-loot-value {
+  font-family: var(--font-mono);
+  color: var(--text-bright);
+}
+
 .empty-state {
   color: var(--text-muted);
   text-align: center;
@@ -833,11 +918,14 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.85rem 1.25rem;
+  width: 100%;
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1fr auto;
   align-items: center;
   gap: 1rem;
   transition: var(--transition);
+  text-align: left;
+  cursor: pointer;
 }
 
 .session-item:hover {
@@ -850,9 +938,32 @@ body {
   font-size: 0.88rem;
 }
 
+.session-primary {
+  min-width: 0;
+}
+
 .session-tier {
   color: var(--text-muted);
   font-size: 0.8rem;
+  font-family: var(--font-mono);
+}
+
+.session-secondary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.session-secondary-label {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.session-secondary-value {
+  font-size: 0.82rem;
+  color: var(--text-bright);
   font-family: var(--font-mono);
 }
 
@@ -871,6 +982,294 @@ body {
 .session-status.active { background: var(--blue-dim); color: var(--blue); }
 .session-status.completed { background: var(--green-dim); color: var(--green); }
 .session-status.abandoned { background: rgba(255,255,255,0.05); color: var(--text-muted); }
+
+.session-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+}
+
+.session-drawer.hidden {
+  display: none;
+}
+
+.session-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.52);
+  backdrop-filter: blur(6px);
+}
+
+.session-drawer-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(460px, 100%);
+  height: 100%;
+  background: linear-gradient(180deg, rgba(17, 14, 10, 0.98), rgba(8, 7, 6, 0.98));
+  border-left: 1px solid var(--border-gold);
+  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+}
+
+.session-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.35rem 1.35rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.session-drawer-kicker {
+  display: inline-block;
+  margin-bottom: 0.35rem;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--gold-light);
+}
+
+.session-drawer-header h3 {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  color: var(--text-bright);
+}
+
+.session-drawer-close {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+
+.session-drawer-body {
+  padding: 1rem 1.35rem 1.35rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.session-drawer-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.session-drawer-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.85rem 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.session-drawer-label {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.session-drawer-value {
+  font-size: 0.88rem;
+  color: var(--text-bright);
+  font-family: var(--font-mono);
+}
+
+.session-drawer-value.positive {
+  color: var(--green);
+}
+
+.session-drawer-value.negative {
+  color: var(--red);
+}
+
+.session-drawer-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.session-drawer-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.95rem 1rem 1rem;
+}
+
+.session-drawer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.session-drawer-field label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.session-drawer-input,
+.session-drawer-textarea {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.85rem;
+  padding: 0.72rem 0.78rem;
+  transition: var(--transition);
+}
+
+.session-drawer-textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.session-drawer-input:focus,
+.session-drawer-textarea:focus {
+  outline: none;
+  border-color: var(--border-gold);
+  box-shadow: 0 0 0 3px rgba(198, 161, 91, 0.1);
+}
+
+.session-drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.session-drawer-analytics {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.9rem 1rem 1rem;
+}
+
+.session-analytics-item {
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.025);
+  border-radius: var(--radius-sm);
+  padding: 0.8rem;
+}
+
+.session-analytics-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.session-analytics-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.session-analytics-name {
+  color: var(--text-bright);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.session-analytics-value {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.session-analytics-meta {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.session-analytics-bar {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.session-analytics-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(198, 161, 91, 0.5), rgba(232, 201, 141, 0.95));
+}
+
+.session-drawer-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.session-drawer-section-header h4 {
+  font-size: 0.86rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-bright);
+}
+
+.session-drawer-count {
+  color: var(--gold-light);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.session-drawer-loot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.9rem 1rem 1rem;
+}
+
+.session-drawer-loot-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.9rem;
+  padding: 0.75rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.session-drawer-loot-main {
+  min-width: 0;
+}
+
+.session-drawer-loot-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.session-drawer-loot-name {
+  color: var(--text-bright);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.session-drawer-loot-meta {
+  margin-top: 0.28rem;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.session-drawer-loot-value {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
 
 /* ==================== SETTINGS PAGE ==================== */
 .settings-layout {

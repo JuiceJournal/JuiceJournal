@@ -65,6 +65,14 @@ class APIClient {
   }
 
   /**
+   * Base URL ayarla
+   */
+  setBaseURL(baseURL) {
+    this.baseURL = baseURL;
+    this.client.defaults.baseURL = baseURL;
+  }
+
+  /**
    * Saglik kontrolu
    */
   async healthCheck() {
@@ -77,9 +85,7 @@ class APIClient {
    * Giris yap
    */
   async login(credentials) {
-    console.log('API login cagrildi:', credentials);
     const response = await this.client.post('/api/auth/login', credentials);
-    console.log('API login yaniti:', response);
     if (response.success && response.data.token) {
       this.setToken(response.data.token);
     }
@@ -164,6 +170,14 @@ class APIClient {
   }
 
   /**
+   * Session metadata guncelle
+   */
+  async updateSession(sessionId, data) {
+    const response = await this.client.put(`/api/sessions/${sessionId}`, data);
+    return response.data?.session;
+  }
+
+  /**
    * Yeni session baslat
    */
   async startSession(data) {
@@ -216,6 +230,14 @@ class APIClient {
       sessionId,
       items
     });
+    return response.data;
+  }
+
+  /**
+   * Son loot entry'lerini getir
+   */
+  async getRecentLoot(params = {}) {
+    const response = await this.client.get('/api/loot/recent', { params });
     return response.data;
   }
 
@@ -292,9 +314,12 @@ class APIClient {
   /**
    * Kisisel istatistikleri getir
    */
-  async getPersonalStats(period = 'weekly') {
+  async getPersonalStats(period = 'weekly', context = {}) {
     const response = await this.client.get('/api/stats/personal', {
-      params: { period }
+      params: {
+        period,
+        ...context
+      }
     });
     return response.data;
   }
@@ -312,8 +337,10 @@ class APIClient {
   /**
    * Genel ozet istatistikleri getir
    */
-  async getSummaryStats() {
-    const response = await this.client.get('/api/stats/summary');
+  async getSummaryStats(context = {}) {
+    const response = await this.client.get('/api/stats/summary', {
+      params: context
+    });
     return response.data;
   }
 }
