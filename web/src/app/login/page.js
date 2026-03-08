@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useI18n } from '@/hooks/useI18n';
 import PoeChromeIcon from '@/components/PoeChromeIcon';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage } from '@/lib/api';
@@ -10,6 +11,7 @@ import { getApiErrorMessage } from '@/lib/api';
 export default function LoginPage() {
   const router = useRouter();
   const { user, login, register } = useAuth();
+  const { t } = useI18n();
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -34,13 +36,13 @@ export default function LoginPage() {
         : await register(formData);
 
       if (response.success) {
-        toast.success(isLogin ? 'Welcome back to the atlas.' : 'Account created!');
+        toast.success(isLogin ? t('toast.welcomeBack') : t('toast.accountCreated'));
         router.push('/dashboard');
       } else {
-        toast.error(getApiErrorMessage(response, isLogin ? 'Unable to sign in right now.' : 'Unable to create the account right now.'));
+        toast.error(getApiErrorMessage(response, isLogin ? t('toast.signInError') : t('toast.createError')));
       }
     } catch (error) {
-      toast.error(getApiErrorMessage(error, isLogin ? 'Unable to sign in right now.' : 'Unable to create the account right now.'));
+      toast.error(getApiErrorMessage(error, isLogin ? t('toast.signInError') : t('toast.createError')));
     } finally {
       setLoading(false);
     }
@@ -51,38 +53,38 @@ export default function LoginPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(152,78,42,0.18),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(198,161,91,0.12),transparent_20%)]" />
       <div className="relative mx-auto grid min-h-[calc(100vh-5rem)] max-w-6xl items-center gap-10 lg:grid-cols-[1.15fr_0.85fr]">
         <section className="hidden lg:block">
-          <p className="section-kicker">Occult Atlas Ledger</p>
+          <p className="section-kicker">{t('brand.kicker')}</p>
           <h1 className="mt-4 max-w-3xl font-display text-6xl uppercase leading-[0.92] text-stone-100">
-            Production-grade tracking for Path of Exile economies.
+            {t('auth.heroTitle')}
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-poe-mist">
-            Keep league context, session profit, and market movement in one coherent command surface built for long-term progression.
+            {t('auth.heroBody')}
           </p>
 
           <div className="mt-8 grid max-w-2xl gap-4 sm:grid-cols-3">
             <div className="rounded-2xl border border-poe-border bg-[rgba(20,16,14,0.78)] p-4">
               <p className="section-kicker inline-flex items-center gap-2">
                 <PoeChromeIcon type="atlas" size={14} className="text-poe-gold/80" />
-                <span>Maps</span>
+                <span>{t('auth.maps')}</span>
               </p>
-              <p className="mt-3 font-display text-2xl uppercase text-poe-gold">Tracked</p>
-              <p className="mt-2 text-sm text-poe-mist">Record session tempo and route quality.</p>
+              <p className="mt-3 font-display text-2xl uppercase text-poe-gold">{t('auth.mapsValue')}</p>
+              <p className="mt-2 text-sm text-poe-mist">{t('auth.mapsBody')}</p>
             </div>
             <div className="rounded-2xl border border-poe-border bg-[rgba(20,16,14,0.78)] p-4">
               <p className="section-kicker inline-flex items-center gap-2">
                 <PoeChromeIcon type="market" size={14} className="text-poe-gold/80" />
-                <span>Market</span>
+                <span>{t('auth.market')}</span>
               </p>
-              <p className="mt-3 font-display text-2xl uppercase text-poe-gold">Synced</p>
-              <p className="mt-2 text-sm text-poe-mist">Read current value by game and league.</p>
+              <p className="mt-3 font-display text-2xl uppercase text-poe-gold">{t('auth.marketValue')}</p>
+              <p className="mt-2 text-sm text-poe-mist">{t('auth.marketBody')}</p>
             </div>
             <div className="rounded-2xl border border-poe-border bg-[rgba(20,16,14,0.78)] p-4">
               <p className="section-kicker inline-flex items-center gap-2">
                 <PoeChromeIcon type="sigil" size={14} className="text-poe-gold/80" />
-                <span>Goal</span>
+                <span>{t('auth.focus')}</span>
               </p>
-              <p className="mt-3 font-display text-2xl uppercase text-poe-gold">Refined</p>
-              <p className="mt-2 text-sm text-poe-mist">A tracker that feels native to PoE.</p>
+              <p className="mt-3 font-display text-2xl uppercase text-poe-gold">{t('auth.focusValue')}</p>
+              <p className="mt-2 text-sm text-poe-mist">{t('auth.focusBody')}</p>
             </div>
           </div>
         </section>
@@ -93,23 +95,23 @@ export default function LoginPage() {
               <PoeChromeIcon type="gate" size={30} className="text-poe-gold drop-shadow-[0_0_12px_rgba(198,161,91,0.22)]" />
             </div>
             <div>
-              <p className="section-kicker">{isLogin ? 'Return To Command' : 'Create Ledger Access'}</p>
+              <p className="section-kicker">{isLogin ? t('auth.signInKicker') : t('auth.createKicker')}</p>
               <h2 className="mt-1 font-display text-3xl uppercase tracking-[0.12em] text-stone-100">
-                {isLogin ? 'Sign In' : 'Create Account'}
+                {isLogin ? t('auth.signInTitle') : t('auth.createTitle')}
               </h2>
             </div>
           </div>
 
           <p className="mt-5 text-sm leading-6 text-poe-mist">
             {isLogin
-              ? 'Enter the atlas control panel and continue tracking your current farming context.'
-              : 'Create a new operator account for session tracking, pricing, and leaderboard progression.'}
+              ? t('auth.signInBody')
+              : t('auth.createBody')}
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
             <div>
               <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-poe-mist">
-                {isLogin ? 'Username or Email' : 'Username'}
+                {isLogin ? t('auth.usernameOrEmail') : t('auth.username')}
               </label>
               <input
                 type="text"
@@ -124,7 +126,7 @@ export default function LoginPage() {
             {!isLogin && (
               <div>
                 <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-poe-mist">
-                  Email
+                  {t('auth.email')}
                 </label>
                 <input
                   type="email"
@@ -138,7 +140,7 @@ export default function LoginPage() {
 
             <div>
               <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-poe-mist">
-                Password
+                {t('auth.password')}
               </label>
               <input
                 type="password"
@@ -155,7 +157,7 @@ export default function LoginPage() {
               disabled={loading}
               className="btn btn-primary mt-4 w-full disabled:opacity-50"
             >
-              {loading ? 'Processing...' : isLogin ? 'Enter Dashboard' : 'Create Account'}
+              {loading ? t('auth.processing') : isLogin ? t('auth.enterDashboard') : t('auth.createAccount')}
             </button>
           </form>
 
@@ -164,7 +166,7 @@ export default function LoginPage() {
               onClick={() => setIsLogin(!isLogin)}
               className="text-sm font-semibold uppercase tracking-[0.14em] text-poe-gold transition-colors hover:text-amber-200"
             >
-              {isLogin ? 'Need a new account?' : 'Already have access?'}
+              {isLogin ? t('auth.needAccount') : t('auth.haveAccount')}
             </button>
           </div>
         </section>

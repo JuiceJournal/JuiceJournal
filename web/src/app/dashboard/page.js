@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useI18n } from '@/hooks/useI18n';
 import { useSocket } from '@/hooks/useSocket';
 import { useTrackerContext } from '@/hooks/useTrackerContext';
 import Navbar from '@/components/Navbar';
@@ -18,6 +19,7 @@ import toast from 'react-hot-toast';
 export default function DashboardPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const { t } = useI18n();
   const { connected, lastMessage } = useSocket();
   const { poeVersion, league } = useTrackerContext();
 
@@ -65,46 +67,45 @@ export default function DashboardPage() {
       setStats(statsRes.data);
       setRecentSessions(sessionsRes.data?.sessions || []);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Unable to load the dashboard right now.'));
+      toast.error(getApiErrorMessage(error, t('toast.dashboardLoadError')));
     } finally {
       setLoading(false);
     }
   };
 
   const handleStartSession = async () => {
-    const mapName = prompt(`Enter ${getPoeVersionLabel(poeVersion)} map name for ${league}:`, 'Dunes Map');
+    const mapName = prompt(t('prompt.enterMap', { version: getPoeVersionLabel(poeVersion), league }), 'Dunes Map');
     if (!mapName) return;
 
     try {
       const response = await sessionAPI.start({ mapName, poeVersion, league });
       if (response.success) {
-        toast.success(`${mapName} started in ${league}`);
+        toast.success(t('toast.startSessionSuccess', { mapName, league }));
         loadDashboardData();
       }
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Unable to start the session.'));
+      toast.error(getApiErrorMessage(error, t('toast.startSessionError')));
     }
   };
 
   const handleEndSession = async () => {
     if (!activeSession) return;
-    if (!confirm('Do you want to end the active session?')) return;
+    if (!confirm(t('prompt.endActiveSession'))) return;
 
     try {
       const response = await sessionAPI.end(activeSession.id);
       if (response.success) {
         const profit = parseFloat(response.data.session.profitChaos);
         const profitVal = profit >= 0 ? profit.toFixed(1) : Math.abs(profit).toFixed(1);
-        const message = profit >= 0 ? `Profit: ${profitVal}c` : `Loss: ${profitVal}c`;
         if (profit >= 0) {
-          toast.success(message);
+          toast.success(t('toast.profit', { value: `${profitVal}c` }));
         } else {
-          toast(message);
+          toast(t('toast.loss', { value: `${profitVal}c` }));
         }
         loadDashboardData();
       }
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Unable to end the session.'));
+      toast.error(getApiErrorMessage(error, t('toast.endSessionError')));
     }
   };
 
@@ -115,7 +116,7 @@ export default function DashboardPage() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-poe-gold text-xl">Loading...</div>
+        <div className="text-poe-gold text-xl">{t('common.loading')}</div>
       </div>
     );
   }
@@ -128,12 +129,12 @@ export default function DashboardPage() {
         <section className="card mb-8 overflow-visible">
           <div className="relative z-[1] grid gap-8 lg:grid-cols-[1.4fr_0.9fr] lg:items-end">
             <div>
-              <p className="section-kicker">Campaign Control</p>
+              <p className="section-kicker">{t('dashboard.kicker')}</p>
               <h1 className="mt-3 max-w-3xl font-display text-4xl uppercase leading-none text-stone-100 sm:text-5xl">
-                Build a sharper atlas ledger with a UI that feels like Path of Exile.
+                {t('dashboard.title')}
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-poe-mist">
-                Track route efficiency, preserve league-specific context, and turn every session into a readable economic story instead of a flat dashboard table.
+                {t('dashboard.body')}
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <span className="context-chip border-sky-500/30 bg-sky-500/10 text-sky-200">
@@ -143,18 +144,18 @@ export default function DashboardPage() {
                   {league}
                 </span>
                 <span className={`context-chip ${connected ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}>
-                  {connected ? 'Live Feed Active' : 'Socket Offline'}
+                  {connected ? t('dashboard.liveFeedActive') : t('dashboard.socketOffline')}
                 </span>
               </div>
               <div className="mt-8 flex flex-wrap gap-3">
                 <button onClick={handleStartSession} className="btn btn-primary">
                   <PoeChromeIcon type="atlas" size={16} />
-                  Start New Map
+                  {t('dashboard.startNewMap')}
                 </button>
                 {activeSession && (
                   <button onClick={() => setShowLootModal(true)} className="btn btn-secondary">
                     <PoeChromeIcon type="vault" size={16} />
-                    Add Loot
+                    {t('dashboard.addLoot')}
                   </button>
                 )}
               </div>
@@ -164,12 +165,12 @@ export default function DashboardPage() {
               <div className="rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.88)] p-4">
                 <p className="section-kicker inline-flex items-center gap-2">
                   <PoeChromeIcon type="pulse" size={14} className="text-poe-gold/80" />
-                  <span>Connection</span>
+                  <span>{t('dashboard.connection')}</span>
                 </p>
                 <div className="mt-3 flex items-center gap-3">
                   <span className={`h-3 w-3 rounded-full ${connected ? 'bg-emerald-400 shadow-[0_0_14px_rgba(74,222,128,0.55)]' : 'bg-red-400 shadow-[0_0_14px_rgba(248,113,113,0.4)]'}`} />
                   <span className="text-sm font-semibold uppercase tracking-[0.14em] text-stone-200">
-                    {connected ? 'WebSocket linked' : 'Realtime interrupted'}
+                    {connected ? t('dashboard.websocketLinked') : t('dashboard.realtimeInterrupted')}
                   </span>
                 </div>
               </div>
@@ -177,13 +178,15 @@ export default function DashboardPage() {
               <div className="rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.88)] p-4">
                 <p className="section-kicker inline-flex items-center gap-2">
                   <PoeChromeIcon type="route" size={14} className="text-poe-gold/80" />
-                  <span>Session Status</span>
+                  <span>{t('dashboard.sessionStatus')}</span>
                 </p>
                 <p className="mt-3 text-lg font-display uppercase tracking-[0.12em] text-poe-gold">
-                  {activeSession ? activeSession.mapName : 'No active run'}
+                  {activeSession ? activeSession.mapName : t('dashboard.noActiveRun')}
                 </p>
                 <p className="mt-1 text-sm text-poe-mist">
-                  {activeSession ? `${activeSession.league} • ${getPoeVersionLabel(activeSession.poeVersion)}` : 'Open a fresh route to start tracking.'}
+                  {activeSession
+                    ? `${activeSession.league} / ${getPoeVersionLabel(activeSession.poeVersion)}`
+                    : t('dashboard.openFreshRoute')}
                 </p>
               </div>
             </div>
@@ -194,45 +197,45 @@ export default function DashboardPage() {
           <div className="card">
             <p className="section-kicker inline-flex items-center gap-2">
               <PoeChromeIcon type="market" size={14} className="text-poe-gold/80" />
-              <span>Context Profit</span>
+              <span>{t('dashboard.contextProfit')}</span>
             </p>
             <p className={`mt-3 text-3xl font-semibold ${getProfitColorClass(stats?.summary?.totalProfit || 0)}`}>
               <CurrencyValue value={stats?.summary?.totalProfit || 0} type="chaos" size={20} />
             </p>
-            <p className="mt-3 text-sm text-poe-mist">Net value in the selected league and game context.</p>
+            <p className="mt-3 text-sm text-poe-mist">{t('dashboard.contextProfitBody')}</p>
           </div>
 
           <div className="card">
             <p className="section-kicker inline-flex items-center gap-2">
               <PoeChromeIcon type="atlas" size={14} className="text-poe-gold/80" />
-              <span>Maps Cleared</span>
+              <span>{t('dashboard.mapsCleared')}</span>
             </p>
             <p className="mt-3 text-3xl font-semibold text-white">
               {stats?.summary?.totalSessions || 0}
             </p>
-            <p className="mt-3 text-sm text-poe-mist">Completed sessions contributing to this ledger.</p>
+            <p className="mt-3 text-sm text-poe-mist">{t('dashboard.mapsClearedBody')}</p>
           </div>
 
           <div className="card">
             <p className="section-kicker inline-flex items-center gap-2">
               <PoeChromeIcon type="route" size={14} className="text-poe-gold/80" />
-              <span>Average Route</span>
+              <span>{t('dashboard.averageRoute')}</span>
             </p>
             <p className={`mt-3 text-3xl font-semibold ${getProfitColorClass(stats?.summary?.avgProfitPerMap || 0)}`}>
               <CurrencyValue value={stats?.summary?.avgProfitPerMap || 0} type="chaos" size={20} />
             </p>
-            <p className="mt-3 text-sm text-poe-mist">Expected payout per map before route adjustments.</p>
+            <p className="mt-3 text-sm text-poe-mist">{t('dashboard.averageRouteBody')}</p>
           </div>
 
           <div className="card">
             <p className="section-kicker inline-flex items-center gap-2">
               <PoeChromeIcon type="pulse" size={14} className="text-poe-gold/80" />
-              <span>Hourly Tempo</span>
+              <span>{t('dashboard.hourlyTempo')}</span>
             </p>
             <p className={`mt-3 text-3xl font-semibold ${getProfitColorClass(stats?.summary?.avgProfitPerHour || 0)}`}>
               <CurrencyValue value={stats?.summary?.avgProfitPerHour || 0} type="chaos" size={20} />
             </p>
-            <p className="mt-3 text-sm text-poe-mist">Sustained earning rate across the current farming loop.</p>
+            <p className="mt-3 text-sm text-poe-mist">{t('dashboard.hourlyTempoBody')}</p>
           </div>
         </div>
 
@@ -241,16 +244,16 @@ export default function DashboardPage() {
             <div className="card">
               <p className="section-kicker inline-flex items-center gap-2">
                 <PoeChromeIcon type="sessions" size={14} className="text-poe-gold/80" />
-                <span>Current Expedition</span>
+                <span>{t('dashboard.currentExpedition')}</span>
               </p>
               <h2 className="panel-title">
-                Active Session
+                {t('dashboard.activeSession')}
               </h2>
 
               {activeSession ? (
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-poe-border bg-[rgba(10,8,7,0.78)] p-4">
-                    <p className="text-gray-400 text-sm">Map</p>
+                    <p className="text-gray-400 text-sm">{t('common.map')}</p>
                     <p className="mt-2 text-2xl font-display uppercase tracking-[0.1em] text-white">{activeSession.mapName}</p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <span className="context-chip border-sky-500/30 bg-sky-500/10 text-sky-200">
@@ -269,17 +272,17 @@ export default function DashboardPage() {
 
                   {!activeSessionMatchesContext && (
                     <p className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-300">
-                      This active session is outside the currently selected dashboard context.
+                      {t('dashboard.outOfContext')}
                     </p>
                   )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.76)] p-4">
-                      <p className="section-kicker">Started</p>
+                      <p className="section-kicker">{t('common.started')}</p>
                       <p className="mt-2 text-base font-semibold text-white">{new Date(activeSession.startedAt).toLocaleTimeString()}</p>
                     </div>
                     <div className="rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.76)] p-4">
-                      <p className="section-kicker">Profit</p>
+                      <p className="section-kicker">{t('common.profit')}</p>
                       <p className={`mt-2 text-base font-semibold ${getProfitColorClass(activeSession.profitChaos)}`}>
                         <CurrencyValue value={activeSession.profitChaos} type="chaos" size={16} />
                       </p>
@@ -292,25 +295,25 @@ export default function DashboardPage() {
                       className="flex-1 btn btn-primary"
                     >
                       <PoeChromeIcon type="vault" size={16} />
-                      Add Loot
+                      {t('dashboard.addLoot')}
                     </button>
                     <button
                       onClick={handleEndSession}
                       className="flex-1 rounded-md border border-red-500/25 bg-red-500/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.16em] text-red-300 transition-colors hover:bg-red-500/20"
                     >
-                      End
+                      {t('common.end')}
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-poe-border bg-[rgba(10,8,7,0.65)] px-6 py-10 text-center">
-                  <p className="font-display text-xl uppercase tracking-[0.14em] text-stone-200">No active map</p>
-                  <p className="mt-3 text-sm text-poe-mist">Start a run to begin capturing route value, loot, and pace.</p>
+                  <p className="font-display text-xl uppercase tracking-[0.14em] text-stone-200">{t('dashboard.noActiveMap')}</p>
+                  <p className="mt-3 text-sm text-poe-mist">{t('dashboard.noActiveMapBody')}</p>
                   <button
                     onClick={handleStartSession}
                     className="btn btn-primary mt-6"
                   >
-                    Start New Map
+                    {t('dashboard.startNewMap')}
                   </button>
                 </div>
               )}
@@ -327,20 +330,20 @@ export default function DashboardPage() {
             <div>
               <p className="section-kicker inline-flex items-center gap-2">
                 <PoeChromeIcon type="sessions" size={14} className="text-poe-gold/80" />
-                <span>Ledger History</span>
+                <span>{t('dashboard.recentSessions')}</span>
               </p>
               <h2 className="panel-title">
-                Recent Sessions
+                {t('dashboard.recentSessions')}
               </h2>
               <p className="text-sm text-poe-mist">
-                Filtered to {getPoeVersionLabel(poeVersion)} / {league}
+                {t('dashboard.filteredTo', { version: getPoeVersionLabel(poeVersion), league })}
               </p>
             </div>
             <button
               onClick={() => router.push('/dashboard/sessions')}
               className="rounded-full border border-poe-border bg-[rgba(20,17,14,0.7)] px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-poe-gold transition-colors hover:border-poe-gold/35 hover:text-amber-200"
             >
-              View All
+              {t('common.viewAll')}
             </button>
           </div>
 

@@ -3,42 +3,44 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useI18n } from '@/hooks/useI18n';
 import { useTrackerContext } from '@/hooks/useTrackerContext';
 import Navbar from '@/components/Navbar';
 import PoeChromeIcon from '@/components/PoeChromeIcon';
 import CurrencyIcon, { CurrencyValue } from '@/components/CurrencyIcon';
 import SparklineChart from '@/components/SparklineChart';
 import { getApiErrorMessage, priceAPI } from '@/lib/api';
+import { getCurrentLocale, getLocaleTag, translate } from '@/lib/i18n';
 import { getItemTypeLabel, getPoeVersionLabel } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
 const POE1_TYPES = [
-  { value: '', label: 'All', icon: null },
-  { value: 'currency', label: 'Currency', icon: 'chaos' },
-  { value: 'fragment', label: 'Fragment', icon: 'vaal' },
-  { value: 'scarab', label: 'Scarab', icon: 'chance' },
-  { value: 'map', label: 'Map', icon: 'alchemy' },
-  { value: 'divination_card', label: 'Div Card', icon: 'divine' },
-  { value: 'gem', label: 'Gem', icon: 'gcp' },
-  { value: 'unique', label: 'Unique', icon: 'exalted' },
-  { value: 'oil', label: 'Oil', icon: 'blessed' },
-  { value: 'incubator', label: 'Incubator', icon: 'regret' },
-  { value: 'delirium_orb', label: 'Delirium Orb', icon: 'chromatic' },
-  { value: 'catalyst', label: 'Catalyst', icon: 'scouring' },
-  { value: 'other', label: 'Other', icon: 'alteration' },
+  { value: '', labelKey: 'common.all', icon: null },
+  { value: 'currency', itemType: 'currency', icon: 'chaos' },
+  { value: 'fragment', itemType: 'fragment', icon: 'vaal' },
+  { value: 'scarab', itemType: 'scarab', icon: 'chance' },
+  { value: 'map', itemType: 'map', icon: 'alchemy' },
+  { value: 'divination_card', itemType: 'divination_card', icon: 'divine' },
+  { value: 'gem', itemType: 'gem', icon: 'gcp' },
+  { value: 'unique', itemType: 'unique', icon: 'exalted' },
+  { value: 'oil', itemType: 'oil', icon: 'blessed' },
+  { value: 'incubator', itemType: 'incubator', icon: 'regret' },
+  { value: 'delirium_orb', itemType: 'delirium_orb', icon: 'chromatic' },
+  { value: 'catalyst', itemType: 'catalyst', icon: 'scouring' },
+  { value: 'other', itemType: 'other', icon: 'alteration' },
 ];
 
 const POE2_TYPES = [
-  { value: '', label: 'All', icon: null },
-  { value: 'currency', label: 'Currency', icon: 'exalted' },
-  { value: 'fragment', label: 'Fragment', icon: 'vaal' },
-  { value: 'scarab', label: 'Scarab', icon: 'chance' },
-  { value: 'map', label: 'Map', icon: 'alchemy' },
-  { value: 'divination_card', label: 'Div Card', icon: 'divine' },
-  { value: 'gem', label: 'Gem', icon: 'gcp' },
-  { value: 'unique', label: 'Unique', icon: 'mirror' },
-  { value: 'catalyst', label: 'Catalyst', icon: 'scouring' },
-  { value: 'other', label: 'Other', icon: 'alteration' },
+  { value: '', labelKey: 'common.all', icon: null },
+  { value: 'currency', itemType: 'currency', icon: 'exalted' },
+  { value: 'fragment', itemType: 'fragment', icon: 'vaal' },
+  { value: 'scarab', itemType: 'scarab', icon: 'chance' },
+  { value: 'map', itemType: 'map', icon: 'alchemy' },
+  { value: 'divination_card', itemType: 'divination_card', icon: 'divine' },
+  { value: 'gem', itemType: 'gem', icon: 'gcp' },
+  { value: 'unique', itemType: 'unique', icon: 'mirror' },
+  { value: 'catalyst', itemType: 'catalyst', icon: 'scouring' },
+  { value: 'other', itemType: 'other', icon: 'alteration' },
 ];
 
 function SkeletonRow() {
@@ -59,6 +61,7 @@ function SkeletonRow() {
 export default function CurrencyPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const { t } = useI18n();
   const { poeVersion, league } = useTrackerContext();
 
   const [prices, setPrices] = useState([]);
@@ -109,7 +112,7 @@ export default function CurrencyPage() {
       setTotalCount(data.count || 0);
       setLastUpdated(data.updatedAt);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Unable to load prices right now.'));
+      toast.error(getApiErrorMessage(error, t('toast.pricesLoadError')));
     } finally {
       setLoading(false);
     }
@@ -127,10 +130,10 @@ export default function CurrencyPage() {
     try {
       setSyncing(true);
       await priceAPI.sync({ league, poeVersion });
-      toast.success('Prices synced successfully');
+      toast.success(t('toast.pricesSynced'));
       await loadPrices();
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Unable to sync prices right now.'));
+      toast.error(getApiErrorMessage(error, t('toast.pricesSyncError')));
     } finally {
       setSyncing(false);
     }
@@ -191,17 +194,18 @@ export default function CurrencyPage() {
     if (!date) return '-';
     const diff = Date.now() - new Date(date).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
+    const formatter = new Intl.RelativeTimeFormat(getLocaleTag(getCurrentLocale()), { numeric: 'auto' });
+    if (mins < 1) return formatter.format(0, 'minute');
+    if (mins < 60) return formatter.format(-mins, 'minute');
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
+    if (hours < 24) return formatter.format(-hours, 'hour');
+    return formatter.format(-Math.floor(hours / 24), 'day');
   };
 
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-poe-dark">
-        <div className="text-poe-gold text-xl animate-pulse">Loading...</div>
+      <div className="text-poe-gold text-xl animate-pulse">{t('common.loading')}</div>
       </div>
     );
   }
@@ -216,13 +220,13 @@ export default function CurrencyPage() {
             <div>
               <p className="section-kicker inline-flex items-center gap-2">
                 <PoeChromeIcon type="market" size={14} className="text-poe-gold/80" />
-                <span>Market Observatory</span>
+                <span>{t('currency.kicker')}</span>
               </p>
               <h1 className="mt-3 font-display text-4xl uppercase leading-none text-stone-100">
-                Currency Archive
+                {t('currency.title')}
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-poe-mist">
-                Review synced item values through a league-aware market panel rather than a generic pricing table.
+                {t('currency.body')}
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
                 <span className="context-chip border-sky-500/30 bg-sky-500/10 text-sky-200">
@@ -240,14 +244,14 @@ export default function CurrencyPage() {
               className="btn btn-primary disabled:opacity-50"
             >
               <PoeChromeIcon type="market" size={16} />
-              {syncing ? 'Syncing...' : 'Sync Prices'}
+              {syncing ? t('common.loading') : t('currency.syncPrices')}
             </button>
           </div>
         </section>
 
         <section className="card mb-6">
           <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filter by item type">
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label={t('common.type')}>
               {(poeVersion === 'poe2' ? POE2_TYPES : POE1_TYPES).map((tab) => (
                 <button
                   key={tab.value}
@@ -261,7 +265,7 @@ export default function CurrencyPage() {
                   }`}
                 >
                   {tab.icon && <CurrencyIcon type={tab.icon} size={14} />}
-                  {tab.label}
+                  {tab.labelKey ? t(tab.labelKey) : getItemTypeLabel(tab.itemType)}
                 </button>
               ))}
             </div>
@@ -281,8 +285,8 @@ export default function CurrencyPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                placeholder="Search items..."
-                aria-label="Search currency items"
+                placeholder={t('currency.searchItems')}
+                aria-label={t('currency.searchItems')}
                 className="input pl-9 text-sm"
               />
             </div>
@@ -298,19 +302,19 @@ export default function CurrencyPage() {
                     #
                   </th>
                   <th className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist w-12" scope="col">
-                    <span className="sr-only">Icon</span>
+                    <span className="sr-only">{t('common.icon')}</span>
                   </th>
-                  <SortHeader field="itemName">Name</SortHeader>
+                  <SortHeader field="itemName">{t('common.name')}</SortHeader>
                   <th className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist" scope="col">
-                    Type
+                    {t('common.type')}
                   </th>
-                  <SortHeader field="chaosValue">Chaos</SortHeader>
-                  <SortHeader field="divineValue">Divine</SortHeader>
+                  <SortHeader field="chaosValue">{t('currency.chaos')}</SortHeader>
+                  <SortHeader field="divineValue">{t('currency.divine')}</SortHeader>
                   <th className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist" scope="col">
-                    Trend
+                    {t('common.trend')}
                   </th>
                   <th className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist" scope="col">
-                    Updated
+                    {t('common.updated')}
                   </th>
                 </tr>
               </thead>
@@ -325,12 +329,12 @@ export default function CurrencyPage() {
                   <tr>
                     <td colSpan={8} className="px-4 py-16 text-center">
                       <p className="font-display text-xl uppercase tracking-[0.14em] text-stone-200">
-                        {searchQuery ? 'No matching relics found' : 'No market data in this context'}
+                        {searchQuery ? t('currency.noMatchesTitle') : t('currency.noDataTitle')}
                       </p>
                       <p className="mt-3 text-sm text-poe-mist">
                         {searchQuery
-                          ? 'Try a broader item name or switch category.'
-                          : 'Sync prices to populate this market archive.'}
+                          ? t('currency.noMatchesBody')
+                          : t('currency.noDataBody')}
                       </p>
                     </td>
                   </tr>
@@ -387,8 +391,8 @@ export default function CurrencyPage() {
 
           {!loading && sortedPrices.length > 0 && (
             <div className="flex items-center justify-between border-t border-poe-border px-4 py-4 text-xs uppercase tracking-[0.14em] text-poe-mist">
-              <span>Showing {sortedPrices.length} of {totalCount} items</span>
-              <span>Last synced: {formatTimeAgo(lastUpdated)}</span>
+              <span>{t('currency.showing', { shown: sortedPrices.length, total: totalCount })}</span>
+              <span>{t('currency.lastSynced', { time: formatTimeAgo(lastUpdated) })}</span>
             </div>
           )}
         </div>

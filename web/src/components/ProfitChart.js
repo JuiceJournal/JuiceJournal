@@ -10,14 +10,17 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { formatShortDate } from '@/lib/utils';
+import { useI18n } from '@/hooks/useI18n';
 
 export default function ProfitChart({ data }) {
+  const { t } = useI18n();
+
   if (!data || data.length === 0) {
     return (
       <div className="card h-80 flex items-center justify-center">
         <div className="text-center">
-          <p className="section-kicker">Profit Trend</p>
-          <p className="mt-3 text-gray-400">No chart data available in this context</p>
+          <p className="section-kicker">{t('chart.title')}</p>
+          <p className="mt-3 text-gray-400">{t('chart.empty')}</p>
         </div>
       </div>
     );
@@ -35,10 +38,10 @@ export default function ProfitChart({ data }) {
         <div className="rounded-2xl border border-poe-border bg-[rgba(14,11,10,0.96)] px-4 py-3 shadow-[0_20px_40px_rgba(0,0,0,0.45)]">
           <p className="section-kicker mb-2">{label}</p>
           <p className="text-poe-gold font-semibold">
-            Profit: {payload[0].value.toFixed(1)}c
+            {t('chart.tooltipProfit', { value: payload[0].value.toFixed(1) })}
           </p>
           <p className="mt-1 text-sm text-gray-400">
-            {payload[0].payload.sessions} map
+            {t('chart.tooltipMaps', { count: payload[0].payload.sessions })}
           </p>
         </div>
       );
@@ -48,12 +51,12 @@ export default function ProfitChart({ data }) {
 
   return (
     <div className="card">
-      <p className="section-kicker">Market Trail</p>
+      <p className="section-kicker">{t('chart.kicker')}</p>
       <h3 className="panel-title">
-        Profit Trend
+        {t('chart.title')}
       </h3>
       <p className="mb-5 max-w-xl text-sm text-poe-mist">
-        A seven-day reading of how efficiently this farming context converted runs into value.
+        {t('dashboard.averageRouteBody')}
       </p>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">

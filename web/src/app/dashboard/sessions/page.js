@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useI18n } from '@/hooks/useI18n';
 import { useTrackerContext } from '@/hooks/useTrackerContext';
 import Navbar from '@/components/Navbar';
 import PoeChromeIcon from '@/components/PoeChromeIcon';
@@ -14,6 +15,7 @@ import toast from 'react-hot-toast';
 export default function SessionsPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const { t } = useI18n();
   const { poeVersion, league } = useTrackerContext();
 
   const [sessions, setSessions] = useState([]);
@@ -58,20 +60,20 @@ export default function SessionsPage() {
 
       setHasMore((response.data?.sessions || []).length === 20);
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Unable to load sessions right now.'));
+      toast.error(getApiErrorMessage(error, t('toast.sessionsLoadError')));
     } finally {
       setLoading(false);
     }
   };
 
   const handleEndSession = async (sessionId) => {
-    if (!confirm('Do you want to end this session?')) return;
+    if (!confirm(t('prompt.endSession'))) return;
 
     try {
       const response = await sessionAPI.end(sessionId);
       if (response.success) {
         const profit = parseFloat(response.data.session.profitChaos);
-        const message = `Session completed. Profit: ${formatChaos(profit)}`;
+        const message = t('toast.sessionCompleted', { value: formatChaos(profit) });
         if (profit >= 0) {
           toast.success(message);
         } else {
@@ -80,7 +82,7 @@ export default function SessionsPage() {
         loadSessions();
       }
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Unable to end the session.'));
+      toast.error(getApiErrorMessage(error, t('toast.endSessionError')));
     }
   };
 
@@ -93,7 +95,7 @@ export default function SessionsPage() {
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-poe-gold text-xl">Loading...</div>
+        <div className="text-poe-gold text-xl">{t('common.loading')}</div>
       </div>
     );
   }
@@ -108,13 +110,13 @@ export default function SessionsPage() {
             <div>
               <p className="section-kicker inline-flex items-center gap-2">
                 <PoeChromeIcon type="sessions" size={14} className="text-poe-gold/80" />
-                <span>Run Archive</span>
+                <span>{t('sessions.kicker')}</span>
               </p>
               <h1 className="mt-3 font-display text-4xl uppercase leading-none text-stone-100">
-                Session Ledger
+                {t('sessions.title')}
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-poe-mist">
-                Review completed routes, current expeditions, and abandoned runs without losing the active game and league context.
+                {t('sessions.body')}
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
                 <span className="context-chip border-sky-500/30 bg-sky-500/10 text-sky-200">
@@ -129,7 +131,7 @@ export default function SessionsPage() {
             <div className="rounded-2xl border border-poe-border bg-[rgba(10,8,7,0.78)] p-4">
               <p className="section-kicker inline-flex items-center gap-2">
                 <PoeChromeIcon type="vault" size={14} className="text-poe-gold/80" />
-                <span>Status Filter</span>
+                <span>{t('sessions.statusFilter')}</span>
               </p>
               <select
                 value={filter}
@@ -139,10 +141,10 @@ export default function SessionsPage() {
                 }}
                 className="input mt-3 min-w-[12rem] text-sm"
               >
-                <option value="all">All</option>
-                <option value="active">Active</option>
-                <option value="completed">Completed</option>
-                <option value="abandoned">Abandoned</option>
+                <option value="all">{t('sessions.all')}</option>
+                <option value="active">{t('sessions.active')}</option>
+                <option value="completed">{t('sessions.completed')}</option>
+                <option value="abandoned">{t('sessions.abandoned')}</option>
               </select>
             </div>
           </div>
@@ -162,7 +164,7 @@ export default function SessionsPage() {
                 disabled={loading}
                 className="btn btn-secondary disabled:opacity-50"
               >
-                {loading ? 'Loading...' : 'Load More'}
+                {loading ? t('common.loading') : t('sessions.loadMore')}
               </button>
             </div>
           )}

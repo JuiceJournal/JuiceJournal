@@ -2,13 +2,16 @@
 
 import { formatNumber } from '@/lib/utils';
 import { CurrencyValue } from '@/components/CurrencyIcon';
+import { useI18n } from '@/hooks/useI18n';
 
 export default function LeaderboardTable({ data, currentUserId }) {
+  const { t } = useI18n();
+
   if (!data || data.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-poe-border bg-[rgba(11,9,8,0.6)] p-10 text-center">
-        <p className="font-display text-xl uppercase tracking-[0.14em] text-stone-200">No rankings yet</p>
-        <p className="mt-3 text-sm text-poe-mist">This ladder will populate once enough league sessions are completed.</p>
+        <p className="font-display text-xl uppercase tracking-[0.14em] text-stone-200">{t('leaderboard.noRankingsTitle')}</p>
+        <p className="mt-3 text-sm text-poe-mist">{t('leaderboard.noRankingsBody')}</p>
       </div>
     );
   }
@@ -32,12 +35,12 @@ export default function LeaderboardTable({ data, currentUserId }) {
         <table className="w-full min-w-[760px]">
           <thead>
             <tr className="border-b border-poe-border bg-[rgba(255,255,255,0.02)] text-[0.68rem] uppercase tracking-[0.16em] text-poe-mist">
-              <th className="px-4 py-4 text-center font-semibold w-20">Rank</th>
-              <th className="px-4 py-4 text-left font-semibold">User</th>
-              <th className="px-4 py-4 text-center font-semibold">Maps</th>
-              <th className="px-4 py-4 text-right font-semibold">Total Profit</th>
-              <th className="px-4 py-4 text-right font-semibold">Avg. Profit</th>
-              <th className="px-4 py-4 text-right font-semibold">Hourly</th>
+              <th className="px-4 py-4 text-center font-semibold w-20">{t('leaderboard.rank')}</th>
+              <th className="px-4 py-4 text-left font-semibold">{t('leaderboard.user')}</th>
+              <th className="px-4 py-4 text-center font-semibold">{t('leaderboard.maps')}</th>
+              <th className="px-4 py-4 text-right font-semibold">{t('leaderboard.totalProfit')}</th>
+              <th className="px-4 py-4 text-right font-semibold">{t('leaderboard.avgProfit')}</th>
+              <th className="px-4 py-4 text-right font-semibold">{t('leaderboard.hourly')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-poe-border/70">
@@ -57,7 +60,7 @@ export default function LeaderboardTable({ data, currentUserId }) {
                   <td className="px-4 py-4">
                     <p className="font-display text-lg uppercase tracking-[0.08em] text-stone-100">{entry.username}</p>
                     {isCurrentUser && (
-                      <span className="mt-1 inline-flex text-xs font-semibold uppercase tracking-[0.14em] text-poe-gold">(You)</span>
+                      <span className="mt-1 inline-flex text-xs font-semibold uppercase tracking-[0.14em] text-poe-gold">{t('leaderboard.you')}</span>
                     )}
                   </td>
                   <td className="px-4 py-4 text-center text-sm font-semibold text-stone-300">

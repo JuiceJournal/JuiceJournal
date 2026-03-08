@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useI18n } from '@/hooks/useI18n';
 import { getApiErrorMessage, lootAPI } from '@/lib/api';
 import { getItemTypeLabel } from '@/lib/utils';
 
@@ -16,6 +17,7 @@ const ITEM_TYPES = [
 ];
 
 export default function AddLootModal({ sessionId, onClose, onSuccess }) {
+  const { t } = useI18n();
   const [formData, setFormData] = useState({
     itemName: '',
     itemType: 'currency',
@@ -43,10 +45,10 @@ export default function AddLootModal({ sessionId, onClose, onSuccess }) {
         onSuccess?.();
         onClose?.();
       } else {
-        setError(getApiErrorMessage(response, 'Unable to add loot right now.'));
+        setError(getApiErrorMessage(response, t('toast.lootAddError')));
       }
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to add loot right now.'));
+      setError(getApiErrorMessage(err, t('toast.lootAddError')));
     } finally {
       setLoading(false);
     }
@@ -56,7 +58,7 @@ export default function AddLootModal({ sessionId, onClose, onSuccess }) {
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
       <div className="bg-poe-card rounded-lg p-6 w-full max-w-md mx-4">
         <h2 className="text-xl font-semibold text-poe-gold mb-4">
-          Add Loot
+          {t('loot.title')}
         </h2>
 
         {error && (
@@ -68,21 +70,21 @@ export default function AddLootModal({ sessionId, onClose, onSuccess }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-gray-400 text-sm mb-1">
-              Item Name
+              {t('loot.itemName')}
             </label>
             <input
               type="text"
               value={formData.itemName}
               onChange={(e) => setFormData({ ...formData, itemName: e.target.value })}
               className="w-full bg-poe-darker border border-poe-border rounded px-3 py-2 text-white focus:border-poe-gold focus:outline-none"
-              placeholder="e.g. Chaos Orb"
+                placeholder={t('loot.itemNamePlaceholder')}
               required
             />
           </div>
 
           <div>
             <label className="block text-gray-400 text-sm mb-1">
-              Item Type
+              {t('loot.itemType')}
             </label>
             <select
               value={formData.itemType}
@@ -100,7 +102,7 @@ export default function AddLootModal({ sessionId, onClose, onSuccess }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-gray-400 text-sm mb-1">
-                Quantity
+                {t('loot.quantity')}
               </label>
               <input
                 type="number"
@@ -114,7 +116,7 @@ export default function AddLootModal({ sessionId, onClose, onSuccess }) {
 
             <div>
               <label className="block text-gray-400 text-sm mb-1">
-                Chaos Value (Optional)
+                {t('loot.chaosValue')}
               </label>
               <input
                 type="number"
@@ -123,7 +125,7 @@ export default function AddLootModal({ sessionId, onClose, onSuccess }) {
                 value={formData.chaosValue}
                 onChange={(e) => setFormData({ ...formData, chaosValue: e.target.value })}
                 className="w-full bg-poe-darker border border-poe-border rounded px-3 py-2 text-white focus:border-poe-gold focus:outline-none"
-                placeholder="Auto"
+                placeholder={t('loot.auto')}
               />
             </div>
           </div>
@@ -134,14 +136,14 @@ export default function AddLootModal({ sessionId, onClose, onSuccess }) {
               onClick={onClose}
               className="flex-1 px-4 py-2 bg-poe-darker text-gray-300 rounded hover:bg-poe-border transition-colors"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               disabled={loading}
               className="flex-1 px-4 py-2 bg-poe-gold text-poe-dark font-medium rounded hover:bg-poe-gold-dark transition-colors disabled:opacity-50"
             >
-              {loading ? 'Adding...' : 'Add'}
+              {loading ? t('loot.adding') : t('common.add')}
             </button>
           </div>
         </form>

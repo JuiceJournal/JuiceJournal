@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useI18n } from '@/hooks/useI18n';
 import { useTrackerContext } from '@/hooks/useTrackerContext';
 import PoeChromeIcon from '@/components/PoeChromeIcon';
 import { getPoeVersionLabel } from '@/lib/utils';
@@ -11,6 +12,7 @@ import { getPoeVersionLabel } from '@/lib/utils';
 export default function Navbar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const { locale, locales, setLocale, t } = useI18n();
   const { poeVersion, setPoeVersion, league, setLeague, leagueOptions, loadingLeagues } = useTrackerContext();
   const [leagueDraft, setLeagueDraft] = useState(league);
 
@@ -19,10 +21,10 @@ export default function Navbar() {
   }, [league]);
 
   const navItems = [
-    { href: '/dashboard', label: 'Dashboard', icon: 'atlas' },
-    { href: '/dashboard/sessions', label: 'Sessions', icon: 'sessions' },
-    { href: '/dashboard/currency', label: 'Currency', icon: 'market' },
-    { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: 'ladder' },
+    { href: '/dashboard', label: t('nav.dashboard'), icon: 'atlas' },
+    { href: '/dashboard/sessions', label: t('nav.sessions'), icon: 'sessions' },
+    { href: '/dashboard/currency', label: t('nav.currency'), icon: 'market' },
+    { href: '/dashboard/leaderboard', label: t('nav.leaderboard'), icon: 'ladder' },
   ];
 
   const commitLeague = () => {
@@ -40,9 +42,9 @@ export default function Navbar() {
                   <PoeChromeIcon type="sigil" size={28} className="text-poe-gold drop-shadow-[0_0_12px_rgba(198,161,91,0.22)]" />
                 </div>
                 <div>
-                  <p className="section-kicker">Atlas Ledger</p>
+                  <p className="section-kicker">{t('brand.kicker')}</p>
                   <p className="font-display text-2xl uppercase tracking-[0.18em] text-poe-gold">
-                    PoE Farm Tracker
+                    {t('app.name')}
                   </p>
                 </div>
               </Link>
@@ -73,7 +75,7 @@ export default function Navbar() {
                   <div className="text-right">
                     <p className="section-kicker inline-flex items-center gap-2">
                       <PoeChromeIcon type="gate" size={13} className="text-poe-gold/80" />
-                      <span>Account</span>
+                      <span>{t('user.account')}</span>
                     </p>
                     <p className="text-sm font-semibold text-stone-200">{user.username}</p>
                   </div>
@@ -81,7 +83,7 @@ export default function Navbar() {
                     onClick={logout}
                     className="rounded-full border border-poe-border bg-[rgba(32,26,22,0.82)] px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-stone-300 transition-colors hover:border-poe-gold/35 hover:text-stone-100"
                   >
-                    Logout
+                    {t('user.logout')}
                   </button>
                 </>
               ) : (
@@ -89,7 +91,7 @@ export default function Navbar() {
                   href="/login"
                   className="rounded-full border border-poe-border bg-[rgba(32,26,22,0.82)] px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-poe-gold transition-colors hover:border-poe-gold/35 hover:text-amber-200"
                 >
-                  Sign In
+                  {t('user.signIn')}
                 </Link>
               )}
             </div>
@@ -99,7 +101,7 @@ export default function Navbar() {
             <div>
               <p className="section-kicker inline-flex items-center gap-2">
                 <PoeChromeIcon type="vault" size={13} className="text-poe-gold/80" />
-                <span>Tracking Context</span>
+                <span>{t('context.title')}</span>
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="context-chip border-sky-500/30 bg-sky-500/10 text-sky-200">
@@ -109,17 +111,28 @@ export default function Navbar() {
                   {league}
                 </span>
                 <span className="text-sm text-poe-mist">
-                  Use one league context across dashboard, prices, sessions, and rankings.
+                  {t('context.helper')}
                 </span>
               </div>
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
               <select
+                value={locale}
+                onChange={(e) => setLocale(e.target.value)}
+                className="input min-w-[10rem] text-sm"
+                aria-label={t('context.selectLanguage')}
+              >
+                {locales.map((entry) => (
+                  <option key={entry.code} value={entry.code}>{entry.label}</option>
+                ))}
+              </select>
+
+              <select
                 value={poeVersion}
                 onChange={(e) => setPoeVersion(e.target.value)}
                 className="input min-w-[9rem] text-sm"
-                aria-label="Select game version"
+                aria-label={t('context.selectVersion')}
               >
                 <option value="poe1">PoE 1</option>
                 <option value="poe2">PoE 2</option>
@@ -137,9 +150,9 @@ export default function Navbar() {
                       commitLeague();
                     }
                   }}
-                  placeholder={loadingLeagues ? 'Loading leagues...' : 'League'}
+                  placeholder={loadingLeagues ? t('context.loadingLeagues') : t('context.leaguePlaceholder')}
                   className="input min-w-[12rem] text-sm"
-                  aria-label="League"
+                  aria-label={t('context.leaguePlaceholder')}
                 />
                 <datalist id="tracker-league-options">
                   {leagueOptions.map((option) => (

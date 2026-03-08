@@ -2,6 +2,8 @@
  * Utility functions
  */
 
+import { getCurrentLocale, getLocaleTag, translate } from '@/lib/i18n';
+
 /**
  * Format chaos value
  */
@@ -52,7 +54,7 @@ export function formatDate(date, options = {}) {
     ...options,
   };
 
-  return d.toLocaleDateString('en-US', defaultOptions);
+  return d.toLocaleDateString(getLocaleTag(), defaultOptions);
 }
 
 /**
@@ -64,7 +66,7 @@ export function formatTime(date) {
   const d = new Date(date);
   if (isNaN(d.getTime())) return '-';
 
-  return d.toLocaleTimeString('en-US', {
+  return d.toLocaleTimeString(getLocaleTag(), {
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -97,7 +99,7 @@ export function formatCurrency(value) {
  * Format number
  */
 export function formatNumber(num) {
-  return new Intl.NumberFormat('en-US').format(num);
+  return new Intl.NumberFormat(getLocaleTag()).format(num);
 }
 
 /**
@@ -130,12 +132,7 @@ export function getStatusColorClass(status) {
  * Return status label
  */
 export function getStatusLabel(status) {
-  const labels = {
-    active: 'Active',
-    completed: 'Completed',
-    abandoned: 'Abandoned',
-  };
-  return labels[status] || status;
+  return translate(`status.${status}`, {}, getCurrentLocale());
 }
 
 /**
@@ -149,21 +146,7 @@ export function getPoeVersionLabel(poeVersion) {
  * Return item type label
  */
 export function getItemTypeLabel(type) {
-  const labels = {
-    currency: 'Currency',
-    fragment: 'Fragment',
-    scarab: 'Scarab',
-    map: 'Map',
-    divination_card: 'Divination Card',
-    gem: 'Gem',
-    unique: 'Unique',
-    oil: 'Oil',
-    incubator: 'Incubator',
-    delirium_orb: 'Delirium Orb',
-    catalyst: 'Catalyst',
-    other: 'Other',
-  };
-  return labels[type] || type;
+  return translate(`itemType.${type}`, {}, getCurrentLocale());
 }
 
 /**
