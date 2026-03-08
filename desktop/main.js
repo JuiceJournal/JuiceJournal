@@ -9,7 +9,7 @@
  * - OCR ile stash tarama
  */
 
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen, shell, nativeImage } = require('electron');
 const crypto = require('crypto');
 const http = require('http');
 const path = require('path');
@@ -50,6 +50,7 @@ let ocrScanner = null;
 let apiClient = null;
 let currentSession = null;
 let poeAuthServer = null;
+let trayHintShown = false;
 
 function normalizeErrorMessage(error, fallback = 'Unexpected error') {
   if (!error) return fallback;
@@ -65,6 +66,130 @@ function normalizeErrorMessage(error, fallback = 'Unexpected error') {
 
 function toRendererError(error, fallback) {
   return new Error(normalizeErrorMessage(error, fallback));
+}
+
+function createTrayIcon() {
+  const traySvg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+      <defs>
+        <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#f0d29b"/>
+          <stop offset="100%" stop-color="#8e6530"/>
+        </linearGradient>
+      </defs>
+      <rect x="8" y="8" width="48" height="48" rx="14" fill="#120f0d" stroke="url(#gold)" stroke-width="3"/>
+      <path d="M32 15l15 8.5v17L32 49 17 40.5v-17L32 15Z" fill="none" stroke="url(#gold)" stroke-width="3.2" stroke-linejoin="round"/>
+      <path d="M32 23l8 4.5v9L32 41l-8-4.5v-9L32 23Z" fill="none" stroke="url(#gold)" stroke-width="3.2" stroke-linejoin="round"/>
+    </svg>
+  `.trim();
+
+  const dataUrl = `data:image/svg+xml;base64,${Buffer.from(traySvg).toString('base64')}`;
+  const image = nativeImage.createFromDataURL(dataUrl);
+  const size = process.platform === 'win32' ? 16 : 18;
+  return image.resize({ width: size, height: size });
+}
+
+function showMainWindow(targetPage = null) {
+  if (!mainWindow) {
+    createMainWindow();
+  }
+
+  if (!mainWindow) return;
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+
+  mainWindow.show();
+  mainWindow.focus();
+
+  if (targetPage) {
+    mainWindow.webContents.send('navigate', targetPage);
+  }
+
+  refreshTrayMenu();
+}
+
+function hideMainWindowToTray(showHint = false) {
+  if (!mainWindow) return;
+
+  mainWindow.hide();
+  refreshTrayMenu();
+
+  if (showHint && !trayHintShown) {
+    trayHintShown = true;
+    showNotification('PoE Farm Tracker', 'Uygulama system tray icinde calismaya devam ediyor.');
+  }
+}
+
+function toggleMainWindowVisibility() {
+  if (!mainWindow || !mainWindow.isVisible()) {
+    showMainWindow();
+    return;
+  }
+
+  hideMainWindowToTray(false);
+}
+
+function refreshTrayMenu() {
+  if (!tray) return;
+
+  const isVisible = Boolean(mainWindow?.isVisible());
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: isVisible ? 'Pencereyi Gizle' : 'Ana Pencereyi Ac',
+      click: () => {
+        if (isVisible) {
+          hideMainWindowToTray(false);
+        } else {
+          showMainWindow();
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Dashboard',
+      click: () => showMainWindow('dashboard')
+    },
+    {
+      label: 'Sessions',
+      click: () => showMainWindow('sessions')
+    },
+    {
+      label: 'Currency',
+      click: () => showMainWindow('currency')
+    },
+    {
+      label: 'Ayarlar',
+      click: () => showMainWindow('settings')
+    },
+    { type: 'separator' },
+    {
+      label: 'Yeni Map Session',
+      click: () => {
+        showMainWindow('dashboard');
+        startNewSession();
+      }
+    },
+    {
+      label: 'Loot Ekle (F9)',
+      click: () => {
+        showMainWindow('dashboard');
+        captureAndScan();
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Cikis',
+      click: () => {
+        app.isQuiting = true;
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setToolTip('PoE Farm Tracker');
+  tray.setContextMenu(contextMenu);
 }
 
 function getTrackerContextDefaults(overrides = {}) {
@@ -206,8 +331,16 @@ function createMainWindow() {
   mainWindow.on('close', (event) => {
     if (!app.isQuiting) {
       event.preventDefault();
-      mainWindow.hide();
+      hideMainWindowToTray(true);
     }
+  });
+
+  mainWindow.on('show', () => {
+    refreshTrayMenu();
+  });
+
+  mainWindow.on('hide', () => {
+    refreshTrayMenu();
   });
 
   // Pencere kapandiginda temizle
@@ -220,79 +353,25 @@ function createMainWindow() {
  * System tray'i olustur
  */
 function createTray() {
-  const iconPath = path.join(__dirname, 'src', 'assets', 'tray-icon.png');
-  
-  // Icon dosyasi yoksa varsayilan bir sey kullan
-  let trayIcon;
-  try {
-    if (require('fs').existsSync(iconPath)) {
-      trayIcon = iconPath;
-    } else {
-      // Electron'un varsayilan ikonu veya bos
-      trayIcon = null;
-    }
-  } catch (e) {
-    trayIcon = null;
+  if (tray) {
+    refreshTrayMenu();
+    return;
   }
-  
-  tray = new Tray(trayIcon || path.join(__dirname, 'src', 'index.html')); // Gecici cozum
 
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Ana Pencereyi Ac',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        }
-      }
-    },
-    { type: 'separator' },
-    {
-      label: 'Yeni Map Session',
-      click: () => {
-        startNewSession();
-      }
-    },
-    {
-      label: 'Loot Ekle (F9)',
-      click: () => {
-        captureAndScan();
-      }
-    },
-    { type: 'separator' },
-    {
-      label: 'Ayarlar',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.webContents.send('navigate', 'settings');
-        }
-      }
-    },
-    { type: 'separator' },
-    {
-      label: 'Cikis',
-      click: () => {
-        app.isQuiting = true;
-        app.quit();
-      }
-    }
-  ]);
-
-  tray.setToolTip('PoE Farm Tracker');
-  tray.setContextMenu(contextMenu);
+  tray = new Tray(createTrayIcon());
+  refreshTrayMenu();
 
   // Tray'e tiklandiginda pencereyi goster/gizle
   tray.on('click', () => {
-    if (mainWindow) {
-      if (mainWindow.isVisible()) {
-        mainWindow.hide();
-      } else {
-        mainWindow.show();
-        mainWindow.focus();
-      }
-    }
+    toggleMainWindowVisibility();
+  });
+
+  tray.on('double-click', () => {
+    showMainWindow();
+  });
+
+  tray.on('right-click', () => {
+    tray.popUpContextMenu();
   });
 }
 
@@ -551,7 +630,7 @@ function setupIPC() {
     }
   });
   ipcMain.handle('window-close', () => {
-    if (mainWindow) mainWindow.close();
+    hideMainWindowToTray(true);
   });
 
   // Ayarlari getir
@@ -773,9 +852,8 @@ app.whenReady().then(() => {
   createMainWindow();
   mainWindow.show(); // Pencereyi goster
   mainWindow.focus();
-  
-  // Tray devre disi - icon sorunu cozulene kadar
-  // createTray();
+
+  createTray();
   registerGlobalShortcuts();
   setupLogParser();
   getCurrentSessionFromBackend().catch((error) => {
@@ -797,7 +875,9 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (mainWindow === null) {
     createMainWindow();
+    createTray();
   }
+  showMainWindow();
 });
 
 app.on('will-quit', () => {
@@ -807,6 +887,11 @@ app.on('will-quit', () => {
   // Log parser'i durdur
   if (logParser) {
     logParser.stop();
+  }
+
+  if (tray) {
+    tray.destroy();
+    tray = null;
   }
 
 });
