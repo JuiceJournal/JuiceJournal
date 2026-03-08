@@ -20,6 +20,83 @@ const LogParser = require('./src/modules/logParser');
 const OCRScanner = require('./src/modules/ocrScanner');
 const APIClient = require('./src/modules/apiClient');
 
+const APP_NAME = 'PoE Farm Tracker';
+const APP_ID = 'PoeFarmTracker.Desktop';
+const MAIN_PROCESS_TRANSLATIONS = {
+  tr: {
+    trayStillRunning: 'Uygulama sistem tepsisinde calismaya devam ediyor.',
+    trayHide: 'Pencereyi Gizle',
+    trayOpen: 'Ana Pencereyi Ac',
+    trayDashboard: 'Dashboard',
+    traySessions: 'Sessionlar',
+    trayCurrency: 'Currency',
+    traySettings: 'Ayarlar',
+    trayNewSession: 'Yeni Map Session',
+    trayAddLoot: 'Loot Ekle (F9)',
+    trayQuit: 'Cikis',
+    notificationError: 'Hata',
+    notificationInfo: 'Bilgi',
+    notificationLootAdded: 'Loot Eklendi',
+    notificationMapStarted: 'Map Basladi',
+    notificationMapCompleted: 'Map Tamamlandi',
+    notificationAutoSession: 'Otomatik Session',
+    noActiveSession: 'Aktif map session bulunmuyor. Once yeni bir map baslatin.',
+    screenCaptureFailed: 'Ekran goruntusu alinamadi',
+    stashNoItems: 'Stash icinde tanimlanabilir item bulunamadi',
+    lootScanFailed: 'Loot tarama sirasinda hata olustu',
+    sessionStartFailed: 'Session baslatilamadi',
+    sessionEndFailed: 'Session bitirilemedi',
+    mapStartedBody: '{mapName} mapi baslatildi',
+    lootAddedBody: '{count} item eklendi. Toplam: {value}c',
+    mapProfitBody: '{label}: {value}c',
+    mapProfit: 'Kar',
+    mapLoss: 'Zarar',
+    autoSessionBody: '{mapName} mapi baslatildi',
+    promptStart: 'Baslat',
+    promptCancel: 'Iptal',
+    promptTitle: 'Yeni Map Session',
+    promptMessage: 'Map adini girin:',
+    promptDetail: 'Ornegin: Dunes Map, City Square Map',
+    unknownMap: 'Bilinmeyen Map'
+  },
+  en: {
+    trayStillRunning: 'The app is still running in the system tray.',
+    trayHide: 'Hide Window',
+    trayOpen: 'Open Window',
+    trayDashboard: 'Dashboard',
+    traySessions: 'Sessions',
+    trayCurrency: 'Currency',
+    traySettings: 'Settings',
+    trayNewSession: 'Start New Map',
+    trayAddLoot: 'Add Loot (F9)',
+    trayQuit: 'Quit',
+    notificationError: 'Error',
+    notificationInfo: 'Info',
+    notificationLootAdded: 'Loot Added',
+    notificationMapStarted: 'Map Started',
+    notificationMapCompleted: 'Map Completed',
+    notificationAutoSession: 'Auto Session',
+    noActiveSession: 'No active map session. Start a new map first.',
+    screenCaptureFailed: 'Failed to capture the screen',
+    stashNoItems: 'No recognizable items were found in the stash',
+    lootScanFailed: 'An error occurred while scanning loot',
+    sessionStartFailed: 'Failed to start the session',
+    sessionEndFailed: 'Failed to end the session',
+    mapStartedBody: '{mapName} map started',
+    lootAddedBody: '{count} items added. Total: {value}c',
+    mapProfitBody: '{label}: {value}c',
+    mapProfit: 'Profit',
+    mapLoss: 'Loss',
+    autoSessionBody: '{mapName} map started',
+    promptStart: 'Start',
+    promptCancel: 'Cancel',
+    promptTitle: 'New Map Session',
+    promptMessage: 'Enter the map name:',
+    promptDetail: 'For example: Dunes Map, City Square Map',
+    unknownMap: 'Unknown Map'
+  }
+};
+
 // Store yapilandirmasi
 const store = new Store({
   defaults: {
@@ -52,6 +129,24 @@ let currentSession = null;
 let poeAuthServer = null;
 let trayHintShown = false;
 
+function getLanguage() {
+  const lang = store.get('language');
+  return lang === 'tr' ? 'tr' : 'en';
+}
+
+function t(key, values = {}) {
+  const language = getLanguage();
+  const dictionary = MAIN_PROCESS_TRANSLATIONS[language] || MAIN_PROCESS_TRANSLATIONS.en;
+  const fallback = MAIN_PROCESS_TRANSLATIONS.en[key] || key;
+  const template = dictionary[key] || fallback;
+  return template.replace(/\{(\w+)\}/g, (match, token) => {
+    if (Object.prototype.hasOwnProperty.call(values, token)) {
+      return String(values[token]);
+    }
+    return match;
+  });
+}
+
 function normalizeErrorMessage(error, fallback = 'Unexpected error') {
   if (!error) return fallback;
   if (typeof error === 'string' && error.trim()) return error.trim();
@@ -69,22 +164,14 @@ function toRendererError(error, fallback) {
 }
 
 function createTrayIcon() {
-  const traySvg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-      <defs>
-        <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#f0d29b"/>
-          <stop offset="100%" stop-color="#8e6530"/>
-        </linearGradient>
-      </defs>
-      <rect x="8" y="8" width="48" height="48" rx="14" fill="#120f0d" stroke="url(#gold)" stroke-width="3"/>
-      <path d="M32 15l15 8.5v17L32 49 17 40.5v-17L32 15Z" fill="none" stroke="url(#gold)" stroke-width="3.2" stroke-linejoin="round"/>
-      <path d="M32 23l8 4.5v9L32 41l-8-4.5v-9L32 23Z" fill="none" stroke="url(#gold)" stroke-width="3.2" stroke-linejoin="round"/>
-    </svg>
-  `.trim();
-
-  const dataUrl = `data:image/svg+xml;base64,${Buffer.from(traySvg).toString('base64')}`;
-  const image = nativeImage.createFromDataURL(dataUrl);
+  const fs = require('fs');
+  const trayIconPath = path.join(__dirname, 'src', 'assets', 'tray-icon.png');
+  const appIconPath = path.join(__dirname, 'src', 'assets', 'icon.png');
+  const fallbackIconPath = path.join(__dirname, 'src', 'assets', 'icon.ico');
+  const sourcePath = fs.existsSync(trayIconPath)
+    ? trayIconPath
+    : (fs.existsSync(appIconPath) ? appIconPath : fallbackIconPath);
+  const image = nativeImage.createFromPath(sourcePath);
   const size = process.platform === 'win32' ? 16 : 18;
   return image.resize({ width: size, height: size });
 }
@@ -118,7 +205,7 @@ function hideMainWindowToTray(showHint = false) {
 
   if (showHint && !trayHintShown) {
     trayHintShown = true;
-    showNotification('PoE Farm Tracker', 'Uygulama system tray icinde calismaya devam ediyor.');
+    showNotification(APP_NAME, t('trayStillRunning'));
   }
 }
 
@@ -137,7 +224,7 @@ function refreshTrayMenu() {
   const isVisible = Boolean(mainWindow?.isVisible());
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: isVisible ? 'Pencereyi Gizle' : 'Ana Pencereyi Ac',
+      label: isVisible ? t('trayHide') : t('trayOpen'),
       click: () => {
         if (isVisible) {
           hideMainWindowToTray(false);
@@ -148,31 +235,31 @@ function refreshTrayMenu() {
     },
     { type: 'separator' },
     {
-      label: 'Dashboard',
+      label: t('trayDashboard'),
       click: () => showMainWindow('dashboard')
     },
     {
-      label: 'Sessions',
+      label: t('traySessions'),
       click: () => showMainWindow('sessions')
     },
     {
-      label: 'Currency',
+      label: t('trayCurrency'),
       click: () => showMainWindow('currency')
     },
     {
-      label: 'Ayarlar',
+      label: t('traySettings'),
       click: () => showMainWindow('settings')
     },
     { type: 'separator' },
     {
-      label: 'Yeni Map Session',
+      label: t('trayNewSession'),
       click: () => {
         showMainWindow('dashboard');
         startNewSession();
       }
     },
     {
-      label: 'Loot Ekle (F9)',
+      label: t('trayAddLoot'),
       click: () => {
         showMainWindow('dashboard');
         captureAndScan();
@@ -180,7 +267,7 @@ function refreshTrayMenu() {
     },
     { type: 'separator' },
     {
-      label: 'Cikis',
+      label: t('trayQuit'),
       click: () => {
         app.isQuiting = true;
         app.quit();
@@ -188,7 +275,7 @@ function refreshTrayMenu() {
     }
   ]);
 
-  tray.setToolTip('PoE Farm Tracker');
+  tray.setToolTip(APP_NAME);
   tray.setContextMenu(contextMenu);
 }
 
@@ -316,7 +403,7 @@ function createMainWindow() {
       nodeIntegration: false
     },
     icon: path.join(__dirname, 'src', 'assets', 'icon.png'),
-    title: 'PoE Farm Tracker'
+    title: APP_NAME
   });
 
   // HTML dosyasini yukle
@@ -396,7 +483,7 @@ function registerGlobalShortcuts() {
 async function captureAndScan() {
   try {
     if (!currentSession) {
-      showNotification('Hata', 'Aktif map session bulunmuyor. Once yeni bir map baslatin.');
+      showNotification(t('notificationError'), t('noActiveSession'));
       return;
     }
 
@@ -410,7 +497,7 @@ async function captureAndScan() {
     });
 
     if (sources.length === 0) {
-      showNotification('Hata', 'Ekran goruntusu alinamadi');
+      showNotification(t('notificationError'), t('screenCaptureFailed'));
       return;
     }
 
@@ -420,7 +507,7 @@ async function captureAndScan() {
     const items = await ocrScanner.scanImage(screenshot);
 
     if (items.length === 0) {
-      showNotification('Bilgi', 'Stash\'te tanimlanabilir item bulunamadi');
+      showNotification(t('notificationInfo'), t('stashNoItems'));
       return;
     }
 
@@ -430,8 +517,8 @@ async function captureAndScan() {
     // Bildirim goster
     const totalValue = items.reduce((sum, item) => sum + (item.chaosValue * item.quantity), 0);
     showNotification(
-      'Loot Eklendi',
-      `${items.length} item eklendi. Toplam: ${totalValue.toFixed(1)}c`
+      t('notificationLootAdded'),
+      t('lootAddedBody', { count: items.length, value: totalValue.toFixed(1) })
     );
 
     // Renderer'a bilgi gonder
@@ -442,7 +529,7 @@ async function captureAndScan() {
     return result;
   } catch (error) {
     console.error('Loot tarama hatasi:', error);
-    showNotification('Hata', 'Loot tarama sirasinda hata olustu');
+    showNotification(t('notificationError'), t('lootScanFailed'));
   }
 }
 
@@ -476,7 +563,7 @@ async function startNewSession(input = {}) {
     currentSession = session;
 
     // Bildirim goster
-    showNotification('Map Basladi', `${mapName} map'i baslatildi`);
+    showNotification(t('notificationMapStarted'), t('mapStartedBody', { mapName }));
 
     // Renderer'a bilgi gonder
     if (mainWindow) {
@@ -486,7 +573,7 @@ async function startNewSession(input = {}) {
     return session;
   } catch (error) {
     console.error('Session baslatma hatasi:', error);
-    showNotification('Hata', 'Session baslatilamadi');
+    showNotification(t('notificationError'), t('sessionStartFailed'));
   }
 }
 
@@ -501,10 +588,10 @@ async function endCurrentSession() {
 
     const profit = parseFloat(session.profitChaos);
     const message = profit >= 0 
-      ? `Kâr: ${profit.toFixed(1)}c` 
-      : `Zarar: ${Math.abs(profit).toFixed(1)}c`;
+      ? t('mapProfitBody', { label: t('mapProfit'), value: profit.toFixed(1) })
+      : t('mapProfitBody', { label: t('mapLoss'), value: Math.abs(profit).toFixed(1) });
 
-    showNotification('Map Tamamlandi', message);
+    showNotification(t('notificationMapCompleted'), message);
 
     // Renderer'a bilgi gonder
     if (mainWindow) {
@@ -516,7 +603,7 @@ async function endCurrentSession() {
     return session;
   } catch (error) {
     console.error('Session bitirme hatasi:', error);
-    showNotification('Hata', 'Session bitirilemedi');
+    showNotification(t('notificationError'), t('sessionEndFailed'));
   }
 }
 
@@ -527,16 +614,16 @@ async function promptMapName() {
   // Basit input dialog
   const { value } = await dialog.showMessageBox(mainWindow, {
     type: 'question',
-    buttons: ['Baslat', 'Iptal'],
+    buttons: [t('promptStart'), t('promptCancel')],
     defaultId: 0,
-    title: 'Yeni Map Session',
-    message: 'Map adini girin:',
-    detail: 'Ornegin: Dunes Map, City Square Map'
+    title: t('promptTitle'),
+    message: t('promptMessage'),
+    detail: t('promptDetail')
   });
 
   if (value === 0) {
     // Basit bir input - gercek implementasyonda custom dialog kullanilabilir
-    return 'Unknown Map'; // Varsayilan deger
+    return t('unknownMap'); // Varsayilan deger
   }
 
   return null;
@@ -588,7 +675,7 @@ function setupLogParser() {
         league: (store.get('defaultLeague') || 'Standard').trim() || 'Standard'
       }).then(session => {
         currentSession = session;
-        showNotification('Otomatik Session', `${data.mapName} map'i baslatildi`);
+        showNotification(t('notificationAutoSession'), t('autoSessionBody', { mapName: data.mapName }));
         if (mainWindow) {
           mainWindow.webContents.send('session-started', session);
         }
@@ -842,6 +929,9 @@ function setupIPC() {
  * Uygulama hazir
  */
 app.whenReady().then(() => {
+  app.setAppUserModelId(APP_ID);
+  app.setName(APP_NAME);
+
   // API client'i baslat
   apiClient = new APIClient(store.get('apiUrl'), store.get('authToken'));
   ocrScanner = new OCRScanner();

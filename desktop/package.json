@@ -23,7 +23,7 @@
     "electron-builder": "^24.9.1"
   },
   "build": {
-    "appId": "com.poefarmtracker.desktop",
+    "appId": "PoeFarmTracker.Desktop",
     "productName": "PoE Farm Tracker",
     "directories": {
       "output": "dist"
