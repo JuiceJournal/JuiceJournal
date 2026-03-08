@@ -203,6 +203,7 @@ window.Translations = {
     'toast.unexpectedError': 'Beklenmeyen bir hata olustu',
     'toast.sessionUpdated': 'Session notlari kaydedildi',
     'toast.sessionUpdateError': 'Session notlari kaydedilemedi',
+    'toast.serverUnavailable': 'Sunucuya ulasilamadi',
 
     // Error messages
     'errors.invalidCredentials': 'Kullanici adi veya sifre hatali',
@@ -235,6 +236,9 @@ window.Translations = {
     'errors.poeComplete': 'Path of Exile baglantisi tamamlanamadi',
     'errors.poeStatus': 'Path of Exile baglanti durumu alinamadi',
     'errors.poeDisconnect': 'Path of Exile baglantisi kaldirilamadi',
+    'errors.serverUnavailable': 'Sunucuya ulasilamadi',
+    'errors.requestTimeout': 'Sunucu yanit vermekte gecikti',
+    'errors.unexpected': 'Beklenmeyen bir hata olustu',
 
     // Currency
     'nav.currency': 'Currency',
@@ -458,6 +462,7 @@ window.Translations = {
     'toast.unexpectedError': 'An unexpected error occurred',
     'toast.sessionUpdated': 'Session notes saved',
     'toast.sessionUpdateError': 'Failed to save session notes',
+    'toast.serverUnavailable': 'Unable to reach the server',
 
     // Error messages
     'errors.invalidCredentials': 'Invalid username or password',
@@ -490,6 +495,9 @@ window.Translations = {
     'errors.poeComplete': 'Failed to complete Path of Exile linking',
     'errors.poeStatus': 'Failed to get Path of Exile link status',
     'errors.poeDisconnect': 'Failed to disconnect Path of Exile account',
+    'errors.serverUnavailable': 'Unable to reach the server',
+    'errors.requestTimeout': 'The server took too long to respond',
+    'errors.unexpected': 'An unexpected error occurred',
 
     // Currency
     'nav.currency': 'Currency',

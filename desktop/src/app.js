@@ -77,7 +77,14 @@ const ERROR_MESSAGE_KEY_MAP = {
   'Failed to get Path of Exile link status': 'errors.poeStatus',
   'Path of Exile baglanti durumu alinamadi': 'errors.poeStatus',
   'Failed to disconnect Path of Exile account': 'errors.poeDisconnect',
-  'Path of Exile baglantisi kaldirilamadi': 'errors.poeDisconnect'
+  'Path of Exile baglantisi kaldirilamadi': 'errors.poeDisconnect',
+  'Unable to reach the server': 'errors.serverUnavailable',
+  'Sunucuya ulasilamadi': 'errors.serverUnavailable',
+  'The request timed out': 'errors.requestTimeout',
+  'Sunucu yanit vermekte gecikti': 'errors.requestTimeout',
+  'An unexpected error occurred': 'errors.unexpected',
+  'Beklenmeyen bir hata olustu': 'errors.unexpected',
+  'Unauthorized request': 'errors.loginFailed'
 };
 
 let sessionClockInterval = null;
@@ -229,7 +236,7 @@ async function loadSettings() {
       btn.classList.toggle('active', btn.dataset.version === ver);
     });
   } catch (error) {
-    console.error('Ayarlari yukleme hatasi:', error);
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.settingsError'), 'error');
   }
 }
 
@@ -603,7 +610,6 @@ async function loadPoeLinkStatus() {
     state.poeLink = response?.poe || null;
   } catch (error) {
     state.poeLink = null;
-    console.error('PoE link status load error:', error);
   } finally {
     renderPoeLinkStatus();
   }
@@ -728,7 +734,7 @@ async function handleStartSession() {
       showToast(window.t('dashboard.activeSession'), `${mapName} ${window.t('toast.sessionStarted')} (${trackerContext.label})`);
     }
   } catch (error) {
-    showToast(window.t('toast.error'), window.t('toast.sessionError'), 'error');
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.sessionStart'), 'error');
   }
 }
 
@@ -746,7 +752,7 @@ async function handleEndSession() {
     updateActiveSessionUI();
     await refreshTrackerData({ includeSessions: true });
   } catch (error) {
-    showToast(window.t('toast.error'), window.t('toast.endSessionError'), 'error');
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.sessionEnd'), 'error');
   }
 }
 
@@ -848,7 +854,7 @@ async function handleScanScreen() {
     await window.electronAPI.scanScreen();
     showToast(window.t('dashboard.scanScreen'), window.t('toast.scanComplete'));
   } catch (error) {
-    showToast(window.t('toast.error'), window.t('toast.scanError'), 'error');
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.scanError'), 'error');
   } finally {
     elements.scanScreenBtn.disabled = false;
     elements.scanScreenBtn.textContent = window.t('dashboard.scanScreen');
@@ -878,8 +884,7 @@ async function loadSessions() {
     state.sessions = response?.sessions || [];
     renderSessionsList();
   } catch (error) {
-    console.error('Session load error:', error);
-    elements.sessionsList.innerHTML = `<p class="empty-state">${window.t('sessions.loadError')}</p>`;
+    elements.sessionsList.innerHTML = `<p class="empty-state">${getUserFacingErrorMessage(error, 'sessions.loadError')}</p>`;
   }
 }
 
@@ -908,7 +913,6 @@ async function loadDashboardStats() {
     elements.todayProfit.innerHTML = currencyHTML(totalProfit, 'chaos', 18, poeVersion);
     elements.todayAvg.innerHTML = currencyHTML(avgProfitPerMap, 'chaos', 18, poeVersion);
   } catch (error) {
-    console.error('Dashboard stats load error:', error);
     resetDashboardSummary();
   }
 }
@@ -930,9 +934,8 @@ async function loadRecentLoot() {
     state.recentLoot = response?.lootEntries || [];
     renderRecentLoot();
   } catch (error) {
-    console.error('Recent loot load error:', error);
     state.recentLoot = [];
-    elements.recentLootList.innerHTML = `<p class="empty-state">${window.t('dashboard.noLoot')}</p>`;
+    elements.recentLootList.innerHTML = `<p class="empty-state">${getUserFacingErrorMessage(error, 'dashboard.noLoot')}</p>`;
   }
 }
 
@@ -1052,7 +1055,7 @@ async function handleSaveSettings() {
     }
     showToast(window.t('nav.settings'), window.t('toast.settingsSaved'));
   } catch (error) {
-    showToast(window.t('toast.error'), window.t('toast.settingsError'), 'error');
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.settingsError'), 'error');
   }
 }
 
@@ -1546,6 +1549,9 @@ async function loadCurrencyLeagues() {
   try {
     const apiUrl = state.settings.apiUrl || 'http://localhost:3001';
     const res = await fetch(`${apiUrl}/api/prices/leagues?poeVersion=${currencyState.poeVersion}`);
+    if (!res.ok) {
+      throw new Error('Unable to reach the server');
+    }
     const json = await res.json();
     const leagues = json.data?.leagues || [];
     const select = document.getElementById('currency-league');
@@ -1553,8 +1559,8 @@ async function loadCurrencyLeagues() {
       select.innerHTML = leagues.map(l => `<option value="${l}">${l}</option>`).join('') || '<option value="">Standard</option>';
       if (leagues.length > 0) currencyState.league = leagues[0];
     }
-  } catch (e) {
-    console.error('Currency leagues error:', e);
+  } catch (error) {
+    currencyState.league = state.settings.defaultLeague || 'Standard';
   }
 }
 
@@ -1571,6 +1577,9 @@ async function loadCurrencyPrices() {
     if (currencyState.search) params.set('search', currencyState.search);
 
     const res = await fetch(`${apiUrl}/api/prices/current?${params}`);
+    if (!res.ok) {
+      throw new Error('Unable to reach the server');
+    }
     const json = await res.json();
     currencyState.prices = json.data?.prices || [];
     renderCurrencyTable();
@@ -1581,9 +1590,8 @@ async function loadCurrencyPrices() {
       const updated = json.data?.updatedAt;
       footer.textContent = `${count} items` + (updated ? ` · Last synced: ${timeAgo(updated)}` : '');
     }
-  } catch (e) {
-    console.error('Currency prices error:', e);
-    tbody.innerHTML = `<tr><td colspan="7" class="currency-empty">${window.t('currency.loadError')}</td></tr>`;
+  } catch (error) {
+    tbody.innerHTML = `<tr><td colspan="7" class="currency-empty">${getUserFacingErrorMessage(error, 'currency.loadError')}</td></tr>`;
   }
 }
 

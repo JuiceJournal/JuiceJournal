@@ -5,6 +5,57 @@
 
 const axios = require('axios');
 
+function normalizeApiError(error) {
+  const status = error.response?.status || null;
+  const apiMessage = error.response?.data?.error;
+  const responseMessage = typeof apiMessage === 'string' && apiMessage.trim()
+    ? apiMessage.trim()
+    : null;
+
+  if (status === 401) {
+    return {
+      status,
+      code: 'UNAUTHORIZED',
+      message: responseMessage || 'Unauthorized request',
+      data: error.response?.data || null
+    };
+  }
+
+  if (responseMessage) {
+    return {
+      status,
+      code: 'API_ERROR',
+      message: responseMessage,
+      data: error.response?.data || null
+    };
+  }
+
+  if (error.code === 'ECONNABORTED') {
+    return {
+      status,
+      code: 'REQUEST_TIMEOUT',
+      message: 'The request timed out',
+      data: null
+    };
+  }
+
+  if (error.code === 'ERR_NETWORK' || /network|econnrefused|failed to fetch/i.test(error.message || '')) {
+    return {
+      status,
+      code: 'SERVER_UNAVAILABLE',
+      message: 'Unable to reach the server',
+      data: null
+    };
+  }
+
+  return {
+    status,
+    code: 'UNEXPECTED_ERROR',
+    message: 'An unexpected error occurred',
+    data: error.response?.data || null
+  };
+}
+
 class APIClient {
   constructor(baseURL, token = null) {
     this.baseURL = baseURL;
@@ -33,8 +84,6 @@ class APIClient {
     this.client.interceptors.response.use(
       (response) => response.data,
       (error) => {
-        console.error('API Hatasi:', error.message);
-        
         if (error.response) {
           const { status, data } = error.response;
           
@@ -42,17 +91,9 @@ class APIClient {
             // Token gecersiz
             this.setToken(null);
           }
-          
-          return Promise.reject({
-            status,
-            message: data?.error || 'Bir hata olustu',
-            data
-          });
         }
-        
-        return Promise.reject({
-          message: error.message || 'Ag hatasi'
-        });
+
+        return Promise.reject(normalizeApiError(error));
       }
     );
   }

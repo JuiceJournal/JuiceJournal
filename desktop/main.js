@@ -163,6 +163,32 @@ function toRendererError(error, fallback) {
   return new Error(normalizeErrorMessage(error, fallback));
 }
 
+function renderBrowserCallbackPage(title, message) {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${APP_NAME}</title>
+    <style>
+      body { margin: 0; font-family: Segoe UI, sans-serif; background: #100c0a; color: #f1ebe2; }
+      main { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+      section { max-width: 420px; width: 100%; border: 1px solid rgba(198,161,91,0.18); background: rgba(20,15,12,0.92); border-radius: 18px; padding: 28px; box-shadow: 0 24px 80px rgba(0,0,0,0.45); }
+      h1 { margin: 0 0 12px; font-size: 24px; letter-spacing: 0.08em; text-transform: uppercase; color: #c6a15b; }
+      p { margin: 0; line-height: 1.6; color: #d3c4af; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <h1>${title}</h1>
+        <p>${message}</p>
+      </section>
+    </main>
+  </body>
+</html>`;
+}
+
 function createTrayIcon() {
   const fs = require('fs');
   const trayIconPath = path.join(__dirname, 'src', 'assets', 'tray-icon.png');
@@ -329,7 +355,7 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
       if (error) {
         clearTimeout(timeout);
         res.writeHead(400, { 'Content-Type': 'text/html' });
-        res.end('<h1>Path of Exile linking failed.</h1><p>You can close this window.</p>');
+        res.end(renderBrowserCallbackPage('Linking Failed', 'Return to PoE Farm Tracker and try the connection again.'));
         await closePoeAuthServer();
         reject(new Error(error));
         return;
@@ -338,14 +364,14 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
       if (!code || state !== expectedState) {
         clearTimeout(timeout);
         res.writeHead(400, { 'Content-Type': 'text/html' });
-        res.end('<h1>Invalid callback.</h1><p>You can close this window.</p>');
+        res.end(renderBrowserCallbackPage('Linking Failed', 'The browser callback could not be validated. Return to the app and try again.'));
         await closePoeAuthServer();
         reject(new Error('Invalid callback state'));
         return;
       }
 
       res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end('<h1>Path of Exile account linked.</h1><p>You can close this window and return to the app.</p>');
+      res.end(renderBrowserCallbackPage('Account Linked', 'You can close this window and continue in PoE Farm Tracker.'));
 
       try {
         const result = await apiClient.completePoeConnect({
@@ -528,7 +554,6 @@ async function captureAndScan() {
 
     return result;
   } catch (error) {
-    console.error('Loot tarama hatasi:', error);
     showNotification(t('notificationError'), t('lootScanFailed'));
   }
 }
@@ -572,7 +597,6 @@ async function startNewSession(input = {}) {
 
     return session;
   } catch (error) {
-    console.error('Session baslatma hatasi:', error);
     showNotification(t('notificationError'), t('sessionStartFailed'));
   }
 }
@@ -602,7 +626,6 @@ async function endCurrentSession() {
 
     return session;
   } catch (error) {
-    console.error('Session bitirme hatasi:', error);
     showNotification(t('notificationError'), t('sessionEndFailed'));
   }
 }
@@ -680,7 +703,7 @@ function setupLogParser() {
           mainWindow.webContents.send('session-started', session);
         }
       }).catch(err => {
-        console.error('Otomatik session hatasi:', err);
+        showNotification(t('notificationError'), t('sessionStartFailed'));
       });
     }
 
@@ -826,11 +849,10 @@ function setupIPC() {
       }
       return result;
     } catch (error) {
-      console.error('Login hatasi:', error);
       return {
         success: false,
         data: null,
-        error: normalizeErrorMessage(error, 'Giris yapilamadi')
+        error: normalizeErrorMessage(error, 'An error occurred during sign in')
       };
     }
   });
@@ -852,7 +874,7 @@ function setupIPC() {
       return {
         success: false,
         data: null,
-        error: normalizeErrorMessage(error, 'Kayit islemi basarisiz')
+        error: normalizeErrorMessage(error, 'An error occurred during registration')
       };
     }
   });
@@ -954,9 +976,7 @@ app.whenReady().then(() => {
   createTray();
   registerGlobalShortcuts();
   setupLogParser();
-  getCurrentSessionFromBackend().catch((error) => {
-    console.error('Aktif session backend senkron hatasi:', error.message);
-  });
+  getCurrentSessionFromBackend().catch(() => {});
 
 });
 
