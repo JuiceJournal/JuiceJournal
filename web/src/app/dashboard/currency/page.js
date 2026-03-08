@@ -8,7 +8,7 @@ import Navbar from '@/components/Navbar';
 import PoeChromeIcon from '@/components/PoeChromeIcon';
 import CurrencyIcon, { CurrencyValue } from '@/components/CurrencyIcon';
 import SparklineChart from '@/components/SparklineChart';
-import { priceAPI } from '@/lib/api';
+import { getApiErrorMessage, priceAPI } from '@/lib/api';
 import { getItemTypeLabel, getPoeVersionLabel } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -109,8 +109,7 @@ export default function CurrencyPage() {
       setTotalCount(data.count || 0);
       setLastUpdated(data.updatedAt);
     } catch (error) {
-      console.error('Price loading error:', error);
-      toast.error('Failed to load prices');
+      toast.error(getApiErrorMessage(error, 'Unable to load prices right now.'));
     } finally {
       setLoading(false);
     }
@@ -131,7 +130,7 @@ export default function CurrencyPage() {
       toast.success('Prices synced successfully');
       await loadPrices();
     } catch (error) {
-      toast.error('Sync failed');
+      toast.error(getApiErrorMessage(error, 'Unable to sync prices right now.'));
     } finally {
       setSyncing(false);
     }

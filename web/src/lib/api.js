@@ -7,6 +7,74 @@ import axios from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+const API_ERROR_MESSAGE_MAP = {
+  'Kullanici adi veya sifre hatali': 'Invalid username or password.',
+  'Invalid username or password': 'Invalid username or password.',
+  'Kullanici adi veya e-posta gereklidir': 'Enter your username or email.',
+  'Username or email is required': 'Enter your username or email.',
+  'Sifre gereklidir': 'Enter your password.',
+  'Password is required': 'Enter your password.',
+  'Bu kullanici adi zaten kullaniliyor': 'That username is already in use.',
+  'That username is already in use': 'That username is already in use.',
+  'Bu e-posta adresi zaten kullaniliyor': 'That email address is already in use.',
+  'That email address is already in use': 'That email address is already in use.',
+  'Path of Exile OAuth is not configured': 'Path of Exile linking is not configured yet.',
+  'Path of Exile OAuth yapilandirilmamis': 'Path of Exile linking is not configured yet.',
+};
+
+export function normalizeApiError(error, fallbackMessage = 'Something went wrong. Please try again.') {
+  const status = error?.response?.status || error?.status || null;
+  const rawMessage = error?.response?.data?.error || error?.error || error?.message || '';
+  const trimmedMessage = typeof rawMessage === 'string' ? rawMessage.trim() : '';
+
+  if (status === 401) {
+    return {
+      status,
+      code: 'UNAUTHORIZED',
+      message: API_ERROR_MESSAGE_MAP[trimmedMessage] || 'Your session has expired. Please sign in again.',
+      rawMessage: trimmedMessage,
+    };
+  }
+
+  if (trimmedMessage) {
+    return {
+      status,
+      code: error?.code || 'API_ERROR',
+      message: API_ERROR_MESSAGE_MAP[trimmedMessage] || trimmedMessage,
+      rawMessage: trimmedMessage,
+    };
+  }
+
+  if (error?.code === 'ECONNABORTED') {
+    return {
+      status,
+      code: 'REQUEST_TIMEOUT',
+      message: 'The server took too long to respond.',
+      rawMessage: '',
+    };
+  }
+
+  if (error?.code === 'ERR_NETWORK' || /network|econnrefused|failed to fetch/i.test(error?.message || '')) {
+    return {
+      status,
+      code: 'SERVER_UNAVAILABLE',
+      message: 'Unable to reach the server.',
+      rawMessage: '',
+    };
+  }
+
+  return {
+    status,
+    code: error?.code || 'UNEXPECTED_ERROR',
+    message: fallbackMessage,
+    rawMessage: trimmedMessage,
+  };
+}
+
+export function getApiErrorMessage(error, fallbackMessage) {
+  return normalizeApiError(error, fallbackMessage).message;
+}
+
 // Create Axios instance
 const apiClient = axios.create({
   baseURL: `${API_URL}/api`,
@@ -40,7 +108,7 @@ apiClient.interceptors.response.use(
         window.location.href = '/login';
       }
     }
-    return Promise.reject(error.response?.data || error);
+    return Promise.reject(normalizeApiError(error));
   }
 );
 

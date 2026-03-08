@@ -7,7 +7,7 @@ import { useTrackerContext } from '@/hooks/useTrackerContext';
 import Navbar from '@/components/Navbar';
 import PoeChromeIcon from '@/components/PoeChromeIcon';
 import LeaderboardTable from '@/components/LeaderboardTable';
-import { statsAPI } from '@/lib/api';
+import { getApiErrorMessage, statsAPI } from '@/lib/api';
 import { getPoeVersionLabel } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -43,8 +43,7 @@ export default function LeaderboardPage() {
       const response = await statsAPI.getLeaderboard(league, period, 50, { poeVersion });
       setLeaderboard(response.data?.leaderboard || []);
     } catch (error) {
-      console.error('Leaderboard loading error:', error);
-      toast.error('Failed to load leaderboard');
+      toast.error(getApiErrorMessage(error, 'Unable to load the leaderboard right now.'));
     } finally {
       setLoading(false);
     }

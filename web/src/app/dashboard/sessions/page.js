@@ -7,7 +7,7 @@ import { useTrackerContext } from '@/hooks/useTrackerContext';
 import Navbar from '@/components/Navbar';
 import PoeChromeIcon from '@/components/PoeChromeIcon';
 import SessionList from '@/components/SessionList';
-import { sessionAPI } from '@/lib/api';
+import { getApiErrorMessage, sessionAPI } from '@/lib/api';
 import { formatChaos, getPoeVersionLabel } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -58,8 +58,7 @@ export default function SessionsPage() {
 
       setHasMore((response.data?.sessions || []).length === 20);
     } catch (error) {
-      console.error('Session loading error:', error);
-      toast.error('Failed to load sessions');
+      toast.error(getApiErrorMessage(error, 'Unable to load sessions right now.'));
     } finally {
       setLoading(false);
     }
@@ -81,7 +80,7 @@ export default function SessionsPage() {
         loadSessions();
       }
     } catch (error) {
-      toast.error(error.error || 'Failed to end session');
+      toast.error(getApiErrorMessage(error, 'Unable to end the session.'));
     }
   };
 

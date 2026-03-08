@@ -17,7 +17,6 @@ export function useSocket() {
         socketRef.current = ws;
 
         ws.onopen = () => {
-          console.log('WebSocket connected');
           setConnected(true);
         };
 
@@ -25,23 +24,20 @@ export function useSocket() {
           try {
             const data = JSON.parse(event.data);
             setLastMessage(data);
-          } catch (error) {
-            console.error('WebSocket message parse error:', error);
+          } catch {
+            return;
           }
         };
 
         ws.onclose = () => {
-          console.log('WebSocket disconnected');
           setConnected(false);
           // Reconnect after 5 seconds
           setTimeout(connect, 5000);
         };
 
-        ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-        };
-      } catch (error) {
-        console.error('WebSocket connection error:', error);
+        ws.onerror = () => {};
+      } catch {
+        setConnected(false);
       }
     };
 

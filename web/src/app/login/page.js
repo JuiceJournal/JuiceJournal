@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import PoeChromeIcon from '@/components/PoeChromeIcon';
 import toast from 'react-hot-toast';
+import { getApiErrorMessage } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -36,10 +37,10 @@ export default function LoginPage() {
         toast.success(isLogin ? 'Welcome back to the atlas.' : 'Account created!');
         router.push('/dashboard');
       } else {
-        toast.error(response.error || 'An error occurred');
+        toast.error(getApiErrorMessage(response, isLogin ? 'Unable to sign in right now.' : 'Unable to create the account right now.'));
       }
     } catch (error) {
-      toast.error(error.error || 'An error occurred during the operation');
+      toast.error(getApiErrorMessage(error, isLogin ? 'Unable to sign in right now.' : 'Unable to create the account right now.'));
     } finally {
       setLoading(false);
     }

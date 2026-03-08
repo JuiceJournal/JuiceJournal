@@ -10,7 +10,7 @@ import PoeChromeIcon from '@/components/PoeChromeIcon';
 import ProfitChart from '@/components/ProfitChart';
 import SessionList from '@/components/SessionList';
 import AddLootModal from '@/components/AddLootModal';
-import { sessionAPI, statsAPI } from '@/lib/api';
+import { getApiErrorMessage, sessionAPI, statsAPI } from '@/lib/api';
 import { getPoeVersionLabel, getProfitColorClass } from '@/lib/utils';
 import { CurrencyValue } from '@/components/CurrencyIcon';
 import toast from 'react-hot-toast';
@@ -65,8 +65,7 @@ export default function DashboardPage() {
       setStats(statsRes.data);
       setRecentSessions(sessionsRes.data?.sessions || []);
     } catch (error) {
-      console.error('Dashboard data loading error:', error);
-      toast.error('Failed to load data');
+      toast.error(getApiErrorMessage(error, 'Unable to load the dashboard right now.'));
     } finally {
       setLoading(false);
     }
@@ -83,7 +82,7 @@ export default function DashboardPage() {
         loadDashboardData();
       }
     } catch (error) {
-      toast.error(error.error || 'Failed to start session');
+      toast.error(getApiErrorMessage(error, 'Unable to start the session.'));
     }
   };
 
@@ -105,7 +104,7 @@ export default function DashboardPage() {
         loadDashboardData();
       }
     } catch (error) {
-      toast.error(error.error || 'Failed to end session');
+      toast.error(getApiErrorMessage(error, 'Unable to end the session.'));
     }
   };
 

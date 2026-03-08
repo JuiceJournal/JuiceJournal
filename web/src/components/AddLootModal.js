@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { lootAPI } from '@/lib/api';
+import { getApiErrorMessage, lootAPI } from '@/lib/api';
 import { getItemTypeLabel } from '@/lib/utils';
 
 const ITEM_TYPES = [
@@ -43,10 +43,10 @@ export default function AddLootModal({ sessionId, onClose, onSuccess }) {
         onSuccess?.();
         onClose?.();
       } else {
-        setError(response.error || 'An error occurred');
+        setError(getApiErrorMessage(response, 'Unable to add loot right now.'));
       }
     } catch (err) {
-      setError(err.error || 'Failed to add loot');
+      setError(getApiErrorMessage(err, 'Unable to add loot right now.'));
     } finally {
       setLoading(false);
     }
