@@ -58,7 +58,6 @@ class OCRScanner {
     try {
       this.worker = await Tesseract.createWorker('eng');
       this.isInitialized = true;
-      console.log('Tesseract worker baslatildi');
     } catch (error) {
       console.error('Tesseract baslatma hatasi:', error);
       throw error;
@@ -73,7 +72,6 @@ class OCRScanner {
       await this.worker.terminate();
       this.worker = null;
       this.isInitialized = false;
-      console.log('Tesseract worker kapatildi');
     }
   }
 
@@ -88,18 +86,12 @@ class OCRScanner {
     }
 
     try {
-      console.log('OCR taramasi basliyor...');
-      
       // Tesseract ile metni oku
       const { data: { text } } = await this.worker.recognize(imageBuffer);
-      
-      console.log('OCR metin:', text.substring(0, 500) + '...');
 
       // Metinden itemleri parse et
       const items = this.parseItemsFromText(text);
-      
-      console.log(`${items.length} item tespit edildi`);
-      
+
       return items;
     } catch (error) {
       console.error('OCR tarama hatasi:', error);

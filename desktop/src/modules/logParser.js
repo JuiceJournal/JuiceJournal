@@ -4,7 +4,7 @@
  * 
  * Kullanim:
  * const parser = new LogParser('C:/PoE/logs/Client.txt');
- * parser.on('mapEntered', (data) => console.log(data));
+ * parser.on('mapEntered', (data) => data);
  * parser.start();
  */
 
@@ -32,7 +32,6 @@ class LogParser extends EventEmitter {
    */
   start() {
     if (this.isRunning) {
-      console.log('Log parser zaten calisiyor');
       return;
     }
 
@@ -47,9 +46,6 @@ class LogParser extends EventEmitter {
     // Dosya boyutunu al ve son pozisyondan basla
     const stats = fs.statSync(this.logPath);
     this.lastPosition = stats.size;
-
-    console.log('Log parser baslatildi:', this.logPath);
-    console.log('Baslangic pozisyonu:', this.lastPosition);
 
     // Dosyayi izle
     this.watchInterval = setInterval(() => {
@@ -70,7 +66,6 @@ class LogParser extends EventEmitter {
       this.watchInterval = null;
     }
 
-    console.log('Log parser durduruldu');
     this.emit('stopped');
   }
 
@@ -216,8 +211,6 @@ class LogParser extends EventEmitter {
    * Map girisini isle
    */
   handleMapEnter(data) {
-    console.log('Map girisi tespit edildi:', data.mapName);
-    
     this.currentMap = data.mapName;
     this.mapStartTime = Date.now();
 
@@ -235,8 +228,6 @@ class LogParser extends EventEmitter {
     if (!this.currentMap) {
       return; // Aktif map yoksa islem yapma
     }
-
-    console.log('Map cikisi tespit edildi:', data.location);
 
     const exitData = {
       mapName: this.currentMap,
