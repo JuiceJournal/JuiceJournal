@@ -17,6 +17,69 @@ const state = {
   selectedSession: null
 };
 
+const ERROR_MESSAGE_KEY_MAP = {
+  'Kullanici adi veya sifre hatali': 'errors.invalidCredentials',
+  'Invalid username or password': 'errors.invalidCredentials',
+  'Kullanici adi veya e-posta gereklidir': 'errors.usernameOrEmailRequired',
+  'Username or email is required': 'errors.usernameOrEmailRequired',
+  'Sifre gereklidir': 'errors.passwordRequired',
+  'Password is required': 'errors.passwordRequired',
+  'Kullanici adi 3-50 karakter arasinda olmalidir': 'errors.usernameLength',
+  'Username must be between 3 and 50 characters': 'errors.usernameLength',
+  'Kullanici adi sadece harf ve rakam icerebilir': 'errors.usernameAlphanumeric',
+  'Username may only contain letters and numbers': 'errors.usernameAlphanumeric',
+  'Gecerli bir e-posta adresi giriniz': 'errors.emailInvalid',
+  'Enter a valid email address': 'errors.emailInvalid',
+  'Sifre en az 6 karakter olmalidir': 'errors.passwordMinLength',
+  'Password must be at least 6 characters': 'errors.passwordMinLength',
+  'Bu kullanici adi zaten kullaniliyor': 'errors.usernameTaken',
+  'That username is already in use': 'errors.usernameTaken',
+  'Bu e-posta adresi zaten kullaniliyor': 'errors.emailTaken',
+  'That email address is already in use': 'errors.emailTaken',
+  'Kayit sirasinda bir hata olustu': 'errors.registerFailed',
+  'An error occurred during registration': 'errors.registerFailed',
+  'Giris sirasinda bir hata olustu': 'errors.loginFailed',
+  'An error occurred during sign in': 'errors.loginFailed',
+  'Profil bilgileri alinirken hata olustu': 'errors.profileLoad',
+  'Failed to load profile details': 'errors.profileLoad',
+  'Profil guncellenirken hata olustu': 'errors.profileUpdate',
+  'Failed to update profile': 'errors.profileUpdate',
+  'Session bulunamadi': 'errors.sessionNotFound',
+  'Session not found': 'errors.sessionNotFound',
+  'Aktif session bulunamadi': 'errors.activeSessionNotFound',
+  'Active session not found': 'errors.activeSessionNotFound',
+  'Session detaylari alinamadi': 'errors.sessionLoad',
+  'Failed to load session details': 'errors.sessionLoad',
+  'Session listesi yuklenemedi': 'errors.sessionListLoad',
+  'Failed to load sessions': 'errors.sessionListLoad',
+  'Session detaylari guncellenemedi': 'errors.sessionUpdate',
+  'Failed to update session details': 'errors.sessionUpdate',
+  'Session baslatilamadi': 'errors.sessionStart',
+  'Failed to start the session': 'errors.sessionStart',
+  'Session bitirilemedi': 'errors.sessionEnd',
+  'Failed to end the session': 'errors.sessionEnd',
+  'Aktif session yok': 'errors.noActiveSession',
+  'No active session': 'errors.noActiveSession',
+  'Loot eklenemedi': 'errors.lootAdd',
+  'Failed to add loot': 'errors.lootAdd',
+  'Son loot verileri alinamadi': 'errors.lootRecent',
+  'Failed to load recent loot': 'errors.lootRecent',
+  'Path of Exile OAuth is not configured': 'errors.poeOAuthNotConfigured',
+  'Path of Exile OAuth yapilandirilmamis': 'errors.poeOAuthNotConfigured',
+  'Invalid redirect URI': 'errors.invalidRedirectUri',
+  'Gecersiz yonlendirme adresi': 'errors.invalidRedirectUri',
+  'Authorization code and PKCE verifier are required': 'errors.authorizationCodeRequired',
+  'Yetkilendirme kodu ve PKCE verifier gereklidir': 'errors.authorizationCodeRequired',
+  'Failed to start Path of Exile linking': 'errors.poeStart',
+  'Path of Exile baglantisi baslatilamadi': 'errors.poeStart',
+  'Failed to complete Path of Exile linking': 'errors.poeComplete',
+  'Path of Exile baglantisi tamamlanamadi': 'errors.poeComplete',
+  'Failed to get Path of Exile link status': 'errors.poeStatus',
+  'Path of Exile baglanti durumu alinamadi': 'errors.poeStatus',
+  'Failed to disconnect Path of Exile account': 'errors.poeDisconnect',
+  'Path of Exile baglantisi kaldirilamadi': 'errors.poeDisconnect'
+};
+
 let sessionClockInterval = null;
 
 // DOM Elementleri
@@ -325,11 +388,14 @@ function setupEventListeners() {
 function setupIPCListeners() {
   // Map olaylari
   window.electronAPI.onMapEntered((data) => {
-    showToast('Map Girisi', `${data.mapName} map'ine girildi`);
+    showToast(window.t('toast.mapEnteredTitle'), window.t('toast.mapEnteredBody', { mapName: data.mapName }));
   });
   
   window.electronAPI.onMapExited((data) => {
-    showToast('Map Cikisi', `${data.mapName} tamamlandi. Sure: ${formatDuration(data.duration)}`);
+    showToast(window.t('toast.mapExitedTitle'), window.t('toast.mapExitedBody', {
+      mapName: data.mapName,
+      duration: formatDuration(data.duration)
+    }));
     refreshTrackerData({ includeSessions: true });
   });
   
@@ -337,7 +403,7 @@ function setupIPCListeners() {
   window.electronAPI.onSessionStarted((session) => {
     state.currentSession = session;
     updateActiveSessionUI();
-    showToast('Session Basladi', `${session.mapName} baslatildi`);
+    showToast(window.t('toast.sessionStartedTitle'), window.t('toast.sessionStartedBody', { mapName: session.mapName }));
     refreshTrackerData({ includeSessions: true });
   });
   
@@ -345,15 +411,17 @@ function setupIPCListeners() {
     state.currentSession = null;
     updateActiveSessionUI();
     const profit = parseFloat(session.profitChaos);
-    const message = profit >= 0 ? `Kâr: ${profit.toFixed(1)}c` : `Zarar: ${Math.abs(profit).toFixed(1)}c`;
-    showToast('Session Tamamlandi', message, profit >= 0 ? 'success' : 'warning');
+    const message = profit >= 0
+      ? window.t('toast.sessionProfitBody', { value: profit.toFixed(1) })
+      : window.t('toast.sessionLossBody', { value: Math.abs(profit).toFixed(1) });
+    showToast(window.t('toast.sessionCompletedTitle'), message, profit >= 0 ? 'success' : 'warning');
     refreshTrackerData({ includeSessions: true });
   });
   
   // Loot olaylari
   window.electronAPI.onLootAdded((data) => {
     const itemCount = Array.isArray(data.items) ? data.items.length : 1;
-    showToast('Loot Eklendi', `${itemCount} item eklendi`);
+    showToast(window.t('toast.lootAddedTitle'), window.t('toast.lootAddedBody', { count: itemCount }));
     refreshTrackerData({ includeSessions: isPageActive('sessions') });
   });
   
@@ -426,10 +494,10 @@ async function handleLogin(e) {
       await refreshTrackerData();
       showToast(window.t('login.title'), window.t('toast.loginSuccess'));
     } else {
-      showToast(window.t('toast.loginFailed'), result.error, 'error');
+      showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage({ error: result.error }, 'errors.loginFailed'), 'error');
     }
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error), 'error');
+    showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
   }
 }
 
@@ -453,10 +521,10 @@ async function handleRegister(e) {
       await refreshTrackerData();
       showToast(window.t('register.title'), window.t('toast.registerSuccess'));
     } else {
-      showToast(window.t('toast.registerFailed'), result.error, 'error');
+      showToast(window.t('toast.registerFailed'), getUserFacingErrorMessage({ error: result.error }, 'errors.registerFailed'), 'error');
     }
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error), 'error');
+    showToast(window.t('toast.registerFailed'), getUserFacingErrorMessage(error, 'errors.registerFailed'), 'error');
   }
 }
 
@@ -549,14 +617,14 @@ async function handlePoeConnect() {
 
   if (elements.poeConnectBtn) {
     elements.poeConnectBtn.disabled = true;
-    elements.poeConnectBtn.textContent = 'Connecting...';
+    elements.poeConnectBtn.textContent = `${window.t('settings.connectPoe')}...`;
   }
 
   try {
     const response = await window.electronAPI.startPoeConnect();
     state.poeLink = response?.poe || null;
     renderPoeLinkStatus();
-    showToast('Path of Exile', state.poeLink?.mock ? window.t('toast.poeLinkedMock') : window.t('toast.poeLinked'), 'success');
+    showToast(window.t('toast.poeTitle'), state.poeLink?.mock ? window.t('toast.poeLinkedMock') : window.t('toast.poeLinked'), 'success');
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.poeConnectError'), 'error');
   } finally {
@@ -572,14 +640,14 @@ async function handlePoeDisconnect() {
 
   if (elements.poeDisconnectBtn) {
     elements.poeDisconnectBtn.disabled = true;
-    elements.poeDisconnectBtn.textContent = 'Disconnecting...';
+    elements.poeDisconnectBtn.textContent = `${window.t('settings.disconnectPoe')}...`;
   }
 
   try {
     const response = await window.electronAPI.disconnectPoeAccount();
     state.poeLink = response?.poe || null;
     renderPoeLinkStatus();
-    showToast('Path of Exile', window.t('toast.poeDisconnected'), 'success');
+    showToast(window.t('toast.poeTitle'), window.t('toast.poeDisconnected'), 'success');
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.poeDisconnectError'), 'error');
   } finally {
@@ -1061,17 +1129,27 @@ function showToast(title, message, type = 'info') {
   }, 5000);
 }
 
-function getUserFacingErrorMessage(error, fallbackKey = 'toast.unexpectedError') {
-  const fallback = window.t(fallbackKey);
-
-  if (!error) return fallback;
+function extractRawErrorMessage(error) {
+  if (!error) return '';
   if (typeof error === 'string' && error.trim()) return error.trim();
   if (typeof error.message === 'string' && error.message.trim() && error.message !== '[object Object]') {
     return error.message.trim();
   }
   if (typeof error.error === 'string' && error.error.trim()) return error.error.trim();
   if (typeof error.data?.error === 'string' && error.data.error.trim()) return error.data.error.trim();
-  return fallback;
+  return '';
+}
+
+function localizeKnownErrorMessage(message) {
+  const key = ERROR_MESSAGE_KEY_MAP[message];
+  return key ? window.t(key) : message;
+}
+
+function getUserFacingErrorMessage(error, fallbackKey = 'toast.unexpectedError') {
+  const fallback = window.t(fallbackKey);
+  const rawMessage = extractRawErrorMessage(error);
+  if (!rawMessage) return fallback;
+  return localizeKnownErrorMessage(rawMessage) || fallback;
 }
 
 async function openSessionDrawer(sessionId) {
@@ -1596,13 +1674,13 @@ async function handleCurrencySync() {
     });
     const json = await res.json();
     if (json.success) {
-      showToast('Currency', window.t('currency.syncSuccess'), 'success');
+      showToast(window.t('toast.currencyTitle'), window.t('currency.syncSuccess'), 'success');
       await loadCurrencyPrices();
     } else {
-      showToast('Currency', window.t('currency.syncFailed'), 'error');
+      showToast(window.t('toast.currencyTitle'), window.t('currency.syncFailed'), 'error');
     }
   } catch (e) {
-    showToast('Currency', window.t('currency.syncFailed'), 'error');
+    showToast(window.t('toast.currencyTitle'), window.t('currency.syncFailed'), 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = window.t('currency.sync'); }
   }

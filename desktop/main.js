@@ -827,7 +827,11 @@ function setupIPC() {
       return result;
     } catch (error) {
       console.error('Login hatasi:', error);
-      throw toRendererError(error, 'Giris yapilamadi');
+      return {
+        success: false,
+        data: null,
+        error: normalizeErrorMessage(error, 'Giris yapilamadi')
+      };
     }
   });
 
@@ -845,7 +849,11 @@ function setupIPC() {
         error: null
       };
     } catch (error) {
-      throw toRendererError(error, 'Kayit islemi basarisiz');
+      return {
+        success: false,
+        data: null,
+        error: normalizeErrorMessage(error, 'Kayit islemi basarisiz')
+      };
     }
   });
 

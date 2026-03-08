@@ -170,6 +170,19 @@ window.Translations = {
     'toast.loginFailed': 'Giris Basarisiz',
     'toast.registerSuccess': 'Hesabiniz olusturuldu!',
     'toast.registerFailed': 'Kayit Basarisiz',
+    'toast.mapEnteredTitle': 'Map Girisi',
+    'toast.mapEnteredBody': '{mapName} mapine girildi',
+    'toast.mapExitedTitle': 'Map Cikisi',
+    'toast.mapExitedBody': '{mapName} tamamlandi. Sure: {duration}',
+    'toast.sessionStartedTitle': 'Session Basladi',
+    'toast.sessionStartedBody': '{mapName} baslatildi',
+    'toast.sessionCompletedTitle': 'Session Tamamlandi',
+    'toast.sessionProfitBody': 'Kar: {value}c',
+    'toast.sessionLossBody': 'Zarar: {value}c',
+    'toast.lootAddedTitle': 'Loot Eklendi',
+    'toast.lootAddedBody': '{count} item eklendi',
+    'toast.currencyTitle': 'Currency',
+    'toast.poeTitle': 'Path of Exile',
     'toast.settingsSaved': 'Ayarlar basariyla kaydedildi',
     'toast.settingsError': 'Ayarlar kaydedilemedi',
     'toast.sessionStarted': 'baslatildi',
@@ -190,6 +203,38 @@ window.Translations = {
     'toast.unexpectedError': 'Beklenmeyen bir hata olustu',
     'toast.sessionUpdated': 'Session notlari kaydedildi',
     'toast.sessionUpdateError': 'Session notlari kaydedilemedi',
+
+    // Error messages
+    'errors.invalidCredentials': 'Kullanici adi veya sifre hatali',
+    'errors.usernameOrEmailRequired': 'Kullanici adi veya e-posta gereklidir',
+    'errors.passwordRequired': 'Sifre gereklidir',
+    'errors.usernameLength': 'Kullanici adi 3-50 karakter arasinda olmalidir',
+    'errors.usernameAlphanumeric': 'Kullanici adi sadece harf ve rakam icerebilir',
+    'errors.emailInvalid': 'Gecerli bir e-posta adresi giriniz',
+    'errors.passwordMinLength': 'Sifre en az 6 karakter olmalidir',
+    'errors.usernameTaken': 'Bu kullanici adi zaten kullaniliyor',
+    'errors.emailTaken': 'Bu e-posta adresi zaten kullaniliyor',
+    'errors.registerFailed': 'Kayit sirasinda bir hata olustu',
+    'errors.loginFailed': 'Giris sirasinda bir hata olustu',
+    'errors.profileLoad': 'Profil bilgileri alinirken hata olustu',
+    'errors.profileUpdate': 'Profil guncellenirken hata olustu',
+    'errors.sessionNotFound': 'Session bulunamadi',
+    'errors.activeSessionNotFound': 'Aktif session bulunamadi',
+    'errors.sessionLoad': 'Session detaylari alinamadi',
+    'errors.sessionListLoad': 'Session listesi yuklenemedi',
+    'errors.sessionUpdate': 'Session detaylari guncellenemedi',
+    'errors.sessionStart': 'Session baslatilamadi',
+    'errors.sessionEnd': 'Session bitirilemedi',
+    'errors.noActiveSession': 'Aktif session yok',
+    'errors.lootAdd': 'Loot eklenemedi',
+    'errors.lootRecent': 'Son loot verileri alinamadi',
+    'errors.poeOAuthNotConfigured': 'Path of Exile OAuth yapilandirilmamis',
+    'errors.invalidRedirectUri': 'Gecersiz yonlendirme adresi',
+    'errors.authorizationCodeRequired': 'Yetkilendirme kodu ve PKCE verifier gereklidir',
+    'errors.poeStart': 'Path of Exile baglantisi baslatilamadi',
+    'errors.poeComplete': 'Path of Exile baglantisi tamamlanamadi',
+    'errors.poeStatus': 'Path of Exile baglanti durumu alinamadi',
+    'errors.poeDisconnect': 'Path of Exile baglantisi kaldirilamadi',
 
     // Currency
     'nav.currency': 'Currency',
@@ -380,6 +425,19 @@ window.Translations = {
     'toast.loginFailed': 'Login Failed',
     'toast.registerSuccess': 'Account created!',
     'toast.registerFailed': 'Registration Failed',
+    'toast.mapEnteredTitle': 'Map Entered',
+    'toast.mapEnteredBody': 'Entered {mapName}',
+    'toast.mapExitedTitle': 'Map Finished',
+    'toast.mapExitedBody': '{mapName} completed. Duration: {duration}',
+    'toast.sessionStartedTitle': 'Session Started',
+    'toast.sessionStartedBody': '{mapName} started',
+    'toast.sessionCompletedTitle': 'Session Completed',
+    'toast.sessionProfitBody': 'Profit: {value}c',
+    'toast.sessionLossBody': 'Loss: {value}c',
+    'toast.lootAddedTitle': 'Loot Added',
+    'toast.lootAddedBody': '{count} items added',
+    'toast.currencyTitle': 'Currency',
+    'toast.poeTitle': 'Path of Exile',
     'toast.settingsSaved': 'Settings saved successfully',
     'toast.settingsError': 'Failed to save settings',
     'toast.sessionStarted': 'started',
@@ -400,6 +458,38 @@ window.Translations = {
     'toast.unexpectedError': 'An unexpected error occurred',
     'toast.sessionUpdated': 'Session notes saved',
     'toast.sessionUpdateError': 'Failed to save session notes',
+
+    // Error messages
+    'errors.invalidCredentials': 'Invalid username or password',
+    'errors.usernameOrEmailRequired': 'Username or email is required',
+    'errors.passwordRequired': 'Password is required',
+    'errors.usernameLength': 'Username must be between 3 and 50 characters',
+    'errors.usernameAlphanumeric': 'Username may only contain letters and numbers',
+    'errors.emailInvalid': 'Enter a valid email address',
+    'errors.passwordMinLength': 'Password must be at least 6 characters',
+    'errors.usernameTaken': 'That username is already in use',
+    'errors.emailTaken': 'That email address is already in use',
+    'errors.registerFailed': 'An error occurred during registration',
+    'errors.loginFailed': 'An error occurred during sign in',
+    'errors.profileLoad': 'Failed to load profile details',
+    'errors.profileUpdate': 'Failed to update profile',
+    'errors.sessionNotFound': 'Session not found',
+    'errors.activeSessionNotFound': 'Active session not found',
+    'errors.sessionLoad': 'Failed to load session details',
+    'errors.sessionListLoad': 'Failed to load sessions',
+    'errors.sessionUpdate': 'Failed to update session details',
+    'errors.sessionStart': 'Failed to start the session',
+    'errors.sessionEnd': 'Failed to end the session',
+    'errors.noActiveSession': 'No active session',
+    'errors.lootAdd': 'Failed to add loot',
+    'errors.lootRecent': 'Failed to load recent loot',
+    'errors.poeOAuthNotConfigured': 'Path of Exile OAuth is not configured',
+    'errors.invalidRedirectUri': 'Invalid redirect URI',
+    'errors.authorizationCodeRequired': 'Authorization code and PKCE verifier are required',
+    'errors.poeStart': 'Failed to start Path of Exile linking',
+    'errors.poeComplete': 'Failed to complete Path of Exile linking',
+    'errors.poeStatus': 'Failed to get Path of Exile link status',
+    'errors.poeDisconnect': 'Failed to disconnect Path of Exile account',
 
     // Currency
     'nav.currency': 'Currency',
@@ -428,9 +518,13 @@ window.Translations = {
 /**
  * Get translation for a key
  */
-window.t = function(key) {
+window.t = function(key, values) {
   const lang = (window._appState && window._appState.language) || 'en';
-  return window.Translations[lang]?.[key] || window.Translations['en']?.[key] || key;
+  const template = window.Translations[lang]?.[key] || window.Translations['en']?.[key] || key;
+  const tokens = values || {};
+  return String(template).replace(/\{(\w+)\}/g, function(match, token) {
+    return Object.prototype.hasOwnProperty.call(tokens, token) ? String(tokens[token]) : match;
+  });
 };
 
 /**
