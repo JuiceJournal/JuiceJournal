@@ -165,6 +165,8 @@ const elements = {
  * Uygulamayi baslat
  */
 async function init() {
+  populateLanguageOptions();
+
   // Ayarlari yukle
   await loadSettings();
 
@@ -197,6 +199,17 @@ async function init() {
   // Aktif session ve dashboard verilerini senkronize et
   await refreshTrackerData();
   
+}
+
+function populateLanguageOptions() {
+  if (!elements.globalLanguage || typeof window.getSupportedLocales !== 'function') {
+    return;
+  }
+
+  const locales = window.getSupportedLocales();
+  elements.globalLanguage.innerHTML = locales
+    .map((locale) => `<option value="${locale.code}">${locale.label}</option>`)
+    .join('');
 }
 
 function ensureSessionClock() {
