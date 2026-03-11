@@ -334,9 +334,37 @@ function getPendingSyncSnapshot() {
   };
 }
 
+function getPendingSyncEntriesForView() {
+  return [
+    ...getPendingSessionActions().map((action) => ({
+      ...action,
+      queueType: 'session'
+    })),
+    ...getPendingLootActions().map((action) => ({
+      ...action,
+      queueType: 'loot'
+    }))
+  ]
+    .sort((a, b) => new Date(b.lastAttemptAt || b.queuedAt).getTime() - new Date(a.lastAttemptAt || a.queuedAt).getTime())
+    .slice(0, 20);
+}
+
 function emitPendingSyncState() {
   if (!mainWindow) return;
-  mainWindow.webContents.send('pending-sync-updated', getPendingSyncSnapshot());
+  mainWindow.webContents.send('pending-sync-updated', {
+    ...getPendingSyncSnapshot(),
+    entries: getPendingSyncEntriesForView()
+  });
+}
+
+function annotateSyncFailure(action, error, { blocked = false } = {}) {
+  return {
+    ...action,
+    attempts: (action.attempts || 0) + 1,
+    lastAttemptAt: new Date().toISOString(),
+    lastError: normalizeErrorMessage(error, 'Unexpected sync error'),
+    blocked
+  };
 }
 
 function appendQueuedLootToCurrentSession(items) {
@@ -366,7 +394,7 @@ function appendQueuedLootToCurrentSession(items) {
   }
 }
 
-async function flushPendingSessionActions() {
+async function flushPendingSessionActions(forceBlocked = false) {
   if (pendingSessionFlushInProgress || !apiClient?.token) {
     return { processed: 0, remaining: getPendingSessionActions().length, sessionIdMap: new Map() };
   }
@@ -385,6 +413,11 @@ async function flushPendingSessionActions() {
   try {
     for (const action of queuedActions) {
       if (action.ownerUserId && action.ownerUserId !== currentUserId) {
+        remainingActions.push(action);
+        continue;
+      }
+
+      if (action.blocked && !forceBlocked) {
         remainingActions.push(action);
         continue;
       }
@@ -423,9 +456,11 @@ async function flushPendingSessionActions() {
         processed += 1;
       } catch (error) {
         if (isRetryableApiError(error)) {
-          remainingActions.push(action);
+          remainingActions.push(annotateSyncFailure(action, error));
           break;
         }
+
+        remainingActions.push(annotateSyncFailure(action, error, { blocked: true }));
       }
     }
   } finally {
@@ -440,7 +475,7 @@ async function flushPendingSessionActions() {
   };
 }
 
-async function flushPendingLootActions(sessionIdMap = new Map()) {
+async function flushPendingLootActions(sessionIdMap = new Map(), forceBlocked = false) {
   if (pendingLootFlushInProgress || !apiClient?.token) {
     return { processed: 0, remaining: getPendingLootActions().length };
   }
@@ -458,6 +493,11 @@ async function flushPendingLootActions(sessionIdMap = new Map()) {
   try {
     for (const action of queuedActions) {
       if (action.ownerUserId && action.ownerUserId !== currentUserId) {
+        remainingActions.push(action);
+        continue;
+      }
+
+      if (action.blocked && !forceBlocked) {
         remainingActions.push(action);
         continue;
       }
@@ -480,9 +520,11 @@ async function flushPendingLootActions(sessionIdMap = new Map()) {
         processed += 1;
       } catch (error) {
         if (isRetryableApiError(error)) {
-          remainingActions.push(action);
+          remainingActions.push(annotateSyncFailure(action, error));
           break;
         }
+
+        remainingActions.push(annotateSyncFailure(action, error, { blocked: true }));
       }
     }
   } finally {
@@ -496,9 +538,9 @@ async function flushPendingLootActions(sessionIdMap = new Map()) {
   };
 }
 
-async function flushPendingActions() {
-  const sessionResult = await flushPendingSessionActions();
-  const lootResult = await flushPendingLootActions(sessionResult.sessionIdMap);
+async function flushPendingActions(forceBlocked = false) {
+  const sessionResult = await flushPendingSessionActions(forceBlocked);
+  const lootResult = await flushPendingLootActions(sessionResult.sessionIdMap, forceBlocked);
 
   if ((sessionResult.processed || 0) > 0 || (lootResult.processed || 0) > 0) {
     appendAuditTrail('auditPendingSyncFlushed', {
@@ -513,10 +555,33 @@ async function flushPendingActions() {
   };
 }
 
-function buildDiagnosticsPayload() {
+async function buildDiagnosticsPayload() {
   const settings = { ...store.store };
   delete settings.authToken;
   delete settings.auditTrail;
+
+  const apiSnapshot = {
+    baseURL: apiClient?.baseURL || store.get('apiUrl'),
+    authenticated: Boolean(apiClient?.token),
+    status: 'unknown',
+    latencyMs: null,
+    details: null,
+    error: null
+  };
+
+  if (apiClient) {
+    const startedAt = Date.now();
+    try {
+      const health = await apiClient.healthCheck();
+      apiSnapshot.status = 'reachable';
+      apiSnapshot.latencyMs = Date.now() - startedAt;
+      apiSnapshot.details = health?.data || health || null;
+    } catch (error) {
+      apiSnapshot.status = 'unreachable';
+      apiSnapshot.latencyMs = Date.now() - startedAt;
+      apiSnapshot.error = normalizeErrorMessage(error, 'Unable to reach API');
+    }
+  }
 
   return {
     generatedAt: new Date().toISOString(),
@@ -549,6 +614,7 @@ function buildDiagnosticsPayload() {
       startedAt: currentSession.startedAt,
       endedAt: currentSession.endedAt || null
     } : null,
+    api: apiSnapshot,
     auditTrail: getAuditTrail(),
     settings
   };
@@ -1366,7 +1432,10 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-sync-status', () => {
-    return getPendingSyncSnapshot();
+    return {
+      ...getPendingSyncSnapshot(),
+      entries: getPendingSyncEntriesForView()
+    };
   });
 
   ipcMain.handle('get-audit-trail', () => {
@@ -1376,7 +1445,7 @@ function setupIPC() {
   });
 
   ipcMain.handle('retry-pending-loot-actions', async () => {
-    return await flushPendingActions();
+    return await flushPendingActions(true);
   });
 
   ipcMain.handle('export-diagnostics', async () => {
@@ -1393,7 +1462,7 @@ function setupIPC() {
       return { canceled: true };
     }
 
-    const payload = buildDiagnosticsPayload();
+    const payload = await buildDiagnosticsPayload();
     fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
     appendAuditTrail('auditDiagnosticsExported');
     return {

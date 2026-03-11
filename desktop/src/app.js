@@ -16,6 +16,7 @@ const state = {
   poeLink: null,
   selectedSession: null,
   pendingLootCount: 0,
+  pendingSyncEntries: [],
   auditTrail: []
 };
 
@@ -162,6 +163,7 @@ const elements = {
   connectionText: document.getElementById('connection-text'),
   pendingSyncCount: document.getElementById('pending-sync-count'),
   pendingSyncMeta: document.getElementById('pending-sync-meta'),
+  pendingSyncList: document.getElementById('pending-sync-list'),
   auditTrailList: document.getElementById('audit-trail-list'),
   retryPendingSyncBtn: document.getElementById('retry-pending-sync'),
   exportDiagnosticsBtn: document.getElementById('export-diagnostics'),
@@ -264,8 +266,10 @@ async function loadPendingLootState() {
   try {
     const response = await window.electronAPI.getSyncStatus();
     state.pendingLootCount = response?.total || 0;
+    state.pendingSyncEntries = response?.entries || [];
   } catch {
     state.pendingLootCount = 0;
+    state.pendingSyncEntries = [];
   }
 }
 
@@ -287,6 +291,36 @@ function renderPendingSyncState() {
   elements.pendingSyncMeta.textContent = state.pendingLootCount > 0
     ? window.t('settings.syncQueuePending', { count: state.pendingLootCount })
     : window.t('settings.syncQueueEmpty');
+
+  if (!elements.pendingSyncList) {
+    return;
+  }
+
+  if (!state.pendingSyncEntries?.length) {
+    elements.pendingSyncList.innerHTML = `<p class="text-muted">${window.t('settings.syncQueueEmpty')}</p>`;
+    return;
+  }
+
+  elements.pendingSyncList.innerHTML = state.pendingSyncEntries.slice(0, 10).map((entry) => {
+    const titleKey = entry.queueType === 'session'
+      ? (entry.type === 'sessionStart' ? 'settings.pendingSessionStart' : 'settings.pendingSessionEnd')
+      : 'settings.pendingLootSync';
+    const statusLabel = entry.blocked
+      ? window.t('settings.syncBlocked')
+      : (entry.lastError ? window.t('settings.syncRetrying') : window.t('settings.syncQueued'));
+    const attemptLabel = entry.attempts ? `${window.t('settings.syncAttempts')}: ${entry.attempts}` : '';
+    const reason = entry.lastError ? escapeHTML(entry.lastError) : window.t('settings.syncNoErrors');
+    return `
+      <article class="sync-action-item ${entry.blocked ? 'blocked' : (entry.lastError ? 'warning' : '')}">
+        <div class="sync-action-row">
+          <span class="sync-action-title">${window.t(titleKey)}</span>
+          <span class="sync-action-subtle">${statusLabel}</span>
+        </div>
+        <div class="sync-action-subtle">${attemptLabel}</div>
+        <div class="sync-action-subtle">${reason}</div>
+      </article>
+    `;
+  }).join('');
 }
 
 function renderAuditTrail() {
@@ -300,7 +334,7 @@ function renderAuditTrail() {
   }
 
   elements.auditTrailList.innerHTML = state.auditTrail.slice(0, 12).map((entry) => {
-    const message = window.t(entry.key, entry.values || {});
+    const message = escapeHTML(window.t(entry.key, entry.values || {}));
     const timestamp = entry.createdAt ? timeAgo(entry.createdAt) : '-';
     return `
       <article class="audit-entry ${entry.level || 'info'}">
@@ -562,6 +596,7 @@ function setupIPCListeners() {
   if (window.electronAPI.onPendingSyncUpdated) {
     window.electronAPI.onPendingSyncUpdated((data) => {
       state.pendingLootCount = data?.total || 0;
+      state.pendingSyncEntries = data?.entries || [];
       renderPendingSyncState();
     });
   }

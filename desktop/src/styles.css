@@ -1538,6 +1538,45 @@ body {
   color: var(--text-secondary);
 }
 
+.sync-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+
+.sync-action-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+  background: var(--bg-base);
+}
+
+.sync-action-item.blocked {
+  border-color: rgba(255, 82, 82, 0.22);
+}
+
+.sync-action-item.warning {
+  border-color: rgba(255, 145, 0, 0.22);
+}
+
+.sync-action-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.sync-action-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sync-action-subtle {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
 .settings-actions-row {
   display: flex;
   flex-wrap: wrap;
