@@ -138,12 +138,10 @@ router.get('/:id',
   authenticate,
   [
     param('id').isUUID().withMessage('Gecerli bir session ID giriniz'),
-    body('endedAt').optional().isISO8601().withMessage('Gecerli bir bitis zamani giriniz'),
     handleValidationErrors
   ],
   async (req, res) => {
     try {
-      const { endedAt } = req.body || {};
       const session = await Session.findOne({
         where: {
           id: req.params.id,
@@ -370,10 +368,12 @@ router.put('/:id/abandon',
   authenticate,
   [
     param('id').isUUID().withMessage('Gecerli bir session ID giriniz'),
+    body('endedAt').optional().isISO8601().withMessage('Gecerli bir bitis zamani giriniz'),
     handleValidationErrors
   ],
   async (req, res) => {
     try {
+      const { endedAt } = req.body || {};
       const session = await Session.findOne({
         where: {
           id: req.params.id,
