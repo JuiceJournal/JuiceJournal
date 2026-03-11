@@ -9,6 +9,7 @@ const { query, body, validationResult } = require('express-validator');
 const { Price } = require('../models');
 const { authenticate } = require('../middleware/auth');
 const poeNinjaService = require('../services/poeNinjaService');
+const env = require('../config/env');
 
 const { Op } = require('sequelize');
 const syncState = new Map();
@@ -247,6 +248,14 @@ router.post('/sync',
   ],
   async (req, res) => {
     try {
+      if (env.auth.requireAdminForPriceSync && req.user?.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          data: null,
+          error: 'Bu islem icin yetkiniz yok'
+        });
+      }
+
       const { league, types, poeVersion = 'poe1' } = req.body;
 
       const targetLeague = league || await Price.getCurrentLeague(poeVersion) || 'Standard';

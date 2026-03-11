@@ -43,6 +43,9 @@ cp .env.docker .env
 ### 4. Sunucuyu Baslat
 
 ```bash
+# Migration'lari calistir
+npm run db:migrate
+
 # Gelistirme modu
 npm run dev
 
@@ -100,6 +103,7 @@ DB_PORT=5432
 DB_NAME=poefarm
 DB_USER=postgres
 DB_PASSWORD=postgres123
+DB_AUTO_SYNC=true
 ```
 
 ### Docker'siz
@@ -166,6 +170,18 @@ ws.onmessage = (event) => {
 ```
 
 ## Veritabani Yonetimi
+
+### Migration Akisi
+```bash
+# SQL migration'lari uygula
+npm run db:migrate
+```
+
+Production notu:
+- `DB_AUTO_SYNC=false` kullanin
+- deploy oncesi `npm run db:migrate` calistirin
+- `JWT_SECRET` zorunludur
+- `REQUIRE_ADMIN_FOR_PRICE_SYNC=true` ile manuel fiyat senkronunu admin'e kapatabilirsiniz
 
 ### SQL Shell
 ```bash

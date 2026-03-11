@@ -36,6 +36,17 @@ module.exports = (sequelize, DataTypes) => {
         }
       }
     },
+    role: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: 'user',
+      validate: {
+        isIn: {
+          args: [['user', 'admin']],
+          msg: 'Gecersiz kullanici rolu'
+        }
+      }
+    },
     passwordHash: {
       type: DataTypes.STRING(255),
       allowNull: false,

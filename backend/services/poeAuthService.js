@@ -1,28 +1,28 @@
 const axios = require('axios');
 const crypto = require('crypto');
+const env = require('../config/env');
 
 const OAUTH_BASE_URL = 'https://www.pathofexile.com/oauth';
 const API_BASE_URL = 'https://api.pathofexile.com';
 
 function getScopes() {
-  return process.env.POE_SCOPES || 'account:profile';
+  return env.poe.scopes;
 }
 
 function isMockMode() {
-  return process.env.POE_OAUTH_MOCK === 'true' || !process.env.POE_CLIENT_ID;
+  return env.poe.mock || !env.poe.clientId;
 }
 
 function isConfigured() {
   return Boolean(
-    process.env.POE_CLIENT_ID &&
-    process.env.POE_REDIRECT_URI &&
-    process.env.POE_TOKEN_ENCRYPTION_KEY
+    env.poe.clientId &&
+    env.poe.redirectUri &&
+    env.poe.tokenEncryptionKey
   );
 }
 
 function getEncryptionKey() {
-  const rawKey = process.env.POE_TOKEN_ENCRYPTION_KEY
-    || ((process.env.NODE_ENV || 'development') !== 'production' ? 'development-poe-token-key' : null);
+  const rawKey = env.poe.tokenEncryptionKey || null;
 
   if (!rawKey) {
     throw new Error('POE_TOKEN_ENCRYPTION_KEY must be configured in production');
@@ -66,7 +66,7 @@ function decryptToken(payload) {
 function buildAuthorizationUrl({ redirectUri, codeChallenge, state }) {
   const params = new URLSearchParams({
     response_type: 'code',
-    client_id: process.env.POE_CLIENT_ID,
+    client_id: env.poe.clientId,
     redirect_uri: redirectUri,
     scope: getScopes(),
     code_challenge: codeChallenge,
@@ -80,7 +80,7 @@ function buildAuthorizationUrl({ redirectUri, codeChallenge, state }) {
 async function exchangeCode({ code, codeVerifier, redirectUri }) {
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
-    client_id: process.env.POE_CLIENT_ID,
+    client_id: env.poe.clientId,
     code,
     redirect_uri: redirectUri,
     code_verifier: codeVerifier,
@@ -89,7 +89,7 @@ async function exchangeCode({ code, codeVerifier, redirectUri }) {
   const response = await axios.post(`${OAUTH_BASE_URL}/token`, body.toString(), {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': `OAuth ${process.env.POE_CLIENT_ID}/0.1.0 (contact: ${process.env.POE_CONTACT || 'support@example.com'}) PoEFarmTracker`,
+      'User-Agent': `OAuth ${env.poe.clientId}/0.1.0 (contact: ${env.poe.contact}) PoEFarmTracker`,
     },
     timeout: 30000,
   });
@@ -101,7 +101,7 @@ async function fetchProfile(accessToken) {
   const response = await axios.get(`${API_BASE_URL}/profile`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      'User-Agent': `OAuth ${process.env.POE_CLIENT_ID || 'poefarmtracker'}/0.1.0 (contact: ${process.env.POE_CONTACT || 'support@example.com'}) PoEFarmTracker`,
+      'User-Agent': `OAuth ${env.poe.clientId || 'poefarmtracker'}/0.1.0 (contact: ${env.poe.contact}) PoEFarmTracker`,
     },
     timeout: 30000,
   });

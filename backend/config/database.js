@@ -4,16 +4,18 @@
  */
 
 const { Sequelize } = require('sequelize');
+const env = require('./env');
+const logger = require('../services/logger');
 
 const sequelize = new Sequelize(
-  process.env.DB_NAME || 'poefarm',
-  process.env.DB_USER || 'postgres',
-  process.env.DB_PASSWORD || '',
+  env.db.name,
+  env.db.user,
+  env.db.password,
   {
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
+    host: env.db.host,
+    port: env.db.port,
     dialect: 'postgres',
-    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    logging: env.isDevelopment ? (msg) => logger.debug('sequelize', { msg }) : false,
     pool: {
       max: 5,
       min: 0,

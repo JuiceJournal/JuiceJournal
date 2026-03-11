@@ -5,13 +5,15 @@
 
 const cron = require('node-cron');
 const poeNinjaService = require('./poeNinjaService');
+const env = require('../config/env');
+const logger = require('./logger');
 
 let priceSyncJob = null;
 
 /**
  * Fiyat senkronizasyon cron job'unu baslat
  */
-const startPriceSync = (app, intervalHours = 1) => {
+const startPriceSync = (app, intervalHours = env.priceSync.intervalHours) => {
   // Varsa onceki job'u durdur
   if (priceSyncJob) {
     priceSyncJob.stop();
@@ -19,13 +21,12 @@ const startPriceSync = (app, intervalHours = 1) => {
 
   // Her saat basi calistir
   priceSyncJob = cron.schedule(`0 */${intervalHours} * * *`, async () => {
-    console.log(`[${new Date().toISOString()}] Otomatik fiyat senkronizasyonu basliyor...`);
+    logger.info('automatic price sync started');
     
     try {
-      const league = process.env.DEFAULT_LEAGUE || 'Ancestor';
+      const league = env.priceSync.defaultLeague;
       const results = await poeNinjaService.syncAllPrices(league);
-      
-      console.log(`[${new Date().toISOString()}] Fiyat senkronizasyonu tamamlandi:`, {
+      logger.info('automatic price sync completed', {
         totalSynced: results.types.reduce((sum, t) => sum + (t.synced || 0), 0),
         duration: new Date() - results.startedAt
       });
@@ -41,21 +42,21 @@ const startPriceSync = (app, intervalHours = 1) => {
         });
       }
     } catch (error) {
-      console.error('Otomatik fiyat senkronizasyon hatasi:', error);
+      logger.error('automatic price sync failed', { message: error.message });
     }
   });
 
-  console.log(`Fiyat senkronizasyonu her ${intervalHours} saatte bir calisacak sekilde ayarlandi`);
+  logger.info('price sync schedule configured', { intervalHours });
   
   // Hemen bir senkronizasyon yap
   setTimeout(async () => {
     try {
-      const league = process.env.DEFAULT_LEAGUE || 'Ancestor';
-      console.log(`[${new Date().toISOString()}] Ilk fiyat senkronizasyonu basliyor...`);
+      const league = env.priceSync.defaultLeague;
+      logger.info('initial price sync started');
       await poeNinjaService.syncAllPrices(league);
-      console.log(`[${new Date().toISOString()}] Ilk fiyat senkronizasyonu tamamlandi`);
+      logger.info('initial price sync completed');
     } catch (error) {
-      console.error('Ilk fiyat senkronizasyon hatasi:', error);
+      logger.error('initial price sync failed', { message: error.message });
     }
   }, 5000); // 5 saniye bekle (veritabani hazir olsun)
 
@@ -69,7 +70,7 @@ const stopPriceSync = () => {
   if (priceSyncJob) {
     priceSyncJob.stop();
     priceSyncJob = null;
-    console.log('Fiyat senkronizasyonu durduruldu');
+    logger.info('price sync stopped');
   }
 };
 

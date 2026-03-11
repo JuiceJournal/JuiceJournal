@@ -11,7 +11,8 @@ const { sequelize, User } = require('../models');
 const TEST_USER = {
   username: 'testuser',
   email: 'test@poefarm.com',
-  password: 'Test1234'
+  password: 'Test1234',
+  role: 'admin'
 };
 
 async function seed() {
@@ -33,13 +34,15 @@ async function seed() {
     const user = await User.create({
       username: TEST_USER.username,
       email: TEST_USER.email,
-      passwordHash
+      passwordHash,
+      role: TEST_USER.role
     });
 
     console.log('Mock test user created:');
     console.log(`  Username: ${TEST_USER.username}`);
     console.log(`  Email:    ${TEST_USER.email}`);
     console.log(`  Password: ${TEST_USER.password}`);
+    console.log(`  Role:     ${TEST_USER.role}`);
     console.log(`  ID:       ${user.id}`);
 
     process.exit(0);

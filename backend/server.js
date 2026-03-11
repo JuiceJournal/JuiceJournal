@@ -16,6 +16,8 @@ require('dotenv').config();
 const { sequelize, Session } = require('./models');
 const cronService = require('./services/cronService');
 const { JWT_SECRET } = require('./middleware/auth');
+const env = require('./config/env');
+const logger = require('./services/logger');
 
 // Route importları
 const authRoutes = require('./routes/auth');
@@ -114,7 +116,7 @@ app.use(express.urlencoded({ extended: true }));
 // Request logging middleware
 if (process.env.NODE_ENV === 'development') {
   app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    logger.debug('request', { method: req.method, path: req.path });
     next();
   });
 }
@@ -163,20 +165,20 @@ app.use((err, req, res, next) => {
 });
 
 // Port ayarı
-const PORT = process.env.PORT || 3001;
+const PORT = env.port;
 
 // Sunucuyu başlat
 const startServer = async () => {
   try {
     await sequelize.authenticate();
-    console.log('Veritabani baglantisi basarili.');
+    logger.info('database connection established');
 
-    const shouldAutoSyncSchema = process.env.DB_AUTO_SYNC === 'true' || (process.env.NODE_ENV || 'development') !== 'production';
+    const shouldAutoSyncSchema = env.db.autoSync;
     if (shouldAutoSyncSchema) {
       await sequelize.sync({ alter: true });
-      console.log('Veritabani modelleri senkronize edildi.');
+      logger.info('database models synchronized');
     } else {
-      console.log('Veritabani otomatik alter kapali. Mevcut schema kullaniliyor.');
+      logger.info('database auto sync disabled');
     }
 
     const [backfilledSessions] = await Session.update(
@@ -195,26 +197,25 @@ const startServer = async () => {
     );
 
     if (backfilledSessions > 0) {
-      console.log(`${backfilledSessions} mevcut session poe1/Standard olarak guncellendi.`);
+      logger.info('backfilled sessions with default poe context', { count: backfilledSessions });
     }
 
     server.listen(PORT, () => {
-      console.log(`Sunucu ${PORT} portunda calisiyor`);
-      console.log(`Health check: http://localhost:${PORT}/health`);
+      logger.info('server started', { port: PORT, health: `http://localhost:${PORT}/health` });
     });
 
     cronService.startPriceSync(app);
-    console.log('Fiyat senkronizasyon cron job baslatildi');
+    logger.info('price sync cron started');
 
   } catch (error) {
-    console.error('Sunucu baslatma hatasi:', error);
+    logger.error('server startup failed', { message: error.message });
     process.exit(1);
   }
 };
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('SIGTERM alindi, sunucu kapatiliyor...');
+  logger.info('received SIGTERM, shutting down');
   server.close(() => {
     sequelize.close().then(() => {
       process.exit(0);
@@ -223,7 +224,7 @@ process.on('SIGTERM', () => {
 });
 
 process.on('SIGINT', () => {
-  console.log('SIGINT alindi, sunucu kapatiliyor...');
+  logger.info('received SIGINT, shutting down');
   server.close(() => {
     sequelize.close().then(() => {
       process.exit(0);

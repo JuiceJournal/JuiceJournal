@@ -5,20 +5,9 @@
 
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
+const env = require('../config/env');
 
-function getJwtSecret() {
-  if (process.env.JWT_SECRET) {
-    return process.env.JWT_SECRET;
-  }
-
-  if ((process.env.NODE_ENV || 'development') !== 'production') {
-    return 'development-only-jwt-secret';
-  }
-
-  throw new Error('JWT_SECRET must be configured in production');
-}
-
-const JWT_SECRET = getJwtSecret();
+const JWT_SECRET = env.auth.jwtSecret;
 
 /**
  * JWT token dogrulama middleware
@@ -124,13 +113,34 @@ const generateToken = (userId) => {
   return jwt.sign(
     { userId },
     JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    { expiresIn: env.auth.jwtExpiresIn }
   );
+};
+
+const requireRole = (...roles) => (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      data: null,
+      error: 'Yetkilendirme tokeni gerekli'
+    });
+  }
+
+  if (!roles.includes(req.user.role)) {
+    return res.status(403).json({
+      success: false,
+      data: null,
+      error: 'Bu islem icin yetkiniz yok'
+    });
+  }
+
+  next();
 };
 
 module.exports = {
   authenticate,
   optionalAuth,
+  requireRole,
   generateToken,
   JWT_SECRET
 };
