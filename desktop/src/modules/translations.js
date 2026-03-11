@@ -256,6 +256,9 @@ window.Translations = {
     'errors.poeDisconnect': 'Path of Exile baglantisi kaldirilamadi',
     'errors.serverUnavailable': 'Sunucuya ulasilamadi',
     'errors.requestTimeout': 'Sunucu yanit vermekte gecikti',
+    'errors.forbidden': 'Bu islem icin yetkiniz yok',
+    'errors.priceSyncInProgress': 'Bu baglam icin fiyat senkronizasyonu zaten calisiyor',
+    'errors.priceSyncCooldown': 'Bu baglam icin fiyatlar yakin zamanda senkronize edildi',
     'errors.unexpected': 'Beklenmeyen bir hata olustu',
 
     // Currency
@@ -267,6 +270,7 @@ window.Translations = {
     'currency.syncing': 'Senkronize ediliyor...',
     'currency.syncSuccess': 'Fiyatlar basariyla senkronize edildi',
     'currency.syncFailed': 'Senkronizasyon basarisiz',
+    'currency.syncRestricted': 'Fiyat senkronizasyonu yalnizca admin hesaplar icin aciktir',
     'currency.name': 'Ad',
     'currency.type': 'Tip',
     'currency.trend': 'Trend',
@@ -815,6 +819,9 @@ window.Translations = {
     'errors.poeDisconnect': 'Failed to disconnect Path of Exile account',
     'errors.serverUnavailable': 'Unable to reach the server',
     'errors.requestTimeout': 'The server took too long to respond',
+    'errors.forbidden': 'You do not have permission to perform this action',
+    'errors.priceSyncInProgress': 'Price sync is already running for this context',
+    'errors.priceSyncCooldown': 'Prices were synced recently for this context',
     'errors.unexpected': 'An unexpected error occurred',
 
     // Currency
@@ -826,6 +833,7 @@ window.Translations = {
     'currency.syncing': 'Syncing...',
     'currency.syncSuccess': 'Prices synced successfully',
     'currency.syncFailed': 'Sync failed',
+    'currency.syncRestricted': 'Price sync is restricted to admin accounts',
     'currency.name': 'Name',
     'currency.type': 'Type',
     'currency.trend': 'Trend',

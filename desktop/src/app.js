@@ -19,6 +19,9 @@ const state = {
 };
 
 const ERROR_MESSAGE_KEY_MAP = {
+  FORBIDDEN: 'errors.forbidden',
+  PRICE_SYNC_IN_PROGRESS: 'errors.priceSyncInProgress',
+  PRICE_SYNC_COOLDOWN: 'errors.priceSyncCooldown',
   'Kullanici adi veya sifre hatali': 'errors.invalidCredentials',
   'Invalid username or password': 'errors.invalidCredentials',
   'Kullanici adi veya e-posta gereklidir': 'errors.usernameOrEmailRequired',
@@ -189,7 +192,10 @@ async function init() {
     try {
       const me = await window.electronAPI.getCurrentUser();
       if (me?.user) {
-        setCurrentUser(me.user);
+        setCurrentUser({
+          ...me.user,
+          capabilities: me.capabilities || {}
+        });
         await loadPoeLinkStatus();
       }
     } catch (error) {
@@ -541,7 +547,10 @@ async function handleLogin(e) {
     const result = await window.electronAPI.login({ username, password });
     
     if (result.success) {
-      setCurrentUser(result.data.user);
+      setCurrentUser({
+        ...result.data.user,
+        capabilities: result.data.capabilities || {}
+      });
       elements.loginModal.classList.add('hidden');
       await loadPoeLinkStatus();
       await refreshTrackerData();
@@ -568,7 +577,10 @@ async function handleRegister(e) {
     const result = await window.electronAPI.register({ username, email, password });
     
     if (result.success) {
-      setCurrentUser(result.data.user);
+      setCurrentUser({
+        ...result.data.user,
+        capabilities: result.data.capabilities || {}
+      });
       elements.registerModal.classList.add('hidden');
       await loadPoeLinkStatus();
       await refreshTrackerData();
@@ -611,6 +623,10 @@ function setCurrentUser(user) {
   if (elements.userAvatar) {
     elements.userAvatar.textContent = user.username.charAt(0).toUpperCase();
   }
+}
+
+function canCurrentUserSyncPrices() {
+  return Boolean(state.currentUser?.capabilities?.canSyncPrices);
 }
 
 function renderPoeLinkStatus() {
@@ -1194,6 +1210,14 @@ function extractRawErrorMessage(error) {
   return '';
 }
 
+function extractErrorCode(error) {
+  if (!error) return '';
+  if (typeof error.errorCode === 'string' && error.errorCode.trim()) return error.errorCode.trim();
+  if (typeof error.code === 'string' && error.code.trim()) return error.code.trim();
+  if (typeof error.data?.errorCode === 'string' && error.data.errorCode.trim()) return error.data.errorCode.trim();
+  return '';
+}
+
 function localizeKnownErrorMessage(message) {
   const key = ERROR_MESSAGE_KEY_MAP[message];
   return key ? window.t(key) : message;
@@ -1201,6 +1225,10 @@ function localizeKnownErrorMessage(message) {
 
 function getUserFacingErrorMessage(error, fallbackKey = 'toast.unexpectedError') {
   const fallback = window.t(fallbackKey);
+  const errorCode = extractErrorCode(error);
+  if (errorCode && ERROR_MESSAGE_KEY_MAP[errorCode]) {
+    return window.t(ERROR_MESSAGE_KEY_MAP[errorCode]);
+  }
   const rawMessage = extractRawErrorMessage(error);
   if (!rawMessage) return fallback;
   return localizeKnownErrorMessage(rawMessage) || fallback;
@@ -1594,6 +1622,12 @@ async function loadCurrencyPage() {
   updateTypeFilterDropdown();
   await loadCurrencyLeagues();
   await loadCurrencyPrices();
+
+  const syncBtn = document.getElementById('currency-sync-btn');
+  if (syncBtn) {
+    syncBtn.disabled = !canCurrentUserSyncPrices();
+    syncBtn.title = canCurrentUserSyncPrices() ? '' : window.t('currency.syncRestricted');
+  }
 }
 
 async function loadCurrencyLeagues() {
@@ -1720,6 +1754,11 @@ function timeAgo(date) {
 }
 
 async function handleCurrencySync() {
+  if (!canCurrentUserSyncPrices()) {
+    showToast(window.t('toast.currencyTitle'), window.t('currency.syncRestricted'), 'warning');
+    return;
+  }
+
   const btn = document.getElementById('currency-sync-btn');
   if (btn) { btn.disabled = true; btn.textContent = window.t('currency.syncing'); }
 

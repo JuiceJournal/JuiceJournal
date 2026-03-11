@@ -8,6 +8,7 @@ const axios = require('axios');
 function normalizeApiError(error) {
   const status = error.response?.status || null;
   const apiMessage = error.response?.data?.error;
+  const apiErrorCode = error.response?.data?.errorCode || null;
   const responseMessage = typeof apiMessage === 'string' && apiMessage.trim()
     ? apiMessage.trim()
     : null;
@@ -15,7 +16,7 @@ function normalizeApiError(error) {
   if (status === 401) {
     return {
       status,
-      code: 'UNAUTHORIZED',
+      code: apiErrorCode || 'UNAUTHORIZED',
       message: responseMessage || 'Unauthorized request',
       data: error.response?.data || null
     };
@@ -24,7 +25,7 @@ function normalizeApiError(error) {
   if (responseMessage) {
     return {
       status,
-      code: 'API_ERROR',
+      code: apiErrorCode || 'API_ERROR',
       message: responseMessage,
       data: error.response?.data || null
     };
