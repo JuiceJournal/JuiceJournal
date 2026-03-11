@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const { User } = require('../models');
 const { authenticate, generateToken } = require('../middleware/auth');
 const poeAuthService = require('../services/poeAuthService');
+const env = require('../config/env');
 const { Op } = require('sequelize');
 
 const authLimiter = rateLimit({
@@ -23,6 +24,12 @@ const authLimiter = rateLimit({
     error: 'Cok fazla giris denemesi yapildi, lutfen daha sonra tekrar deneyin'
   }
 });
+
+function getCapabilities(user) {
+  return {
+    canSyncPrices: !env.auth.requireAdminForPriceSync || user.role === 'admin'
+  };
+}
 
 /**
  * Validation middleware
@@ -82,7 +89,8 @@ router.post('/register',
           data: null,
           error: existingUser.username === username 
             ? 'Bu kullanici adi zaten kullaniliyor'
-            : 'Bu e-posta adresi zaten kullaniliyor'
+            : 'Bu e-posta adresi zaten kullaniliyor',
+          errorCode: existingUser.username === username ? 'USERNAME_TAKEN' : 'EMAIL_TAKEN'
         });
       }
 
@@ -103,7 +111,8 @@ router.post('/register',
         success: true,
         data: {
           user,
-          token
+          token,
+          capabilities: getCapabilities(user)
         },
         error: null
       });
@@ -152,7 +161,8 @@ router.post('/login',
         return res.status(401).json({
           success: false,
           data: null,
-          error: 'Kullanici adi veya sifre hatali'
+          error: 'Kullanici adi veya sifre hatali',
+          errorCode: 'INVALID_CREDENTIALS'
         });
       }
 
@@ -163,7 +173,8 @@ router.post('/login',
         return res.status(401).json({
           success: false,
           data: null,
-          error: 'Kullanici adi veya sifre hatali'
+          error: 'Kullanici adi veya sifre hatali',
+          errorCode: 'INVALID_CREDENTIALS'
         });
       }
 
@@ -174,7 +185,8 @@ router.post('/login',
         success: true,
         data: {
           user,
-          token
+          token,
+          capabilities: getCapabilities(user)
         },
         error: null
       });
@@ -198,7 +210,8 @@ router.get('/me', authenticate, async (req, res) => {
     res.json({
       success: true,
       data: {
-        user: req.user
+        user: req.user,
+        capabilities: getCapabilities(req.user)
       },
       error: null
     });

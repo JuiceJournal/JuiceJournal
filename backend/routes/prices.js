@@ -252,7 +252,8 @@ router.post('/sync',
         return res.status(403).json({
           success: false,
           data: null,
-          error: 'Bu islem icin yetkiniz yok'
+          error: 'Bu islem icin yetkiniz yok',
+          errorCode: 'FORBIDDEN'
         });
       }
 
@@ -268,7 +269,8 @@ router.post('/sync',
         return res.status(429).json({
           success: false,
           data: null,
-          error: 'Price sync is already running for this context'
+          error: 'Price sync is already running for this context',
+          errorCode: 'PRICE_SYNC_IN_PROGRESS'
         });
       }
 
@@ -276,7 +278,8 @@ router.post('/sync',
         return res.status(429).json({
           success: false,
           data: null,
-          error: 'Prices were synced recently for this context'
+          error: 'Prices were synced recently for this context',
+          errorCode: 'PRICE_SYNC_COOLDOWN'
         });
       }
 
