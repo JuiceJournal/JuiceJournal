@@ -37,6 +37,28 @@ const handleValidationErrors = (req, res, next) => {
 
 const poeVersionValidator = query('poeVersion').optional().isIn(['poe1', 'poe2']);
 
+function canAccessSyncControls(user) {
+  return !env.auth.requireAdminForPriceSync || user?.role === 'admin';
+}
+
+function getSyncStatusPayload() {
+  const now = Date.now();
+  const contexts = Array.from(syncState.entries()).map(([context, state]) => ({
+    context,
+    inFlight: Boolean(state?.inFlight),
+    lastSuccessAt: state?.lastSuccessAt || null,
+    cooldownRemainingMs: state?.lastSuccessAt
+      ? Math.max(0, PRICE_SYNC_MIN_INTERVAL_MS - (now - state.lastSuccessAt))
+      : 0
+  }));
+
+  return {
+    contexts,
+    inFlightCount: contexts.filter((entry) => entry.inFlight).length,
+    trackedContexts: contexts.length
+  };
+}
+
 /**
  * GET /api/prices/current
  * Get current prices
@@ -220,6 +242,27 @@ router.get('/leagues',
 );
 
 /**
+ * GET /api/prices/sync-status
+ * View current sync state for operations surfaces
+ */
+router.get('/sync-status', authenticate, async (req, res) => {
+  try {
+    if (!canAccessSyncControls(req.user)) {
+      return errorResponse(res, 403, 'Bu islem icin yetkiniz yok', 'FORBIDDEN');
+    }
+
+    res.json({
+      success: true,
+      data: getSyncStatusPayload(),
+      error: null
+    });
+  } catch (error) {
+    console.error('Price sync status error:', error);
+    errorResponse(res, 500, 'Failed to get sync status', 'PRICE_SYNC_STATUS_FAILED');
+  }
+});
+
+/**
  * POST /api/prices/sync
  * Sync prices from poe.ninja (Admin/Internal)
  */
@@ -233,13 +276,8 @@ router.post('/sync',
   ],
   async (req, res) => {
     try {
-      if (env.auth.requireAdminForPriceSync && req.user?.role !== 'admin') {
-        return res.status(403).json({
-          success: false,
-          data: null,
-          error: 'Bu islem icin yetkiniz yok',
-          errorCode: 'FORBIDDEN'
-        });
+      if (!canAccessSyncControls(req.user)) {
+        return errorResponse(res, 403, 'Bu islem icin yetkiniz yok', 'FORBIDDEN');
       }
 
       const { league, types, poeVersion = 'poe1' } = req.body;
