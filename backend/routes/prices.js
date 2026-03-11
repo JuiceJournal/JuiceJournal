@@ -15,17 +15,22 @@ const { Op } = require('sequelize');
 const syncState = new Map();
 const PRICE_SYNC_MIN_INTERVAL_MS = parseInt(process.env.PRICE_SYNC_MIN_INTERVAL_MS || '300000', 10);
 
+function errorResponse(res, status, error, errorCode) {
+  return res.status(status).json({
+    success: false,
+    data: null,
+    error,
+    errorCode
+  });
+}
+
 /**
  * Validation middleware
  */
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      data: null,
-      error: errors.array()[0].msg
-    });
+    return errorResponse(res, 400, errors.array()[0].msg, 'VALIDATION_ERROR');
   }
   next();
 };
@@ -97,11 +102,7 @@ router.get('/current',
       });
     } catch (error) {
       console.error('Price fetch error:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to get prices'
-      });
+      errorResponse(res, 500, 'Failed to get prices', 'PRICES_LOAD_FAILED');
     }
   }
 );
@@ -135,11 +136,7 @@ router.get('/item/:itemName',
       });
 
       if (!price) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          error: 'Item price not found'
-        });
+        return errorResponse(res, 404, 'Item price not found', 'PRICE_NOT_FOUND');
       }
 
       res.json({
@@ -149,11 +146,7 @@ router.get('/item/:itemName',
       });
     } catch (error) {
       console.error('Price fetch error:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to get price'
-      });
+      errorResponse(res, 500, 'Failed to get price', 'PRICE_LOAD_FAILED');
     }
   }
 );
@@ -187,11 +180,7 @@ router.get('/types',
       });
     } catch (error) {
       console.error('Type fetch error:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to get types'
-      });
+      errorResponse(res, 500, 'Failed to get types', 'PRICE_TYPES_LOAD_FAILED');
     }
   }
 );
@@ -225,11 +214,7 @@ router.get('/leagues',
       });
     } catch (error) {
       console.error('League fetch error:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to get leagues'
-      });
+      errorResponse(res, 500, 'Failed to get leagues', 'PRICE_LEAGUES_LOAD_FAILED');
     }
   }
 );
@@ -330,11 +315,7 @@ router.post('/sync',
         lastSuccessAt: previousState?.lastSuccessAt || null
       });
       console.error('Price sync error:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to sync prices'
-      });
+      errorResponse(res, 500, 'Failed to sync prices', 'PRICE_SYNC_FAILED');
     }
   }
 );
@@ -363,11 +344,7 @@ router.get('/currency-overview',
       });
     } catch (error) {
       console.error('Currency overview error:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to get currency overview'
-      });
+      errorResponse(res, 500, 'Failed to get currency overview', 'PRICE_CURRENCY_OVERVIEW_FAILED');
     }
   }
 );
@@ -396,11 +373,7 @@ router.get('/item-overview',
       });
     } catch (error) {
       console.error('Item overview error:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to get item overview'
-      });
+      errorResponse(res, 500, 'Failed to get item overview', 'PRICE_ITEM_OVERVIEW_FAILED');
     }
   }
 );

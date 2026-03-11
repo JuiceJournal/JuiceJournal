@@ -31,17 +31,22 @@ function getCapabilities(user) {
   };
 }
 
+function errorResponse(res, status, error, errorCode) {
+  return res.status(status).json({
+    success: false,
+    data: null,
+    error,
+    errorCode
+  });
+}
+
 /**
  * Validation middleware
  */
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      data: null,
-      error: errors.array()[0].msg
-    });
+    return errorResponse(res, 400, errors.array()[0].msg, 'VALIDATION_ERROR');
   }
   next();
 };
@@ -118,11 +123,7 @@ router.post('/register',
       });
     } catch (error) {
       console.error('Kayit hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Kayit sirasinda bir hata olustu'
-      });
+      errorResponse(res, 500, 'Kayit sirasinda bir hata olustu', 'REGISTER_FAILED');
     }
   }
 );
@@ -192,11 +193,7 @@ router.post('/login',
       });
     } catch (error) {
       console.error('Giris hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Giris sirasinda bir hata olustu'
-      });
+      errorResponse(res, 500, 'Giris sirasinda bir hata olustu', 'LOGIN_FAILED');
     }
   }
 );
@@ -217,11 +214,7 @@ router.get('/me', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Profil getirme hatasi:', error);
-    res.status(500).json({
-      success: false,
-      data: null,
-      error: 'Profil bilgileri alinirken hata olustu'
-    });
+    errorResponse(res, 500, 'Profil bilgileri alinirken hata olustu', 'PROFILE_LOAD_FAILED');
   }
 });
 
@@ -256,19 +249,11 @@ router.post('/poe/connect/start',
       }
 
       if (!poeAuthService.isConfigured()) {
-        return res.status(400).json({
-          success: false,
-          data: null,
-          error: 'Path of Exile OAuth is not configured'
-        });
+        return errorResponse(res, 400, 'Path of Exile OAuth is not configured', 'POE_OAUTH_NOT_CONFIGURED');
       }
 
       if (!redirectUri || redirectUri !== process.env.POE_REDIRECT_URI) {
-        return res.status(400).json({
-          success: false,
-          data: null,
-          error: 'Invalid redirect URI'
-        });
+        return errorResponse(res, 400, 'Invalid redirect URI', 'INVALID_REDIRECT_URI');
       }
 
       const authUrl = poeAuthService.buildAuthorizationUrl({
@@ -290,11 +275,7 @@ router.post('/poe/connect/start',
       });
     } catch (error) {
       console.error('PoE connect start error:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to start Path of Exile linking'
-      });
+      errorResponse(res, 500, 'Failed to start Path of Exile linking', 'POE_CONNECT_START_FAILED');
     }
   }
 );
@@ -332,27 +313,15 @@ router.post('/poe/connect/complete',
       }
 
       if (!poeAuthService.isConfigured()) {
-        return res.status(400).json({
-          success: false,
-          data: null,
-          error: 'Path of Exile OAuth is not configured'
-        });
+        return errorResponse(res, 400, 'Path of Exile OAuth is not configured', 'POE_OAUTH_NOT_CONFIGURED');
       }
 
       if (!redirectUri || redirectUri !== process.env.POE_REDIRECT_URI) {
-        return res.status(400).json({
-          success: false,
-          data: null,
-          error: 'Invalid redirect URI'
-        });
+        return errorResponse(res, 400, 'Invalid redirect URI', 'INVALID_REDIRECT_URI');
       }
 
       if (!code || !codeVerifier) {
-        return res.status(400).json({
-          success: false,
-          data: null,
-          error: 'Authorization code and PKCE verifier are required'
-        });
+        return errorResponse(res, 400, 'Authorization code and PKCE verifier are required', 'POE_AUTHORIZATION_CODE_REQUIRED');
       }
 
       const tokenPayload = await poeAuthService.exchangeCode({
@@ -382,11 +351,7 @@ router.post('/poe/connect/complete',
       });
     } catch (error) {
       console.error('PoE connect complete error:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to complete Path of Exile linking'
-      });
+      errorResponse(res, 500, 'Failed to complete Path of Exile linking', 'POE_CONNECT_COMPLETE_FAILED');
     }
   }
 );
@@ -408,11 +373,7 @@ router.get('/poe/status', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('PoE status error:', error);
-    res.status(500).json({
-      success: false,
-      data: null,
-      error: 'Failed to get Path of Exile link status'
-    });
+    errorResponse(res, 500, 'Failed to get Path of Exile link status', 'POE_STATUS_LOAD_FAILED');
   }
 });
 
@@ -433,11 +394,7 @@ router.delete('/poe/disconnect', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('PoE disconnect error:', error);
-    res.status(500).json({
-      success: false,
-      data: null,
-      error: 'Failed to disconnect Path of Exile account'
-    });
+    errorResponse(res, 500, 'Failed to disconnect Path of Exile account', 'POE_DISCONNECT_FAILED');
   }
 });
 

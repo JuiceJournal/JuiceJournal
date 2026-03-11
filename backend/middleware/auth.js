@@ -20,7 +20,8 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         data: null,
-        error: 'Yetkilendirme tokeni gerekli'
+        error: 'Yetkilendirme tokeni gerekli',
+        errorCode: 'AUTH_TOKEN_REQUIRED'
       });
     }
 
@@ -30,7 +31,8 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         data: null,
-        error: 'Token bulunamadi'
+        error: 'Token bulunamadi',
+        errorCode: 'AUTH_TOKEN_MISSING'
       });
     }
 
@@ -44,7 +46,8 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         data: null,
-        error: 'Kullanici bulunamadi'
+        error: 'Kullanici bulunamadi',
+        errorCode: 'AUTH_USER_NOT_FOUND'
       });
     }
 
@@ -55,26 +58,29 @@ const authenticate = async (req, res, next) => {
     next();
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        success: false,
-        data: null,
-        error: 'Token suresi doldu, lutfen tekrar giris yapin'
-      });
-    }
+        return res.status(401).json({
+          success: false,
+          data: null,
+          error: 'Token suresi doldu, lutfen tekrar giris yapin',
+          errorCode: 'AUTH_TOKEN_EXPIRED'
+        });
+      }
     
     if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({
-        success: false,
-        data: null,
-        error: 'Gecersiz token'
-      });
-    }
+        return res.status(401).json({
+          success: false,
+          data: null,
+          error: 'Gecersiz token',
+          errorCode: 'AUTH_TOKEN_INVALID'
+        });
+      }
 
     console.error('Auth middleware hatasi:', error);
     return res.status(500).json({
       success: false,
       data: null,
-      error: 'Yetkilendirme hatasi'
+      error: 'Yetkilendirme hatasi',
+      errorCode: 'AUTH_MIDDLEWARE_FAILED'
     });
   }
 };
@@ -122,7 +128,8 @@ const requireRole = (...roles) => (req, res, next) => {
     return res.status(401).json({
       success: false,
       data: null,
-      error: 'Yetkilendirme tokeni gerekli'
+      error: 'Yetkilendirme tokeni gerekli',
+      errorCode: 'AUTH_TOKEN_REQUIRED'
     });
   }
 
@@ -130,7 +137,8 @@ const requireRole = (...roles) => (req, res, next) => {
     return res.status(403).json({
       success: false,
       data: null,
-      error: 'Bu islem icin yetkiniz yok'
+      error: 'Bu islem icin yetkiniz yok',
+      errorCode: 'FORBIDDEN'
     });
   }
 
