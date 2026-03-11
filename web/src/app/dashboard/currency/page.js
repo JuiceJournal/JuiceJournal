@@ -60,7 +60,7 @@ function SkeletonRow() {
 
 export default function CurrencyPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, capabilities, loading: authLoading } = useAuth();
   const { t } = useI18n();
   const { poeVersion, league } = useTrackerContext();
 
@@ -127,6 +127,11 @@ export default function CurrencyPage() {
   }, [league, selectedType, poeVersion]);
 
   const handleSync = async () => {
+    if (!capabilities?.canSyncPrices) {
+      toast.error(t('currency.syncRestricted'));
+      return;
+    }
+
     try {
       setSyncing(true);
       await priceAPI.sync({ league, poeVersion });
@@ -240,7 +245,7 @@ export default function CurrencyPage() {
 
             <button
               onClick={handleSync}
-              disabled={syncing}
+              disabled={syncing || !capabilities?.canSyncPrices}
               className="btn btn-primary disabled:opacity-50"
             >
               <PoeChromeIcon type="market" size={16} />
@@ -251,6 +256,11 @@ export default function CurrencyPage() {
 
         <section className="card mb-6">
           <div className="flex flex-col gap-4">
+            {!capabilities?.canSyncPrices && (
+              <p className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                {t('currency.syncRestricted')}
+              </p>
+            )}
             <div className="flex flex-wrap gap-2" role="tablist" aria-label={t('common.type')}>
               {(poeVersion === 'poe2' ? POE2_TYPES : POE1_TYPES).map((tab) => (
                 <button

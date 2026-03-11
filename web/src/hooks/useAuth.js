@@ -7,6 +7,7 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [capabilities, setCapabilities] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,9 +21,11 @@ export function AuthProvider({ children }) {
         const response = await authAPI.getMe();
         if (response.success) {
           setUser(response.data.user);
+          setCapabilities(response.data.capabilities || {});
         }
       } catch (error) {
         localStorage.removeItem('token');
+        setCapabilities({});
       }
     }
     setLoading(false);
@@ -33,6 +36,7 @@ export function AuthProvider({ children }) {
     if (response.success) {
       localStorage.setItem('token', response.data.token);
       setUser(response.data.user);
+      setCapabilities(response.data.capabilities || {});
     }
     return response;
   };
@@ -42,6 +46,7 @@ export function AuthProvider({ children }) {
     if (response.success) {
       localStorage.setItem('token', response.data.token);
       setUser(response.data.user);
+      setCapabilities(response.data.capabilities || {});
     }
     return response;
   };
@@ -49,10 +54,11 @@ export function AuthProvider({ children }) {
   const logout = () => {
     localStorage.removeItem('token');
     setUser(null);
+    setCapabilities({});
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, capabilities, loading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -125,6 +125,7 @@ export const EN_MESSAGES = {
   'currency.title': 'Currency Archive',
   'currency.body': 'Review synced prices in the selected game and league.',
   'currency.syncPrices': 'Sync Prices',
+  'currency.syncRestricted': 'Price sync is restricted to admin accounts.',
   'currency.searchItems': 'Search items...',
   'currency.noMatchesTitle': 'No matching items',
   'currency.noMatchesBody': 'Try a broader search or another type.',

@@ -114,6 +114,7 @@ export const TR_MESSAGES = {
   'currency.title': 'Currency Arsivi',
   'currency.body': 'Secili oyun ve ligdeki senkron fiyatlari inceleyin.',
   'currency.syncPrices': 'Fiyatlari Senkronize Et',
+  'currency.syncRestricted': 'Fiyat senkronizasyonu yalnizca admin hesaplar icin aciktir.',
   'currency.searchItems': 'Item ara...',
   'currency.noMatchesTitle': 'Eslesen item yok',
   'currency.noMatchesBody': 'Daha genis arama veya baska tip deneyin.',

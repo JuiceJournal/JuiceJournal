@@ -8,6 +8,9 @@ import axios from 'axios';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 const API_ERROR_MESSAGE_MAP = {
+  FORBIDDEN: 'You do not have permission to perform this action.',
+  PRICE_SYNC_IN_PROGRESS: 'Price sync is already running for this context.',
+  PRICE_SYNC_COOLDOWN: 'Prices were synced recently for this context.',
   'Kullanici adi veya sifre hatali': 'Invalid username or password.',
   'Invalid username or password': 'Invalid username or password.',
   'Kullanici adi veya e-posta gereklidir': 'Enter your username or email.',
@@ -24,14 +27,15 @@ const API_ERROR_MESSAGE_MAP = {
 
 export function normalizeApiError(error, fallbackMessage = 'Something went wrong. Please try again.') {
   const status = error?.response?.status || error?.status || null;
+  const errorCode = error?.response?.data?.errorCode || error?.errorCode || error?.code || null;
   const rawMessage = error?.response?.data?.error || error?.error || error?.message || '';
   const trimmedMessage = typeof rawMessage === 'string' ? rawMessage.trim() : '';
 
   if (status === 401) {
     return {
       status,
-      code: 'UNAUTHORIZED',
-      message: API_ERROR_MESSAGE_MAP[trimmedMessage] || 'Your session has expired. Please sign in again.',
+      code: errorCode || 'UNAUTHORIZED',
+      message: API_ERROR_MESSAGE_MAP[errorCode] || API_ERROR_MESSAGE_MAP[trimmedMessage] || 'Your session has expired. Please sign in again.',
       rawMessage: trimmedMessage,
     };
   }
@@ -39,8 +43,8 @@ export function normalizeApiError(error, fallbackMessage = 'Something went wrong
   if (trimmedMessage) {
     return {
       status,
-      code: error?.code || 'API_ERROR',
-      message: API_ERROR_MESSAGE_MAP[trimmedMessage] || trimmedMessage,
+      code: errorCode || error?.code || 'API_ERROR',
+      message: API_ERROR_MESSAGE_MAP[errorCode] || API_ERROR_MESSAGE_MAP[trimmedMessage] || trimmedMessage,
       rawMessage: trimmedMessage,
     };
   }
