@@ -171,6 +171,7 @@ export const priceAPI = {
   getTypes: (params) => apiClient.get('/prices/types', { params }),
   getLeagues: (params) => apiClient.get('/prices/leagues', { params }),
   sync: (data) => apiClient.post('/prices/sync', data),
+  getSyncStatus: () => apiClient.get('/prices/sync-status'),
 };
 
 // ==================== STATS ====================
@@ -183,6 +184,13 @@ export const statsAPI = {
       params: { limit, ...filters },
     }),
   getSummary: (filters = {}) => apiClient.get('/stats/summary', { params: filters }),
+};
+
+export const opsAPI = {
+  getHealth: async () => {
+    const response = await axios.get(`${API_URL}/health`);
+    return response.data;
+  },
 };
 
 export default apiClient;

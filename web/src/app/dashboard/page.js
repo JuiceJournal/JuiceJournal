@@ -11,14 +11,14 @@ import PoeChromeIcon from '@/components/PoeChromeIcon';
 import ProfitChart from '@/components/ProfitChart';
 import SessionList from '@/components/SessionList';
 import AddLootModal from '@/components/AddLootModal';
-import { getApiErrorMessage, sessionAPI, statsAPI } from '@/lib/api';
+import { getApiErrorMessage, opsAPI, priceAPI, sessionAPI, statsAPI } from '@/lib/api';
 import { getPoeVersionLabel, getProfitColorClass } from '@/lib/utils';
 import { CurrencyValue } from '@/components/CurrencyIcon';
 import toast from 'react-hot-toast';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, capabilities, loading: authLoading } = useAuth();
   const { t } = useI18n();
   const { connected, lastMessage } = useSocket();
   const { poeVersion, league } = useTrackerContext();
@@ -26,6 +26,7 @@ export default function DashboardPage() {
   const [activeSession, setActiveSession] = useState(null);
   const [stats, setStats] = useState(null);
   const [recentSessions, setRecentSessions] = useState([]);
+  const [opsData, setOpsData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showLootModal, setShowLootModal] = useState(false);
 
@@ -37,8 +38,11 @@ export default function DashboardPage() {
 
     if (user) {
       loadDashboardData();
+      if (capabilities?.canSyncPrices) {
+        loadOperationsData();
+      }
     }
-  }, [user, authLoading, router, poeVersion, league]);
+  }, [user, authLoading, router, poeVersion, league, capabilities]);
 
   useEffect(() => {
     if (lastMessage) {
@@ -70,6 +74,22 @@ export default function DashboardPage() {
       toast.error(getApiErrorMessage(error, t('toast.dashboardLoadError')));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadOperationsData = async () => {
+    try {
+      const [{ data: syncStatus }, health] = await Promise.all([
+        priceAPI.getSyncStatus(),
+        opsAPI.getHealth(),
+      ]);
+
+      setOpsData({
+        syncStatus,
+        health
+      });
+    } catch {
+      setOpsData(null);
     }
   };
 
@@ -238,6 +258,42 @@ export default function DashboardPage() {
             <p className="mt-3 text-sm text-poe-mist">{t('dashboard.hourlyTempoBody')}</p>
           </div>
         </div>
+
+        {capabilities?.canSyncPrices && (
+          <div className="card mb-8">
+            <p className="section-kicker inline-flex items-center gap-2">
+              <PoeChromeIcon type="gate" size={14} className="text-poe-gold/80" />
+              <span>{t('ops.kicker')}</span>
+            </p>
+            <h2 className="panel-title">{t('ops.title')}</h2>
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div className="rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.76)] p-4">
+                <p className="section-kicker">{t('ops.apiStatus')}</p>
+                <p className="mt-2 text-lg font-semibold text-stone-100">
+                  {opsData?.health?.data?.status === 'OK' ? t('ops.reachable') : t('ops.unreachable')}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.76)] p-4">
+                <p className="section-kicker">{t('ops.syncContexts')}</p>
+                <p className="mt-2 text-lg font-semibold text-stone-100">
+                  {opsData?.syncStatus?.trackedContexts || 0}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.76)] p-4">
+                <p className="section-kicker">{t('ops.inFlight')}</p>
+                <p className="mt-2 text-lg font-semibold text-stone-100">
+                  {opsData?.syncStatus?.inFlightCount || 0}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.76)] p-4">
+                <p className="section-kicker">{t('ops.websocketClients')}</p>
+                <p className="mt-2 text-lg font-semibold text-stone-100">
+                  {opsData?.health?.data?.websocketClients || 0}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-1">
