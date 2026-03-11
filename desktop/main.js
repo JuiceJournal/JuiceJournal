@@ -27,6 +27,7 @@ const APP_ID = 'PoeFarmTracker.Desktop';
 const DEFAULT_STRATEGY_PRESETS = ['Strongbox', 'Legion', 'Ritual', 'Expedition', 'Harvest', 'Boss Rush'];
 const MAX_PENDING_LOOT_ACTIONS = 100;
 const MAX_PENDING_SESSION_ACTIONS = 20;
+const MAX_AUDIT_TRAIL_ENTRIES = 200;
 const MAIN_PROCESS_TRANSLATIONS = {
   tr: {
     trayStillRunning: 'Uygulama sistem tepsisinde calismaya devam ediyor.',
@@ -64,7 +65,16 @@ const MAIN_PROCESS_TRANSLATIONS = {
     promptDetail: 'Ornegin: Dunes Map, City Square Map',
     unknownMap: 'Bilinmeyen Map',
     lootQueuedTitle: 'Loot Kuyruga Alindi',
-    lootQueuedBody: '{count} item baglanti gelince senkronize edilecek.'
+    lootQueuedBody: '{count} item baglanti gelince senkronize edilecek.',
+    auditLogin: 'Yerel kullanici girisi basarili',
+    auditLogout: 'Kullanici cikis yapti',
+    auditSessionStarted: '{mapName} session baslatildi',
+    auditSessionQueued: '{mapName} session senkron kuyruguna alindi',
+    auditSessionEnded: '{mapName} session tamamlandi',
+    auditSessionEndQueued: '{mapName} session bitisi kuyruga alindi',
+    auditLootQueued: '{count} loot senkron kuyruguna alindi',
+    auditPendingSyncFlushed: 'Bekleyen senkron islemleri denendi. Session: {sessions}, Loot: {loot}',
+    auditDiagnosticsExported: 'Diagnostik dosyasi disa aktarildi'
   },
   en: {
     trayStillRunning: 'The app is still running in the system tray.',
@@ -102,7 +112,16 @@ const MAIN_PROCESS_TRANSLATIONS = {
     promptDetail: 'For example: Dunes Map, City Square Map',
     unknownMap: 'Unknown Map',
     lootQueuedTitle: 'Loot Queued',
-    lootQueuedBody: '{count} items will sync when the connection returns.'
+    lootQueuedBody: '{count} items will sync when the connection returns.',
+    auditLogin: 'Local user login succeeded',
+    auditLogout: 'User logged out',
+    auditSessionStarted: '{mapName} session started',
+    auditSessionQueued: '{mapName} session queued for sync',
+    auditSessionEnded: '{mapName} session completed',
+    auditSessionEndQueued: '{mapName} session end queued for sync',
+    auditLootQueued: '{count} loot actions queued for sync',
+    auditPendingSyncFlushed: 'Pending sync processed. Sessions: {sessions}, Loot: {loot}',
+    auditDiagnosticsExported: 'Diagnostics file exported'
   }
 };
 
@@ -123,6 +142,7 @@ const store = new Store({
     pendingSessionActions: [],
     pendingLootActions: [],
     queuedCurrentSession: null,
+    auditTrail: [],
     strategyPresets: DEFAULT_STRATEGY_PRESETS
   },
 });
@@ -214,6 +234,33 @@ function getQueuedCurrentSession() {
 function setQueuedCurrentSession(session) {
   store.set('queuedCurrentSession', session || null);
   emitPendingSyncState();
+}
+
+function getAuditTrail() {
+  return store.get('auditTrail') || [];
+}
+
+function setAuditTrail(entries) {
+  const normalizedEntries = entries.slice(-MAX_AUDIT_TRAIL_ENTRIES);
+  store.set('auditTrail', normalizedEntries);
+
+  if (mainWindow) {
+    mainWindow.webContents.send('audit-trail-updated', {
+      entries: normalizedEntries.slice().reverse().slice(0, 20)
+    });
+  }
+}
+
+function appendAuditTrail(key, values = {}, level = 'info') {
+  const entries = getAuditTrail();
+  entries.push({
+    id: crypto.randomUUID(),
+    key,
+    values,
+    level,
+    createdAt: new Date().toISOString()
+  });
+  setAuditTrail(entries);
 }
 
 function getCurrentUserId() {
@@ -453,6 +500,13 @@ async function flushPendingActions() {
   const sessionResult = await flushPendingSessionActions();
   const lootResult = await flushPendingLootActions(sessionResult.sessionIdMap);
 
+  if ((sessionResult.processed || 0) > 0 || (lootResult.processed || 0) > 0) {
+    appendAuditTrail('auditPendingSyncFlushed', {
+      sessions: sessionResult.processed || 0,
+      loot: lootResult.processed || 0
+    });
+  }
+
   return {
     sessions: sessionResult,
     loot: lootResult
@@ -462,6 +516,7 @@ async function flushPendingActions() {
 function buildDiagnosticsPayload() {
   const settings = { ...store.store };
   delete settings.authToken;
+  delete settings.auditTrail;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -494,6 +549,7 @@ function buildDiagnosticsPayload() {
       startedAt: currentSession.startedAt,
       endedAt: currentSession.endedAt || null
     } : null,
+    auditTrail: getAuditTrail(),
     settings
   };
 }
@@ -887,6 +943,7 @@ async function captureAndScan() {
         sessionId: currentSession.id,
         items
       });
+      appendAuditTrail('auditLootQueued', { count: items.length }, 'warning');
       showNotification(
         t('lootQueuedTitle'),
         t('lootQueuedBody', { count: items.length })
@@ -919,6 +976,7 @@ async function captureAndScan() {
           sessionId: currentSession.id,
           items
         });
+        appendAuditTrail('auditLootQueued', { count: items.length }, 'warning');
         const totalValue = items.reduce((sum, item) => sum + ((item.chaosValue || 0) * (item.quantity || 1)), 0);
         if (mainWindow) {
           mainWindow.webContents.send('loot-added', { items, totalValue, queued: true });
@@ -966,6 +1024,7 @@ async function startNewSession(input = {}) {
         league
       });
       setQueuedCurrentSession(null);
+      appendAuditTrail('auditSessionStarted', { mapName });
     } catch (error) {
       if (!isRetryableApiError(error)) {
         throw error;
@@ -1000,6 +1059,7 @@ async function startNewSession(input = {}) {
         }
       });
       setQueuedCurrentSession(session);
+      appendAuditTrail('auditSessionQueued', { mapName }, 'warning');
     }
 
     currentSession = session;
@@ -1035,9 +1095,11 @@ async function endCurrentSession() {
       });
       setQueuedCurrentSession(null);
       queued = true;
+      appendAuditTrail('auditSessionEndQueued', { mapName: currentSession.mapName }, 'warning');
     } else {
       try {
         session = await apiClient.endSession(currentSession.id);
+        appendAuditTrail('auditSessionEnded', { mapName: currentSession.mapName });
       } catch (error) {
         if (!isRetryableApiError(error)) {
           throw error;
@@ -1049,6 +1111,7 @@ async function endCurrentSession() {
           endedAt: new Date().toISOString()
         });
         queued = true;
+        appendAuditTrail('auditSessionEndQueued', { mapName: currentSession.mapName }, 'warning');
       }
     }
 
@@ -1306,6 +1369,12 @@ function setupIPC() {
     return getPendingSyncSnapshot();
   });
 
+  ipcMain.handle('get-audit-trail', () => {
+    return {
+      entries: getAuditTrail().slice().reverse().slice(0, 20)
+    };
+  });
+
   ipcMain.handle('retry-pending-loot-actions', async () => {
     return await flushPendingActions();
   });
@@ -1326,6 +1395,7 @@ function setupIPC() {
 
     const payload = buildDiagnosticsPayload();
     fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
+    appendAuditTrail('auditDiagnosticsExported');
     return {
       canceled: false,
       filePath
@@ -1405,6 +1475,7 @@ function setupIPC() {
         apiClient.setToken(token);
         store.set('currentUserId', result?.data?.user?.id || null);
         await flushPendingActions();
+        appendAuditTrail('auditLogin');
       }
       return result;
     } catch (error) {
@@ -1425,6 +1496,7 @@ function setupIPC() {
         apiClient.setToken(token);
         store.set('currentUserId', result?.user?.id || null);
         await flushPendingActions();
+        appendAuditTrail('auditLogin');
       }
       return {
         success: true,
@@ -1512,6 +1584,7 @@ function setupIPC() {
 
   // Logout
   ipcMain.handle('logout', () => {
+    appendAuditTrail('auditLogout');
     store.set('authToken', null);
     store.set('currentUserId', null);
     apiClient.setToken(null);

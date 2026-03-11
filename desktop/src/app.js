@@ -15,7 +15,8 @@ const state = {
   recentLoot: [],
   poeLink: null,
   selectedSession: null,
-  pendingLootCount: 0
+  pendingLootCount: 0,
+  auditTrail: []
 };
 
 const ERROR_MESSAGE_KEY_MAP = {
@@ -161,6 +162,7 @@ const elements = {
   connectionText: document.getElementById('connection-text'),
   pendingSyncCount: document.getElementById('pending-sync-count'),
   pendingSyncMeta: document.getElementById('pending-sync-meta'),
+  auditTrailList: document.getElementById('audit-trail-list'),
   retryPendingSyncBtn: document.getElementById('retry-pending-sync'),
   exportDiagnosticsBtn: document.getElementById('export-diagnostics'),
   saveSettingsBtn: document.getElementById('save-settings'),
@@ -227,7 +229,9 @@ async function init() {
   // Aktif session ve dashboard verilerini senkronize et
   await refreshTrackerData();
   await loadPendingLootState();
+  await loadAuditTrailState();
   renderPendingSyncState();
+  renderAuditTrail();
   
 }
 
@@ -265,6 +269,15 @@ async function loadPendingLootState() {
   }
 }
 
+async function loadAuditTrailState() {
+  try {
+    const response = await window.electronAPI.getAuditTrail();
+    state.auditTrail = response?.entries || [];
+  } catch {
+    state.auditTrail = [];
+  }
+}
+
 function renderPendingSyncState() {
   if (!elements.pendingSyncCount || !elements.pendingSyncMeta) {
     return;
@@ -274,6 +287,30 @@ function renderPendingSyncState() {
   elements.pendingSyncMeta.textContent = state.pendingLootCount > 0
     ? window.t('settings.syncQueuePending', { count: state.pendingLootCount })
     : window.t('settings.syncQueueEmpty');
+}
+
+function renderAuditTrail() {
+  if (!elements.auditTrailList) {
+    return;
+  }
+
+  if (!state.auditTrail.length) {
+    elements.auditTrailList.innerHTML = `<p class="text-muted">${window.t('settings.auditTrailEmpty')}</p>`;
+    return;
+  }
+
+  elements.auditTrailList.innerHTML = state.auditTrail.slice(0, 12).map((entry) => {
+    const message = window.t(entry.key, entry.values || {});
+    const timestamp = entry.createdAt ? timeAgo(entry.createdAt) : '-';
+    return `
+      <article class="audit-entry ${entry.level || 'info'}">
+        <div class="audit-entry-header">
+          <span class="audit-entry-title">${message}</span>
+          <span class="audit-entry-time">${timestamp}</span>
+        </div>
+      </article>
+    `;
+  }).join('');
 }
 
 function ensureSessionClock() {
@@ -526,6 +563,13 @@ function setupIPCListeners() {
     window.electronAPI.onPendingSyncUpdated((data) => {
       state.pendingLootCount = data?.total || 0;
       renderPendingSyncState();
+    });
+  }
+
+  if (window.electronAPI.onAuditTrailUpdated) {
+    window.electronAPI.onAuditTrailUpdated((data) => {
+      state.auditTrail = data?.entries || [];
+      renderAuditTrail();
     });
   }
   

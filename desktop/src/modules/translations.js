@@ -177,6 +177,9 @@ window.Translations = {
     'settings.retryingSync': 'Deneniyor...',
     'settings.exportDiagnostics': 'Diagnostik Disa Aktar',
     'settings.exportingDiagnostics': 'Aktariliyor...',
+    'settings.auditTrail': 'Yerel Islem Gecmisi',
+    'settings.auditTrailDesc': 'Son calisma, kuyruk ve diagnostik olaylari.',
+    'settings.auditTrailEmpty': 'Henuz kayit yok',
 
     // Settings - About
     'settings.version': 'Versiyon',
@@ -289,6 +292,17 @@ window.Translations = {
     'currency.noData': 'Fiyat verisi yok. Senkronize butonuna basin.',
     'currency.loading': 'Fiyatlar yukleniyor...',
     'currency.loadError': 'Fiyatlar yuklenirken hata olustu',
+
+    // Audit
+    'auditLogin': 'Yerel kullanici girisi basarili',
+    'auditLogout': 'Kullanici cikis yapti',
+    'auditSessionStarted': '{mapName} session baslatildi',
+    'auditSessionQueued': '{mapName} session senkron kuyruguna alindi',
+    'auditSessionEnded': '{mapName} session tamamlandi',
+    'auditSessionEndQueued': '{mapName} session bitisi kuyruga alindi',
+    'auditLootQueued': '{count} loot senkron kuyruguna alindi',
+    'auditPendingSyncFlushed': 'Bekleyen senkron islemleri denendi. Session: {sessions}, Loot: {loot}',
+    'auditDiagnosticsExported': 'Diagnostik dosyasi disa aktarildi',
 
     // Misc
     'misc.mapPrompt': 'Map adini girin:',
@@ -752,6 +766,9 @@ window.Translations = {
     'settings.retryingSync': 'Retrying...',
     'settings.exportDiagnostics': 'Export Diagnostics',
     'settings.exportingDiagnostics': 'Exporting...',
+    'settings.auditTrail': 'Local Audit Trail',
+    'settings.auditTrailDesc': 'Recent runtime, queue, and diagnostics events.',
+    'settings.auditTrailEmpty': 'No audit entries yet',
 
     // Settings - About
     'settings.version': 'Version',
@@ -864,6 +881,17 @@ window.Translations = {
     'currency.noData': 'No price data. Click Sync to fetch.',
     'currency.loading': 'Loading prices...',
     'currency.loadError': 'Failed to load prices',
+
+    // Audit
+    'auditLogin': 'Local user login succeeded',
+    'auditLogout': 'User logged out',
+    'auditSessionStarted': '{mapName} session started',
+    'auditSessionQueued': '{mapName} session queued for sync',
+    'auditSessionEnded': '{mapName} session completed',
+    'auditSessionEndQueued': '{mapName} session end queued for sync',
+    'auditLootQueued': '{count} loot actions queued for sync',
+    'auditPendingSyncFlushed': 'Pending sync processed. Sessions: {sessions}, Loot: {loot}',
+    'auditDiagnosticsExported': 'Diagnostics file exported',
 
     // Misc
     'misc.mapPrompt': 'Enter map name:',

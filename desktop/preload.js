@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRecentLoot: (params) => ipcRenderer.invoke('get-recent-loot', params),
   getPendingLootActions: () => ipcRenderer.invoke('get-pending-loot-actions'),
   getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
+  getAuditTrail: () => ipcRenderer.invoke('get-audit-trail'),
   retryPendingLootActions: () => ipcRenderer.invoke('retry-pending-loot-actions'),
   exportDiagnostics: () => ipcRenderer.invoke('export-diagnostics'),
 
@@ -65,6 +66,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onPendingSyncUpdated: (callback) => {
     ipcRenderer.on('pending-sync-updated', (event, data) => callback(data));
+  },
+  onAuditTrailUpdated: (callback) => {
+    ipcRenderer.on('audit-trail-updated', (event, data) => callback(data));
   },
   onNavigate: (callback) => {
     ipcRenderer.on('navigate', (event, page) => callback(page));

@@ -1544,6 +1544,46 @@ body {
   gap: 0.75rem;
 }
 
+.audit-trail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.audit-entry {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.8rem 0.95rem;
+  background: var(--bg-base);
+}
+
+.audit-entry.warning {
+  border-color: rgba(255, 145, 0, 0.22);
+}
+
+.audit-entry.error {
+  border-color: rgba(255, 82, 82, 0.2);
+}
+
+.audit-entry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.audit-entry-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.audit-entry-time {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
 /* About Page */
 .about-info {
   padding: 1.5rem;
