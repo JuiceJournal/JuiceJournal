@@ -21,7 +21,13 @@ function isConfigured() {
 }
 
 function getEncryptionKey() {
-  const rawKey = process.env.POE_TOKEN_ENCRYPTION_KEY || 'development-poe-token-key';
+  const rawKey = process.env.POE_TOKEN_ENCRYPTION_KEY
+    || ((process.env.NODE_ENV || 'development') !== 'production' ? 'development-poe-token-key' : null);
+
+  if (!rawKey) {
+    throw new Error('POE_TOKEN_ENCRYPTION_KEY must be configured in production');
+  }
+
   return crypto.createHash('sha256').update(rawKey).digest();
 }
 

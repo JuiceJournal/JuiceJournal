@@ -6,10 +6,23 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const { User } = require('../models');
 const { authenticate, generateToken } = require('../middleware/auth');
 const poeAuthService = require('../services/poeAuthService');
 const { Op } = require('sequelize');
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    data: null,
+    error: 'Cok fazla giris denemesi yapildi, lutfen daha sonra tekrar deneyin'
+  }
+});
 
 /**
  * Validation middleware
@@ -31,6 +44,7 @@ const handleValidationErrors = (req, res, next) => {
  * Yeni kullanici kaydi
  */
 router.post('/register',
+  authLimiter,
   [
     body('username')
       .trim()
@@ -109,6 +123,7 @@ router.post('/register',
  * Kullanici girisi
  */
 router.post('/login',
+  authLimiter,
   [
     body('username')
       .trim()

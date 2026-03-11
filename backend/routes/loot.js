@@ -117,6 +117,8 @@ router.post('/',
         req.app.broadcast({
           type: 'LOOT_ADDED',
           data: { lootEntry, session }
+        }, {
+          targetUserId: req.userId
         });
       }
 
@@ -506,6 +508,8 @@ router.post('/bulk',
         req.app.broadcast({
           type: 'LOOT_BULK_ADDED',
           data: { items: createdItems, session }
+        }, {
+          targetUserId: req.userId
         });
       }
 

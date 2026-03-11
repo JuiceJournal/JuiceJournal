@@ -10,13 +10,22 @@ export function useSocket() {
   const socketRef = useRef(null);
 
   useEffect(() => {
+    let reconnectTimer = null;
+
     // Establish WebSocket connection
     const connect = () => {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      if (!token) {
+        setConnected(false);
+        return;
+      }
+
       try {
         const ws = new WebSocket(WS_URL);
         socketRef.current = ws;
 
         ws.onopen = () => {
+          ws.send(JSON.stringify({ type: 'AUTH', token }));
           setConnected(true);
         };
 
@@ -29,10 +38,11 @@ export function useSocket() {
           }
         };
 
-        ws.onclose = () => {
+        ws.onclose = (event) => {
           setConnected(false);
-          // Reconnect after 5 seconds
-          setTimeout(connect, 5000);
+          if (event.code !== 1008) {
+            reconnectTimer = setTimeout(connect, 5000);
+          }
         };
 
         ws.onerror = () => {};
@@ -44,6 +54,9 @@ export function useSocket() {
     connect();
 
     return () => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
       if (socketRef.current) {
         socketRef.current.close();
       }

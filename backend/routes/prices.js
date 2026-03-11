@@ -11,6 +11,8 @@ const { authenticate } = require('../middleware/auth');
 const poeNinjaService = require('../services/poeNinjaService');
 
 const { Op } = require('sequelize');
+const syncState = new Map();
+const PRICE_SYNC_MIN_INTERVAL_MS = parseInt(process.env.PRICE_SYNC_MIN_INTERVAL_MS || '300000', 10);
 
 /**
  * Validation middleware
@@ -249,10 +251,37 @@ router.post('/sync',
 
       const targetLeague = league || await Price.getCurrentLeague(poeVersion) || 'Standard';
       const targetTypes = types || poeNinjaService.getDefaultSyncTypes(poeVersion);
+      const syncKey = `${poeVersion}:${targetLeague}`;
+      const currentState = syncState.get(syncKey);
+      const now = Date.now();
+
+      if (currentState?.inFlight) {
+        return res.status(429).json({
+          success: false,
+          data: null,
+          error: 'Price sync is already running for this context'
+        });
+      }
+
+      if (currentState?.lastSuccessAt && (now - currentState.lastSuccessAt) < PRICE_SYNC_MIN_INTERVAL_MS) {
+        return res.status(429).json({
+          success: false,
+          data: null,
+          error: 'Prices were synced recently for this context'
+        });
+      }
 
       console.log(`Price sync started: ${targetLeague} (${poeVersion})`);
+      syncState.set(syncKey, {
+        inFlight: true,
+        lastSuccessAt: currentState?.lastSuccessAt || null
+      });
 
       const results = await poeNinjaService.syncAllPrices(targetLeague, targetTypes, poeVersion);
+      syncState.set(syncKey, {
+        inFlight: false,
+        lastSuccessAt: Date.now()
+      });
 
       // Broadcast via WebSocket
       if (req.app.broadcast) {
@@ -264,6 +293,8 @@ router.post('/sync',
             syncedAt: new Date(),
             results
           }
+        }, {
+          targetUserId: req.userId
         });
       }
 
@@ -278,6 +309,14 @@ router.post('/sync',
         error: null
       });
     } catch (error) {
+      const { league, poeVersion = 'poe1' } = req.body;
+      const targetLeague = league || await Price.getCurrentLeague(poeVersion) || 'Standard';
+      const syncKey = `${poeVersion}:${targetLeague}`;
+      const previousState = syncState.get(syncKey);
+      syncState.set(syncKey, {
+        inFlight: false,
+        lastSuccessAt: previousState?.lastSuccessAt || null
+      });
       console.error('Price sync error:', error);
       res.status(500).json({
         success: false,

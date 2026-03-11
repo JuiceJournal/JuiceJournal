@@ -6,7 +6,19 @@
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+function getJwtSecret() {
+  if (process.env.JWT_SECRET) {
+    return process.env.JWT_SECRET;
+  }
+
+  if ((process.env.NODE_ENV || 'development') !== 'production') {
+    return 'development-only-jwt-secret';
+  }
+
+  throw new Error('JWT_SECRET must be configured in production');
+}
+
+const JWT_SECRET = getJwtSecret();
 
 /**
  * JWT token dogrulama middleware
