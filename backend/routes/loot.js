@@ -11,6 +11,15 @@ const { authenticate } = require('../middleware/auth');
 
 const { Op } = require('sequelize');
 
+function errorResponse(res, status, error, errorCode) {
+  return res.status(status).json({
+    success: false,
+    data: null,
+    error,
+    errorCode
+  });
+}
+
 /**
  * Validation middleware
  */
@@ -65,11 +74,7 @@ router.post('/',
       });
 
       if (!session) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          error: 'Session bulunamadi'
-        });
+        return errorResponse(res, 404, 'Session bulunamadi', 'SESSION_NOT_FOUND');
       }
 
       // Chaos degeri verilmemisse fiyat tablosundan bul
@@ -129,11 +134,7 @@ router.post('/',
       });
     } catch (error) {
       console.error('Loot ekleme hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Loot eklenirken hata olustu'
-      });
+      errorResponse(res, 500, 'Loot eklenirken hata olustu', 'LOOT_ADD_FAILED');
     }
   }
 );
@@ -164,11 +165,7 @@ router.get('/session/:sessionId',
       });
 
       if (!session) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          error: 'Session bulunamadi'
-        });
+        return errorResponse(res, 404, 'Session bulunamadi', 'SESSION_NOT_FOUND');
       }
 
       const { count, rows: lootEntries } = await LootEntry.findAndCountAll({
@@ -196,11 +193,7 @@ router.get('/session/:sessionId',
       });
     } catch (error) {
       console.error('Loot listeleme hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Loot entry\'ler alinirken hata olustu'
-      });
+      errorResponse(res, 500, 'Loot entry\'ler alinirken hata olustu', 'LOOT_LIST_LOAD_FAILED');
     }
   }
 );
@@ -266,11 +259,7 @@ router.get('/recent',
       });
     } catch (error) {
       console.error('Son loot listeleme hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Son loot entry\'ler alinirken hata olustu'
-      });
+      errorResponse(res, 500, 'Son loot entry\'ler alinirken hata olustu', 'RECENT_LOOT_LOAD_FAILED');
     }
   }
 );
@@ -297,11 +286,7 @@ router.get('/:id',
       });
 
       if (!lootEntry) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          error: 'Loot entry bulunamadi'
-        });
+        return errorResponse(res, 404, 'Loot entry bulunamadi', 'LOOT_NOT_FOUND');
       }
 
       res.json({
@@ -311,11 +296,7 @@ router.get('/:id',
       });
     } catch (error) {
       console.error('Loot getirme hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Loot entry alinirken hata olustu'
-      });
+      errorResponse(res, 500, 'Loot entry alinirken hata olustu', 'LOOT_LOAD_FAILED');
     }
   }
 );
@@ -346,11 +327,7 @@ router.put('/:id',
       });
 
       if (!lootEntry) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          error: 'Loot entry bulunamadi'
-        });
+        return errorResponse(res, 404, 'Loot entry bulunamadi', 'LOOT_NOT_FOUND');
       }
 
       await lootEntry.update({
@@ -369,11 +346,7 @@ router.put('/:id',
       });
     } catch (error) {
       console.error('Loot guncelleme hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Loot entry guncellenirken hata olustu'
-      });
+      errorResponse(res, 500, 'Loot entry guncellenirken hata olustu', 'LOOT_UPDATE_FAILED');
     }
   }
 );
@@ -400,11 +373,7 @@ router.delete('/:id',
       });
 
       if (!lootEntry) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          error: 'Loot entry bulunamadi'
-        });
+        return errorResponse(res, 404, 'Loot entry bulunamadi', 'LOOT_NOT_FOUND');
       }
 
       const session = lootEntry.session;
@@ -420,11 +389,7 @@ router.delete('/:id',
       });
     } catch (error) {
       console.error('Loot silme hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Loot entry silinirken hata olustu'
-      });
+      errorResponse(res, 500, 'Loot entry silinirken hata olustu', 'LOOT_DELETE_FAILED');
     }
   }
 );
@@ -454,11 +419,7 @@ router.post('/bulk',
       });
 
       if (!session) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          error: 'Session bulunamadi'
-        });
+        return errorResponse(res, 404, 'Session bulunamadi', 'SESSION_NOT_FOUND');
       }
 
       const createdItems = [];
@@ -524,11 +485,7 @@ router.post('/bulk',
       });
     } catch (error) {
       console.error('Toplu loot ekleme hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Loot eklenirken hata olustu'
-      });
+      errorResponse(res, 500, 'Loot eklenirken hata olustu', 'LOOT_BULK_ADD_FAILED');
     }
   }
 );

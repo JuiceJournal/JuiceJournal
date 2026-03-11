@@ -183,9 +183,9 @@ module.exports = (sequelize, DataTypes) => {
     return this.profitChaos;
   };
 
-  Session.prototype.complete = async function() {
+  Session.prototype.complete = async function(endedAtOverride = null) {
     this.status = 'completed';
-    this.endedAt = new Date();
+    this.endedAt = endedAtOverride ? new Date(endedAtOverride) : new Date();
     
     if (this.startedAt) {
       this.durationSec = Math.floor((this.endedAt - this.startedAt) / 1000);
@@ -195,9 +195,9 @@ module.exports = (sequelize, DataTypes) => {
     return this;
   };
 
-  Session.prototype.abandon = async function() {
+  Session.prototype.abandon = async function(endedAtOverride = null) {
     this.status = 'abandoned';
-    this.endedAt = new Date();
+    this.endedAt = endedAtOverride ? new Date(endedAtOverride) : new Date();
     
     if (this.startedAt) {
       this.durationSec = Math.floor((this.endedAt - this.startedAt) / 1000);

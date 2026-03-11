@@ -11,6 +11,15 @@ const { authenticate } = require('../middleware/auth');
 
 const { Op } = require('sequelize');
 
+function errorResponse(res, status, error, errorCode) {
+  return res.status(status).json({
+    success: false,
+    data: null,
+    error,
+    errorCode
+  });
+}
+
 /**
  * Validation middleware
  */
@@ -169,11 +178,7 @@ router.get('/personal',
       });
     } catch (error) {
       console.error('Statistics error:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to get statistics'
-      });
+      errorResponse(res, 500, 'Failed to get statistics', 'STATS_PERSONAL_LOAD_FAILED');
     }
   }
 );
@@ -252,11 +257,7 @@ router.get('/leaderboard/:league/:period',
       });
     } catch (error) {
       console.error('Leaderboard error:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to get leaderboard'
-      });
+      errorResponse(res, 500, 'Failed to get leaderboard', 'STATS_LEADERBOARD_LOAD_FAILED');
     }
   }
 );
@@ -334,11 +335,7 @@ router.get('/summary',
       });
     } catch (error) {
       console.error('Summary statistics error:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Failed to get summary statistics'
-      });
+      errorResponse(res, 500, 'Failed to get summary statistics', 'STATS_SUMMARY_LOAD_FAILED');
     }
   }
 );

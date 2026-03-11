@@ -39,6 +39,15 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
+function errorResponse(res, status, error, errorCode) {
+  return res.status(status).json({
+    success: false,
+    data: null,
+    error,
+    errorCode
+  });
+}
+
 /**
  * GET /api/sessions
  * Tum session'lari listele
@@ -87,11 +96,7 @@ router.get('/',
       });
     } catch (error) {
       console.error('Session listeleme hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Session\'lar alinirken hata olustu'
-      });
+      errorResponse(res, 500, 'Session\'lar alinirken hata olustu', 'SESSION_LIST_LOAD_FAILED');
     }
   }
 );
@@ -121,11 +126,7 @@ router.get('/active', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Aktif session getirme hatasi:', error);
-    res.status(500).json({
-      success: false,
-      data: null,
-      error: 'Aktif session alinirken hata olustu'
-    });
+    errorResponse(res, 500, 'Aktif session alinirken hata olustu', 'ACTIVE_SESSION_LOAD_FAILED');
   }
 });
 
@@ -137,10 +138,12 @@ router.get('/:id',
   authenticate,
   [
     param('id').isUUID().withMessage('Gecerli bir session ID giriniz'),
+    body('endedAt').optional().isISO8601().withMessage('Gecerli bir bitis zamani giriniz'),
     handleValidationErrors
   ],
   async (req, res) => {
     try {
+      const { endedAt } = req.body || {};
       const session = await Session.findOne({
         where: {
           id: req.params.id,
@@ -154,11 +157,7 @@ router.get('/:id',
       });
 
       if (!session) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          error: 'Session bulunamadi'
-        });
+        return errorResponse(res, 404, 'Session bulunamadi', 'SESSION_NOT_FOUND');
       }
 
       res.json({
@@ -168,11 +167,7 @@ router.get('/:id',
       });
     } catch (error) {
       console.error('Session getirme hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Session alinirken hata olustu'
-      });
+      errorResponse(res, 500, 'Session alinirken hata olustu', 'SESSION_LOAD_FAILED');
     }
   }
 );
@@ -202,11 +197,12 @@ router.post('/start',
     body('strategyTag').optional({ nullable: true }).trim().isLength({ max: 50 }),
     body('notes').optional({ nullable: true }).trim().isLength({ max: 2000 }),
     body('costChaos').optional().isFloat({ min: 0 }),
+    body('startedAt').optional().isISO8601().withMessage('Gecerli bir baslangic zamani giriniz'),
     handleValidationErrors
   ],
   async (req, res) => {
     try {
-      const { mapName, mapTier, mapType, costChaos = 0, poeVersion, league } = req.body;
+      const { mapName, mapTier, mapType, costChaos = 0, poeVersion, league, startedAt } = req.body;
 
       // Aktif session kontrolu
       const activeSession = await Session.findOne({
@@ -217,11 +213,7 @@ router.post('/start',
       });
 
       if (activeSession) {
-        return res.status(400).json({
-          success: false,
-          data: null,
-          error: 'Zaten aktif bir session var. Once mevcut session\'i tamamlayin.'
-        });
+        return errorResponse(res, 400, 'Zaten aktif bir session var. Once mevcut session\'i tamamlayin.', 'SESSION_ALREADY_ACTIVE');
       }
 
       // Yeni session olustur
@@ -236,7 +228,7 @@ router.post('/start',
         league,
         costChaos,
         status: 'active',
-        startedAt: new Date()
+        startedAt: startedAt ? new Date(startedAt) : new Date()
       });
 
       // WebSocket uzerinden broadcast
@@ -256,11 +248,7 @@ router.post('/start',
       });
     } catch (error) {
       console.error('Session baslatma hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Session baslatilirken hata olustu'
-      });
+      errorResponse(res, 500, 'Session baslatilirken hata olustu', 'SESSION_START_FAILED');
     }
   }
 );
@@ -287,11 +275,7 @@ router.put('/:id',
       });
 
       if (!session) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          error: 'Session bulunamadi'
-        });
+        return errorResponse(res, 404, 'Session bulunamadi', 'SESSION_NOT_FOUND');
       }
 
       const updates = {};
@@ -323,11 +307,7 @@ router.put('/:id',
       });
     } catch (error) {
       console.error('Session guncelleme hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Session guncellenirken hata olustu'
-      });
+      errorResponse(res, 500, 'Session guncellenirken hata olustu', 'SESSION_UPDATE_FAILED');
     }
   }
 );
@@ -340,10 +320,12 @@ router.put('/:id/end',
   authenticate,
   [
     param('id').isUUID().withMessage('Gecerli bir session ID giriniz'),
+    body('endedAt').optional().isISO8601().withMessage('Gecerli bir bitis zamani giriniz'),
     handleValidationErrors
   ],
   async (req, res) => {
     try {
+      const { endedAt } = req.body || {};
       const session = await Session.findOne({
         where: {
           id: req.params.id,
@@ -353,14 +335,10 @@ router.put('/:id/end',
       });
 
       if (!session) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          error: 'Aktif session bulunamadi'
-        });
+        return errorResponse(res, 404, 'Aktif session bulunamadi', 'ACTIVE_SESSION_NOT_FOUND');
       }
 
-      await session.complete();
+      await session.complete(endedAt || null);
 
       // WebSocket uzerinden broadcast
       if (req.app.broadcast) {
@@ -379,11 +357,7 @@ router.put('/:id/end',
       });
     } catch (error) {
       console.error('Session tamamlama hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Session tamamlanirken hata olustu'
-      });
+      errorResponse(res, 500, 'Session tamamlanirken hata olustu', 'SESSION_END_FAILED');
     }
   }
 );
@@ -409,14 +383,10 @@ router.put('/:id/abandon',
       });
 
       if (!session) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          error: 'Aktif session bulunamadi'
-        });
+        return errorResponse(res, 404, 'Aktif session bulunamadi', 'ACTIVE_SESSION_NOT_FOUND');
       }
 
-      await session.abandon();
+      await session.abandon(endedAt || null);
 
       res.json({
         success: true,
@@ -425,11 +395,7 @@ router.put('/:id/abandon',
       });
     } catch (error) {
       console.error('Session iptal hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Session iptal edilirken hata olustu'
-      });
+      errorResponse(res, 500, 'Session iptal edilirken hata olustu', 'SESSION_ABANDON_FAILED');
     }
   }
 );
@@ -454,11 +420,7 @@ router.delete('/:id',
       });
 
       if (!session) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          error: 'Session bulunamadi'
-        });
+        return errorResponse(res, 404, 'Session bulunamadi', 'SESSION_NOT_FOUND');
       }
 
       await session.destroy();
@@ -470,11 +432,7 @@ router.delete('/:id',
       });
     } catch (error) {
       console.error('Session silme hatasi:', error);
-      res.status(500).json({
-        success: false,
-        data: null,
-        error: 'Session silinirken hata olustu'
-      });
+      errorResponse(res, 500, 'Session silinirken hata olustu', 'SESSION_DELETE_FAILED');
     }
   }
 );
