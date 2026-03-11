@@ -22,6 +22,21 @@ const ERROR_MESSAGE_KEY_MAP = {
   FORBIDDEN: 'errors.forbidden',
   PRICE_SYNC_IN_PROGRESS: 'errors.priceSyncInProgress',
   PRICE_SYNC_COOLDOWN: 'errors.priceSyncCooldown',
+  SESSION_NOT_FOUND: 'errors.sessionNotFound',
+  ACTIVE_SESSION_NOT_FOUND: 'errors.activeSessionNotFound',
+  SESSION_ALREADY_ACTIVE: 'errors.sessionStart',
+  SESSION_START_FAILED: 'errors.sessionStart',
+  SESSION_END_FAILED: 'errors.sessionEnd',
+  SESSION_LIST_LOAD_FAILED: 'errors.sessionListLoad',
+  SESSION_LOAD_FAILED: 'errors.sessionLoad',
+  SESSION_UPDATE_FAILED: 'errors.sessionUpdate',
+  LOOT_NOT_FOUND: 'errors.lootAdd',
+  LOOT_ADD_FAILED: 'errors.lootAdd',
+  LOOT_BULK_ADD_FAILED: 'errors.lootAdd',
+  RECENT_LOOT_LOAD_FAILED: 'errors.lootRecent',
+  STATS_PERSONAL_LOAD_FAILED: 'errors.unexpected',
+  STATS_LEADERBOARD_LOAD_FAILED: 'errors.unexpected',
+  STATS_SUMMARY_LOAD_FAILED: 'errors.unexpected',
   'Kullanici adi veya sifre hatali': 'errors.invalidCredentials',
   'Invalid username or password': 'errors.invalidCredentials',
   'Kullanici adi veya e-posta gereklidir': 'errors.usernameOrEmailRequired',
@@ -793,7 +808,12 @@ async function handleStartSession() {
       state.currentSession = session;
       updateActiveSessionUI();
       await refreshTrackerData({ includeSessions: true });
-      showToast(window.t('dashboard.activeSession'), `${mapName} ${window.t('toast.sessionStarted')} (${trackerContext.label})`);
+      showToast(
+        window.t('dashboard.activeSession'),
+        session.queued
+          ? `${window.t('toast.sessionQueued')} (${trackerContext.label})`
+          : `${mapName} ${window.t('toast.sessionStarted')} (${trackerContext.label})`
+      );
     }
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.sessionStart'), 'error');
@@ -809,10 +829,13 @@ async function handleEndSession() {
   if (!confirm(window.t('misc.endSessionConfirm'))) return;
   
   try {
-    await window.electronAPI.endSession();
+    const result = await window.electronAPI.endSession();
     state.currentSession = null;
     updateActiveSessionUI();
     await refreshTrackerData({ includeSessions: true });
+    if (result?.queued) {
+      showToast(window.t('dashboard.activeSession'), window.t('toast.sessionEndQueued'), 'warning');
+    }
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.sessionEnd'), 'error');
   }

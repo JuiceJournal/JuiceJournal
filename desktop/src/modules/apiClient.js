@@ -230,16 +230,16 @@ class APIClient {
   /**
    * Session'i bitir
    */
-  async endSession(sessionId) {
-    const response = await this.client.put(`/api/sessions/${sessionId}/end`);
+  async endSession(sessionId, data = {}) {
+    const response = await this.client.put(`/api/sessions/${sessionId}/end`, data);
     return response.data?.session;
   }
 
   /**
    * Session'i iptal et
    */
-  async abandonSession(sessionId) {
-    const response = await this.client.put(`/api/sessions/${sessionId}/abandon`);
+  async abandonSession(sessionId, data = {}) {
+    const response = await this.client.put(`/api/sessions/${sessionId}/abandon`, data);
     return response.data?.session;
   }
 

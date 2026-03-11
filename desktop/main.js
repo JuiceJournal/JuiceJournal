@@ -24,6 +24,7 @@ const APP_NAME = 'PoE Farm Tracker';
 const APP_ID = 'PoeFarmTracker.Desktop';
 const DEFAULT_STRATEGY_PRESETS = ['Strongbox', 'Legion', 'Ritual', 'Expedition', 'Harvest', 'Boss Rush'];
 const MAX_PENDING_LOOT_ACTIONS = 100;
+const MAX_PENDING_SESSION_ACTIONS = 20;
 const MAIN_PROCESS_TRANSLATIONS = {
   tr: {
     trayStillRunning: 'Uygulama sistem tepsisinde calismaya devam ediyor.',
@@ -117,7 +118,9 @@ const store = new Store({
     defaultLeague: 'Standard',
     scanHotkey: 'F9',
     currentUserId: null,
+    pendingSessionActions: [],
     pendingLootActions: [],
+    queuedCurrentSession: null,
     strategyPresets: DEFAULT_STRATEGY_PRESETS
   },
 });
@@ -139,6 +142,7 @@ let poeAuthServer = null;
 let trayHintShown = false;
 let pendingLootFlushInProgress = false;
 let pendingLootFlushInterval = null;
+let pendingSessionFlushInProgress = false;
 
 function getLanguage() {
   const lang = store.get('language');
@@ -189,6 +193,30 @@ function setPendingLootActions(actions) {
   }
 }
 
+function getPendingSessionActions() {
+  return store.get('pendingSessionActions') || [];
+}
+
+function setPendingSessionActions(actions) {
+  store.set('pendingSessionActions', actions.slice(-MAX_PENDING_SESSION_ACTIONS));
+}
+
+function getQueuedCurrentSession() {
+  const session = store.get('queuedCurrentSession') || null;
+  if (!session) return null;
+
+  const currentUserId = getCurrentUserId();
+  if (session.ownerUserId && currentUserId && session.ownerUserId !== currentUserId) {
+    return null;
+  }
+
+  return session;
+}
+
+function setQueuedCurrentSession(session) {
+  store.set('queuedCurrentSession', session || null);
+}
+
 function getCurrentUserId() {
   return store.get('currentUserId') || null;
 }
@@ -213,7 +241,146 @@ function queuePendingLootAction(action) {
   setPendingLootActions(queuedActions);
 }
 
-async function flushPendingLootActions() {
+function queuePendingSessionAction(action) {
+  const queuedActions = getPendingSessionActions();
+  queuedActions.push({
+    id: crypto.randomUUID(),
+    ownerUserId: getCurrentUserId(),
+    queuedAt: new Date().toISOString(),
+    ...action
+  });
+  setPendingSessionActions(queuedActions);
+}
+
+function createQueuedSession(input = {}) {
+  return {
+    id: input.localSessionId || `local-${crypto.randomUUID()}`,
+    ownerUserId: getCurrentUserId(),
+    mapName: input.mapName,
+    mapTier: input.mapTier || null,
+    mapType: input.mapType || null,
+    strategyTag: input.strategyTag || null,
+    notes: input.notes || null,
+    poeVersion: input.poeVersion,
+    league: input.league,
+    costChaos: input.costChaos || 0,
+    status: 'active',
+    startedAt: input.startedAt || new Date().toISOString(),
+    endedAt: null,
+    totalLootChaos: 0,
+    profitChaos: 0,
+    lootEntries: [],
+    localOnly: true,
+    queued: true
+  };
+}
+
+function isLocalSessionId(sessionId) {
+  return typeof sessionId === 'string' && sessionId.startsWith('local-');
+}
+
+function appendQueuedLootToCurrentSession(items) {
+  if (!currentSession || !Array.isArray(items) || !items.length) {
+    return;
+  }
+
+  const existingLoot = Array.isArray(currentSession.lootEntries) ? currentSession.lootEntries : [];
+  const normalizedItems = items.map((item) => ({
+    id: `queued-loot-${crypto.randomUUID()}`,
+    itemName: item.itemName,
+    itemType: item.itemType || 'other',
+    quantity: item.quantity || 1,
+    chaosValue: item.chaosValue || 0,
+    divineValue: item.divineValue || null,
+    createdAt: new Date().toISOString()
+  }));
+
+  currentSession.lootEntries = [...normalizedItems, ...existingLoot];
+  const totalLootChaos = currentSession.lootEntries.reduce((sum, loot) => (
+    sum + ((parseFloat(loot.chaosValue) || 0) * (parseInt(loot.quantity || 0, 10) || 0))
+  ), 0);
+  currentSession.totalLootChaos = totalLootChaos;
+  currentSession.profitChaos = totalLootChaos - (parseFloat(currentSession.costChaos) || 0);
+  if (currentSession.localOnly) {
+    setQueuedCurrentSession(currentSession);
+  }
+}
+
+async function flushPendingSessionActions() {
+  if (pendingSessionFlushInProgress || !apiClient?.token) {
+    return { processed: 0, remaining: getPendingSessionActions().length, sessionIdMap: new Map() };
+  }
+
+  const currentUserId = getCurrentUserId();
+  const queuedActions = getPendingSessionActions();
+  if (!queuedActions.length || !currentUserId) {
+    return { processed: 0, remaining: queuedActions.length, sessionIdMap: new Map() };
+  }
+
+  pendingSessionFlushInProgress = true;
+  const remainingActions = [];
+  const sessionIdMap = new Map();
+  let processed = 0;
+
+  try {
+    for (const action of queuedActions) {
+      if (action.ownerUserId && action.ownerUserId !== currentUserId) {
+        remainingActions.push(action);
+        continue;
+      }
+
+      try {
+        if (action.type === 'sessionStart') {
+          const session = await apiClient.startSession({
+            ...action.payload,
+            startedAt: action.startedAt
+          });
+          sessionIdMap.set(action.localSessionId, session.id);
+
+          const queuedCurrentSession = getQueuedCurrentSession();
+          if (queuedCurrentSession?.id === action.localSessionId) {
+            currentSession = session;
+            setQueuedCurrentSession(null);
+          }
+        } else if (action.type === 'sessionEnd') {
+          const resolvedSessionId = sessionIdMap.get(action.sessionId) || action.sessionId;
+          if (isLocalSessionId(resolvedSessionId)) {
+            remainingActions.push(action);
+            continue;
+          }
+
+          await apiClient.endSession(resolvedSessionId, {
+            endedAt: action.endedAt
+          });
+
+          const queuedCurrentSession = getQueuedCurrentSession();
+          if (queuedCurrentSession?.id === action.sessionId) {
+            currentSession = null;
+            setQueuedCurrentSession(null);
+          }
+        }
+
+        processed += 1;
+      } catch (error) {
+        if (isRetryableApiError(error)) {
+          remainingActions.push(action);
+          break;
+        }
+      }
+    }
+  } finally {
+    setPendingSessionActions(remainingActions);
+    pendingSessionFlushInProgress = false;
+  }
+
+  return {
+    processed,
+    remaining: remainingActions.length,
+    sessionIdMap
+  };
+}
+
+async function flushPendingLootActions(sessionIdMap = new Map()) {
   if (pendingLootFlushInProgress || !apiClient?.token) {
     return { processed: 0, remaining: getPendingLootActions().length };
   }
@@ -235,11 +402,17 @@ async function flushPendingLootActions() {
         continue;
       }
 
+      const resolvedSessionId = sessionIdMap.get(action.sessionId) || action.sessionId;
+      if (isLocalSessionId(resolvedSessionId)) {
+        remainingActions.push(action);
+        continue;
+      }
+
       try {
         if (action.type === 'bulkLoot') {
-          await apiClient.addLootBulk(action.sessionId, action.items);
+          await apiClient.addLootBulk(resolvedSessionId, action.items);
         } else if (action.type === 'singleLoot') {
-          await apiClient.addLoot(action.sessionId, action.data);
+          await apiClient.addLoot(resolvedSessionId, action.data);
         } else {
           continue;
         }
@@ -260,6 +433,16 @@ async function flushPendingLootActions() {
   return {
     processed,
     remaining: remainingActions.length
+  };
+}
+
+async function flushPendingActions() {
+  const sessionResult = await flushPendingSessionActions();
+  const lootResult = await flushPendingLootActions(sessionResult.sessionIdMap);
+
+  return {
+    sessions: sessionResult,
+    loot: lootResult
   };
 }
 
@@ -416,9 +599,18 @@ function getTrackerContextDefaults(overrides = {}) {
 }
 
 async function getCurrentSessionFromBackend() {
-  const session = await apiClient.getActiveSession();
-  currentSession = session || null;
-  return currentSession;
+  try {
+    const session = await apiClient.getActiveSession();
+    currentSession = session || getQueuedCurrentSession() || null;
+    return currentSession;
+  } catch (error) {
+    const queuedSession = getQueuedCurrentSession();
+    if (queuedSession) {
+      currentSession = queuedSession;
+      return currentSession;
+    }
+    throw error;
+  }
 }
 
 async function closePoeAuthServer() {
@@ -637,6 +829,20 @@ async function captureAndScan() {
       return;
     }
 
+    if (currentSession.localOnly) {
+      appendQueuedLootToCurrentSession(items);
+      queuePendingLootAction({
+        type: 'bulkLoot',
+        sessionId: currentSession.id,
+        items
+      });
+      showNotification(
+        t('lootQueuedTitle'),
+        t('lootQueuedBody', { count: items.length })
+      );
+      return { queued: true, count: items.length };
+    }
+
     try {
       // API'ye gonder
       const result = await apiClient.addLootBulk(currentSession.id, items);
@@ -656,11 +862,16 @@ async function captureAndScan() {
       return result;
     } catch (error) {
       if (isRetryableApiError(error)) {
+        appendQueuedLootToCurrentSession(items);
         queuePendingLootAction({
           type: 'bulkLoot',
           sessionId: currentSession.id,
           items
         });
+        const totalValue = items.reduce((sum, item) => sum + ((item.chaosValue || 0) * (item.quantity || 1)), 0);
+        if (mainWindow) {
+          mainWindow.webContents.send('loot-added', { items, totalValue, queued: true });
+        }
         showNotification(
           t('lootQueuedTitle'),
           t('lootQueuedBody', { count: items.length })
@@ -693,14 +904,52 @@ async function startNewSession(input = {}) {
     if (!mapName) return;
 
     // Session olustur
-    const session = await apiClient.startSession({
-      mapName,
-      mapTier: input.mapTier || null,
-      mapType: input.mapType || null,
-      costChaos: input.costChaos || 0,
-      poeVersion,
-      league
-    });
+    let session;
+    try {
+      session = await apiClient.startSession({
+        mapName,
+        mapTier: input.mapTier || null,
+        mapType: input.mapType || null,
+        costChaos: input.costChaos || 0,
+        poeVersion,
+        league
+      });
+      setQueuedCurrentSession(null);
+    } catch (error) {
+      if (!isRetryableApiError(error)) {
+        throw error;
+      }
+
+      session = createQueuedSession({
+        localSessionId: input.localSessionId,
+        mapName,
+        mapTier: input.mapTier || null,
+        mapType: input.mapType || null,
+        strategyTag: input.strategyTag || null,
+        notes: input.notes || null,
+        costChaos: input.costChaos || 0,
+        poeVersion,
+        league,
+        startedAt: input.startedAt || new Date().toISOString()
+      });
+
+      queuePendingSessionAction({
+        type: 'sessionStart',
+        localSessionId: session.id,
+        startedAt: session.startedAt,
+        payload: {
+          mapName,
+          mapTier: input.mapTier || null,
+          mapType: input.mapType || null,
+          strategyTag: input.strategyTag || null,
+          notes: input.notes || null,
+          costChaos: input.costChaos || 0,
+          poeVersion,
+          league
+        }
+      });
+      setQueuedCurrentSession(session);
+    }
 
     currentSession = session;
 
@@ -724,8 +973,33 @@ async function startNewSession(input = {}) {
 async function endCurrentSession() {
   try {
     if (!currentSession) return;
+    let session = currentSession;
+    let queued = false;
 
-    const session = await apiClient.endSession(currentSession.id);
+    if (currentSession.localOnly) {
+      queuePendingSessionAction({
+        type: 'sessionEnd',
+        sessionId: currentSession.id,
+        endedAt: new Date().toISOString()
+      });
+      setQueuedCurrentSession(null);
+      queued = true;
+    } else {
+      try {
+        session = await apiClient.endSession(currentSession.id);
+      } catch (error) {
+        if (!isRetryableApiError(error)) {
+          throw error;
+        }
+
+        queuePendingSessionAction({
+          type: 'sessionEnd',
+          sessionId: currentSession.id,
+          endedAt: new Date().toISOString()
+        });
+        queued = true;
+      }
+    }
 
     const profit = parseFloat(session.profitChaos);
     const message = profit >= 0 
@@ -741,7 +1015,7 @@ async function endCurrentSession() {
 
     currentSession = null;
 
-    return session;
+    return queued ? { ...session, queued: true } : session;
   } catch (error) {
     showNotification(t('notificationError'), t('sessionEndFailed'));
   }
@@ -808,18 +1082,17 @@ function setupLogParser() {
   logParser.on('mapEntered', (data) => {
     if (store.get('autoStartSession') && !currentSession) {
       // Otomatik session baslat
-      apiClient.startSession({
+      startNewSession({
         mapName: data.mapName,
         mapTier: data.mapTier,
         poeVersion: store.get('poeVersion') || 'poe1',
         league: (store.get('defaultLeague') || 'Standard').trim() || 'Standard'
       }).then(session => {
-        currentSession = session;
         showNotification(t('notificationAutoSession'), t('autoSessionBody', { mapName: data.mapName }));
         if (mainWindow) {
           mainWindow.webContents.send('session-started', session);
         }
-      }).catch(err => {
+      }).catch(() => {
         showNotification(t('notificationError'), t('sessionStartFailed'));
       });
     }
@@ -910,24 +1183,65 @@ function setupIPC() {
 
   ipcMain.handle('get-sessions', async (event, params = {}) => {
     const trackerContext = getTrackerContextDefaults(params);
-    return await apiClient.getSessions({
-      ...params,
-      ...trackerContext
-    });
+    try {
+      return await apiClient.getSessions({
+        ...params,
+        ...trackerContext
+      });
+    } catch (error) {
+      const queuedSession = getQueuedCurrentSession();
+      if (queuedSession) {
+        return {
+          sessions: [queuedSession],
+          total: 1,
+          limit: params.limit || 50,
+          offset: params.offset || 0
+        };
+      }
+      throw error;
+    }
   });
 
   ipcMain.handle('get-dashboard-stats', async () => {
     const trackerContext = getTrackerContextDefaults();
-    return await apiClient.getPersonalStats('daily', trackerContext);
+    try {
+      return await apiClient.getPersonalStats('daily', trackerContext);
+    } catch (error) {
+      const queuedSession = getQueuedCurrentSession();
+      if (queuedSession) {
+        return {
+          summary: {
+            totalSessions: 1,
+            totalCost: parseFloat(queuedSession.costChaos || 0),
+            totalLoot: parseFloat(queuedSession.totalLootChaos || 0),
+            totalProfit: parseFloat(queuedSession.profitChaos || 0),
+            totalDuration: 0,
+            avgProfitPerMap: parseFloat(queuedSession.profitChaos || 0),
+            avgProfitPerHour: 0
+          },
+          dailyStats: [],
+          mapStats: []
+        };
+      }
+      throw error;
+    }
   });
 
   ipcMain.handle('get-recent-loot', async (event, params = {}) => {
     const trackerContext = getTrackerContextDefaults(params);
-    return await apiClient.getRecentLoot({
-      limit: 8,
-      ...params,
-      ...trackerContext
-    });
+    try {
+      return await apiClient.getRecentLoot({
+        limit: 8,
+        ...params,
+        ...trackerContext
+      });
+    } catch (error) {
+      const queuedSession = getQueuedCurrentSession();
+      return {
+        lootEntries: queuedSession?.lootEntries || [],
+        count: queuedSession?.lootEntries?.length || 0
+      };
+    }
   });
 
   ipcMain.handle('get-pending-loot-actions', () => {
@@ -938,7 +1252,7 @@ function setupIPC() {
   });
 
   ipcMain.handle('retry-pending-loot-actions', async () => {
-    return await flushPendingLootActions();
+    return await flushPendingActions();
   });
 
   // Manuel loot ekle
@@ -947,6 +1261,25 @@ function setupIPC() {
       throw new Error('Aktif session yok');
     }
     try {
+      if (currentSession.localOnly) {
+        appendQueuedLootToCurrentSession([data]);
+        queuePendingLootAction({
+          type: 'singleLoot',
+          sessionId: currentSession.id,
+          data
+        });
+        if (mainWindow) {
+          mainWindow.webContents.send('loot-added', {
+            items: [data],
+            totalValue: parseFloat(data.chaosValue || 0) * parseInt(data.quantity || 1, 10),
+            queued: true
+          });
+        }
+        return {
+          queued: true
+        };
+      }
+
       const result = await apiClient.addLoot(currentSession.id, data);
       if (mainWindow) {
         mainWindow.webContents.send('loot-added', {
@@ -957,11 +1290,19 @@ function setupIPC() {
       return result;
     } catch (error) {
       if (isRetryableApiError(error)) {
+        appendQueuedLootToCurrentSession([data]);
         queuePendingLootAction({
           type: 'singleLoot',
           sessionId: currentSession.id,
           data
         });
+        if (mainWindow) {
+          mainWindow.webContents.send('loot-added', {
+            items: [data],
+            totalValue: parseFloat(data.chaosValue || 0) * parseInt(data.quantity || 1, 10),
+            queued: true
+          });
+        }
         return {
           queued: true
         };
@@ -986,7 +1327,7 @@ function setupIPC() {
         store.set('authToken', token);
         apiClient.setToken(token);
         store.set('currentUserId', result?.data?.user?.id || null);
-        await flushPendingLootActions();
+        await flushPendingActions();
       }
       return result;
     } catch (error) {
@@ -1006,7 +1347,7 @@ function setupIPC() {
         store.set('authToken', token);
         apiClient.setToken(token);
         store.set('currentUserId', result?.user?.id || null);
-        await flushPendingLootActions();
+        await flushPendingActions();
       }
       return {
         success: true,
@@ -1026,7 +1367,7 @@ function setupIPC() {
     try {
       const me = await apiClient.getMe();
       store.set('currentUserId', me?.user?.id || null);
-      await flushPendingLootActions();
+      await flushPendingActions();
       return me;
     } catch (error) {
       throw toRendererError(error, 'Kullanici bilgileri alinamadi');
@@ -1124,9 +1465,9 @@ app.whenReady().then(() => {
   registerGlobalShortcuts();
   setupLogParser();
   getCurrentSessionFromBackend().catch(() => {});
-  flushPendingLootActions().catch(() => {});
+  flushPendingActions().catch(() => {});
   pendingLootFlushInterval = setInterval(() => {
-    flushPendingLootActions().catch(() => {});
+    flushPendingActions().catch(() => {});
   }, 30000);
 
 });
