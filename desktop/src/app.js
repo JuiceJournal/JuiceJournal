@@ -14,7 +14,8 @@ const state = {
   sessions: [],
   recentLoot: [],
   poeLink: null,
-  selectedSession: null
+  selectedSession: null,
+  pendingLootCount: 0
 };
 
 const ERROR_MESSAGE_KEY_MAP = {
@@ -122,6 +123,7 @@ const elements = {
   sessionDrawerTitle: document.getElementById('session-drawer-title'),
   sessionDrawerSummary: document.getElementById('session-drawer-summary'),
   sessionDrawerStrategy: document.getElementById('session-drawer-strategy'),
+  strategyPresetsList: document.getElementById('strategy-presets'),
   sessionDrawerNotes: document.getElementById('session-drawer-notes'),
   sessionDrawerSave: document.getElementById('session-drawer-save'),
   sessionDrawerAnalytics: document.getElementById('session-drawer-analytics'),
@@ -169,6 +171,7 @@ async function init() {
 
   // Ayarlari yukle
   await loadSettings();
+  populateStrategyPresets();
 
   // Set language from settings and apply translations
   window._appState.language = state.settings.language || 'en';
@@ -198,6 +201,7 @@ async function init() {
   
   // Aktif session ve dashboard verilerini senkronize et
   await refreshTrackerData();
+  await loadPendingLootState();
   
 }
 
@@ -210,6 +214,29 @@ function populateLanguageOptions() {
   elements.globalLanguage.innerHTML = locales
     .map((locale) => `<option value="${locale.code}">${locale.label}</option>`)
     .join('');
+}
+
+function populateStrategyPresets() {
+  if (!elements.strategyPresetsList) {
+    return;
+  }
+
+  const presets = Array.isArray(state.settings.strategyPresets) && state.settings.strategyPresets.length
+    ? state.settings.strategyPresets
+    : ['Strongbox', 'Legion', 'Ritual', 'Expedition', 'Harvest', 'Boss Rush'];
+
+  elements.strategyPresetsList.innerHTML = presets
+    .map((preset) => `<option value="${preset}"></option>`)
+    .join('');
+}
+
+async function loadPendingLootState() {
+  try {
+    const response = await window.electronAPI.getPendingLootActions();
+    state.pendingLootCount = response?.count || 0;
+  } catch {
+    state.pendingLootCount = 0;
+  }
 }
 
 function ensureSessionClock() {
@@ -444,6 +471,12 @@ function setupIPCListeners() {
     showToast(window.t('toast.lootAddedTitle'), window.t('toast.lootAddedBody', { count: itemCount }));
     refreshTrackerData({ includeSessions: isPageActive('sessions') });
   });
+
+  if (window.electronAPI.onPendingLootUpdated) {
+    window.electronAPI.onPendingLootUpdated((data) => {
+      state.pendingLootCount = data?.count || 0;
+    });
+  }
   
   // Navigation
   window.electronAPI.onNavigate((page) => {
@@ -864,8 +897,13 @@ async function handleScanScreen() {
   elements.scanScreenBtn.textContent = window.t('dashboard.scanning');
   
   try {
-    await window.electronAPI.scanScreen();
-    showToast(window.t('dashboard.scanScreen'), window.t('toast.scanComplete'));
+    const result = await window.electronAPI.scanScreen();
+    if (result?.queued) {
+      state.pendingLootCount += result.count || 0;
+      showToast(window.t('toast.currencyTitle'), window.t('toast.lootQueued', { count: result.count || 0 }), 'warning');
+    } else {
+      showToast(window.t('dashboard.scanScreen'), window.t('toast.scanComplete'));
+    }
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.scanError'), 'error');
   } finally {

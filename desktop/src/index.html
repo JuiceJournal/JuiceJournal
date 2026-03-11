@@ -317,7 +317,8 @@
               <div class="session-drawer-form">
                 <div class="session-drawer-field">
                   <label for="session-drawer-strategy" data-i18n="sessions.strategyTag">Strategy Tag</label>
-                  <input id="session-drawer-strategy" class="session-drawer-input" type="text" maxlength="50" data-i18n-placeholder="sessions.strategyPlaceholder" placeholder="e.g. Strongbox / Legion / Ritual">
+                  <input id="session-drawer-strategy" class="session-drawer-input" type="text" list="strategy-presets" maxlength="50" data-i18n-placeholder="sessions.strategyPlaceholder" placeholder="e.g. Strongbox / Legion / Ritual">
+                  <datalist id="strategy-presets"></datalist>
                 </div>
                 <div class="session-drawer-field">
                   <label for="session-drawer-notes" data-i18n="sessions.notes">Notes</label>

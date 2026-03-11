@@ -22,6 +22,8 @@ const APIClient = require('./src/modules/apiClient');
 
 const APP_NAME = 'PoE Farm Tracker';
 const APP_ID = 'PoeFarmTracker.Desktop';
+const DEFAULT_STRATEGY_PRESETS = ['Strongbox', 'Legion', 'Ritual', 'Expedition', 'Harvest', 'Boss Rush'];
+const MAX_PENDING_LOOT_ACTIONS = 100;
 const MAIN_PROCESS_TRANSLATIONS = {
   tr: {
     trayStillRunning: 'Uygulama sistem tepsisinde calismaya devam ediyor.',
@@ -57,7 +59,9 @@ const MAIN_PROCESS_TRANSLATIONS = {
     promptTitle: 'Yeni Map Session',
     promptMessage: 'Map adini girin:',
     promptDetail: 'Ornegin: Dunes Map, City Square Map',
-    unknownMap: 'Bilinmeyen Map'
+    unknownMap: 'Bilinmeyen Map',
+    lootQueuedTitle: 'Loot Kuyruga Alindi',
+    lootQueuedBody: '{count} item baglanti gelince senkronize edilecek.'
   },
   en: {
     trayStillRunning: 'The app is still running in the system tray.',
@@ -93,7 +97,9 @@ const MAIN_PROCESS_TRANSLATIONS = {
     promptTitle: 'New Map Session',
     promptMessage: 'Enter the map name:',
     promptDetail: 'For example: Dunes Map, City Square Map',
-    unknownMap: 'Unknown Map'
+    unknownMap: 'Unknown Map',
+    lootQueuedTitle: 'Loot Queued',
+    lootQueuedBody: '{count} items will sync when the connection returns.'
   }
 };
 
@@ -109,7 +115,10 @@ const store = new Store({
     soundNotifications: false,
     poeVersion: 'poe1',
     defaultLeague: 'Standard',
-    scanHotkey: 'F9'
+    scanHotkey: 'F9',
+    currentUserId: null,
+    pendingLootActions: [],
+    strategyPresets: DEFAULT_STRATEGY_PRESETS
   },
 });
 
@@ -128,6 +137,8 @@ let apiClient = null;
 let currentSession = null;
 let poeAuthServer = null;
 let trayHintShown = false;
+let pendingLootFlushInProgress = false;
+let pendingLootFlushInterval = null;
 
 function getLanguage() {
   const lang = store.get('language');
@@ -161,6 +172,95 @@ function normalizeErrorMessage(error, fallback = 'Unexpected error') {
 
 function toRendererError(error, fallback) {
   return new Error(normalizeErrorMessage(error, fallback));
+}
+
+function getPendingLootActions() {
+  return store.get('pendingLootActions') || [];
+}
+
+function setPendingLootActions(actions) {
+  const normalizedActions = actions.slice(-MAX_PENDING_LOOT_ACTIONS);
+  store.set('pendingLootActions', normalizedActions);
+
+  if (mainWindow) {
+    mainWindow.webContents.send('pending-loot-updated', {
+      count: normalizedActions.length
+    });
+  }
+}
+
+function getCurrentUserId() {
+  return store.get('currentUserId') || null;
+}
+
+function isRetryableApiError(error) {
+  const code = error?.code || error?.data?.code || null;
+  const status = error?.status || null;
+  return code === 'SERVER_UNAVAILABLE'
+    || code === 'REQUEST_TIMEOUT'
+    || status === null
+    || status >= 500;
+}
+
+function queuePendingLootAction(action) {
+  const queuedActions = getPendingLootActions();
+  queuedActions.push({
+    id: crypto.randomUUID(),
+    ownerUserId: getCurrentUserId(),
+    queuedAt: new Date().toISOString(),
+    ...action
+  });
+  setPendingLootActions(queuedActions);
+}
+
+async function flushPendingLootActions() {
+  if (pendingLootFlushInProgress || !apiClient?.token) {
+    return { processed: 0, remaining: getPendingLootActions().length };
+  }
+
+  const currentUserId = getCurrentUserId();
+  const queuedActions = getPendingLootActions();
+  if (!queuedActions.length || !currentUserId) {
+    return { processed: 0, remaining: queuedActions.length };
+  }
+
+  pendingLootFlushInProgress = true;
+  const remainingActions = [];
+  let processed = 0;
+
+  try {
+    for (const action of queuedActions) {
+      if (action.ownerUserId && action.ownerUserId !== currentUserId) {
+        remainingActions.push(action);
+        continue;
+      }
+
+      try {
+        if (action.type === 'bulkLoot') {
+          await apiClient.addLootBulk(action.sessionId, action.items);
+        } else if (action.type === 'singleLoot') {
+          await apiClient.addLoot(action.sessionId, action.data);
+        } else {
+          continue;
+        }
+
+        processed += 1;
+      } catch (error) {
+        if (isRetryableApiError(error)) {
+          remainingActions.push(action);
+          break;
+        }
+      }
+    }
+  } finally {
+    setPendingLootActions(remainingActions);
+    pendingLootFlushInProgress = false;
+  }
+
+  return {
+    processed,
+    remaining: remainingActions.length
+  };
 }
 
 function renderBrowserCallbackPage(title, message) {
@@ -537,22 +637,39 @@ async function captureAndScan() {
       return;
     }
 
-    // API'ye gonder
-    const result = await apiClient.addLootBulk(currentSession.id, items);
+    try {
+      // API'ye gonder
+      const result = await apiClient.addLootBulk(currentSession.id, items);
 
-    // Bildirim goster
-    const totalValue = items.reduce((sum, item) => sum + (item.chaosValue * item.quantity), 0);
-    showNotification(
-      t('notificationLootAdded'),
-      t('lootAddedBody', { count: items.length, value: totalValue.toFixed(1) })
-    );
+      // Bildirim goster
+      const totalValue = items.reduce((sum, item) => sum + (item.chaosValue * item.quantity), 0);
+      showNotification(
+        t('notificationLootAdded'),
+        t('lootAddedBody', { count: items.length, value: totalValue.toFixed(1) })
+      );
 
-    // Renderer'a bilgi gonder
-    if (mainWindow) {
-      mainWindow.webContents.send('loot-added', { items, totalValue });
+      // Renderer'a bilgi gonder
+      if (mainWindow) {
+        mainWindow.webContents.send('loot-added', { items, totalValue });
+      }
+
+      return result;
+    } catch (error) {
+      if (isRetryableApiError(error)) {
+        queuePendingLootAction({
+          type: 'bulkLoot',
+          sessionId: currentSession.id,
+          items
+        });
+        showNotification(
+          t('lootQueuedTitle'),
+          t('lootQueuedBody', { count: items.length })
+        );
+        return { queued: true, count: items.length };
+      }
+
+      throw error;
     }
-
-    return result;
   } catch (error) {
     showNotification(t('notificationError'), t('lootScanFailed'));
   }
@@ -813,6 +930,17 @@ function setupIPC() {
     });
   });
 
+  ipcMain.handle('get-pending-loot-actions', () => {
+    const queuedActions = getPendingLootActions();
+    return {
+      count: queuedActions.length
+    };
+  });
+
+  ipcMain.handle('retry-pending-loot-actions', async () => {
+    return await flushPendingLootActions();
+  });
+
   // Manuel loot ekle
   ipcMain.handle('add-loot', async (event, data) => {
     if (!currentSession) {
@@ -828,6 +956,17 @@ function setupIPC() {
       }
       return result;
     } catch (error) {
+      if (isRetryableApiError(error)) {
+        queuePendingLootAction({
+          type: 'singleLoot',
+          sessionId: currentSession.id,
+          data
+        });
+        return {
+          queued: true
+        };
+      }
+
       throw toRendererError(error, 'Loot eklenemedi');
     }
   });
@@ -846,6 +985,8 @@ function setupIPC() {
       if (token) {
         store.set('authToken', token);
         apiClient.setToken(token);
+        store.set('currentUserId', result?.data?.user?.id || null);
+        await flushPendingLootActions();
       }
       return result;
     } catch (error) {
@@ -864,6 +1005,8 @@ function setupIPC() {
       if (token) {
         store.set('authToken', token);
         apiClient.setToken(token);
+        store.set('currentUserId', result?.user?.id || null);
+        await flushPendingLootActions();
       }
       return {
         success: true,
@@ -881,7 +1024,10 @@ function setupIPC() {
 
   ipcMain.handle('get-current-user', async () => {
     try {
-      return await apiClient.getMe();
+      const me = await apiClient.getMe();
+      store.set('currentUserId', me?.user?.id || null);
+      await flushPendingLootActions();
+      return me;
     } catch (error) {
       throw toRendererError(error, 'Kullanici bilgileri alinamadi');
     }
@@ -949,6 +1095,7 @@ function setupIPC() {
   // Logout
   ipcMain.handle('logout', () => {
     store.set('authToken', null);
+    store.set('currentUserId', null);
     apiClient.setToken(null);
     currentSession = null;
     return true;
@@ -977,6 +1124,10 @@ app.whenReady().then(() => {
   registerGlobalShortcuts();
   setupLogParser();
   getCurrentSessionFromBackend().catch(() => {});
+  flushPendingLootActions().catch(() => {});
+  pendingLootFlushInterval = setInterval(() => {
+    flushPendingLootActions().catch(() => {});
+  }, 30000);
 
 });
 
@@ -1010,6 +1161,11 @@ app.on('will-quit', () => {
   if (tray) {
     tray.destroy();
     tray = null;
+  }
+
+  if (pendingLootFlushInterval) {
+    clearInterval(pendingLootFlushInterval);
+    pendingLootFlushInterval = null;
   }
 
 });
