@@ -12,6 +12,8 @@
 const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen, shell, nativeImage } = require('electron');
 const crypto = require('crypto');
 const http = require('http');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const Store = require('electron-store');
 
@@ -185,12 +187,7 @@ function getPendingLootActions() {
 function setPendingLootActions(actions) {
   const normalizedActions = actions.slice(-MAX_PENDING_LOOT_ACTIONS);
   store.set('pendingLootActions', normalizedActions);
-
-  if (mainWindow) {
-    mainWindow.webContents.send('pending-loot-updated', {
-      count: normalizedActions.length
-    });
-  }
+  emitPendingSyncState();
 }
 
 function getPendingSessionActions() {
@@ -199,6 +196,7 @@ function getPendingSessionActions() {
 
 function setPendingSessionActions(actions) {
   store.set('pendingSessionActions', actions.slice(-MAX_PENDING_SESSION_ACTIONS));
+  emitPendingSyncState();
 }
 
 function getQueuedCurrentSession() {
@@ -215,6 +213,7 @@ function getQueuedCurrentSession() {
 
 function setQueuedCurrentSession(session) {
   store.set('queuedCurrentSession', session || null);
+  emitPendingSyncState();
 }
 
 function getCurrentUserId() {
@@ -277,6 +276,20 @@ function createQueuedSession(input = {}) {
 
 function isLocalSessionId(sessionId) {
   return typeof sessionId === 'string' && sessionId.startsWith('local-');
+}
+
+function getPendingSyncSnapshot() {
+  return {
+    pendingSessions: getPendingSessionActions().length,
+    pendingLoot: getPendingLootActions().length,
+    total: getPendingSessionActions().length + getPendingLootActions().length,
+    hasQueuedCurrentSession: Boolean(getQueuedCurrentSession())
+  };
+}
+
+function emitPendingSyncState() {
+  if (!mainWindow) return;
+  mainWindow.webContents.send('pending-sync-updated', getPendingSyncSnapshot());
 }
 
 function appendQueuedLootToCurrentSession(items) {
@@ -446,6 +459,45 @@ async function flushPendingActions() {
   };
 }
 
+function buildDiagnosticsPayload() {
+  const settings = { ...store.store };
+  delete settings.authToken;
+
+  return {
+    generatedAt: new Date().toISOString(),
+    appVersion: app.getVersion(),
+    platform: process.platform,
+    release: os.release(),
+    currentUserId: getCurrentUserId(),
+    pendingSync: {
+      snapshot: getPendingSyncSnapshot(),
+      sessionActions: getPendingSessionActions().map((action) => ({
+        id: action.id,
+        type: action.type,
+        sessionId: action.sessionId || action.localSessionId || null,
+        queuedAt: action.queuedAt
+      })),
+      lootActions: getPendingLootActions().map((action) => ({
+        id: action.id,
+        type: action.type,
+        sessionId: action.sessionId || null,
+        queuedAt: action.queuedAt,
+        itemCount: Array.isArray(action.items) ? action.items.length : 1
+      }))
+    },
+    currentSession: currentSession ? {
+      id: currentSession.id,
+      mapName: currentSession.mapName,
+      status: currentSession.status,
+      localOnly: Boolean(currentSession.localOnly),
+      queued: Boolean(currentSession.queued),
+      startedAt: currentSession.startedAt,
+      endedAt: currentSession.endedAt || null
+    } : null,
+    settings
+  };
+}
+
 function renderBrowserCallbackPage(title, message) {
   return `<!doctype html>
 <html lang="en">
@@ -473,7 +525,6 @@ function renderBrowserCallbackPage(title, message) {
 }
 
 function createTrayIcon() {
-  const fs = require('fs');
   const trayIconPath = path.join(__dirname, 'src', 'assets', 'tray-icon.png');
   const appIconPath = path.join(__dirname, 'src', 'assets', 'icon.png');
   const fallbackIconPath = path.join(__dirname, 'src', 'assets', 'icon.ico');
@@ -1251,8 +1302,34 @@ function setupIPC() {
     };
   });
 
+  ipcMain.handle('get-sync-status', () => {
+    return getPendingSyncSnapshot();
+  });
+
   ipcMain.handle('retry-pending-loot-actions', async () => {
     return await flushPendingActions();
+  });
+
+  ipcMain.handle('export-diagnostics', async () => {
+    const defaultPath = path.join(app.getPath('documents'), `poe-farm-diagnostics-${Date.now()}.json`);
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export Diagnostics',
+      defaultPath,
+      filters: [
+        { name: 'JSON', extensions: ['json'] }
+      ]
+    });
+
+    if (canceled || !filePath) {
+      return { canceled: true };
+    }
+
+    const payload = buildDiagnosticsPayload();
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
+    return {
+      canceled: false,
+      filePath
+    };
   });
 
   // Manuel loot ekle
@@ -1460,6 +1537,7 @@ app.whenReady().then(() => {
   createMainWindow();
   mainWindow.show(); // Pencereyi goster
   mainWindow.focus();
+  emitPendingSyncState();
 
   createTray();
   registerGlobalShortcuts();

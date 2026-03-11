@@ -548,6 +548,18 @@
                 </div>
                 <button id="test-connection" class="btn btn-secondary btn-small" data-i18n="settings.testConnection">Baglantiyi Test Et</button>
               </div>
+              <div class="settings-group">
+                <h3 data-i18n="settings.syncQueue">Senkron Kuyrugu</h3>
+                <p class="settings-desc" data-i18n="settings.syncQueueDesc">Bekleyen session ve loot islemlerini yonetin.</p>
+                <div class="sync-queue-card">
+                  <div class="sync-queue-count" id="pending-sync-count">0</div>
+                  <div class="sync-queue-meta" id="pending-sync-meta" data-i18n="settings.syncQueueEmpty">Bekleyen islem yok</div>
+                </div>
+                <div class="settings-actions-row">
+                  <button id="retry-pending-sync" class="btn btn-secondary btn-small" data-i18n="settings.retrySync">Bekleyenleri Dene</button>
+                  <button id="export-diagnostics" class="btn btn-secondary btn-small" data-i18n="settings.exportDiagnostics">Diagnostik Disa Aktar</button>
+                </div>
+              </div>
             </div>
 
             <!-- About Tab -->

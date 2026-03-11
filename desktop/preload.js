@@ -30,7 +30,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scanScreen: () => ipcRenderer.invoke('scan-screen'),
   getRecentLoot: (params) => ipcRenderer.invoke('get-recent-loot', params),
   getPendingLootActions: () => ipcRenderer.invoke('get-pending-loot-actions'),
+  getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
   retryPendingLootActions: () => ipcRenderer.invoke('retry-pending-loot-actions'),
+  exportDiagnostics: () => ipcRenderer.invoke('export-diagnostics'),
 
   // Auth
   login: (credentials) => ipcRenderer.invoke('login', credentials),
@@ -60,6 +62,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onPendingLootUpdated: (callback) => {
     ipcRenderer.on('pending-loot-updated', (event, data) => callback(data));
+  },
+  onPendingSyncUpdated: (callback) => {
+    ipcRenderer.on('pending-sync-updated', (event, data) => callback(data));
   },
   onNavigate: (callback) => {
     ipcRenderer.on('navigate', (event, page) => callback(page));

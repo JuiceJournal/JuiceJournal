@@ -1515,6 +1515,35 @@ body {
   color: var(--text-secondary);
 }
 
+.sync-queue-card {
+  display: flex;
+  align-items: baseline;
+  gap: 0.85rem;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-base);
+}
+
+.sync-queue-count {
+  font-family: var(--font-display);
+  font-size: 1.8rem;
+  line-height: 1;
+  color: var(--gold-light);
+}
+
+.sync-queue-meta {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.settings-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 /* About Page */
 .about-info {
   padding: 1.5rem;

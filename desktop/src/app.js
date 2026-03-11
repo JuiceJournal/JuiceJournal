@@ -159,6 +159,10 @@ const elements = {
   testConnection: document.getElementById('test-connection'),
   connectionDot: document.getElementById('connection-dot'),
   connectionText: document.getElementById('connection-text'),
+  pendingSyncCount: document.getElementById('pending-sync-count'),
+  pendingSyncMeta: document.getElementById('pending-sync-meta'),
+  retryPendingSyncBtn: document.getElementById('retry-pending-sync'),
+  exportDiagnosticsBtn: document.getElementById('export-diagnostics'),
   saveSettingsBtn: document.getElementById('save-settings'),
   resetSettingsBtn: document.getElementById('reset-settings'),
   settingsNavBtns: document.querySelectorAll('.settings-nav-btn'),
@@ -223,6 +227,7 @@ async function init() {
   // Aktif session ve dashboard verilerini senkronize et
   await refreshTrackerData();
   await loadPendingLootState();
+  renderPendingSyncState();
   
 }
 
@@ -253,11 +258,22 @@ function populateStrategyPresets() {
 
 async function loadPendingLootState() {
   try {
-    const response = await window.electronAPI.getPendingLootActions();
-    state.pendingLootCount = response?.count || 0;
+    const response = await window.electronAPI.getSyncStatus();
+    state.pendingLootCount = response?.total || 0;
   } catch {
     state.pendingLootCount = 0;
   }
+}
+
+function renderPendingSyncState() {
+  if (!elements.pendingSyncCount || !elements.pendingSyncMeta) {
+    return;
+  }
+
+  elements.pendingSyncCount.textContent = String(state.pendingLootCount || 0);
+  elements.pendingSyncMeta.textContent = state.pendingLootCount > 0
+    ? window.t('settings.syncQueuePending', { count: state.pendingLootCount })
+    : window.t('settings.syncQueueEmpty');
 }
 
 function ensureSessionClock() {
@@ -435,6 +451,12 @@ function setupEventListeners() {
   if (elements.testConnection) {
     elements.testConnection.addEventListener('click', handleTestConnection);
   }
+  if (elements.retryPendingSyncBtn) {
+    elements.retryPendingSyncBtn.addEventListener('click', handleRetryPendingSync);
+  }
+  if (elements.exportDiagnosticsBtn) {
+    elements.exportDiagnosticsBtn.addEventListener('click', handleExportDiagnostics);
+  }
 
   // Window controls
   const winMin = document.getElementById('win-minimize');
@@ -496,6 +518,14 @@ function setupIPCListeners() {
   if (window.electronAPI.onPendingLootUpdated) {
     window.electronAPI.onPendingLootUpdated((data) => {
       state.pendingLootCount = data?.count || 0;
+      renderPendingSyncState();
+    });
+  }
+
+  if (window.electronAPI.onPendingSyncUpdated) {
+    window.electronAPI.onPendingSyncUpdated((data) => {
+      state.pendingLootCount = data?.total || 0;
+      renderPendingSyncState();
     });
   }
   
@@ -1278,6 +1308,47 @@ async function openSessionDrawer(sessionId) {
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'sessions.loadError'), 'error');
     closeSessionDrawer();
+  }
+}
+
+async function handleRetryPendingSync() {
+  if (!elements.retryPendingSyncBtn) return;
+
+  const originalLabel = elements.retryPendingSyncBtn.textContent;
+  elements.retryPendingSyncBtn.disabled = true;
+  elements.retryPendingSyncBtn.textContent = window.t('settings.retryingSync');
+
+  try {
+    const result = await window.electronAPI.retryPendingLootActions();
+    state.pendingLootCount = (result?.sessions?.remaining || 0) + (result?.loot?.remaining || 0);
+    renderPendingSyncState();
+    showToast(window.t('settings.api'), window.t('toast.syncRetryComplete', { count: state.pendingLootCount }), 'success');
+    await refreshTrackerData({ includeSessions: true });
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.unexpectedError'), 'error');
+  } finally {
+    elements.retryPendingSyncBtn.disabled = false;
+    elements.retryPendingSyncBtn.textContent = originalLabel;
+  }
+}
+
+async function handleExportDiagnostics() {
+  if (!elements.exportDiagnosticsBtn) return;
+
+  const originalLabel = elements.exportDiagnosticsBtn.textContent;
+  elements.exportDiagnosticsBtn.disabled = true;
+  elements.exportDiagnosticsBtn.textContent = window.t('settings.exportingDiagnostics');
+
+  try {
+    const result = await window.electronAPI.exportDiagnostics();
+    if (!result?.canceled) {
+      showToast(window.t('settings.about'), window.t('toast.diagnosticsExported'), 'success');
+    }
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.unexpectedError'), 'error');
+  } finally {
+    elements.exportDiagnosticsBtn.disabled = false;
+    elements.exportDiagnosticsBtn.textContent = originalLabel;
   }
 }
 
