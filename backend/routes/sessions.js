@@ -72,12 +72,7 @@ router.get('/',
         where,
         order: [['startedAt', 'DESC']],
         limit: parseInt(limit),
-        offset: parseInt(offset),
-        include: [{
-          model: LootEntry,
-          as: 'lootEntries',
-          attributes: ['id', 'itemName', 'quantity', 'chaosValue']
-        }]
+        offset: parseInt(offset)
       });
 
       res.json({
@@ -249,6 +244,8 @@ router.post('/start',
         req.app.broadcast({
           type: 'SESSION_STARTED',
           data: { session }
+        }, {
+          targetUserId: req.userId
         });
       }
 
@@ -370,6 +367,8 @@ router.put('/:id/end',
         req.app.broadcast({
           type: 'SESSION_COMPLETED',
           data: { session }
+        }, {
+          targetUserId: req.userId
         });
       }
 

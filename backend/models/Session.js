@@ -165,11 +165,16 @@ module.exports = (sequelize, DataTypes) => {
 
   // Instance metodlari
   Session.prototype.calculateProfit = async function() {
-    // Loot entry'lerin toplam degerini al
-    const lootEntries = await this.getLootEntries();
-    const totalLoot = lootEntries.reduce((sum, loot) => {
-      return sum + (parseFloat(loot.chaosValue) * loot.quantity);
-    }, 0);
+    const LootEntry = this.sequelize.models.LootEntry;
+    const [result] = await LootEntry.findAll({
+      attributes: [[
+        this.sequelize.literal('COALESCE(SUM("chaos_value" * quantity), 0)'),
+        'totalLoot'
+      ]],
+      where: { sessionId: this.id },
+      raw: true
+    });
+    const totalLoot = parseFloat(result?.totalLoot || 0);
 
     this.totalLootChaos = totalLoot;
     this.profitChaos = totalLoot - parseFloat(this.costChaos);
