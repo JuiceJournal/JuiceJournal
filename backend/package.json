@@ -4,6 +4,7 @@
   "description": "PoE Farm Tracker Backend API",
   "main": "server.js",
   "scripts": {
+    "build": "node scripts/build-check.js",
     "start": "node server.js",
     "dev": "nodemon server.js",
     "db:migrate": "node config/migrate.js",
