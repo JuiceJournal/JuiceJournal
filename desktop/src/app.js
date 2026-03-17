@@ -2077,12 +2077,13 @@ const POE1_CATEGORY_TYPES = [
   { value: 'fragment', labelKey: 'category.fragment', label: 'Fragment', icon: 'vaal' },
   { value: 'scarab', labelKey: 'category.scarab', label: 'Scarab', icon: 'chance' },
   { value: 'essence', labelKey: 'category.essence', label: 'Essence', icon: 'fusing' },
+  { value: 'fossil', labelKey: 'category.fossil', label: 'Fossil', icon: 'chromatic', poe1Only: true },
   { value: 'map', labelKey: 'category.map', label: 'Map', icon: 'alchemy' },
   { value: 'divination_card', labelKey: 'category.divCard', label: 'Div Card', icon: 'divine' },
   { value: 'gem', labelKey: 'category.gem', label: 'Gem', icon: 'gcp' },
   { value: 'unique', labelKey: 'category.unique', label: 'Unique', icon: 'exalted' },
   { value: 'oil', labelKey: 'category.oil', label: 'Oil', icon: 'blessed', poe1Only: true },
-  { value: 'fossil', labelKey: 'category.fossil', label: 'Fossil', icon: 'chromatic', poe1Only: true },
+  { value: 'beast', labelKey: 'category.beast', label: 'Beast', icon: 'chance', poe1Only: true },
   { value: 'incubator', labelKey: 'category.incubator', label: 'Incubator', icon: 'regret', poe1Only: true },
   { value: 'delirium_orb', labelKey: 'category.deliriumOrb', label: 'Delirium Orb', icon: 'chromatic', poe1Only: true },
   { value: 'catalyst', labelKey: 'category.catalyst', label: 'Catalyst', icon: 'scouring' },
@@ -2091,18 +2092,17 @@ const POE1_CATEGORY_TYPES = [
   { value: 'other', labelKey: 'category.other', label: 'Other', icon: 'alteration' },
 ];
 
-// PoE 2 item category types — no fragments/oils/incubators/delirium/fossils
+// PoE 2 item category types — exchange API categories
 const POE2_CATEGORY_TYPES = [
   { value: '', labelKey: 'category.all', label: 'All', icon: null },
   { value: 'currency', labelKey: 'category.currency', label: 'Currency', icon: 'chaos' },
-  { value: 'scarab', labelKey: 'category.scarab', label: 'Scarab', icon: 'chance' },
+  { value: 'fragment', labelKey: 'category.fragment', label: 'Fragment', icon: 'vaal', poe2Only: true },
   { value: 'essence', labelKey: 'category.essence', label: 'Essence', icon: 'fusing' },
   { value: 'rune', labelKey: 'category.rune', label: 'Rune', icon: 'regal', poe2Only: true },
-  { value: 'map', labelKey: 'category.map', label: 'Map', icon: 'alchemy' },
-  { value: 'divination_card', labelKey: 'category.divCard', label: 'Div Card', icon: 'divine' },
   { value: 'gem', labelKey: 'category.gem', label: 'Gem', icon: 'gcp' },
-  { value: 'unique', labelKey: 'category.unique', label: 'Unique', icon: 'mirror' },
-  { value: 'catalyst', labelKey: 'category.catalyst', label: 'Catalyst', icon: 'scouring' },
+  { value: 'soul_core', labelKey: 'category.soulCore', label: 'Soul Core', icon: 'divine', poe2Only: true },
+  { value: 'idol', labelKey: 'category.idol', label: 'Idol', icon: 'exalted', poe2Only: true },
+  { value: 'expedition', labelKey: 'category.expedition', label: 'Expedition', icon: 'chance', poe2Only: true },
   { value: 'other', labelKey: 'category.other', label: 'Other', icon: 'alteration' },
 ];
 
@@ -2230,33 +2230,42 @@ async function loadCurrencyPage() {
   }
 }
 
-// Known PoE leagues (current + variants)
-const KNOWN_POE1_LEAGUES = ['Phrecia', 'Hardcore Phrecia', 'SSF Phrecia', 'HC SSF Phrecia', 'Standard', 'Hardcore'];
-const KNOWN_POE2_LEAGUES = ['Early Access', 'Hardcore Early Access', 'SSF Early Access', 'HC SSF Early Access', 'Standard', 'Hardcore'];
+// Fallback PoE leagues (used when API is unreachable)
+const FALLBACK_POE1_LEAGUES = ['Mirage', 'Hardcore Mirage', 'SSF Mirage', 'HC SSF Mirage', 'Standard', 'Hardcore'];
+const FALLBACK_POE2_LEAGUES = ['Fate of the Vaal', 'HC Fate of the Vaal', 'Standard', 'Hardcore'];
 
 async function loadCurrencyLeagues() {
   const select = document.getElementById('currency-league');
   if (!select) return;
 
-  // Start with known leagues for the version
-  const knownLeagues = currencyState.poeVersion === 'poe2' ? KNOWN_POE2_LEAGUES : KNOWN_POE1_LEAGUES;
+  let allLeagues = [];
 
-  // Try to get DB leagues (from synced prices) and merge
-  let dbLeagues = [];
   try {
     const res = await window.electronAPI.getCurrencyLeagues(currencyState.poeVersion);
-    dbLeagues = res?.data?.leagues || [];
+    // apiClient unwraps: res = { leagues: [...], activeLeagues: [...] }
+    const leagueData = res?.data || res || {};
+
+    // Use active leagues from poe.ninja if available
+    if (leagueData.activeLeagues && leagueData.activeLeagues.length > 0) {
+      allLeagues = leagueData.activeLeagues.map(l => l.name || l.displayName);
+    }
+
+    // Add any DB-only leagues not in the active list
+    const dbLeagues = leagueData.leagues || [];
+    for (const l of dbLeagues) {
+      if (!allLeagues.includes(l)) allLeagues.push(l);
+    }
   } catch {}
 
-  // Merge: known first, then any DB-only leagues
-  const allLeagues = [...knownLeagues];
-  for (const l of dbLeagues) {
+  // Always merge fallback leagues so standard options are available
+  const fallback = currencyState.poeVersion === 'poe2' ? FALLBACK_POE2_LEAGUES : FALLBACK_POE1_LEAGUES;
+  for (const l of fallback) {
     if (!allLeagues.includes(l)) allLeagues.push(l);
   }
 
   select.innerHTML = allLeagues.map(l => `<option value="${escapeHTML(l)}">${escapeHTML(l)}</option>`).join('');
 
-  // Auto-select: defaultLeague from settings, or first known league
+  // Auto-select: defaultLeague from settings, or first league
   const defaultLeague = state.settings.defaultLeague || allLeagues[0] || 'Standard';
   if (allLeagues.includes(defaultLeague)) {
     select.value = defaultLeague;
@@ -2278,13 +2287,15 @@ async function loadCurrencyPrices() {
     if (currencyState.search) params.search = currencyState.search;
 
     const json = await window.electronAPI.getCurrencyPrices(params);
-    currencyState.prices = json.data?.prices || [];
+    // apiClient unwraps response.data twice: axios interceptor strips HTTP envelope,
+    // then getPrices() accesses .data — so json = { prices: [...], count, league }
+    currencyState.prices = json?.prices || json?.data?.prices || [];
     renderCurrencyTable();
 
     const footer = document.getElementById('currency-footer');
     if (footer) {
-      const count = json.data?.count || 0;
-      const updated = json.data?.updatedAt;
+      const count = json?.count || json?.data?.count || 0;
+      const updated = json?.updatedAt || json?.data?.updatedAt;
       footer.textContent = `${count} items` + (updated ? ` · Last synced: ${timeAgo(updated)}` : '');
     }
   } catch (error) {
@@ -2380,13 +2391,11 @@ async function handleCurrencySync() {
       league: currencyState.league,
       poeVersion: currencyState.poeVersion
     });
-    if (result?.success) {
-      showToast(window.t('toast.currencyTitle'), window.t('currency.syncSuccess'), 'success');
-      await loadCurrencyLeagues();
-      await loadCurrencyPrices();
-    } else {
-      showToast(window.t('toast.currencyTitle'), getUserFacingErrorMessage(result, 'currency.syncFailed'), 'error');
-    }
+    // apiClient unwraps: result = { message, league, results } (inner .data of API response)
+    // Sync succeeded if we got here without throwing
+    showToast(window.t('toast.currencyTitle'), window.t('currency.syncSuccess'), 'success');
+    await loadCurrencyLeagues();
+    await loadCurrencyPrices();
   } catch (e) {
     showToast(window.t('toast.currencyTitle'), getUserFacingErrorMessage(e, 'currency.syncFailed'), 'error');
   } finally {

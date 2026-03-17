@@ -69,7 +69,9 @@ router.get('/current',
     query('type').optional().isIn([
       'currency', 'fragment', 'scarab', 'map',
       'divination_card', 'gem', 'unique', 'oil',
-      'incubator', 'delirium_orb', 'catalyst', 'other'
+      'incubator', 'delirium_orb', 'catalyst',
+      'essence', 'fossil', 'beast', 'rune', 'tattoo', 'omen',
+      'soul_core', 'idol', 'expedition', 'ultimatum', 'other'
     ]),
     query('search').optional().trim(),
     query('limit').optional().isInt({ min: 1, max: 1000 }),
@@ -209,7 +211,7 @@ router.get('/types',
 
 /**
  * GET /api/prices/leagues
- * Get available leagues
+ * Get available leagues (from poe.ninja + DB)
  */
 router.get('/leagues',
   [
@@ -220,17 +222,25 @@ router.get('/leagues',
     try {
       const { poeVersion = 'poe1' } = req.query;
 
-      const where = { poeVersion };
-      const leagues = await Price.findAll({
+      // Get leagues from DB (already synced)
+      const dbLeagues = await Price.findAll({
         attributes: [[Price.sequelize.fn('DISTINCT', Price.sequelize.col('league')), 'league']],
-        where,
+        where: { poeVersion },
         raw: true
       });
+      const dbLeagueNames = dbLeagues.map(l => l.league);
+
+      // Get active leagues from poe.ninja
+      let activeLeagues = null;
+      try {
+        activeLeagues = await poeNinjaService.getActiveLeagues(poeVersion);
+      } catch {}
 
       res.json({
         success: true,
         data: {
-          leagues: leagues.map(l => l.league)
+          leagues: dbLeagueNames,
+          activeLeagues: activeLeagues
         },
         error: null
       });

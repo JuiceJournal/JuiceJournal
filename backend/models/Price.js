@@ -35,6 +35,16 @@ module.exports = (sequelize, DataTypes) => {
         'incubator',
         'delirium_orb',
         'catalyst',
+        'essence',
+        'fossil',
+        'beast',
+        'rune',
+        'tattoo',
+        'omen',
+        'soul_core',
+        'idol',
+        'expedition',
+        'ultimatum',
         'other'
       ),
       allowNull: false,
@@ -167,10 +177,21 @@ module.exports = (sequelize, DataTypes) => {
   Price.bulkUpsert = async function(items, league, poeVersion = 'poe1') {
     if (!items.length) return [];
 
-    const records = items.map(item => ({
+    // Deduplicate by name (keep highest chaosValue) and filter invalid values
+    const deduped = new Map();
+    for (const item of items) {
+      if (!item.name || item.chaosValue < 0) continue;
+      const key = item.name.toLowerCase();
+      const existing = deduped.get(key);
+      if (!existing || (item.chaosValue || 0) > (existing.chaosValue || 0)) {
+        deduped.set(key, item);
+      }
+    }
+
+    const records = [...deduped.values()].map(item => ({
       itemName: item.name,
       itemType: item.type,
-      chaosValue: item.chaosValue,
+      chaosValue: Math.max(0, item.chaosValue || 0),
       divineValue: item.divineValue,
       league,
       poeVersion,
@@ -180,26 +201,33 @@ module.exports = (sequelize, DataTypes) => {
       updatedAt: new Date()
     }));
 
-    try {
-      const result = await this.bulkCreate(records, {
-        updateOnDuplicate: ['chaosValue', 'divineValue', 'iconUrl', 'sparklineData', 'active', 'updatedAt', 'itemType'],
-        returning: true
-      });
-      return result.map(price => ({ price, created: price.isNewRecord !== false }));
-    } catch (error) {
-      console.error('Bulk price upsert hatasi:', error.message);
-      // Fallback to individual upserts if bulk fails (e.g. unique constraint race)
-      const results = [];
-      for (const record of records) {
-        try {
-          const result = await this.upsertPrice(record);
-          results.push(result);
-        } catch (err) {
-          console.error(`Fiyat kaydetme hatasi (${record.itemName}):`, err.message);
+    // Process in chunks to avoid oversized queries
+    const CHUNK_SIZE = 500;
+    const allResults = [];
+
+    for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+      const chunk = records.slice(i, i + CHUNK_SIZE);
+      try {
+        const result = await this.bulkCreate(chunk, {
+          updateOnDuplicate: ['chaosValue', 'divineValue', 'iconUrl', 'sparklineData', 'active', 'updatedAt', 'itemType'],
+          returning: true
+        });
+        allResults.push(...result.map(price => ({ price, created: price.isNewRecord !== false })));
+      } catch (error) {
+        console.error(`Bulk upsert chunk hatasi (${i}-${i+chunk.length}):`, error.message);
+        // Fallback to individual upserts for this chunk
+        for (const record of chunk) {
+          try {
+            const result = await this.upsertPrice(record);
+            allResults.push(result);
+          } catch (err) {
+            // silently skip individual failures
+          }
         }
       }
-      return results;
     }
+
+    return allResults;
   };
 
   Price.deactivateOldPrices = async function(league, olderThanMinutes = 120, poeVersion = 'poe1') {

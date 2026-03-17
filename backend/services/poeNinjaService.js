@@ -2,18 +2,31 @@
  * PoeNinja Service
  * poe.ninja API entegrasyonu ve fiyat senkronizasyonu
  * PoE 1 ve PoE 2 destegi
+ *
+ * API Endpoints:
+ * - PoE 1: https://poe.ninja/api/data/currencyoverview?league=X&type=Currency
+ * - PoE 1: https://poe.ninja/api/data/itemoverview?league=X&type=Map
+ * - PoE 2: https://poe.ninja/poe2/api/economy/exchange/{urlSlug}/overview?league=X&type=Currency
+ * - PoE 2 leagues: https://poe.ninja/poe2/api/data/index-state
  */
 
 const axios = require('axios');
 const { Price } = require('../models');
 
 const POE1_BASE_URL = 'https://poe.ninja/api/data';
-const POE2_BASE_URL = 'https://poe.ninja/poe2/api/economy';
+const POE2_BASE_URL = 'https://poe.ninja/poe2/api';
 
-// PoE 1 item tipi mapping
+const REQUEST_HEADERS = {
+  'Accept': 'application/json',
+  'User-Agent': 'PoE-Farm-Tracker/1.0'
+};
+
+// PoE 1 item tipi mapping (poe.ninja API type → internal category)
 const POE1_ITEM_TYPE_MAPPING = {
+  // Currency API types
   'Currency': 'currency',
   'Fragment': 'fragment',
+  // Item API types
   'Scarab': 'scarab',
   'Map': 'map',
   'DivinationCard': 'divination_card',
@@ -23,46 +36,75 @@ const POE1_ITEM_TYPE_MAPPING = {
   'Incubator': 'incubator',
   'DeliriumOrb': 'delirium_orb',
   'Catalyst': 'catalyst',
+  'Essence': 'essence',
+  'Fossil': 'fossil',
+  'Resonator': 'fossil',
+  'Beast': 'beast',
+  'Vial': 'other',
+  'Tattoo': 'tattoo',
+  'Omen': 'omen',
+  'Artifact': 'other',
+  'DjinnCoin': 'other',
+  'Wombgift': 'other',
+  'Runegraft': 'other',
+  'AllflameEmber': 'other',
+  'ClusterJewel': 'unique',
+  'ForbiddenJewel': 'unique',
+  'ShrineBelt': 'unique',
+  'UniqueTincture': 'unique',
+  'UniqueRelic': 'unique',
   'UniqueJewel': 'unique',
   'UniqueFlask': 'unique',
   'UniqueWeapon': 'unique',
   'UniqueArmour': 'unique',
   'UniqueAccessory': 'unique',
-  'Resonator': 'other',
-  'Fossil': 'other',
-  'Essence': 'other'
+  'BlightedMap': 'map',
+  'BlightRavagedMap': 'map',
+  'Invitation': 'map',
+  'ValdoMap': 'map'
 };
 
-// PoE 2 item tipi mapping
+// PoE 2 item tipi mapping (all types use exchange API — note: poe.ninja uses PLURAL names for PoE2)
 const POE2_ITEM_TYPE_MAPPING = {
   'Currency': 'currency',
-  'Fragment': 'fragment',
-  'Scarab': 'scarab',
-  'Map': 'map',
-  'DivinationCard': 'divination_card',
-  'SkillGem': 'gem',
-  'UniqueWeapon': 'unique',
-  'UniqueArmour': 'unique',
-  'UniqueAccessory': 'unique',
-  'UniqueJewel': 'unique',
-  'UniqueFlask': 'unique',
-  'UniqueMap': 'map',
-  'Catalyst': 'catalyst',
-  'Essence': 'other',
-  'Rune': 'other'
+  'Fragments': 'fragment',
+  'UncutGems': 'gem',
+  'SoulCores': 'soul_core',
+  'Idol': 'idol',
+  'Runes': 'rune',
+  'Essences': 'essence',
+  'Expedition': 'expedition',
+  'Ultimatum': 'soul_core'
 };
 
-// PoE 1 sync tipleri
+// PoE 1 sync tipleri (currency API + item API types)
 const POE1_SYNC_TYPES = [
-  'Currency', 'Fragment', 'Scarab', 'Map', 'DivinationCard',
-  'SkillGem', 'UniqueMap', 'Oil', 'Incubator', 'DeliriumOrb', 'Catalyst'
+  // Currency API
+  'Currency', 'Fragment',
+  // Item API — high priority
+  'Scarab', 'Map', 'DivinationCard', 'Essence', 'Oil',
+  'SkillGem', 'UniqueMap', 'Fossil', 'Resonator',
+  'Incubator', 'DeliriumOrb', 'Catalyst',
+  // Item API — uniques
+  'UniqueJewel', 'UniqueFlask', 'UniqueWeapon', 'UniqueArmour', 'UniqueAccessory',
+  'ForbiddenJewel', 'ShrineBelt', 'UniqueTincture', 'UniqueRelic', 'ClusterJewel',
+  // Item API — league-specific
+  'Beast', 'Tattoo', 'Omen',
+  'BlightedMap', 'BlightRavagedMap', 'Invitation', 'ValdoMap',
+  // Item API — minor (mapped to 'other')
+  'Vial', 'Artifact', 'DjinnCoin', 'Wombgift', 'Runegraft', 'AllflameEmber'
 ];
 
-// PoE 2 sync tipleri
+// PoE 2 sync tipleri (all use exchange API — plural names required)
 const POE2_SYNC_TYPES = [
-  'Currency', 'Fragment', 'Scarab', 'Map', 'DivinationCard',
-  'SkillGem', 'UniqueWeapon', 'UniqueArmour', 'UniqueAccessory'
+  'Currency', 'Fragments', 'UncutGems', 'SoulCores',
+  'Idol', 'Runes', 'Essences', 'Expedition', 'Ultimatum'
 ];
+
+// Cache for PoE2 league index state (refreshed every 30 min)
+let poe2IndexCache = null;
+let poe2IndexCacheTime = 0;
+const INDEX_CACHE_TTL = 30 * 60 * 1000;
 
 function getTypeMapping(poeVersion) {
   return poeVersion === 'poe2' ? POE2_ITEM_TYPE_MAPPING : POE1_ITEM_TYPE_MAPPING;
@@ -73,6 +115,72 @@ function getDefaultSyncTypes(poeVersion) {
 }
 
 /**
+ * PoE 2 index state'ini getir (league listesi icin)
+ */
+const getPoe2IndexState = async () => {
+  const now = Date.now();
+  if (poe2IndexCache && (now - poe2IndexCacheTime) < INDEX_CACHE_TTL) {
+    return poe2IndexCache;
+  }
+
+  try {
+    const response = await axios.get(`${POE2_BASE_URL}/data/index-state`, {
+      timeout: 15000,
+      headers: REQUEST_HEADERS
+    });
+    poe2IndexCache = response.data;
+    poe2IndexCacheTime = now;
+    return poe2IndexCache;
+  } catch (error) {
+    console.error('PoE2 index state fetch error:', error.message);
+    return poe2IndexCache; // return stale cache if available
+  }
+};
+
+/**
+ * PoE 2 aktif league'in URL slug'ini bul
+ */
+const getPoe2LeagueSlug = async (leagueName) => {
+  const indexState = await getPoe2IndexState();
+  if (!indexState) return null;
+
+  const allLeagues = [
+    ...(indexState.economyLeagues || []),
+    ...(indexState.oldEconomyLeagues || [])
+  ];
+
+  const match = allLeagues.find(l =>
+    l.name.toLowerCase() === leagueName.toLowerCase() ||
+    l.displayName.toLowerCase() === leagueName.toLowerCase()
+  );
+
+  return match?.url || null;
+};
+
+/**
+ * Aktif ligleri getir (poe.ninja'dan)
+ */
+const getActiveLeagues = async (poeVersion = 'poe1') => {
+  if (poeVersion === 'poe2') {
+    const indexState = await getPoe2IndexState();
+    if (!indexState) return [];
+
+    const leagues = [];
+    for (const l of (indexState.economyLeagues || [])) {
+      leagues.push({ name: l.name, displayName: l.displayName, active: true, hardcore: l.hardcore });
+    }
+    for (const l of (indexState.oldEconomyLeagues || [])) {
+      leagues.push({ name: l.name, displayName: l.displayName, active: false, hardcore: l.hardcore });
+    }
+    return leagues;
+  }
+
+  // PoE 1 doesn't have a league index endpoint, return known leagues
+  // The current league name is validated by making a test request
+  return null;
+};
+
+/**
  * Currency verilerini poe.ninja'dan cek
  */
 const getCurrencyOverview = async (league = 'Standard', type = 'Currency', poeVersion = 'poe1') => {
@@ -80,8 +188,12 @@ const getCurrencyOverview = async (league = 'Standard', type = 'Currency', poeVe
     let url, params;
 
     if (poeVersion === 'poe2') {
-      url = `${POE2_BASE_URL}/currencyexchange/overview`;
-      params = { leagueName: league, overviewName: type };
+      const slug = await getPoe2LeagueSlug(league);
+      if (!slug) {
+        throw new Error(`Unknown PoE2 league: ${league}`);
+      }
+      url = `${POE2_BASE_URL}/economy/exchange/${slug}/overview`;
+      params = { league, type };
     } else {
       url = `${POE1_BASE_URL}/currencyoverview`;
       params = { league, type };
@@ -90,10 +202,7 @@ const getCurrencyOverview = async (league = 'Standard', type = 'Currency', poeVe
     const response = await axios.get(url, {
       params,
       timeout: 30000,
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'PoE-Farm-Tracker/1.0'
-      }
+      headers: REQUEST_HEADERS
     });
 
     return response.data;
@@ -104,27 +213,22 @@ const getCurrencyOverview = async (league = 'Standard', type = 'Currency', poeVe
 };
 
 /**
- * Item verilerini poe.ninja'dan cek
+ * Item verilerini poe.ninja'dan cek (PoE 1 only — PoE 2 uses exchange API)
  */
 const getItemOverview = async (league = 'Standard', type = 'Map', poeVersion = 'poe1') => {
   try {
-    let url, params;
-
     if (poeVersion === 'poe2') {
-      url = `${POE2_BASE_URL}/item/overview`;
-      params = { leagueName: league, overviewName: type };
-    } else {
-      url = `${POE1_BASE_URL}/itemoverview`;
-      params = { league, type };
+      // PoE 2 doesn't have item overview on poe.ninja yet
+      return { lines: [] };
     }
+
+    const url = `${POE1_BASE_URL}/itemoverview`;
+    const params = { league, type };
 
     const response = await axios.get(url, {
       params,
       timeout: 30000,
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'PoE-Farm-Tracker/1.0'
-      }
+      headers: REQUEST_HEADERS
     });
 
     return response.data;
@@ -145,32 +249,72 @@ const normalizeCurrencyData = (data, type, poeVersion = 'poe1') => {
     return items;
   }
 
-  data.lines.forEach(line => {
-    const itemType = typeMapping[type] || 'currency';
+  if (poeVersion === 'poe2') {
+    // PoE 2 exchange API format:
+    // - core.primary = "divine" (base currency), core.secondary = "chaos"
+    // - core.rates = { chaos: 31.94 } (1 divine = 31.94 chaos)
+    // - lines[].primaryValue = value in divine orbs (e.g., chaos: 0.03131 = 1 chaos costs 0.03131 divine)
+    // - items[] = display names and icons matched by id
 
-    items.push({
-      name: line.currencyTypeName || line.name,
-      type: itemType,
-      chaosValue: line.chaosEquivalent || line.chaosValue || 0,
-      divineValue: line.divineEquivalent || (line.chaosEquivalent / 180) || null,
-      iconUrl: line.icon || null,
-      sparklineData: line.sparkline || line.receiveSparkLine || null
-    });
-  });
+    // Build name + icon lookup from items array
+    const itemInfoMap = {};
+    if (data.items && data.items.length > 0) {
+      data.items.forEach(item => {
+        if (item.id) {
+          itemInfoMap[item.id] = {
+            name: item.name || item.id,
+            image: item.image ? `https://web.poecdn.com${item.image}` : null
+          };
+        }
+      });
+    }
 
-  // PoE 2 currency details may include icon URLs separately
-  if (data.currencyDetails && data.currencyDetails.length > 0) {
-    const iconMap = {};
-    data.currencyDetails.forEach(detail => {
-      if (detail.name && detail.icon) {
-        iconMap[detail.name] = detail.icon;
-      }
+    // Divine-to-chaos conversion rate
+    const chaosRate = data.core?.rates?.chaos || data.core?.rates?.exalted || 1;
+
+    data.lines.forEach(line => {
+      const divineValue = line.primaryValue || 0; // value in divine orbs
+      const chaosValue = divineValue * chaosRate;  // convert to chaos
+      const info = itemInfoMap[line.id] || {};
+
+      items.push({
+        name: info.name || line.id || 'Unknown',
+        type: typeMapping[type] || 'currency',
+        chaosValue: Math.round(chaosValue * 100) / 100,
+        divineValue: Math.round(divineValue * 10000) / 10000,
+        iconUrl: info.image || null,
+        sparklineData: line.sparkline || null
+      });
     });
-    items.forEach(item => {
-      if (!item.iconUrl && iconMap[item.name]) {
-        item.iconUrl = iconMap[item.name];
-      }
+  } else {
+    // PoE 1 format
+    data.lines.forEach(line => {
+      const itemType = typeMapping[type] || 'currency';
+
+      items.push({
+        name: line.currencyTypeName || line.name,
+        type: itemType,
+        chaosValue: line.chaosEquivalent || line.chaosValue || 0,
+        divineValue: line.divineEquivalent || (line.chaosEquivalent / 180) || null,
+        iconUrl: line.icon || null,
+        sparklineData: line.sparkline || line.receiveSparkLine || null
+      });
     });
+
+    // PoE 1 currency details may include icon URLs separately
+    if (data.currencyDetails && data.currencyDetails.length > 0) {
+      const iconMap = {};
+      data.currencyDetails.forEach(detail => {
+        if (detail.name && detail.icon) {
+          iconMap[detail.name] = detail.icon;
+        }
+      });
+      items.forEach(item => {
+        if (!item.iconUrl && iconMap[item.name]) {
+          item.iconUrl = iconMap[item.name];
+        }
+      });
+    }
   }
 
   return items;
@@ -217,7 +361,8 @@ const syncPricesByType = async (league, type, poeVersion = 'poe1') => {
   try {
     let items = [];
 
-    if (type === 'Currency' || type === 'Fragment') {
+    // PoE 2: all types use exchange API; PoE 1: Currency/Fragment use currencyoverview, rest use itemoverview
+    if (poeVersion === 'poe2' || type === 'Currency' || type === 'Fragment') {
       const data = await getCurrencyOverview(league, type, poeVersion);
       items = normalizeCurrencyData(data, type, poeVersion);
     } else {
@@ -290,15 +435,23 @@ const getChaosOrbValue = async (league = 'Standard', poeVersion = 'poe1') => {
   try {
     const data = await getCurrencyOverview(league, 'Currency', poeVersion);
 
-    const divineOrb = data.lines.find(line =>
-      (line.currencyTypeName || line.name) === 'Divine Orb'
-    );
+    if (poeVersion === 'poe2') {
+      // PoE 2 exchange API provides rates in core
+      const divineRate = data.core?.rates?.divine;
+      if (divineRate) {
+        return { divineToChaos: 1 / divineRate, chaosToDivine: divineRate };
+      }
+    } else {
+      const divineOrb = data.lines.find(line =>
+        (line.currencyTypeName || line.name) === 'Divine Orb'
+      );
 
-    if (divineOrb) {
-      return {
-        divineToChaos: divineOrb.chaosEquivalent || divineOrb.chaosValue || 180,
-        chaosToDivine: 1 / (divineOrb.chaosEquivalent || divineOrb.chaosValue || 180)
-      };
+      if (divineOrb) {
+        return {
+          divineToChaos: divineOrb.chaosEquivalent || divineOrb.chaosValue || 180,
+          chaosToDivine: 1 / (divineOrb.chaosEquivalent || divineOrb.chaosValue || 180)
+        };
+      }
     }
 
     return { divineToChaos: 180, chaosToDivine: 1/180 };
@@ -337,12 +490,12 @@ const getItemPrice = async (itemName, itemType = null, league = 'Standard', poeV
       : await getItemOverview(league, searchType, poeVersion);
 
     const item = data.lines.find(line =>
-      (line.currencyTypeName || line.name).toLowerCase() === itemName.toLowerCase()
+      (line.currencyTypeName || line.name || line.id || '').toLowerCase() === itemName.toLowerCase()
     );
 
     if (item) {
       return {
-        name: item.currencyTypeName || item.name,
+        name: item.currencyTypeName || item.name || item.id,
         chaosValue: item.chaosEquivalent || item.chaosValue || 0,
         divineValue: item.divineValue || (item.chaosEquivalent / 180) || null,
         source: 'poe.ninja',
@@ -366,5 +519,7 @@ module.exports = {
   getItemPrice,
   normalizeCurrencyData,
   normalizeItemData,
-  getDefaultSyncTypes
+  getDefaultSyncTypes,
+  getActiveLeagues,
+  getPoe2IndexState
 };

@@ -82,6 +82,8 @@ class APIClient {
     );
 
     // Response interceptor - hata yonetimi
+    // Note: this unwraps response.data, so this.client.get() returns the HTTP body directly
+    // All methods that do `response.data` are accessing the `.data` field of the API response body
     this.client.interceptors.response.use(
       (response) => response.data,
       (error) => {
@@ -331,7 +333,9 @@ class APIClient {
    * Fiyatlari senkronize et
    */
   async syncPrices(data = {}) {
-    const response = await this.client.post('/api/prices/sync', data);
+    const response = await this.client.post('/api/prices/sync', data, {
+      timeout: 120000 // Sync fetches many types sequentially, needs longer timeout
+    });
     return response.data;
   }
 

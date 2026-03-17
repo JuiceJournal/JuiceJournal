@@ -31,13 +31,11 @@ const POE1_ITEM_TYPES = [
   'UniqueRelic', 'Tattoo', 'Rune'
 ];
 
-const POE2_CURRENCY_TYPES = ['Currency'];
-const POE2_ITEM_TYPES = [
-  'Scarab', 'Essence', 'DivinationCard', 'SkillGem',
-  'UniqueMap', 'Map', 'UniqueJewel', 'UniqueFlask',
-  'UniqueWeapon', 'UniqueArmour', 'UniqueAccessory',
-  'Beast', 'Rune'
+const POE2_CURRENCY_TYPES = [
+  'Currency', 'Fragments', 'UncutGems', 'SoulCores',
+  'Idol', 'Runes', 'Essences', 'Expedition', 'Ultimatum'
 ];
+const POE2_ITEM_TYPES = [];
 
 // Quick sync = most important types for profit tracking
 const POE1_QUICK_SYNC = [
@@ -45,8 +43,8 @@ const POE1_QUICK_SYNC = [
   'Essence', 'Oil', 'Fossil', 'UniqueMap'
 ];
 const POE2_QUICK_SYNC = [
-  'Currency', 'DivinationCard', 'Scarab', 'Essence',
-  'UniqueMap', 'Rune'
+  'Currency', 'Fragments', 'Essences', 'Runes',
+  'UncutGems', 'SoulCores', 'Idol'
 ];
 
 // ─── Static core currencies (always present, per version) ─────────

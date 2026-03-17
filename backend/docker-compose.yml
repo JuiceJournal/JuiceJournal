@@ -46,7 +46,7 @@ services:
       - JWT_EXPIRES_IN=7d
       - PORT=3001
       - POE_NINJA_BASE_URL=https://poe.ninja/api/data
-      - DEFAULT_LEAGUE=Ancestor
+      - DEFAULT_LEAGUE=Mirage
     command: sh -c "npm install && npm run dev"
     depends_on:
       postgres:

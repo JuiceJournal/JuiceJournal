@@ -68,7 +68,7 @@ module.exports = {
   priceSync: {
     intervalHours: parseInteger(process.env.PRICE_SYNC_INTERVAL, 1),
     minIntervalMs: parseInteger(process.env.PRICE_SYNC_MIN_INTERVAL_MS, 300000),
-    defaultLeague: process.env.DEFAULT_LEAGUE || 'Ancestor',
+    defaultLeague: process.env.DEFAULT_LEAGUE || 'Mirage',
   },
   poe: {
     clientId: process.env.POE_CLIENT_ID || '',

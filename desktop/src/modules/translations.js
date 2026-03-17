@@ -319,6 +319,11 @@ window.Translations = {
     'category.omen': 'Omen',
     'category.tattoo': 'Tattoo',
     'category.rune': 'Rune',
+    'category.beast': 'Beast',
+    'category.soulCore': 'Soul Core',
+    'category.idol': 'Idol',
+    'category.expedition': 'Expedition',
+    'category.ultimatum': 'Ultimatum',
     'category.other': 'Diger',
 
     // Audit
@@ -966,6 +971,11 @@ window.Translations = {
     'category.omen': 'Omen',
     'category.tattoo': 'Tattoo',
     'category.rune': 'Rune',
+    'category.beast': 'Beast',
+    'category.soulCore': 'Soul Core',
+    'category.idol': 'Idol',
+    'category.expedition': 'Expedition',
+    'category.ultimatum': 'Ultimatum',
     'category.other': 'Other',
 
     // Audit
