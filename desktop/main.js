@@ -21,6 +21,10 @@ const Store = require('electron-store');
 const LogParser = require('./src/modules/logParser');
 const OCRScanner = require('./src/modules/ocrScanner');
 const APIClient = require('./src/modules/apiClient');
+const PoeApiClient = require('./src/modules/poeApiClient');
+const PriceService = require('./src/modules/priceService');
+const StashAnalyzer = require('./src/modules/stashAnalyzer');
+const GameDetector = require('./src/modules/gameDetector');
 
 const APP_NAME = 'PoE Farm Tracker';
 const APP_ID = 'PoeFarmTracker.Desktop';
@@ -74,7 +78,16 @@ const MAIN_PROCESS_TRANSLATIONS = {
     auditSessionEndQueued: '{mapName} session bitisi kuyruga alindi',
     auditLootQueued: '{count} loot senkron kuyruguna alindi',
     auditPendingSyncFlushed: 'Bekleyen senkron islemleri denendi. Session: {sessions}, Loot: {loot}',
-    auditDiagnosticsExported: 'Diagnostik dosyasi disa aktarildi'
+    auditDiagnosticsExported: 'Diagnostik dosyasi disa aktarildi',
+    stashSnapshotTaken: 'Stash goruntusu alindi ({count} item)',
+    stashSnapshotFailed: 'Stash goruntusu alinamadi',
+    pricesSynced: 'Fiyatlar guncellendi ({count} item)',
+    pricesSyncFailed: 'Fiyat guncelleme basarisiz',
+    poeNotLinked: 'PoE hesabi bagli degil. Ayarlardan baglayabilirsiniz.',
+    profitCalculated: 'Kar hesaplandi: {value}c',
+    gameDetected: '{game} algilandi',
+    gameClosed: '{game} kapatildi',
+    gameSwitched: '{from} → {to} gecis yapildi'
   },
   en: {
     trayStillRunning: 'The app is still running in the system tray.',
@@ -121,7 +134,16 @@ const MAIN_PROCESS_TRANSLATIONS = {
     auditSessionEndQueued: '{mapName} session end queued for sync',
     auditLootQueued: '{count} loot actions queued for sync',
     auditPendingSyncFlushed: 'Pending sync processed. Sessions: {sessions}, Loot: {loot}',
-    auditDiagnosticsExported: 'Diagnostics file exported'
+    auditDiagnosticsExported: 'Diagnostics file exported',
+    stashSnapshotTaken: 'Stash snapshot taken ({count} items)',
+    stashSnapshotFailed: 'Failed to take stash snapshot',
+    pricesSynced: 'Prices updated ({count} items)',
+    pricesSyncFailed: 'Price sync failed',
+    poeNotLinked: 'PoE account not linked. Connect it in Settings.',
+    profitCalculated: 'Profit calculated: {value}c',
+    gameDetected: '{game} detected',
+    gameClosed: '{game} closed',
+    gameSwitched: 'Switched {from} → {to}'
   }
 };
 
@@ -143,7 +165,8 @@ const store = new Store({
     pendingLootActions: [],
     queuedCurrentSession: null,
     auditTrail: [],
-    strategyPresets: DEFAULT_STRATEGY_PRESETS
+    strategyPresets: DEFAULT_STRATEGY_PRESETS,
+    poeOAuthTokens: null
   },
 });
 
@@ -159,6 +182,10 @@ let tray = null;
 let logParser = null;
 let ocrScanner = null;
 let apiClient = null;
+let poeApiClient = null;
+let priceService = null;
+let stashAnalyzer = null;
+let gameDetector = null;
 let currentSession = null;
 let poeAuthServer = null;
 let trayHintShown = false;
@@ -1296,6 +1323,75 @@ function setupLogParser() {
 }
 
 /**
+ * Game detector - auto-detect PoE 1 / PoE 2 running
+ */
+function setupGameDetector() {
+  gameDetector = new GameDetector();
+
+  gameDetector.on('gameLaunched', ({ version }) => {
+    const gameLabel = version === 'poe2' ? 'Path of Exile 2' : 'Path of Exile';
+    console.log(`[GameDetector] ${gameLabel} launched`);
+    applyGameVersion(version);
+    showNotification(t('notificationInfo'), t('gameDetected', { game: gameLabel }));
+  });
+
+  gameDetector.on('gameSwitched', ({ from, to }) => {
+    const fromLabel = from === 'poe2' ? 'PoE 2' : 'PoE 1';
+    const toLabel = to === 'poe2' ? 'PoE 2' : 'PoE 1';
+    console.log(`[GameDetector] Switched from ${fromLabel} to ${toLabel}`);
+    applyGameVersion(to);
+    showNotification(t('notificationInfo'), t('gameSwitched', { from: fromLabel, to: toLabel }));
+  });
+
+  gameDetector.on('gameClosed', ({ version }) => {
+    const gameLabel = version === 'poe2' ? 'Path of Exile 2' : 'Path of Exile';
+    console.log(`[GameDetector] ${gameLabel} closed`);
+    if (mainWindow) {
+      mainWindow.webContents.send('game-closed', { version });
+    }
+  });
+
+  gameDetector.start();
+}
+
+/**
+ * Apply detected game version — update store, price service, log parser, and notify renderer
+ */
+function applyGameVersion(version) {
+  const currentVersion = store.get('poeVersion');
+  if (version === currentVersion) return;
+
+  // Update store
+  store.set('poeVersion', version);
+
+  // Update price service
+  if (priceService) {
+    priceService.setPoeVersion(version);
+    priceService.clearCache();
+  }
+
+  // Try to find and switch Client.txt path for the new version
+  const detectedLogPath = GameDetector.findLogPath(version);
+  if (detectedLogPath) {
+    store.set('poePath', detectedLogPath);
+
+    // Restart log parser with new path
+    if (logParser) {
+      logParser.stop();
+    }
+    setupLogParser();
+  }
+
+  // Notify renderer to update UI (icons, labels, etc.)
+  if (mainWindow) {
+    mainWindow.webContents.send('game-version-changed', {
+      version,
+      logPath: detectedLogPath || store.get('poePath')
+    });
+  }
+}
+
+/**
  * IPC handler'lari tanimla
  */
 function setupIPC() {
@@ -1651,6 +1747,142 @@ function setupIPC() {
     }
   });
 
+  // ==================== STASH & PRICES ====================
+
+  // Sync prices from poe.ninja
+  ipcMain.handle('sync-prices', async (event, options = {}) => {
+    try {
+      const league = options.league || store.get('defaultLeague') || 'Standard';
+      priceService.setPoeVersion(store.get('poeVersion') || 'poe1');
+      const result = await priceService.syncPrices(league, options);
+      return result;
+    } catch (error) {
+      throw toRendererError(error, t('pricesSyncFailed'));
+    }
+  });
+
+  // Get price for a specific item
+  ipcMain.handle('get-item-price', async (event, itemName) => {
+    return priceService.getPriceInfo(itemName);
+  });
+
+  // Price a list of items
+  ipcMain.handle('price-items', async (event, items) => {
+    return priceService.priceItems(items);
+  });
+
+  // Get price service status
+  ipcMain.handle('get-price-status', async () => {
+    return priceService.getStatus();
+  });
+
+  // List stash tabs from PoE API
+  ipcMain.handle('list-stash-tabs', async (event, league) => {
+    try {
+      if (!poeApiClient.isAuthenticated()) {
+        throw new Error(t('poeNotLinked'));
+      }
+      const leagueName = league || store.get('defaultLeague') || 'Standard';
+      return await poeApiClient.listStashTabs(leagueName);
+    } catch (error) {
+      throw toRendererError(error, t('stashSnapshotFailed'));
+    }
+  });
+
+  // Take a stash snapshot
+  ipcMain.handle('take-stash-snapshot', async (event, options = {}) => {
+    try {
+      if (!poeApiClient.isAuthenticated()) {
+        throw new Error(t('poeNotLinked'));
+      }
+      const league = options.league || store.get('defaultLeague') || 'Standard';
+      const snapshot = await poeApiClient.takeStashSnapshot(league, {
+        tabIds: options.tabIds,
+        allTabs: options.allTabs
+      });
+
+      // Price the items
+      const priced = priceService.priceItems(snapshot.items);
+      snapshot.items = priced.items;
+      snapshot.totalChaos = priced.totalChaos;
+      snapshot.totalDivine = priced.totalDivine;
+      snapshot.divinePrice = priced.divinePrice;
+
+      // Save the snapshot
+      const snapshotId = options.snapshotId || `snap_${Date.now()}`;
+      stashAnalyzer.saveSnapshot(snapshotId, snapshot);
+
+      if (mainWindow) {
+        mainWindow.webContents.send('stash-snapshot-taken', {
+          snapshotId,
+          itemCount: snapshot.items.length,
+          totalChaos: snapshot.totalChaos,
+          totalDivine: snapshot.totalDivine
+        });
+      }
+
+      return {
+        snapshotId,
+        itemCount: snapshot.items.length,
+        totalChaos: snapshot.totalChaos,
+        totalDivine: snapshot.totalDivine,
+        tabs: snapshot.tabs,
+        items: snapshot.items
+      };
+    } catch (error) {
+      throw toRendererError(error, t('stashSnapshotFailed'));
+    }
+  });
+
+  // Calculate profit between two snapshots
+  ipcMain.handle('calculate-profit', async (event, beforeId, afterId) => {
+    try {
+      const report = stashAnalyzer.diffSnapshots(beforeId, afterId, priceService);
+
+      if (mainWindow) {
+        mainWindow.webContents.send('profit-calculated', report);
+      }
+
+      return report;
+    } catch (error) {
+      throw toRendererError(error, 'Profit calculation failed');
+    }
+  });
+
+  // List stored snapshots
+  ipcMain.handle('list-snapshots', async () => {
+    return stashAnalyzer.listSnapshots();
+  });
+
+  // Delete a snapshot
+  ipcMain.handle('delete-snapshot', async (event, snapshotId) => {
+    stashAnalyzer.deleteSnapshot(snapshotId);
+    return true;
+  });
+
+  // Set PoE OAuth tokens (called after successful OAuth flow)
+  ipcMain.handle('set-poe-tokens', async (event, tokens) => {
+    poeApiClient.setTokens(tokens);
+    store.set('poeOAuthTokens', poeApiClient.getTokens());
+    return true;
+  });
+
+  // Get detected game status
+  ipcMain.handle('get-detected-game', async () => {
+    return {
+      version: gameDetector ? gameDetector.getDetectedGame() : null,
+      settingsVersion: store.get('poeVersion') || 'poe1'
+    };
+  });
+
+  // Check if PoE API is authenticated
+  ipcMain.handle('get-poe-auth-status', async () => {
+    return {
+      authenticated: poeApiClient.isAuthenticated(),
+      expired: poeApiClient.isTokenExpired()
+    };
+  });
+
   // Logout
   ipcMain.handle('logout', () => {
     appendAuditTrail('auditLogout');
@@ -1672,6 +1904,18 @@ app.whenReady().then(() => {
   // API client'i baslat
   apiClient = new APIClient(store.get('apiUrl'), store.get('authToken'));
   ocrScanner = new OCRScanner();
+  poeApiClient = new PoeApiClient();
+  priceService = new PriceService();
+  stashAnalyzer = new StashAnalyzer();
+
+  // Set PoE version for price service
+  priceService.setPoeVersion(store.get('poeVersion') || 'poe1');
+
+  // Restore PoE OAuth tokens if saved
+  const savedPoeTokens = store.get('poeOAuthTokens');
+  if (savedPoeTokens?.accessToken) {
+    poeApiClient.setTokens(savedPoeTokens);
+  }
 
   // IPC handler'lari once kaydet (pencere acilmadan)
   setupIPC();
@@ -1684,6 +1928,7 @@ app.whenReady().then(() => {
   createTray();
   registerGlobalShortcuts();
   setupLogParser();
+  setupGameDetector();
   getCurrentSessionFromBackend().catch(() => {});
   flushPendingActions().catch(() => {});
   pendingLootFlushInterval = setInterval(() => {
@@ -1717,6 +1962,11 @@ app.on('will-quit', () => {
   // Log parser'i durdur
   if (logParser) {
     logParser.stop();
+  }
+
+  // Game detector'i durdur
+  if (gameDetector) {
+    gameDetector.stop();
   }
 
   if (tray) {
