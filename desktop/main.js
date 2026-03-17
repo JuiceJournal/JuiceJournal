@@ -1443,6 +1443,49 @@ function setupIPC() {
     return true;
   });
 
+  // Auth token kontrolu (token'i aciga cikarmadan)
+  ipcMain.handle('has-auth-token', () => {
+    return !!store.get('authToken');
+  });
+
+  // Currency price sync (backend API uzerinden, token guvenli)
+  ipcMain.handle('sync-currency-prices', async (event, { league, poeVersion } = {}) => {
+    try {
+      return await apiClient.syncPrices({ league, poeVersion });
+    } catch (error) {
+      throw toRendererError(error, 'Price sync failed');
+    }
+  });
+
+  // Currency fiyatlarini getir
+  ipcMain.handle('get-currency-prices', async (event, params = {}) => {
+    try {
+      return await apiClient.getPrices(params);
+    } catch (error) {
+      throw toRendererError(error, 'Failed to load prices');
+    }
+  });
+
+  // Ligleri getir
+  ipcMain.handle('get-currency-leagues', async (event, poeVersion = 'poe1') => {
+    try {
+      return await apiClient.getLeagues({ poeVersion });
+    } catch (error) {
+      throw toRendererError(error, 'Failed to load leagues');
+    }
+  });
+
+  // Client.txt dosya secici
+  ipcMain.handle('browse-poe-path', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Client.txt',
+      filters: [{ name: 'Log Files', extensions: ['txt'] }],
+      properties: ['openFile']
+    });
+    if (canceled || !filePaths.length) return null;
+    return filePaths[0];
+  });
+
   // Session baslat
   ipcMain.handle('start-session', async (event, data) => {
     return await startNewSession(data || {});

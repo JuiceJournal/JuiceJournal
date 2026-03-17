@@ -16,6 +16,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSettings: (settings) => ipcRenderer.invoke('set-settings', settings),
 
+  // Auth
+  hasAuthToken: () => ipcRenderer.invoke('has-auth-token'),
+
+  // Dosya secici
+  browsePoePath: () => ipcRenderer.invoke('browse-poe-path'),
+
+  // Currency (IPC uzerinden guvenli)
+  getCurrencyPrices: (params) => ipcRenderer.invoke('get-currency-prices', params),
+  getCurrencyLeagues: (poeVersion) => ipcRenderer.invoke('get-currency-leagues', poeVersion),
+  syncCurrencyPrices: (options) => ipcRenderer.invoke('sync-currency-prices', options),
+
   // Session islemleri
   startSession: (data) => ipcRenderer.invoke('start-session', data),
   endSession: () => ipcRenderer.invoke('end-session'),

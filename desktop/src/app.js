@@ -229,8 +229,8 @@ async function init() {
   setupIPCListeners();
   
   // Mevcut kullaniciyi kontrol et
-  const token = state.settings.authToken;
-  if (token) {
+  const hasToken = await window.electronAPI.hasAuthToken();
+  if (hasToken) {
     try {
       const me = await window.electronAPI.getCurrentUser();
       if (me?.user) {
@@ -549,6 +549,17 @@ function setupEventListeners() {
       syncDesktopCurrencyIcons();
     });
   });
+
+  // Browse Client.txt path
+  const browseBtn = document.getElementById('browse-poe-path');
+  if (browseBtn) {
+    browseBtn.addEventListener('click', async () => {
+      const filePath = await window.electronAPI.browsePoePath();
+      if (filePath && elements.poePath) {
+        elements.poePath.value = filePath;
+      }
+    });
+  }
 
   // Test connection
   if (elements.testConnection) {
@@ -2219,22 +2230,39 @@ async function loadCurrencyPage() {
   }
 }
 
+// Known PoE leagues (current + variants)
+const KNOWN_POE1_LEAGUES = ['Phrecia', 'Hardcore Phrecia', 'SSF Phrecia', 'HC SSF Phrecia', 'Standard', 'Hardcore'];
+const KNOWN_POE2_LEAGUES = ['Early Access', 'Hardcore Early Access', 'SSF Early Access', 'HC SSF Early Access', 'Standard', 'Hardcore'];
+
 async function loadCurrencyLeagues() {
+  const select = document.getElementById('currency-league');
+  if (!select) return;
+
+  // Start with known leagues for the version
+  const knownLeagues = currencyState.poeVersion === 'poe2' ? KNOWN_POE2_LEAGUES : KNOWN_POE1_LEAGUES;
+
+  // Try to get DB leagues (from synced prices) and merge
+  let dbLeagues = [];
   try {
-    const apiUrl = state.settings.apiUrl || 'http://localhost:3001';
-    const res = await fetch(`${apiUrl}/api/prices/leagues?poeVersion=${currencyState.poeVersion}`);
-    if (!res.ok) {
-      throw new Error('Unable to reach the server');
-    }
-    const json = await res.json();
-    const leagues = json.data?.leagues || [];
-    const select = document.getElementById('currency-league');
-    if (select) {
-      select.innerHTML = leagues.map(l => `<option value="${l}">${l}</option>`).join('') || '<option value="">Standard</option>';
-      if (leagues.length > 0) currencyState.league = leagues[0];
-    }
-  } catch (error) {
-    currencyState.league = state.settings.defaultLeague || 'Standard';
+    const res = await window.electronAPI.getCurrencyLeagues(currencyState.poeVersion);
+    dbLeagues = res?.data?.leagues || [];
+  } catch {}
+
+  // Merge: known first, then any DB-only leagues
+  const allLeagues = [...knownLeagues];
+  for (const l of dbLeagues) {
+    if (!allLeagues.includes(l)) allLeagues.push(l);
+  }
+
+  select.innerHTML = allLeagues.map(l => `<option value="${escapeHTML(l)}">${escapeHTML(l)}</option>`).join('');
+
+  // Auto-select: defaultLeague from settings, or first known league
+  const defaultLeague = state.settings.defaultLeague || allLeagues[0] || 'Standard';
+  if (allLeagues.includes(defaultLeague)) {
+    select.value = defaultLeague;
+    currencyState.league = defaultLeague;
+  } else {
+    currencyState.league = allLeagues[0] || 'Standard';
   }
 }
 
@@ -2244,17 +2272,12 @@ async function loadCurrencyPrices() {
   tbody.innerHTML = `<tr><td colspan="7" class="currency-empty">${window.t('currency.loading')}</td></tr>`;
 
   try {
-    const apiUrl = state.settings.apiUrl || 'http://localhost:3001';
-    const params = new URLSearchParams({ poeVersion: currencyState.poeVersion, limit: '500' });
-    if (currencyState.league) params.set('league', currencyState.league);
-    if (currencyState.type) params.set('type', currencyState.type);
-    if (currencyState.search) params.set('search', currencyState.search);
+    const params = { poeVersion: currencyState.poeVersion, limit: '500' };
+    if (currencyState.league) params.league = currencyState.league;
+    if (currencyState.type) params.type = currencyState.type;
+    if (currencyState.search) params.search = currencyState.search;
 
-    const res = await fetch(`${apiUrl}/api/prices/current?${params}`);
-    if (!res.ok) {
-      throw new Error('Unable to reach the server');
-    }
-    const json = await res.json();
+    const json = await window.electronAPI.getCurrencyPrices(params);
     currencyState.prices = json.data?.prices || [];
     renderCurrencyTable();
 
@@ -2353,22 +2376,19 @@ async function handleCurrencySync() {
   if (btn) { btn.disabled = true; btn.textContent = window.t('currency.syncing'); }
 
   try {
-    const apiUrl = state.settings.apiUrl || 'http://localhost:3001';
-    const token = state.settings.authToken;
-    const res = await fetch(`${apiUrl}/api/prices/sync`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ league: currencyState.league, poeVersion: currencyState.poeVersion })
+    const result = await window.electronAPI.syncCurrencyPrices({
+      league: currencyState.league,
+      poeVersion: currencyState.poeVersion
     });
-    const json = await res.json();
-    if (json.success) {
+    if (result?.success) {
       showToast(window.t('toast.currencyTitle'), window.t('currency.syncSuccess'), 'success');
+      await loadCurrencyLeagues();
       await loadCurrencyPrices();
     } else {
-      showToast(window.t('toast.currencyTitle'), window.t('currency.syncFailed'), 'error');
+      showToast(window.t('toast.currencyTitle'), getUserFacingErrorMessage(result, 'currency.syncFailed'), 'error');
     }
   } catch (e) {
-    showToast(window.t('toast.currencyTitle'), window.t('currency.syncFailed'), 'error');
+    showToast(window.t('toast.currencyTitle'), getUserFacingErrorMessage(e, 'currency.syncFailed'), 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = window.t('currency.sync'); }
   }
