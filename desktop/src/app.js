@@ -368,16 +368,27 @@ function renderAuditTrail() {
   }).join('');
 }
 
-function ensureSessionClock() {
-  if (sessionClockInterval) {
-    clearInterval(sessionClockInterval);
-  }
-
+function startSessionClock() {
+  if (sessionClockInterval) return; // Already running
   sessionClockInterval = setInterval(() => {
     if (state.currentSession && !document.hidden) {
       updateActiveSessionUI();
     }
   }, 1000);
+}
+
+function stopSessionClock() {
+  if (sessionClockInterval) {
+    clearInterval(sessionClockInterval);
+    sessionClockInterval = null;
+  }
+}
+
+function ensureSessionClock() {
+  stopSessionClock();
+  if (state.currentSession) {
+    startSessionClock();
+  }
 }
 
 /**
@@ -567,6 +578,16 @@ function setupEventListeners() {
     elements.resetSnapshotsBtn.addEventListener('click', handleResetSnapshots);
   }
 
+  // Session list — event delegation (single listener instead of per-card)
+  if (elements.sessionsList) {
+    elements.sessionsList.addEventListener('click', (event) => {
+      const sessionBtn = event.target.closest('[data-session-id]');
+      if (sessionBtn) {
+        openSessionDrawer(sessionBtn.dataset.sessionId);
+      }
+    });
+  }
+
   // Window controls
   const winMin = document.getElementById('win-minimize');
   const winMax = document.getElementById('win-maximize');
@@ -602,13 +623,15 @@ function setupIPCListeners() {
   window.electronAPI.onSessionStarted((session) => {
     state.currentSession = session;
     updateActiveSessionUI();
+    ensureSessionClock();
     showToast(window.t('toast.sessionStartedTitle'), window.t('toast.sessionStartedBody', { mapName: session.mapName }));
     refreshTrackerData({ includeSessions: true });
   });
-  
+
   window.electronAPI.onSessionEnded((session) => {
     state.currentSession = null;
     updateActiveSessionUI();
+    stopSessionClock();
     const profit = parseFloat(session.profitChaos);
     const message = profit >= 0
       ? window.t('toast.sessionProfitBody', { value: profit.toFixed(1) })
@@ -971,30 +994,47 @@ function resetDashboardSummary() {
   elements.todayAvg.innerHTML = currencyHTML(0, 'chaos', 18, state.settings.poeVersion || 'poe1');
 }
 
+let _refreshPending = null;
+let _refreshOptions = {};
+
 async function refreshTrackerData({ includeSessions = false, includeCurrency = false } = {}) {
-  if (!state.currentUser) {
-    resetDashboardSummary();
-    renderRecentLoot();
-    renderSessionsList();
-    updateActiveSessionUI();
-    return;
-  }
+  // Coalesce rapid calls within 300ms
+  _refreshOptions.includeSessions = _refreshOptions.includeSessions || includeSessions;
+  _refreshOptions.includeCurrency = _refreshOptions.includeCurrency || includeCurrency;
 
-  const tasks = [
-    loadCurrentSession(),
-    loadDashboardStats(),
-    loadRecentLoot()
-  ];
+  if (_refreshPending) return _refreshPending;
 
-  if (includeSessions || isPageActive('sessions')) {
-    tasks.push(loadSessions());
-  }
+  _refreshPending = new Promise(resolve => setTimeout(resolve, 300)).then(async () => {
+    const opts = { ..._refreshOptions };
+    _refreshOptions = {};
+    _refreshPending = null;
 
-  if (includeCurrency || isPageActive('currency')) {
-    tasks.push(loadCurrencyPage());
-  }
+    if (!state.currentUser) {
+      resetDashboardSummary();
+      renderRecentLoot();
+      renderSessionsList();
+      updateActiveSessionUI();
+      return;
+    }
 
-  await Promise.allSettled(tasks);
+    const tasks = [
+      loadCurrentSession(),
+      loadDashboardStats(),
+      loadRecentLoot()
+    ];
+
+    if (opts.includeSessions || isPageActive('sessions')) {
+      tasks.push(loadSessions());
+    }
+
+    if (opts.includeCurrency || isPageActive('currency')) {
+      tasks.push(loadCurrencyPage());
+    }
+
+    await Promise.allSettled(tasks);
+  });
+
+  return _refreshPending;
 }
 
 /**
@@ -1071,12 +1111,12 @@ function updateActiveSessionUI() {
   const liveDuration = getLiveDuration(state.currentSession);
   const profitClass = profitChaos >= 0 ? 'session-info-value positive' : 'session-info-value negative';
   if (state.currentSession) {
-    const contextLabel = `${state.currentSession.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} • ${state.currentSession.league || 'Standard'}`;
+    const contextLabel = `${state.currentSession.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} • ${escapeHTML(state.currentSession.league || 'Standard')}`;
     elements.activeSession.innerHTML = `
       <div class="session-info">
         <div class="session-info-item">
           <span class="session-info-label">${window.t('session.map')}</span>
-          <span class="session-info-value">${state.currentSession.mapName}</span>
+          <span class="session-info-value">${escapeHTML(state.currentSession.mapName)}</span>
         </div>
         <div class="session-info-item">
           <span class="session-info-label">${window.t('session.tier')}</span>
@@ -1257,13 +1297,14 @@ function renderSessionsList() {
     const lootCount = Array.isArray(session.lootEntries)
       ? session.lootEntries.reduce((sum, loot) => sum + parseInt(loot.quantity || 0, 10), 0)
       : 0;
-    const contextLabel = `${session.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${session.league || 'Standard'}`;
+    const contextLabel = `${session.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(session.league || 'Standard')}`;
     const duration = session.durationSec ? formatDuration(session.durationSec) : '-';
     const tier = session.mapTier ? `T${session.mapTier}` : '-';
     const startedAt = session.startedAt ? timeAgo(session.startedAt) : '-';
+    const safeStatus = ['active', 'completed', 'abandoned'].includes(session.status) ? session.status : 'unknown';
 
     return `
-      <button class="session-item" type="button" data-session-id="${session.id}">
+      <button class="session-item" type="button" data-session-id="${escapeHTML(session.id)}">
         <div class="session-primary">
           <div class="session-name">${escapeHTML(session.mapName || 'Unknown Map')}</div>
           <div class="session-tier">${tier} / ${contextLabel} / ${startedAt}</div>
@@ -1277,16 +1318,11 @@ function renderSessionsList() {
           <span class="session-secondary-value">${lootCount}</span>
         </div>
         <div class="session-profit ${profit >= 0 ? 'positive' : 'negative'}">${currencyHTML(profit, 'chaos', 16, session.poeVersion || state.settings.poeVersion || 'poe1')}</div>
-        <div class="session-status ${session.status}">${window.t(`sessions.${session.status}`)}</div>
+        <div class="session-status ${safeStatus}">${window.t(`sessions.${safeStatus}`)}</div>
       </button>
     `;
   }).join('');
 
-  elements.sessionsList.querySelectorAll('[data-session-id]').forEach((sessionButton) => {
-    sessionButton.addEventListener('click', () => {
-      openSessionDrawer(sessionButton.dataset.sessionId);
-    });
-  });
 }
 
 function renderRecentLoot() {
@@ -1300,7 +1336,7 @@ function renderRecentLoot() {
   elements.recentLootList.innerHTML = state.recentLoot.map((loot) => {
     const session = loot.session || {};
     const totalValue = (parseFloat(loot.chaosValue || 0) * parseInt(loot.quantity || 1, 10)) || 0;
-    const contextLabel = `${session.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${session.league || 'Standard'}`;
+    const contextLabel = `${session.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(session.league || 'Standard')}`;
 
     return `
       <article class="recent-loot-item">
@@ -1417,8 +1453,8 @@ function showToast(title, message, type = 'info') {
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
   toast.innerHTML = `
-    <div class="toast-title">${title}</div>
-    <div class="toast-message">${message}</div>
+    <div class="toast-title">${escapeHTML(title)}</div>
+    <div class="toast-message">${escapeHTML(message)}</div>
   `;
   
   elements.toastContainer.appendChild(toast);
@@ -1812,20 +1848,21 @@ function renderSessionDrawer() {
   const session = state.selectedSession;
   if (!session || !elements.sessionDrawerSummary || !elements.sessionDrawerLoot || !elements.sessionDrawerAnalytics) return;
 
-  const contextLabel = `${session.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${session.league || 'Standard'}`;
+  const contextLabel = `${session.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(session.league || 'Standard')}`;
   const lootEntries = Array.isArray(session.lootEntries) ? session.lootEntries : [];
   const totalLoot = parseFloat(session.totalLootChaos || 0);
   const profit = parseFloat(session.profitChaos || 0);
   const cost = parseFloat(session.costChaos || 0);
   const poeVersion = session.poeVersion || state.settings.poeVersion || 'poe1';
   const analytics = buildSessionAnalytics(lootEntries);
+  const safeStatus = ['active', 'completed', 'abandoned'].includes(session.status) ? session.status : 'unknown';
 
   elements.sessionDrawerTitle.textContent = session.mapName || 'Session';
   elements.sessionDrawerLootCount.textContent = String(lootEntries.length);
   elements.sessionDrawerSummary.innerHTML = `
     <div class="session-drawer-metric">
       <span class="session-drawer-label">${window.t('session.status')}</span>
-      <span class="session-status ${session.status}">${window.t(`sessions.${session.status}`)}</span>
+      <span class="session-status ${safeStatus}">${window.t(`sessions.${safeStatus}`)}</span>
     </div>
     <div class="session-drawer-metric">
       <span class="session-drawer-label">${window.t('sessions.game')}</span>
@@ -2289,10 +2326,11 @@ function renderSparklineSVG(sparkData) {
   return `<svg width="${w}" height="${h}"><polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 
+const _escapeDiv = document.createElement('div');
 function escapeHTML(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  if (str == null) return '';
+  _escapeDiv.textContent = String(str);
+  return _escapeDiv.innerHTML;
 }
 
 function timeAgo(date) {
