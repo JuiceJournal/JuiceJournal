@@ -8,7 +8,7 @@
  *   PoE 2: PathOfExile2.exe, PathOfExile2_x64.exe
  */
 
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const { EventEmitter } = require('events');
 
 // Known process names per version
@@ -60,6 +60,7 @@ class GameDetector extends EventEmitter {
   start() {
     if (this.isRunning) return;
     this.isRunning = true;
+    this._polling = false;
 
     // Initial check
     this._poll();
@@ -91,6 +92,8 @@ class GameDetector extends EventEmitter {
    * Check running processes
    */
   async _poll() {
+    if (this._polling) return; // Prevent overlapping polls
+    this._polling = true;
     try {
       const processes = await this._getRunningProcesses();
       const lowerProcs = processes.map(p => p.toLowerCase());
@@ -131,6 +134,8 @@ class GameDetector extends EventEmitter {
     } catch (error) {
       // Silently handle poll errors (permissions, etc.)
       console.error('Game detection poll error:', error.message);
+    } finally {
+      this._polling = false;
     }
   }
 
@@ -140,7 +145,7 @@ class GameDetector extends EventEmitter {
   _getRunningProcesses() {
     return new Promise((resolve, reject) => {
       // Use tasklist for Windows — fast and reliable
-      exec('tasklist /FO CSV /NH', { maxBuffer: 1024 * 1024 }, (error, stdout) => {
+      execFile('tasklist', ['/FO', 'CSV', '/NH'], { maxBuffer: 1024 * 1024 }, (error, stdout) => {
         if (error) {
           reject(error);
           return;

@@ -9,6 +9,7 @@
  */
 
 const fs = require('fs');
+const fsp = require('fs/promises');
 const path = require('path');
 const { EventEmitter } = require('events');
 
@@ -42,7 +43,8 @@ class LogParser extends EventEmitter {
     }
 
     this.isRunning = true;
-    
+    this._reading = false;
+
     // Dosya boyutunu al ve son pozisyondan basla
     const stats = fs.statSync(this.logPath);
     this.lastPosition = stats.size;
@@ -72,10 +74,13 @@ class LogParser extends EventEmitter {
   /**
    * Yeni satirlari oku
    */
-  readNewLines() {
+  async readNewLines() {
+    if (this._reading) return; // Prevent overlapping reads
+    this._reading = true;
+    let fh = null;
     try {
-      const stats = fs.statSync(this.logPath);
-      
+      const stats = await fsp.stat(this.logPath);
+
       // Dosya kuculmusse (log rotation) bastan basla
       if (stats.size < this.lastPosition) {
         this.lastPosition = 0;
@@ -86,26 +91,29 @@ class LogParser extends EventEmitter {
         return;
       }
 
-      // Yeni veriyi oku
-      const fd = fs.openSync(this.logPath, 'r');
+      // Yeni veriyi oku (async file handle)
+      fh = await fsp.open(this.logPath, 'r');
       const buffer = Buffer.alloc(stats.size - this.lastPosition);
-      
-      fs.readSync(fd, buffer, 0, buffer.length, this.lastPosition);
-      fs.closeSync(fd);
+      await fh.read(buffer, 0, buffer.length, this.lastPosition);
+      await fh.close();
+      fh = null;
 
       this.lastPosition = stats.size;
 
       // Buffer'i satirlara ayir
       const lines = buffer.toString().split('\n');
-      
+
       for (const line of lines) {
         if (line.trim()) {
           this.parseLine(line.trim());
         }
       }
     } catch (error) {
+      if (fh) { try { await fh.close(); } catch {} }
       console.error('Log okuma hatasi:', error);
       this.emit('error', error);
+    } finally {
+      this._reading = false;
     }
   }
 
