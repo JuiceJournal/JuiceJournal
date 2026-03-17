@@ -890,6 +890,10 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
 
     poeAuthServer.listen(Number(redirectUrl.port), redirectUrl.hostname, async () => {
       try {
+        const parsedAuthUrl = new URL(startResponse.authUrl);
+        if (parsedAuthUrl.protocol !== 'https:' && parsedAuthUrl.protocol !== 'http:') {
+          throw new Error('Invalid auth URL scheme — only https/http allowed');
+        }
         await shell.openExternal(startResponse.authUrl);
       } catch (error) {
         clearTimeout(timeout);
@@ -901,7 +905,7 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
 }
 
 // Development mod kontrolu
-const isDev = process.argv.includes('--dev');
+const isDev = !app.isPackaged;
 
 /**
  * Ana pencereyi olustur
@@ -918,7 +922,8 @@ function createMainWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     },
     icon: path.join(__dirname, 'src', 'assets', 'icon.png'),
     title: APP_NAME
@@ -1409,15 +1414,27 @@ function setupIPC() {
     hideMainWindowToTray(true);
   });
 
-  // Ayarlari getir
+  // Ayarlari getir (secret alanlari cikar)
   ipcMain.handle('get-settings', () => {
-    return store.store;
+    const allSettings = { ...store.store };
+    delete allSettings.authToken;
+    delete allSettings.poeOAuthTokens;
+    delete allSettings.currentUserId;
+    return allSettings;
   });
 
-  // Ayarlari kaydet
+  // Ayarlari kaydet (sadece izin verilen anahtarlar)
+  const SETTINGS_ALLOWLIST = new Set([
+    'apiUrl', 'poePath', 'autoStartSession', 'notifications',
+    'soundNotifications', 'language', 'poeVersion', 'defaultLeague',
+    'scanHotkey', 'theme'
+  ]);
+
   ipcMain.handle('set-settings', (event, settings) => {
     for (const [key, value] of Object.entries(settings)) {
-      store.set(key, value);
+      if (SETTINGS_ALLOWLIST.has(key)) {
+        store.set(key, value);
+      }
     }
 
     if (settings.apiUrl && apiClient) {

@@ -100,8 +100,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('game-closed', (event, data) => callback(data));
   },
 
-  // Dinleyicileri temizle
+  // Dinleyicileri temizle (sadece izin verilen kanallar)
   removeAllListeners: (channel) => {
-    ipcRenderer.removeAllListeners(channel);
+    const ALLOWED_CHANNELS = [
+      'map-entered', 'map-exited', 'session-started', 'session-ended',
+      'loot-added', 'pending-loot-updated', 'pending-sync-updated',
+      'audit-trail-updated', 'navigate', 'stash-snapshot-taken',
+      'profit-calculated', 'game-version-changed', 'game-closed'
+    ];
+    if (channel && ALLOWED_CHANNELS.includes(channel)) {
+      ipcRenderer.removeAllListeners(channel);
+    }
   }
 });
