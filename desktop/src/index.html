@@ -254,6 +254,97 @@
             </div>
           </div>
 
+          <!-- Stash Profit Tracker -->
+          <div class="card stash-tracker-card">
+            <div class="card-header">
+              <h3 data-i18n="stash.profitTracker">Stash Profit Tracker</h3>
+              <div class="card-header-right">
+                <span class="game-status" id="game-status-indicator">
+                  <span class="game-status-dot"></span> <span data-i18n="game.notRunning">Not Running</span>
+                </span>
+                <span class="card-badge" id="stash-tracker-status" data-i18n="stash.ready">Ready</span>
+              </div>
+            </div>
+            <div class="stash-tracker-content">
+              <!-- Price sync status -->
+              <div class="stash-price-status" id="stash-price-status">
+                <div class="price-status-row">
+                  <span class="price-status-label" data-i18n="stash.priceData">Price Data</span>
+                  <span class="price-status-value" id="price-item-count">—</span>
+                </div>
+                <button id="sync-prices-btn" class="btn btn-sm btn-secondary">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21.5 2v6h-6M2.5 22v-6h6"/><path d="M2.5 11.5a10 10 0 0 1 18.14-4.5M21.5 12.5a10 10 0 0 1-18.14 4.5"/></svg>
+                  <span data-i18n="stash.syncPrices">Sync Prices</span>
+                </button>
+              </div>
+
+              <!-- Snapshot controls -->
+              <div class="stash-snapshot-controls">
+                <div class="snapshot-step" id="snapshot-step-before">
+                  <div class="snapshot-step-header">
+                    <span class="snapshot-step-num">1</span>
+                    <span data-i18n="stash.beforeMap">Before Map</span>
+                  </div>
+                  <button id="take-before-snapshot-btn" class="btn btn-secondary btn-snapshot">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    <span data-i18n="stash.takeSnapshot">Take Snapshot</span>
+                  </button>
+                  <div class="snapshot-info" id="before-snapshot-info"></div>
+                </div>
+                <div class="snapshot-step-divider">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+                <div class="snapshot-step" id="snapshot-step-after">
+                  <div class="snapshot-step-header">
+                    <span class="snapshot-step-num">2</span>
+                    <span data-i18n="stash.afterMap">After Map</span>
+                  </div>
+                  <button id="take-after-snapshot-btn" class="btn btn-secondary btn-snapshot" disabled>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    <span data-i18n="stash.takeSnapshot">Take Snapshot</span>
+                  </button>
+                  <div class="snapshot-info" id="after-snapshot-info"></div>
+                </div>
+              </div>
+
+              <!-- Calculate profit button -->
+              <button id="calculate-profit-btn" class="btn btn-primary btn-calculate-profit hidden">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <span data-i18n="stash.calculateProfit">Calculate Profit</span>
+              </button>
+
+              <!-- Profit result -->
+              <div class="stash-profit-result hidden" id="stash-profit-result">
+                <div class="profit-summary">
+                  <div class="profit-main">
+                    <span class="profit-label" data-i18n="stash.netProfit">Net Profit</span>
+                    <span class="profit-value" id="profit-chaos-value">0c</span>
+                    <span class="profit-divine" id="profit-divine-value">0 div</span>
+                  </div>
+                  <div class="profit-breakdown">
+                    <div class="profit-gained">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                      <span data-i18n="stash.gained">Gained</span>
+                      <span id="profit-gained-value">0c</span>
+                    </div>
+                    <div class="profit-lost">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                      <span data-i18n="stash.spent">Spent</span>
+                      <span id="profit-lost-value">0c</span>
+                    </div>
+                  </div>
+                </div>
+                <!-- Item changes list -->
+                <div class="profit-items-list" id="profit-items-list"></div>
+                <!-- Reset -->
+                <button id="reset-snapshots-btn" class="btn btn-sm btn-ghost">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                  <span data-i18n="stash.resetSnapshots">Reset & Start New</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Recent Loot -->
           <div class="card recent-loot-card">
             <div class="card-header">

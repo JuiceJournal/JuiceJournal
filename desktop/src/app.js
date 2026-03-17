@@ -186,7 +186,26 @@ const elements = {
   sessionBadge: document.getElementById('session-badge'),
   
   // Toast
-  toastContainer: document.getElementById('toast-container')
+  toastContainer: document.getElementById('toast-container'),
+
+  // Stash Profit Tracker
+  syncPricesBtn: document.getElementById('sync-prices-btn'),
+  priceItemCount: document.getElementById('price-item-count'),
+  takeBeforeSnapshotBtn: document.getElementById('take-before-snapshot-btn'),
+  takeAfterSnapshotBtn: document.getElementById('take-after-snapshot-btn'),
+  calculateProfitBtn: document.getElementById('calculate-profit-btn'),
+  resetSnapshotsBtn: document.getElementById('reset-snapshots-btn'),
+  beforeSnapshotInfo: document.getElementById('before-snapshot-info'),
+  afterSnapshotInfo: document.getElementById('after-snapshot-info'),
+  stashTrackerStatus: document.getElementById('stash-tracker-status'),
+  stashProfitResult: document.getElementById('stash-profit-result'),
+  profitChaosValue: document.getElementById('profit-chaos-value'),
+  profitDivineValue: document.getElementById('profit-divine-value'),
+  profitGainedValue: document.getElementById('profit-gained-value'),
+  profitLostValue: document.getElementById('profit-lost-value'),
+  profitItemsList: document.getElementById('profit-items-list'),
+  snapshotStepBefore: document.getElementById('snapshot-step-before'),
+  snapshotStepAfter: document.getElementById('snapshot-step-after')
 };
 
 /**
@@ -234,6 +253,8 @@ async function init() {
   await loadAuditTrailState();
   renderPendingSyncState();
   renderAuditTrail();
+  loadPriceStatus();
+  checkInitialGameStatus();
   
 }
 
@@ -529,6 +550,23 @@ function setupEventListeners() {
     elements.exportDiagnosticsBtn.addEventListener('click', handleExportDiagnostics);
   }
 
+  // Stash Profit Tracker
+  if (elements.syncPricesBtn) {
+    elements.syncPricesBtn.addEventListener('click', handleSyncPrices);
+  }
+  if (elements.takeBeforeSnapshotBtn) {
+    elements.takeBeforeSnapshotBtn.addEventListener('click', () => handleTakeSnapshot('before'));
+  }
+  if (elements.takeAfterSnapshotBtn) {
+    elements.takeAfterSnapshotBtn.addEventListener('click', () => handleTakeSnapshot('after'));
+  }
+  if (elements.calculateProfitBtn) {
+    elements.calculateProfitBtn.addEventListener('click', handleCalculateProfit);
+  }
+  if (elements.resetSnapshotsBtn) {
+    elements.resetSnapshotsBtn.addEventListener('click', handleResetSnapshots);
+  }
+
   // Window controls
   const winMin = document.getElementById('win-minimize');
   const winMax = document.getElementById('win-maximize');
@@ -608,6 +646,67 @@ function setupIPCListeners() {
     });
   }
   
+  // Stash events
+  if (window.electronAPI.onStashSnapshotTaken) {
+    window.electronAPI.onStashSnapshotTaken((data) => {
+      showToast(window.t('stash.profitTracker'), window.t('stash.snapshotTaken', { count: data.itemCount }), 'success');
+    });
+  }
+
+  if (window.electronAPI.onProfitCalculated) {
+    window.electronAPI.onProfitCalculated((report) => {
+      renderProfitReport(report);
+    });
+  }
+
+  // Game detection
+  if (window.electronAPI.onGameVersionChanged) {
+    window.electronAPI.onGameVersionChanged(({ version, logPath }) => {
+      const gameLabel = version === 'poe2' ? 'Path of Exile 2' : 'Path of Exile';
+      showToast(window.t('stash.profitTracker'), window.t('game.detected', { game: gameLabel }), 'info');
+
+      // Update local state
+      state.settings.poeVersion = version;
+      if (logPath) state.settings.poePath = logPath;
+
+      // Update version buttons in settings
+      elements.versionBtns.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.version === version);
+      });
+
+      // Switch currency icons
+      syncDesktopCurrencyIcons();
+
+      // Clear cached prices (they're version-specific)
+      stashState.pricesSynced = false;
+      if (elements.priceItemCount) {
+        elements.priceItemCount.textContent = '—';
+      }
+
+      // Update game status indicator
+      updateGameStatusIndicator(version);
+
+      // Auto-refresh currency page if it's currently visible
+      if (currencyState.poeVersion !== version) {
+        currencyState.poeVersion = version;
+        currencyState.type = '';
+        // Update poe-toggle buttons on currency page
+        document.querySelectorAll('.poe-toggle-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.poe === version);
+        });
+        updateTypeFilterDropdown();
+        loadCurrencyLeagues();
+        loadCurrencyPrices();
+      }
+    });
+  }
+
+  if (window.electronAPI.onGameClosed) {
+    window.electronAPI.onGameClosed(({ version }) => {
+      updateGameStatusIndicator(null);
+    });
+  }
+
   // Navigation
   window.electronAPI.onNavigate((page) => {
     navigateTo(page);
@@ -1431,6 +1530,273 @@ async function handleExportDiagnostics() {
   }
 }
 
+// ==================== STASH PROFIT TRACKER ====================
+
+// Track snapshot state locally
+const stashState = {
+  beforeSnapshotId: null,
+  afterSnapshotId: null,
+  pricesSynced: false
+};
+
+async function handleSyncPrices() {
+  if (!elements.syncPricesBtn) return;
+  const btn = elements.syncPricesBtn;
+  btn.disabled = true;
+  const origHTML = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgba(255,255,255,0.2);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.syncing');
+
+  try {
+    const league = state.settings.defaultLeague || 'Standard';
+    const result = await window.electronAPI.syncPrices({ league });
+    stashState.pricesSynced = true;
+    if (elements.priceItemCount) {
+      elements.priceItemCount.textContent = `${result.itemCount} items`;
+    }
+    showToast(window.t('stash.priceData'), window.t('stash.pricesSynced', { count: result.itemCount }), 'success');
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.pricesSyncFailed'), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHTML;
+  }
+}
+
+async function handleTakeSnapshot(type) {
+  const isAfter = type === 'after';
+  const btn = isAfter ? elements.takeAfterSnapshotBtn : elements.takeBeforeSnapshotBtn;
+  const infoEl = isAfter ? elements.afterSnapshotInfo : elements.beforeSnapshotInfo;
+  const stepEl = isAfter ? elements.snapshotStepAfter : elements.snapshotStepBefore;
+
+  if (!btn) return;
+
+  // Check if prices are synced first
+  if (!stashState.pricesSynced) {
+    showToast(window.t('toast.error'), window.t('stash.syncPricesFirst'), 'warning');
+    return;
+  }
+
+  btn.disabled = true;
+  const origHTML = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgba(255,255,255,0.2);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.scanning');
+
+  try {
+    const snapshotId = type;
+    const result = await window.electronAPI.takeStashSnapshot({ snapshotId });
+
+    if (isAfter) {
+      stashState.afterSnapshotId = snapshotId;
+    } else {
+      stashState.beforeSnapshotId = snapshotId;
+      // Enable "after" button
+      if (elements.takeAfterSnapshotBtn) {
+        elements.takeAfterSnapshotBtn.disabled = false;
+      }
+    }
+
+    // Update step visuals
+    if (stepEl) {
+      stepEl.classList.add('done');
+      stepEl.classList.remove('active');
+    }
+
+    if (infoEl) {
+      infoEl.textContent = `${result.itemCount} items · ${Math.round(result.totalChaos)}c`;
+      infoEl.classList.add('has-data');
+    }
+
+    // Update tracker status
+    updateStashTrackerStatus();
+
+    // Show calculate button if both snapshots exist
+    if (stashState.beforeSnapshotId && stashState.afterSnapshotId) {
+      if (elements.calculateProfitBtn) {
+        elements.calculateProfitBtn.classList.remove('hidden');
+      }
+    }
+
+    showToast(window.t('stash.profitTracker'), window.t('stash.snapshotTaken', { count: result.itemCount }), 'success');
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.snapshotFailed'), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHTML;
+  }
+}
+
+async function handleCalculateProfit() {
+  if (!elements.calculateProfitBtn) return;
+
+  elements.calculateProfitBtn.disabled = true;
+
+  try {
+    const report = await window.electronAPI.calculateProfit(
+      stashState.beforeSnapshotId,
+      stashState.afterSnapshotId
+    );
+
+    renderProfitReport(report);
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.profitFailed'), 'error');
+  } finally {
+    elements.calculateProfitBtn.disabled = false;
+  }
+}
+
+function renderProfitReport(report) {
+  if (!elements.stashProfitResult) return;
+
+  const { summary, gained, lost } = report;
+
+  // Show result section
+  elements.stashProfitResult.classList.remove('hidden');
+  if (elements.calculateProfitBtn) {
+    elements.calculateProfitBtn.classList.add('hidden');
+  }
+
+  // Main profit value
+  if (elements.profitChaosValue) {
+    const val = Math.round(summary.netProfitChaos);
+    elements.profitChaosValue.textContent = `${val >= 0 ? '+' : ''}${val}c`;
+    elements.profitChaosValue.className = 'profit-value ' + (val >= 0 ? 'positive' : 'negative');
+  }
+
+  if (elements.profitDivineValue) {
+    elements.profitDivineValue.textContent = `${summary.netProfitDivine.toFixed(1)} div`;
+  }
+
+  if (elements.profitGainedValue) {
+    elements.profitGainedValue.textContent = `+${Math.round(summary.totalGainedChaos)}c`;
+  }
+
+  if (elements.profitLostValue) {
+    elements.profitLostValue.textContent = `-${Math.round(summary.totalLostChaos)}c`;
+  }
+
+  // Render item list
+  if (elements.profitItemsList) {
+    const allItems = [
+      ...gained.map(i => ({ ...i, changeType: 'gained' })),
+      ...lost.map(i => ({ ...i, changeType: 'lost' }))
+    ].sort((a, b) => b.totalChaosValue - a.totalChaosValue);
+
+    // Show top 20 items
+    const top = allItems.slice(0, 20);
+    elements.profitItemsList.innerHTML = top.map(item => {
+      const sign = item.changeType === 'gained' ? '+' : '-';
+      const cls = item.changeType === 'gained' ? 'gained' : 'lost';
+      const iconHtml = item.icon
+        ? `<img class="profit-item-icon" src="${escapeHTML(item.icon)}" alt="">`
+        : '';
+      return `<div class="profit-item-row">
+        <div class="profit-item-left">
+          ${iconHtml}
+          <span class="profit-item-name">${escapeHTML(item.name)}</span>
+          <span class="profit-item-qty">x${Math.abs(item.quantityDiff)}</span>
+        </div>
+        <span class="profit-item-value ${cls}">${sign}${Math.round(item.totalChaosValue)}c</span>
+      </div>`;
+    }).join('');
+  }
+
+  // Update status badge
+  if (elements.stashTrackerStatus) {
+    const val = Math.round(summary.netProfitChaos);
+    elements.stashTrackerStatus.textContent = `${val >= 0 ? '+' : ''}${val}c`;
+    elements.stashTrackerStatus.style.color = val >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+}
+
+function handleResetSnapshots() {
+  stashState.beforeSnapshotId = null;
+  stashState.afterSnapshotId = null;
+
+  // Reset step visuals
+  if (elements.snapshotStepBefore) {
+    elements.snapshotStepBefore.classList.remove('done');
+  }
+  if (elements.snapshotStepAfter) {
+    elements.snapshotStepAfter.classList.remove('done');
+  }
+  if (elements.beforeSnapshotInfo) {
+    elements.beforeSnapshotInfo.textContent = '';
+    elements.beforeSnapshotInfo.classList.remove('has-data');
+  }
+  if (elements.afterSnapshotInfo) {
+    elements.afterSnapshotInfo.textContent = '';
+    elements.afterSnapshotInfo.classList.remove('has-data');
+  }
+  if (elements.takeAfterSnapshotBtn) {
+    elements.takeAfterSnapshotBtn.disabled = true;
+  }
+  if (elements.calculateProfitBtn) {
+    elements.calculateProfitBtn.classList.add('hidden');
+  }
+  if (elements.stashProfitResult) {
+    elements.stashProfitResult.classList.add('hidden');
+  }
+  if (elements.stashTrackerStatus) {
+    elements.stashTrackerStatus.textContent = window.t('stash.ready');
+    elements.stashTrackerStatus.style.color = '';
+  }
+}
+
+function updateStashTrackerStatus() {
+  if (!elements.stashTrackerStatus) return;
+  if (stashState.beforeSnapshotId && stashState.afterSnapshotId) {
+    elements.stashTrackerStatus.textContent = window.t('stash.readyToCalc');
+  } else if (stashState.beforeSnapshotId) {
+    elements.stashTrackerStatus.textContent = window.t('stash.runMaps');
+  } else {
+    elements.stashTrackerStatus.textContent = window.t('stash.ready');
+  }
+}
+
+function updateGameStatusIndicator(version) {
+  const indicator = document.getElementById('game-status-indicator');
+  if (!indicator) return;
+
+  if (version) {
+    const label = version === 'poe2' ? 'PoE 2' : 'PoE 1';
+    indicator.innerHTML = `<span class="game-status-dot running"></span> ${label}`;
+    indicator.classList.add('active');
+  } else {
+    indicator.innerHTML = `<span class="game-status-dot"></span> ${window.t('game.notRunning')}`;
+    indicator.classList.remove('active');
+  }
+}
+
+async function checkInitialGameStatus() {
+  try {
+    const status = await window.electronAPI.getDetectedGame();
+    updateGameStatusIndicator(status.version);
+
+    // If game is detected but settings version differs, the main process
+    // would have already sent game-version-changed, so just sync UI
+    if (status.version && status.version !== state.settings.poeVersion) {
+      state.settings.poeVersion = status.version;
+      elements.versionBtns.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.version === status.version);
+      });
+      syncDesktopCurrencyIcons();
+    }
+  } catch {
+    // Ignore
+  }
+}
+
+async function loadPriceStatus() {
+  try {
+    const status = await window.electronAPI.getPriceStatus();
+    if (elements.priceItemCount && status.itemCount > 0) {
+      elements.priceItemCount.textContent = `${status.itemCount} items`;
+      stashState.pricesSynced = true;
+    }
+  } catch {
+    // Ignore
+  }
+}
+
 function closeSessionDrawer() {
   state.selectedSession = null;
   if (!elements.sessionDrawer) return;
@@ -1656,35 +2022,40 @@ function formatLootCategoryLabel(itemType) {
 
 // ==================== CURRENCY PAGE ====================
 
-// PoE 1 item category types with representative icons
+// PoE 1 item category types — includes PoE1-exclusive mechanics
 const POE1_CATEGORY_TYPES = [
-  { value: '', label: 'All', icon: null },
-  { value: 'currency', label: 'Currency', icon: 'chaos' },
-  { value: 'fragment', label: 'Fragment', icon: 'vaal' },
-  { value: 'scarab', label: 'Scarab', icon: 'chance' },
-  { value: 'map', label: 'Map', icon: 'alchemy' },
-  { value: 'divination_card', label: 'Div Card', icon: 'divine' },
-  { value: 'gem', label: 'Gem', icon: 'gcp' },
-  { value: 'unique', label: 'Unique', icon: 'exalted' },
-  { value: 'oil', label: 'Oil', icon: 'blessed' },
-  { value: 'incubator', label: 'Incubator', icon: 'regret' },
-  { value: 'delirium_orb', label: 'Delirium Orb', icon: 'chromatic' },
-  { value: 'catalyst', label: 'Catalyst', icon: 'scouring' },
-  { value: 'other', label: 'Other', icon: 'alteration' },
+  { value: '', labelKey: 'category.all', label: 'All', icon: null },
+  { value: 'currency', labelKey: 'category.currency', label: 'Currency', icon: 'chaos' },
+  { value: 'fragment', labelKey: 'category.fragment', label: 'Fragment', icon: 'vaal' },
+  { value: 'scarab', labelKey: 'category.scarab', label: 'Scarab', icon: 'chance' },
+  { value: 'essence', labelKey: 'category.essence', label: 'Essence', icon: 'fusing' },
+  { value: 'map', labelKey: 'category.map', label: 'Map', icon: 'alchemy' },
+  { value: 'divination_card', labelKey: 'category.divCard', label: 'Div Card', icon: 'divine' },
+  { value: 'gem', labelKey: 'category.gem', label: 'Gem', icon: 'gcp' },
+  { value: 'unique', labelKey: 'category.unique', label: 'Unique', icon: 'exalted' },
+  { value: 'oil', labelKey: 'category.oil', label: 'Oil', icon: 'blessed', poe1Only: true },
+  { value: 'fossil', labelKey: 'category.fossil', label: 'Fossil', icon: 'chromatic', poe1Only: true },
+  { value: 'incubator', labelKey: 'category.incubator', label: 'Incubator', icon: 'regret', poe1Only: true },
+  { value: 'delirium_orb', labelKey: 'category.deliriumOrb', label: 'Delirium Orb', icon: 'chromatic', poe1Only: true },
+  { value: 'catalyst', labelKey: 'category.catalyst', label: 'Catalyst', icon: 'scouring' },
+  { value: 'omen', labelKey: 'category.omen', label: 'Omen', icon: 'regal', poe1Only: true },
+  { value: 'tattoo', labelKey: 'category.tattoo', label: 'Tattoo', icon: 'blessed', poe1Only: true },
+  { value: 'other', labelKey: 'category.other', label: 'Other', icon: 'alteration' },
 ];
 
-// PoE 2 item category types with representative icons
+// PoE 2 item category types — no fragments/oils/incubators/delirium/fossils
 const POE2_CATEGORY_TYPES = [
-  { value: '', label: 'All', icon: null },
-  { value: 'currency', label: 'Currency', icon: 'chaos' },
-  { value: 'fragment', label: 'Fragment', icon: 'vaal' },
-  { value: 'scarab', label: 'Scarab', icon: 'chance' },
-  { value: 'map', label: 'Map', icon: 'alchemy' },
-  { value: 'divination_card', label: 'Div Card', icon: 'divine' },
-  { value: 'gem', label: 'Gem', icon: 'gcp' },
-  { value: 'unique', label: 'Unique', icon: 'mirror' },
-  { value: 'catalyst', label: 'Catalyst', icon: 'scouring' },
-  { value: 'other', label: 'Other', icon: 'alteration' },
+  { value: '', labelKey: 'category.all', label: 'All', icon: null },
+  { value: 'currency', labelKey: 'category.currency', label: 'Currency', icon: 'chaos' },
+  { value: 'scarab', labelKey: 'category.scarab', label: 'Scarab', icon: 'chance' },
+  { value: 'essence', labelKey: 'category.essence', label: 'Essence', icon: 'fusing' },
+  { value: 'rune', labelKey: 'category.rune', label: 'Rune', icon: 'regal', poe2Only: true },
+  { value: 'map', labelKey: 'category.map', label: 'Map', icon: 'alchemy' },
+  { value: 'divination_card', labelKey: 'category.divCard', label: 'Div Card', icon: 'divine' },
+  { value: 'gem', labelKey: 'category.gem', label: 'Gem', icon: 'gcp' },
+  { value: 'unique', labelKey: 'category.unique', label: 'Unique', icon: 'mirror' },
+  { value: 'catalyst', labelKey: 'category.catalyst', label: 'Catalyst', icon: 'scouring' },
+  { value: 'other', labelKey: 'category.other', label: 'Other', icon: 'alteration' },
 ];
 
 const currencyState = {
@@ -1701,19 +2072,27 @@ const currencyState = {
 function updateTypeFilterDropdown() {
   const container = document.getElementById('currency-type-filter');
   if (!container) return;
-  const types = currencyState.poeVersion === 'poe2' ? POE2_CATEGORY_TYPES : POE1_CATEGORY_TYPES;
+  const isPoe2 = currencyState.poeVersion === 'poe2';
+  const types = isPoe2 ? POE2_CATEGORY_TYPES : POE1_CATEGORY_TYPES;
 
   // If current type doesn't exist in new version, reset
   if (!types.find(t => t.value === currencyState.type)) {
     currencyState.type = '';
   }
 
-  container.innerHTML = types.map(t => {
+  // Version badge before filter tabs
+  const versionTag = isPoe2
+    ? '<span class="currency-version-badge poe2">PoE 2</span>'
+    : '<span class="currency-version-badge poe1">PoE 1</span>';
+
+  container.innerHTML = versionTag + types.map(t => {
     const active = currencyState.type === t.value ? ' active' : '';
+    const label = window.t ? (window.t(t.labelKey) || t.label) : t.label;
+    const exclusiveClass = t.poe1Only ? ' poe1-exclusive' : (t.poe2Only ? ' poe2-exclusive' : '');
     const iconHTML = t.icon
       ? `<img src="${getCurrencyAssetPath(t.icon, currencyState.poeVersion)}" class="currency-tab-icon" width="14" height="14" draggable="false">`
       : '';
-    return `<button class="currency-type-btn${active}" data-type="${t.value}">${iconHTML}<span>${t.label}</span></button>`;
+    return `<button class="currency-type-btn${active}${exclusiveClass}" data-type="${t.value}" title="${label}">${iconHTML}<span>${label}</span></button>`;
   }).join('');
 
   // Bind click events
