@@ -165,29 +165,41 @@ module.exports = (sequelize, DataTypes) => {
   };
 
   Price.bulkUpsert = async function(items, league, poeVersion = 'poe1') {
-    const results = [];
+    if (!items.length) return [];
 
-    for (const item of items) {
-      try {
-        const result = await this.upsertPrice({
-          itemName: item.name,
-          itemType: item.type,
-          chaosValue: item.chaosValue,
-          divineValue: item.divineValue,
-          league,
-          poeVersion,
-          iconUrl: item.iconUrl,
-          sparklineData: item.sparklineData,
-          active: true,
-          updatedAt: new Date()
-        });
-        results.push(result);
-      } catch (error) {
-        console.error(`Fiyat kaydetme hatasi (${item.name}):`, error.message);
+    const records = items.map(item => ({
+      itemName: item.name,
+      itemType: item.type,
+      chaosValue: item.chaosValue,
+      divineValue: item.divineValue,
+      league,
+      poeVersion,
+      iconUrl: item.iconUrl,
+      sparklineData: item.sparklineData,
+      active: true,
+      updatedAt: new Date()
+    }));
+
+    try {
+      const result = await this.bulkCreate(records, {
+        updateOnDuplicate: ['chaosValue', 'divineValue', 'iconUrl', 'sparklineData', 'active', 'updatedAt', 'itemType'],
+        returning: true
+      });
+      return result.map(price => ({ price, created: price.isNewRecord !== false }));
+    } catch (error) {
+      console.error('Bulk price upsert hatasi:', error.message);
+      // Fallback to individual upserts if bulk fails (e.g. unique constraint race)
+      const results = [];
+      for (const record of records) {
+        try {
+          const result = await this.upsertPrice(record);
+          results.push(result);
+        } catch (err) {
+          console.error(`Fiyat kaydetme hatasi (${record.itemName}):`, err.message);
+        }
       }
+      return results;
     }
-
-    return results;
   };
 
   Price.deactivateOldPrices = async function(league, olderThanMinutes = 120, poeVersion = 'poe1') {

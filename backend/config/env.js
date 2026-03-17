@@ -27,10 +27,21 @@ function getRequired(name, fallback = null) {
 function assertProductionConfig() {
   if (!isProduction) return;
 
-  getRequired('JWT_SECRET');
+  const jwtSecret = getRequired('JWT_SECRET');
+  const knownWeakSecrets = ['development-only-jwt-secret', 'your_super_secret_jwt_key', 'your_super_secret_jwt_key_change_this_in_production'];
+  if (jwtSecret.length < 32 || knownWeakSecrets.includes(jwtSecret)) {
+    throw new Error('JWT_SECRET must be at least 32 characters and not a default value');
+  }
 
   if (process.env.POE_CLIENT_ID || process.env.POE_REDIRECT_URI) {
-    getRequired('POE_TOKEN_ENCRYPTION_KEY');
+    const encKey = getRequired('POE_TOKEN_ENCRYPTION_KEY');
+    if (encKey.length < 16) {
+      throw new Error('POE_TOKEN_ENCRYPTION_KEY must be at least 16 characters');
+    }
+  }
+
+  if (parseBoolean(process.env.DB_AUTO_SYNC, false)) {
+    throw new Error('DB_AUTO_SYNC must not be enabled in production — use migrations instead');
   }
 }
 

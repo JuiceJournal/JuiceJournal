@@ -45,20 +45,29 @@ router.post('/',
     body('sessionId').isUUID().withMessage('Gecerli bir session ID giriniz'),
     body('itemName').trim().notEmpty().withMessage('Item adi gereklidir'),
     body('itemType').optional().isIn([
-      'currency', 'fragment', 'scarab', 'map', 
+      'currency', 'fragment', 'scarab', 'map',
       'divination_card', 'gem', 'unique', 'other'
     ]),
     body('quantity').optional().isInt({ min: 1 }),
     body('chaosValue').optional().isFloat({ min: 0 }),
+    body('divineValue').optional().isFloat({ min: 0 }),
+    body('source').optional().isIn(['manual', 'ocr', 'api']),
+    body('screenshotPath').optional().trim().isLength({ max: 500 })
+      .custom(val => {
+        if (val && (val.includes('..') || val.startsWith('/') || /^[a-zA-Z]:/.test(val))) {
+          throw new Error('Invalid screenshot path');
+        }
+        return true;
+      }),
     handleValidationErrors
   ],
   async (req, res) => {
     try {
-      const { 
-        sessionId, 
-        itemName, 
-        itemType = 'other', 
-        quantity = 1, 
+      const {
+        sessionId,
+        itemName,
+        itemType = 'other',
+        quantity = 1,
         chaosValue,
         divineValue,
         source = 'manual',
@@ -402,8 +411,23 @@ router.post('/bulk',
   authenticate,
   [
     body('sessionId').isUUID().withMessage('Gecerli bir session ID giriniz'),
-    body('items').isArray({ min: 1 }).withMessage('En az bir item gereklidir'),
-    body('items.*.itemName').trim().notEmpty(),
+    body('items').isArray({ min: 1, max: 200 }).withMessage('En az 1, en fazla 200 item gereklidir'),
+    body('items.*.itemName').trim().notEmpty().isLength({ max: 200 }),
+    body('items.*.itemType').optional().isIn([
+      'currency', 'fragment', 'scarab', 'map',
+      'divination_card', 'gem', 'unique', 'other'
+    ]),
+    body('items.*.quantity').optional().isInt({ min: 1, max: 99999 }),
+    body('items.*.chaosValue').optional().isFloat({ min: 0 }),
+    body('items.*.divineValue').optional().isFloat({ min: 0 }),
+    body('items.*.source').optional().isIn(['manual', 'ocr', 'api']),
+    body('items.*.screenshotPath').optional().trim().isLength({ max: 500 })
+      .custom(val => {
+        if (val && (val.includes('..') || val.startsWith('/') || /^[a-zA-Z]:/.test(val))) {
+          throw new Error('Invalid screenshot path');
+        }
+        return true;
+      }),
     handleValidationErrors
   ],
   async (req, res) => {
@@ -422,32 +446,43 @@ router.post('/bulk',
         return errorResponse(res, 404, 'Session bulunamadi', 'SESSION_NOT_FOUND');
       }
 
-      const createdItems = [];
+      // Batch price lookup — single query instead of N+1
+      const itemsNeedingPrice = items.filter(i => !i.chaosValue);
+      const priceMap = new Map();
 
-      for (const item of items) {
-        // Her item icin fiyat bul
+      if (itemsNeedingPrice.length > 0) {
+        const uniqueNames = [...new Set(itemsNeedingPrice.map(i => i.itemName.toLowerCase()))];
+        const prices = await Price.findAll({
+          where: {
+            itemName: { [Op.iLike]: { [Op.any]: uniqueNames } },
+            league: session.league,
+            poeVersion: session.poeVersion,
+            active: true
+          },
+          order: [['updatedAt', 'DESC']]
+        });
+        for (const p of prices) {
+          const key = p.itemName.toLowerCase();
+          if (!priceMap.has(key)) {
+            priceMap.set(key, { chaosValue: p.chaosValue, divineValue: p.divineValue });
+          }
+        }
+      }
+
+      // Bulk create all loot entries
+      const lootData = items.map(item => {
         let chaosValue = item.chaosValue;
         let divineValue = item.divineValue;
 
         if (!chaosValue) {
-          const price = await Price.findOne({
-            where: {
-              itemName: {
-                [Op.iLike]: item.itemName
-              },
-              league: session.league,
-              poeVersion: session.poeVersion,
-              active: true
-            }
-          });
-
-          if (price) {
-            chaosValue = price.chaosValue;
-            divineValue = price.divineValue;
+          const found = priceMap.get(item.itemName.toLowerCase());
+          if (found) {
+            chaosValue = found.chaosValue;
+            divineValue = found.divineValue;
           }
         }
 
-        const lootEntry = await LootEntry.create({
+        return {
           sessionId,
           itemName: item.itemName,
           itemType: item.itemType || 'other',
@@ -456,10 +491,10 @@ router.post('/bulk',
           divineValue: divineValue || null,
           source: item.source || 'api',
           screenshotPath: item.screenshotPath
-        });
+        };
+      });
 
-        createdItems.push(lootEntry);
-      }
+      const createdItems = await LootEntry.bulkCreate(lootData);
 
       // Session karini guncelle
       await session.calculateProfit();
