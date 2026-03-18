@@ -1,49 +1,60 @@
 /**
  * Database seed script
- * Creates a mock test user for development/testing
+ * Creates an initial admin user for first-time setup
  *
- * Usage: npm run db:seed
+ * Usage:
+ *   npm run db:seed
+ *
+ * Environment variables (optional):
+ *   SEED_USERNAME  - Admin username (default: admin)
+ *   SEED_EMAIL     - Admin email (default: admin@poefarm.local)
+ *   SEED_PASSWORD  - Admin password (auto-generated if not set)
  */
 
 require('dotenv').config();
+const crypto = require('crypto');
 const { sequelize, User } = require('../models');
 
-const TEST_USER = {
-  username: 'testuser',
-  email: 'test@poefarm.com',
-  password: 'Test1234',
-  role: 'admin'
-};
+function generatePassword(length = 16) {
+  return crypto.randomBytes(length).toString('base64url').slice(0, length);
+}
 
 async function seed() {
+  const username = process.env.SEED_USERNAME || 'admin';
+  const email = process.env.SEED_EMAIL || 'admin@poefarm.local';
+  const password = process.env.SEED_PASSWORD || generatePassword();
+  const role = 'admin';
+
   try {
     await sequelize.authenticate();
     console.log('Database connected.');
 
-    // Ensure tables exist
     await sequelize.sync();
 
-    // Check if test user already exists
-    const existing = await User.findByUsername(TEST_USER.username);
+    const existing = await User.findByUsername(username);
     if (existing) {
-      console.log(`Test user "${TEST_USER.username}" already exists (id: ${existing.id}). Skipping.`);
+      console.log(`User "${username}" already exists (id: ${existing.id}). Skipping.`);
       process.exit(0);
     }
 
-    const passwordHash = await User.hashPassword(TEST_USER.password);
+    const passwordHash = await User.hashPassword(password);
     const user = await User.create({
-      username: TEST_USER.username,
-      email: TEST_USER.email,
+      username,
+      email,
       passwordHash,
-      role: TEST_USER.role
+      role
     });
 
-    console.log('Mock test user created:');
-    console.log(`  Username: ${TEST_USER.username}`);
-    console.log(`  Email:    ${TEST_USER.email}`);
-    console.log(`  Password: ${TEST_USER.password}`);
-    console.log(`  Role:     ${TEST_USER.role}`);
+    console.log('Admin user created:');
+    console.log(`  Username: ${username}`);
+    console.log(`  Email:    ${email}`);
+    console.log(`  Role:     ${role}`);
     console.log(`  ID:       ${user.id}`);
+
+    if (!process.env.SEED_PASSWORD) {
+      console.log(`  Password: ${password}`);
+      console.log('\n  Save this password — it will not be shown again.');
+    }
 
     process.exit(0);
   } catch (err) {

@@ -106,7 +106,9 @@ const limiter = rateLimit({
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
   credentials: true
 }));
 app.use(limiter);
@@ -201,8 +203,12 @@ const startServer = async () => {
     }
 
     server.listen(PORT, () => {
-      logger.info('server started', { port: PORT, health: `http://localhost:${PORT}/health` });
+      logger.info('server started', { port: PORT, env: env.nodeEnv });
     });
+
+    if (env.poe.mock) {
+      logger.warn('PoE OAuth is running in MOCK mode — not suitable for production');
+    }
 
     cronService.startPriceSync(app);
     logger.info('price sync cron started');

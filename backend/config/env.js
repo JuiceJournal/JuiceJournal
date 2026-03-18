@@ -61,7 +61,7 @@ module.exports = {
     autoSync: parseBoolean(process.env.DB_AUTO_SYNC, !isProduction),
   },
   auth: {
-    jwtSecret: process.env.JWT_SECRET || 'development-only-jwt-secret',
+    jwtSecret: getRequired('JWT_SECRET', isProduction ? null : 'dev-jwt-secret-not-for-production'),
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
     requireAdminForPriceSync: parseBoolean(process.env.REQUIRE_ADMIN_FOR_PRICE_SYNC, false),
   },
@@ -73,8 +73,8 @@ module.exports = {
   poe: {
     clientId: process.env.POE_CLIENT_ID || '',
     redirectUri: process.env.POE_REDIRECT_URI || '',
-    tokenEncryptionKey: process.env.POE_TOKEN_ENCRYPTION_KEY || (isProduction ? '' : 'development-poe-token-key'),
-    mock: parseBoolean(process.env.POE_OAUTH_MOCK, false),
+    tokenEncryptionKey: process.env.POE_TOKEN_ENCRYPTION_KEY || (isProduction ? '' : 'dev-poe-key-not-for-production'),
+    mock: parseBoolean(process.env.POE_OAUTH_MOCK, !isProduction && !process.env.POE_CLIENT_ID),
     scopes: process.env.POE_SCOPES || 'account:profile',
     contact: process.env.POE_CONTACT || 'support@example.com',
   }
