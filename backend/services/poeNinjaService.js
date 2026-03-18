@@ -14,6 +14,7 @@ const axios = require('axios');
 const { Price } = require('../models');
 
 const POE1_BASE_URL = 'https://poe.ninja/api/data';
+const POE1_EXCHANGE_URL = 'https://poe.ninja/poe1/api';
 const POE2_BASE_URL = 'https://poe.ninja/poe2/api';
 
 const REQUEST_HEADERS = {
@@ -104,7 +105,9 @@ const POE2_SYNC_TYPES = [
   'Idol', 'Runes', 'Essences', 'Expedition', 'Ultimatum'
 ];
 
-// Cache for PoE2 league index state (refreshed every 30 min)
+// Cache for league index states (refreshed every 30 min)
+let poe1IndexCache = null;
+let poe1IndexCacheTime = 0;
 let poe2IndexCache = null;
 let poe2IndexCacheTime = 0;
 const INDEX_CACHE_TTL = 30 * 60 * 1000;
@@ -116,6 +119,49 @@ function getTypeMapping(poeVersion) {
 function getDefaultSyncTypes(poeVersion) {
   return poeVersion === 'poe2' ? POE2_SYNC_TYPES : POE1_SYNC_TYPES;
 }
+
+/**
+ * PoE 1 index state'ini getir (exchange API league slugs icin)
+ */
+const getPoe1IndexState = async () => {
+  const now = Date.now();
+  if (poe1IndexCache && (now - poe1IndexCacheTime) < INDEX_CACHE_TTL) {
+    return poe1IndexCache;
+  }
+
+  try {
+    const response = await axios.get(`${POE1_EXCHANGE_URL}/data/index-state`, {
+      timeout: 15000,
+      headers: REQUEST_HEADERS
+    });
+    poe1IndexCache = response.data;
+    poe1IndexCacheTime = now;
+    return poe1IndexCache;
+  } catch (error) {
+    console.error('PoE1 index state fetch error:', error.message);
+    return poe1IndexCache;
+  }
+};
+
+/**
+ * PoE 1 aktif league'in URL slug'ini bul (exchange API icin)
+ */
+const getPoe1LeagueSlug = async (leagueName) => {
+  const indexState = await getPoe1IndexState();
+  if (!indexState) return null;
+
+  const allLeagues = [
+    ...(indexState.economyLeagues || []),
+    ...(indexState.oldEconomyLeagues || [])
+  ];
+
+  const match = allLeagues.find(l =>
+    l.name.toLowerCase() === leagueName.toLowerCase() ||
+    (l.displayName && l.displayName.toLowerCase() === leagueName.toLowerCase())
+  );
+
+  return match?.url || null;
+};
 
 /**
  * PoE 2 index state'ini getir (league listesi icin)
@@ -178,9 +224,18 @@ const getActiveLeagues = async (poeVersion = 'poe1') => {
     return leagues;
   }
 
-  // PoE 1 doesn't have a league index endpoint, return known leagues
-  // The current league name is validated by making a test request
-  return null;
+  // PoE 1 also has an index-state endpoint
+  const indexState = await getPoe1IndexState();
+  if (!indexState) return null;
+
+  const leagues = [];
+  for (const l of (indexState.economyLeagues || [])) {
+    leagues.push({ name: l.name, displayName: l.displayName || l.name, active: true, hardcore: l.hardcore });
+  }
+  for (const l of (indexState.oldEconomyLeagues || [])) {
+    leagues.push({ name: l.name, displayName: l.displayName || l.name, active: false, hardcore: l.hardcore });
+  }
+  return leagues.length > 0 ? leagues : null;
 };
 
 /**
@@ -371,6 +426,38 @@ const syncPricesByType = async (league, type, poeVersion = 'poe1') => {
     } else {
       const data = await getItemOverview(league, type, poeVersion);
       items = normalizeItemData(data, type, poeVersion);
+    }
+
+    // PoE 1: also fetch from exchange API to get additional items (e.g. Crusader's Exalted Orb)
+    if (poeVersion === 'poe1') {
+      try {
+        const slug = await getPoe1LeagueSlug(league);
+        if (slug) {
+          const exRes = await axios.get(`${POE1_EXCHANGE_URL}/economy/exchange/${slug}/overview`, {
+            params: { league, type },
+            timeout: 30000,
+            headers: REQUEST_HEADERS
+          });
+          const exItems = normalizeCurrencyData(exRes.data, type, 'poe2'); // same format as PoE2
+          // Override type mapping to use PoE1 categories
+          const typeMapping = getTypeMapping('poe1');
+          const existingNames = new Set(items.map(i => i.name.toLowerCase()));
+          let added = 0;
+          for (const item of exItems) {
+            item.type = typeMapping[type] || 'currency';
+            if (!existingNames.has(item.name.toLowerCase())) {
+              items.push(item);
+              existingNames.add(item.name.toLowerCase());
+              added++;
+            }
+          }
+          if (added > 0) {
+            console.log(`  +${added} extra items from PoE1 exchange API for ${type}`);
+          }
+        }
+      } catch (exError) {
+        // Exchange API is supplementary — don't fail the whole sync
+      }
     }
 
     if (items.length === 0) {
