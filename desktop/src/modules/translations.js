@@ -324,6 +324,7 @@ window.Translations = {
     'category.idol': 'Idol',
     'category.expedition': 'Expedition',
     'category.ultimatum': 'Ultimatum',
+    'category.baseType': 'Base Type',
     'category.other': 'Diger',
 
     // Audit
@@ -976,6 +977,7 @@ window.Translations = {
     'category.idol': 'Idol',
     'category.expedition': 'Expedition',
     'category.ultimatum': 'Ultimatum',
+    'category.baseType': 'Base Type',
     'category.other': 'Other',
 
     // Audit

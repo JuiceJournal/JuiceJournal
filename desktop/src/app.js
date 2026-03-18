@@ -2089,6 +2089,7 @@ const POE1_CATEGORY_TYPES = [
   { value: 'catalyst', labelKey: 'category.catalyst', label: 'Catalyst', icon: 'scouring' },
   { value: 'omen', labelKey: 'category.omen', label: 'Omen', icon: 'regal', poe1Only: true },
   { value: 'tattoo', labelKey: 'category.tattoo', label: 'Tattoo', icon: 'blessed', poe1Only: true },
+  { value: 'base_type', labelKey: 'category.baseType', label: 'Base Type', icon: 'alchemy', poe1Only: true },
   { value: 'other', labelKey: 'category.other', label: 'Other', icon: 'alteration' },
 ];
 
@@ -2103,6 +2104,7 @@ const POE2_CATEGORY_TYPES = [
   { value: 'soul_core', labelKey: 'category.soulCore', label: 'Soul Core', icon: 'divine', poe2Only: true },
   { value: 'idol', labelKey: 'category.idol', label: 'Idol', icon: 'exalted', poe2Only: true },
   { value: 'expedition', labelKey: 'category.expedition', label: 'Expedition', icon: 'chance', poe2Only: true },
+  { value: 'ultimatum', labelKey: 'category.ultimatum', label: 'Ultimatum', icon: 'regal', poe2Only: true },
   { value: 'other', labelKey: 'category.other', label: 'Other', icon: 'alteration' },
 ];
 

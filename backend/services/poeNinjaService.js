@@ -61,7 +61,8 @@ const POE1_ITEM_TYPE_MAPPING = {
   'BlightedMap': 'map',
   'BlightRavagedMap': 'map',
   'Invitation': 'map',
-  'ValdoMap': 'map'
+  'ValdoMap': 'map',
+  'BaseType': 'base_type'
 };
 
 // PoE 2 item tipi mapping (all types use exchange API — note: poe.ninja uses PLURAL names for PoE2)
@@ -74,7 +75,7 @@ const POE2_ITEM_TYPE_MAPPING = {
   'Runes': 'rune',
   'Essences': 'essence',
   'Expedition': 'expedition',
-  'Ultimatum': 'soul_core'
+  'Ultimatum': 'ultimatum'
 };
 
 // PoE 1 sync tipleri (currency API + item API types)
@@ -92,7 +93,9 @@ const POE1_SYNC_TYPES = [
   'Beast', 'Tattoo', 'Omen',
   'BlightedMap', 'BlightRavagedMap', 'Invitation', 'ValdoMap',
   // Item API — minor (mapped to 'other')
-  'Vial', 'Artifact', 'DjinnCoin', 'Wombgift', 'Runegraft', 'AllflameEmber'
+  'Vial', 'Artifact', 'DjinnCoin', 'Wombgift', 'Runegraft', 'AllflameEmber',
+  // Item API — base types (crafting bases)
+  'BaseType'
 ];
 
 // PoE 2 sync tipleri (all use exchange API — plural names required)
