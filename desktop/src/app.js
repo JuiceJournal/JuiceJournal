@@ -1479,13 +1479,14 @@ function showToast(title, message, type = 'info') {
 
 function extractRawErrorMessage(error) {
   if (!error) return '';
-  if (typeof error === 'string' && error.trim()) return error.trim();
-  if (typeof error.message === 'string' && error.message.trim() && error.message !== '[object Object]') {
-    return error.message.trim();
-  }
-  if (typeof error.error === 'string' && error.error.trim()) return error.error.trim();
-  if (typeof error.data?.error === 'string' && error.data.error.trim()) return error.data.error.trim();
-  return '';
+  let msg = '';
+  if (typeof error === 'string') msg = error;
+  else if (typeof error.message === 'string' && error.message !== '[object Object]') msg = error.message;
+  else if (typeof error.error === 'string') msg = error.error;
+  else if (typeof error.data?.error === 'string') msg = error.data.error;
+  // Strip Electron IPC wrapper: "Error invoking remote method '...': Error: <actual message>"
+  msg = msg.replace(/^Error invoking remote method '[^']+': (?:Error: )?/i, '');
+  return msg.trim();
 }
 
 function extractErrorCode(error) {
@@ -1496,17 +1497,39 @@ function extractErrorCode(error) {
   return '';
 }
 
+// Map known raw error substrings to translation keys
+const ERROR_PATTERN_MAP = [
+  { pattern: /synced recently|cooldown/i, key: 'errors.priceSyncCooldown' },
+  { pattern: /sync.*(in progress|already running)/i, key: 'errors.priceSyncInProgress' },
+  { pattern: /timed?\s*out/i, key: 'errors.timeout' },
+  { pattern: /network|ECONNREFUSED|ENOTFOUND|fetch failed/i, key: 'errors.network' },
+  { pattern: /unauthorized|401/i, key: 'errors.unauthorized' },
+  { pattern: /forbidden|403/i, key: 'errors.forbidden' },
+  { pattern: /not found|404/i, key: 'errors.notFound' },
+  { pattern: /rate.?limit|429|too many/i, key: 'errors.rateLimit' },
+  { pattern: /server error|500|502|503/i, key: 'errors.serverError' },
+  { pattern: /invalid.*(username|password|credentials)/i, key: 'errors.invalidCredentials' },
+];
+
 function localizeKnownErrorMessage(message) {
-  const key = ERROR_MESSAGE_KEY_MAP[message];
-  return key ? window.t(key) : message;
+  // Direct key lookup first
+  const directKey = ERROR_MESSAGE_KEY_MAP[message];
+  if (directKey) return window.t(directKey);
+  // Pattern matching for wrapped/partial messages
+  for (const { pattern, key } of ERROR_PATTERN_MAP) {
+    if (pattern.test(message)) return window.t(key);
+  }
+  return null;
 }
 
 function getUserFacingErrorMessage(error, fallbackKey = 'toast.unexpectedError') {
   const fallback = window.t(fallbackKey);
+  // Try error code first
   const errorCode = extractErrorCode(error);
   if (errorCode && ERROR_MESSAGE_KEY_MAP[errorCode]) {
     return window.t(ERROR_MESSAGE_KEY_MAP[errorCode]);
   }
+  // Try raw message pattern matching
   const rawMessage = extractRawErrorMessage(error);
   if (!rawMessage) return fallback;
   return localizeKnownErrorMessage(rawMessage) || fallback;

@@ -280,8 +280,14 @@ window.Translations = {
     'errors.serverUnavailable': 'Sunucuya ulasilamadi',
     'errors.requestTimeout': 'Sunucu yanit vermekte gecikti',
     'errors.forbidden': 'Bu islem icin yetkiniz yok',
-    'errors.priceSyncInProgress': 'Bu baglam icin fiyat senkronizasyonu zaten calisiyor',
-    'errors.priceSyncCooldown': 'Bu baglam icin fiyatlar yakin zamanda senkronize edildi',
+    'errors.priceSyncInProgress': 'Fiyat senkronizasyonu devam ediyor, lutfen bekleyin',
+    'errors.priceSyncCooldown': 'Fiyatlar yakin zamanda guncellendi. Birkaç dakika sonra tekrar deneyin.',
+    'errors.timeout': 'Istek zaman asimina ugradi. Lutfen tekrar deneyin.',
+    'errors.network': 'Baglanti hatasi. Internet baglantinizi kontrol edin.',
+    'errors.unauthorized': 'Oturum suresi dolmus. Lutfen tekrar giris yapin.',
+    'errors.notFound': 'Istenen kaynak bulunamadi.',
+    'errors.rateLimit': 'Cok fazla istek gonderildi. Lutfen biraz bekleyin.',
+    'errors.serverError': 'Sunucu hatasi olustu. Lutfen daha sonra tekrar deneyin.',
     'errors.unexpected': 'Beklenmeyen bir hata olustu',
 
     // Currency
@@ -933,8 +939,14 @@ window.Translations = {
     'errors.serverUnavailable': 'Unable to reach the server',
     'errors.requestTimeout': 'The server took too long to respond',
     'errors.forbidden': 'You do not have permission to perform this action',
-    'errors.priceSyncInProgress': 'Price sync is already running for this context',
-    'errors.priceSyncCooldown': 'Prices were synced recently for this context',
+    'errors.priceSyncInProgress': 'Price sync is already running. Please wait.',
+    'errors.priceSyncCooldown': 'Prices were updated recently. Try again in a few minutes.',
+    'errors.timeout': 'Request timed out. Please try again.',
+    'errors.network': 'Connection error. Check your internet connection.',
+    'errors.unauthorized': 'Session expired. Please log in again.',
+    'errors.notFound': 'The requested resource was not found.',
+    'errors.rateLimit': 'Too many requests. Please wait a moment.',
+    'errors.serverError': 'Server error. Please try again later.',
     'errors.unexpected': 'An unexpected error occurred',
 
     // Currency
