@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const { query, param, validationResult } = require('express-validator');
-const { Session, LootEntry, User, sequelize } = require('../models');
+const { Session, User, sequelize } = require('../models');
 const { authenticate } = require('../middleware/auth');
 
 const { Op } = require('sequelize');
@@ -93,13 +93,8 @@ router.get('/personal',
         }
       }, { poeVersion, league });
 
-      // Basic statistics
-      const sessions = await Session.findAll({
-        where: baseWhere
-      });
-
       const stats = {
-        totalSessions: sessions.length,
+        totalSessions: 0,
         totalCost: 0,
         totalLoot: 0,
         totalProfit: 0,
@@ -110,29 +105,41 @@ router.get('/personal',
         worstMap: null
       };
 
-      if (sessions.length > 0) {
-        // Calculations
-        sessions.forEach(session => {
-          stats.totalCost += parseFloat(session.costChaos) || 0;
-          stats.totalLoot += parseFloat(session.totalLootChaos) || 0;
-          stats.totalProfit += parseFloat(session.profitChaos) || 0;
-          stats.totalDuration += session.durationSec || 0;
-        });
+      const aggregate = await Session.findOne({
+        where: baseWhere,
+        attributes: [
+          [sequelize.fn('COUNT', sequelize.col('id')), 'totalSessions'],
+          [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('cost_chaos')), 0), 'totalCost'],
+          [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('total_loot_chaos')), 0), 'totalLoot'],
+          [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('profit_chaos')), 0), 'totalProfit'],
+          [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('duration_sec')), 0), 'totalDuration'],
+          [sequelize.fn('COALESCE', sequelize.fn('AVG', sequelize.col('profit_chaos')), 0), 'avgProfitPerMap']
+        ],
+        raw: true
+      });
 
-        stats.avgProfitPerMap = stats.totalProfit / sessions.length;
+      stats.totalSessions = parseInt(aggregate?.totalSessions || 0, 10);
+      stats.totalCost = parseFloat(aggregate?.totalCost || 0);
+      stats.totalLoot = parseFloat(aggregate?.totalLoot || 0);
+      stats.totalProfit = parseFloat(aggregate?.totalProfit || 0);
+      stats.totalDuration = parseInt(aggregate?.totalDuration || 0, 10);
+      stats.avgProfitPerMap = parseFloat(aggregate?.avgProfitPerMap || 0);
 
+      if (stats.totalSessions > 0) {
         const hours = stats.totalDuration / 3600;
         if (hours > 0) {
           stats.avgProfitPerHour = stats.totalProfit / hours;
         }
 
-        // Best and worst map
-        const sortedByProfit = [...sessions].sort((a, b) =>
-          parseFloat(b.profitChaos) - parseFloat(a.profitChaos)
-        );
+        stats.bestMap = await Session.findOne({
+          where: baseWhere,
+          order: [['profitChaos', 'DESC']]
+        });
 
-        stats.bestMap = sortedByProfit[0];
-        stats.worstMap = sortedByProfit[sortedByProfit.length - 1];
+        stats.worstMap = await Session.findOne({
+          where: baseWhere,
+          order: [['profitChaos', 'ASC']]
+        });
       }
 
       // Daily profit chart data

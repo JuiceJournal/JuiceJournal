@@ -24,6 +24,52 @@ function normalizeOptionalText(value, maxLength) {
   return trimmed.slice(0, maxLength);
 }
 
+const MAX_CLIENT_TIMESTAMP_SKEW_MS = 5 * 60 * 1000;
+const MAX_CLIENT_BACKDATE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function parseAndValidateClientTimestamp(value, { field, minDate = null, maxDate = null } = {}) {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw Object.assign(new Error(`${field || 'timestamp'} is invalid`), {
+      status: 400,
+      errorCode: 'INVALID_TIMESTAMP'
+    });
+  }
+
+  const now = Date.now();
+  if (parsed.getTime() > now + MAX_CLIENT_TIMESTAMP_SKEW_MS) {
+    throw Object.assign(new Error(`${field || 'timestamp'} is in the future`), {
+      status: 400,
+      errorCode: 'TIMESTAMP_IN_FUTURE'
+    });
+  }
+
+  if (parsed.getTime() < now - MAX_CLIENT_BACKDATE_MS) {
+    throw Object.assign(new Error(`${field || 'timestamp'} is too old`), {
+      status: 400,
+      errorCode: 'TIMESTAMP_TOO_OLD'
+    });
+  }
+
+  if (minDate && parsed.getTime() < new Date(minDate).getTime()) {
+    throw Object.assign(new Error(`${field || 'timestamp'} is before the allowed range`), {
+      status: 400,
+      errorCode: 'TIMESTAMP_BEFORE_RANGE'
+    });
+  }
+
+  if (maxDate && parsed.getTime() > new Date(maxDate).getTime()) {
+    throw Object.assign(new Error(`${field || 'timestamp'} is after the allowed range`), {
+      status: 400,
+      errorCode: 'TIMESTAMP_AFTER_RANGE'
+    });
+  }
+
+  return parsed;
+}
+
 /**
  * Validation middleware
  */
@@ -201,6 +247,7 @@ router.post('/start',
   async (req, res) => {
     try {
       const { mapName, mapTier, mapType, costChaos = 0, poeVersion, league, startedAt } = req.body;
+      const normalizedStartedAt = parseAndValidateClientTimestamp(startedAt, { field: 'startedAt' });
 
       // Aktif session kontrolu
       const activeSession = await Session.findOne({
@@ -226,7 +273,7 @@ router.post('/start',
         league,
         costChaos,
         status: 'active',
-        startedAt: startedAt ? new Date(startedAt) : new Date()
+        startedAt: normalizedStartedAt || new Date()
       });
 
       // WebSocket uzerinden broadcast
@@ -246,7 +293,8 @@ router.post('/start',
       });
     } catch (error) {
       console.error('Session baslatma hatasi:', error);
-      errorResponse(res, 500, 'Session baslatilirken hata olustu', 'SESSION_START_FAILED');
+      const errorMessage = error.errorCode ? 'Session zamani gecersiz' : (error.message || 'Session baslatilirken hata olustu');
+      errorResponse(res, error.status || 500, errorMessage, error.errorCode || 'SESSION_START_FAILED');
     }
   }
 );
@@ -336,7 +384,12 @@ router.put('/:id/end',
         return errorResponse(res, 404, 'Aktif session bulunamadi', 'ACTIVE_SESSION_NOT_FOUND');
       }
 
-      await session.complete(endedAt || null);
+      const finalEndedAt = parseAndValidateClientTimestamp(endedAt, {
+        field: 'endedAt',
+        minDate: session.startedAt
+      });
+
+      await session.complete(finalEndedAt || null);
 
       // WebSocket uzerinden broadcast
       if (req.app.broadcast) {
@@ -355,7 +408,8 @@ router.put('/:id/end',
       });
     } catch (error) {
       console.error('Session tamamlama hatasi:', error);
-      errorResponse(res, 500, 'Session tamamlanirken hata olustu', 'SESSION_END_FAILED');
+      const errorMessage = error.errorCode ? 'Session zamani gecersiz' : (error.message || 'Session tamamlanirken hata olustu');
+      errorResponse(res, error.status || 500, errorMessage, error.errorCode || 'SESSION_END_FAILED');
     }
   }
 );
@@ -386,7 +440,12 @@ router.put('/:id/abandon',
         return errorResponse(res, 404, 'Aktif session bulunamadi', 'ACTIVE_SESSION_NOT_FOUND');
       }
 
-      await session.abandon(endedAt || null);
+      const finalEndedAt = parseAndValidateClientTimestamp(endedAt, {
+        field: 'endedAt',
+        minDate: session.startedAt
+      });
+
+      await session.abandon(finalEndedAt || null);
 
       res.json({
         success: true,
@@ -395,7 +454,8 @@ router.put('/:id/abandon',
       });
     } catch (error) {
       console.error('Session iptal hatasi:', error);
-      errorResponse(res, 500, 'Session iptal edilirken hata olustu', 'SESSION_ABANDON_FAILED');
+      const errorMessage = error.errorCode ? 'Session zamani gecersiz' : (error.message || 'Session iptal edilirken hata olustu');
+      errorResponse(res, error.status || 500, errorMessage, error.errorCode || 'SESSION_ABANDON_FAILED');
     }
   }
 );
