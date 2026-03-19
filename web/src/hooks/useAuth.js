@@ -2,6 +2,7 @@
 
 import { useState, useEffect, createContext, useContext } from 'react';
 import { authAPI } from '@/lib/api';
+import { clearToken, getToken, setToken } from '@/lib/tokenStore';
 
 const AuthContext = createContext(null);
 
@@ -15,7 +16,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const checkAuth = async () => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (token) {
       try {
         const response = await authAPI.getMe();
@@ -24,7 +25,7 @@ export function AuthProvider({ children }) {
           setCapabilities(response.data.capabilities || {});
         }
       } catch (error) {
-        localStorage.removeItem('token');
+        clearToken();
         setCapabilities({});
       }
     }
@@ -34,7 +35,7 @@ export function AuthProvider({ children }) {
   const login = async (credentials) => {
     const response = await authAPI.login(credentials);
     if (response.success) {
-      localStorage.setItem('token', response.data.token);
+      setToken(response.data.token);
       setUser(response.data.user);
       setCapabilities(response.data.capabilities || {});
     }
@@ -44,7 +45,7 @@ export function AuthProvider({ children }) {
   const register = async (userData) => {
     const response = await authAPI.register(userData);
     if (response.success) {
-      localStorage.setItem('token', response.data.token);
+      setToken(response.data.token);
       setUser(response.data.user);
       setCapabilities(response.data.capabilities || {});
     }
@@ -52,7 +53,7 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    clearToken();
     setUser(null);
     setCapabilities({});
   };

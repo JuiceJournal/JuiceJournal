@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { getToken } from '@/lib/tokenStore';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001';
 
@@ -14,7 +15,7 @@ export function useSocket() {
 
     // Establish WebSocket connection
     const connect = () => {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const token = getToken();
       if (!token) {
         setConnected(false);
         return;
