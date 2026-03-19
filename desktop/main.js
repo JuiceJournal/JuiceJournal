@@ -9,7 +9,7 @@
  * - OCR ile stash tarama
  */
 
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen, shell, nativeImage, safeStorage } = require('electron');
 const crypto = require('crypto');
 const http = require('http');
 const fs = require('fs');
@@ -227,6 +227,42 @@ function toRendererError(error, fallback) {
   return new Error(normalizeErrorMessage(error, fallback));
 }
 
+function serializeSecurePayload(value) {
+  const payload = JSON.stringify(value);
+  if (!safeStorage.isEncryptionAvailable()) {
+    return null;
+  }
+
+  return safeStorage.encryptString(payload).toString('base64');
+}
+
+function deserializeSecurePayload(serialized) {
+  if (!serialized || !safeStorage.isEncryptionAvailable()) {
+    return null;
+  }
+
+  try {
+    const decrypted = safeStorage.decryptString(Buffer.from(serialized, 'base64'));
+    return JSON.parse(decrypted);
+  } catch {
+    return null;
+  }
+}
+
+function persistPoeTokens(tokens) {
+  const encrypted = serializeSecurePayload(tokens);
+  if (encrypted) {
+    store.set('poeOAuthTokensEncrypted', encrypted);
+  } else {
+    store.delete('poeOAuthTokensEncrypted');
+  }
+  store.delete('poeOAuthTokens');
+}
+
+function loadPersistedPoeTokens() {
+  return deserializeSecurePayload(store.get('poeOAuthTokensEncrypted'));
+}
+
 function getPendingLootActions() {
   return store.get('pendingLootActions') || [];
 }
@@ -292,6 +328,12 @@ function appendAuditTrail(key, values = {}, level = 'info') {
 
 function getCurrentUserId() {
   return store.get('currentUserId') || null;
+}
+
+function assertDesktopUserAuthenticated() {
+  if (!store.get('authToken') || !getCurrentUserId()) {
+    throw new Error('Yerel uygulama girisi gerekli');
+  }
 }
 
 function isRetryableApiError(error) {
@@ -586,6 +628,8 @@ async function buildDiagnosticsPayload() {
   const settings = { ...store.store };
   delete settings.authToken;
   delete settings.auditTrail;
+  delete settings.poeOAuthTokens;
+  delete settings.poeOAuthTokensEncrypted;
 
   const apiSnapshot = {
     baseURL: apiClient?.baseURL || store.get('apiUrl'),
@@ -645,6 +689,32 @@ async function buildDiagnosticsPayload() {
     auditTrail: getAuditTrail(),
     settings
   };
+}
+
+function prepareOCRImage(imageBuffer) {
+  const image = nativeImage.createFromBuffer(imageBuffer);
+  const size = image.getSize();
+  if (!size.width || !size.height) {
+    return imageBuffer;
+  }
+
+  const cropRegion = {
+    x: Math.round(size.width * 0.08),
+    y: Math.round(size.height * 0.12),
+    width: Math.round(size.width * 0.84),
+    height: Math.round(size.height * 0.76)
+  };
+
+  const cropped = image.crop(cropRegion);
+  const croppedSize = cropped.getSize();
+  const resized = croppedSize.width > 1600
+    ? cropped.resize({
+        width: 1600,
+        height: Math.round((croppedSize.height / croppedSize.width) * 1600)
+      })
+    : cropped;
+
+  return resized.toPNG();
 }
 
 function renderBrowserCallbackPage(title, message) {
@@ -1024,7 +1094,7 @@ async function captureAndScan() {
       return;
     }
 
-    const screenshot = sources[0].thumbnail.toPNG();
+    const screenshot = prepareOCRImage(sources[0].thumbnail.toPNG());
 
     // OCR tara
     const items = await ocrScanner.scanImage(screenshot);
@@ -1812,6 +1882,7 @@ function setupIPC() {
   // Sync prices from poe.ninja
   ipcMain.handle('sync-prices', async (event, options = {}) => {
     try {
+      assertDesktopUserAuthenticated();
       const league = options.league || store.get('defaultLeague') || 'Standard';
       priceService.setPoeVersion(store.get('poeVersion') || 'poe1');
       const result = await priceService.syncPrices(league, options);
@@ -1823,22 +1894,26 @@ function setupIPC() {
 
   // Get price for a specific item
   ipcMain.handle('get-item-price', async (event, itemName) => {
+    assertDesktopUserAuthenticated();
     return priceService.getPriceInfo(itemName);
   });
 
   // Price a list of items
   ipcMain.handle('price-items', async (event, items) => {
+    assertDesktopUserAuthenticated();
     return priceService.priceItems(items);
   });
 
   // Get price service status
   ipcMain.handle('get-price-status', async () => {
+    assertDesktopUserAuthenticated();
     return priceService.getStatus();
   });
 
   // List stash tabs from PoE API
   ipcMain.handle('list-stash-tabs', async (event, league) => {
     try {
+      assertDesktopUserAuthenticated();
       if (!poeApiClient.isAuthenticated()) {
         throw new Error(t('poeNotLinked'));
       }
@@ -1852,6 +1927,7 @@ function setupIPC() {
   // Take a stash snapshot
   ipcMain.handle('take-stash-snapshot', async (event, options = {}) => {
     try {
+      assertDesktopUserAuthenticated();
       if (!poeApiClient.isAuthenticated()) {
         throw new Error(t('poeNotLinked'));
       }
@@ -1897,6 +1973,7 @@ function setupIPC() {
   // Calculate profit between two snapshots
   ipcMain.handle('calculate-profit', async (event, beforeId, afterId) => {
     try {
+      assertDesktopUserAuthenticated();
       const report = stashAnalyzer.diffSnapshots(beforeId, afterId, priceService);
 
       if (mainWindow) {
@@ -1911,19 +1988,22 @@ function setupIPC() {
 
   // List stored snapshots
   ipcMain.handle('list-snapshots', async () => {
+    assertDesktopUserAuthenticated();
     return stashAnalyzer.listSnapshots();
   });
 
   // Delete a snapshot
   ipcMain.handle('delete-snapshot', async (event, snapshotId) => {
+    assertDesktopUserAuthenticated();
     stashAnalyzer.deleteSnapshot(snapshotId);
     return true;
   });
 
   // Set PoE OAuth tokens (called after successful OAuth flow)
   ipcMain.handle('set-poe-tokens', async (event, tokens) => {
+    assertDesktopUserAuthenticated();
     poeApiClient.setTokens(tokens);
-    store.set('poeOAuthTokens', poeApiClient.getTokens());
+    persistPoeTokens(poeApiClient.getTokens());
     return true;
   });
 
@@ -1937,6 +2017,7 @@ function setupIPC() {
 
   // Check if PoE API is authenticated
   ipcMain.handle('get-poe-auth-status', async () => {
+    assertDesktopUserAuthenticated();
     return {
       authenticated: poeApiClient.isAuthenticated(),
       expired: poeApiClient.isTokenExpired()
@@ -1973,8 +2054,10 @@ app.whenReady().then(() => {
 
   // Restore PoE OAuth tokens if saved
   const savedPoeTokens = store.get('poeOAuthTokens');
-  if (savedPoeTokens?.accessToken) {
-    poeApiClient.setTokens(savedPoeTokens);
+  const securePoeTokens = loadPersistedPoeTokens() || savedPoeTokens;
+  if (securePoeTokens?.accessToken) {
+    poeApiClient.setTokens(securePoeTokens);
+    persistPoeTokens(securePoeTokens);
   }
 
   // IPC handler'lari once kaydet (pencere acilmadan)
@@ -2027,6 +2110,10 @@ app.on('will-quit', () => {
   // Game detector'i durdur
   if (gameDetector) {
     gameDetector.stop();
+  }
+
+  if (ocrScanner) {
+    ocrScanner.terminate().catch(() => {});
   }
 
   if (tray) {

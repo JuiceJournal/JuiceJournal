@@ -48,16 +48,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Stash & Prices
   syncPrices: (options) => ipcRenderer.invoke('sync-prices', options),
-  getItemPrice: (itemName) => ipcRenderer.invoke('get-item-price', itemName),
-  priceItems: (items) => ipcRenderer.invoke('price-items', items),
   getPriceStatus: () => ipcRenderer.invoke('get-price-status'),
-  listStashTabs: (league) => ipcRenderer.invoke('list-stash-tabs', league),
   takeStashSnapshot: (options) => ipcRenderer.invoke('take-stash-snapshot', options),
   calculateProfit: (beforeId, afterId) => ipcRenderer.invoke('calculate-profit', beforeId, afterId),
-  listSnapshots: () => ipcRenderer.invoke('list-snapshots'),
-  deleteSnapshot: (snapshotId) => ipcRenderer.invoke('delete-snapshot', snapshotId),
-  setPoeTokens: (tokens) => ipcRenderer.invoke('set-poe-tokens', tokens),
-  getPoeAuthStatus: () => ipcRenderer.invoke('get-poe-auth-status'),
   getDetectedGame: () => ipcRenderer.invoke('get-detected-game'),
 
   // Auth
