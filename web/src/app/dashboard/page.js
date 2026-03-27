@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
@@ -29,6 +29,7 @@ export default function DashboardPage() {
   const [opsData, setOpsData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showLootModal, setShowLootModal] = useState(false);
+  const refreshTimerRef = useRef(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -45,17 +46,28 @@ export default function DashboardPage() {
   }, [user, authLoading, router, poeVersion, league, capabilities]);
 
   useEffect(() => {
-    if (lastMessage) {
-      switch (lastMessage.type) {
-        case 'SESSION_STARTED':
-        case 'SESSION_COMPLETED':
-        case 'LOOT_ADDED':
-        case 'LOOT_BULK_ADDED':
+    if (!lastMessage) return;
+
+    switch (lastMessage.type) {
+      case 'SESSION_STARTED':
+      case 'SESSION_COMPLETED':
+      case 'LOOT_ADDED':
+      case 'LOOT_BULK_ADDED':
+        if (refreshTimerRef.current) {
+          clearTimeout(refreshTimerRef.current);
+        }
+        refreshTimerRef.current = setTimeout(() => {
           loadDashboardData();
-          break;
-      }
+        }, 350);
+        break;
     }
   }, [lastMessage, poeVersion, league]);
+
+  useEffect(() => () => {
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+  }, []);
 
   const loadDashboardData = async () => {
     try {

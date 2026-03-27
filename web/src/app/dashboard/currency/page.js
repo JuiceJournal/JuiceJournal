@@ -101,7 +101,9 @@ export default function CurrencyPage() {
       const params = {
         poeVersion,
         league,
-        limit: 500,
+        limit: 200,
+        sortField,
+        sortDir,
       };
       if (selectedType) params.type = selectedType;
       if (search) params.search = search;
@@ -153,20 +155,7 @@ export default function CurrencyPage() {
     }
   };
 
-  const sortedPrices = [...prices].sort((a, b) => {
-    let aVal;
-    let bVal;
-
-    if (sortField === 'itemName') {
-      aVal = (a.itemName || '').toLowerCase();
-      bVal = (b.itemName || '').toLowerCase();
-      return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-    }
-
-    aVal = parseFloat(a[sortField]) || 0;
-    bVal = parseFloat(b[sortField]) || 0;
-    return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
-  });
+  const sortedPrices = prices;
 
   const SortHeader = ({ field, children }) => {
     const isActive = sortField === field;

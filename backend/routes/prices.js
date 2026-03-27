@@ -75,6 +75,8 @@ router.get('/current',
     ]),
     query('search').optional().trim(),
     query('limit').optional().isInt({ min: 1, max: 1000 }),
+    query('sortField').optional().isIn(['itemName', 'chaosValue', 'divineValue', 'updatedAt']),
+    query('sortDir').optional().isIn(['asc', 'desc']),
     poeVersionValidator,
     handleValidationErrors
   ],
@@ -85,7 +87,9 @@ router.get('/current',
         type,
         search,
         limit = 100,
-        poeVersion = 'poe1'
+        poeVersion = 'poe1',
+        sortField = 'chaosValue',
+        sortDir = 'desc'
       } = req.query;
 
       // Find active league
@@ -109,7 +113,7 @@ router.get('/current',
 
       const prices = await Price.findAll({
         where,
-        order: [['chaosValue', 'DESC']],
+        order: [[sortField, sortDir.toUpperCase()]],
         limit: parseInt(limit)
       });
 
