@@ -2,7 +2,7 @@
 
 import { useState, useEffect, createContext, useContext } from 'react';
 import { authAPI } from '@/lib/api';
-import { clearToken, getToken, setToken } from '@/lib/tokenStore';
+import { clearToken } from '@/lib/tokenStore';
 
 const AuthContext = createContext(null);
 
@@ -16,18 +16,16 @@ export function AuthProvider({ children }) {
   }, []);
 
   const checkAuth = async () => {
-    const token = getToken();
-    if (token) {
-      try {
-        const response = await authAPI.getMe();
-        if (response.success) {
-          setUser(response.data.user);
-          setCapabilities(response.data.capabilities || {});
-        }
-      } catch (error) {
-        clearToken();
-        setCapabilities({});
+    try {
+      const response = await authAPI.getMe();
+      if (response.success) {
+        setUser(response.data.user);
+        setCapabilities(response.data.capabilities || {});
       }
+    } catch (error) {
+      clearToken();
+      setUser(null);
+      setCapabilities({});
     }
     setLoading(false);
   };
@@ -35,7 +33,6 @@ export function AuthProvider({ children }) {
   const login = async (credentials) => {
     const response = await authAPI.login(credentials);
     if (response.success) {
-      setToken(response.data.token);
       setUser(response.data.user);
       setCapabilities(response.data.capabilities || {});
     }
@@ -45,14 +42,18 @@ export function AuthProvider({ children }) {
   const register = async (userData) => {
     const response = await authAPI.register(userData);
     if (response.success) {
-      setToken(response.data.token);
       setUser(response.data.user);
       setCapabilities(response.data.capabilities || {});
     }
     return response;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await authAPI.logout();
+    } catch {
+      // Clear local state even if the server logout call fails.
+    }
     clearToken();
     setUser(null);
     setCapabilities({});

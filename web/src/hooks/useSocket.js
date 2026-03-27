@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { getToken } from '@/lib/tokenStore';
+import { authAPI } from '@/lib/api';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001';
 
@@ -14,14 +14,15 @@ export function useSocket() {
     let reconnectTimer = null;
 
     // Establish WebSocket connection
-    const connect = () => {
-      const token = getToken();
-      if (!token) {
-        setConnected(false);
-        return;
-      }
-
+    const connect = async () => {
       try {
+        const tokenResponse = await authAPI.getRealtimeToken();
+        const token = tokenResponse?.data?.token;
+        if (!token) {
+          setConnected(false);
+          return;
+        }
+
         const ws = new WebSocket(WS_URL);
         socketRef.current = ws;
 
