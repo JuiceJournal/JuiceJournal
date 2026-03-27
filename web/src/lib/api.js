@@ -4,9 +4,9 @@
  */
 
 import axios from 'axios';
-import { clearToken, getToken } from '@/lib/tokenStore';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const LEGACY_TOKEN_KEY = 'token';
 
 const API_ERROR_MESSAGE_MAP = {
   FORBIDDEN: 'You do not have permission to perform this action.',
@@ -95,6 +95,20 @@ export function getApiErrorMessage(error, fallbackMessage) {
   return normalizeApiError(error, fallbackMessage).message;
 }
 
+function clearLegacyAuthStorage() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.sessionStorage.removeItem(LEGACY_TOKEN_KEY);
+  } catch {}
+
+  try {
+    window.localStorage.removeItem(LEGACY_TOKEN_KEY);
+  } catch {}
+}
+
 // Create Axios instance
 const apiClient = axios.create({
   baseURL: `${API_URL}/api`,
@@ -104,29 +118,16 @@ const apiClient = axios.create({
   },
 });
 
-// Request interceptor - attach token
-apiClient.interceptors.request.use(
-  (config) => {
-    if (typeof window !== 'undefined') {
-      const token = getToken();
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
 // Response interceptor - error handling
 apiClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
     if (error.response?.status === 401) {
-      // Token invalid, logout
       if (typeof window !== 'undefined') {
-        clearToken();
-        window.location.href = '/login';
+        clearLegacyAuthStorage();
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(normalizeApiError(error));
@@ -197,4 +198,5 @@ export const opsAPI = {
   },
 };
 
+export { clearLegacyAuthStorage };
 export default apiClient;

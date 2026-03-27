@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext } from 'react';
-import { authAPI } from '@/lib/api';
-import { clearToken } from '@/lib/tokenStore';
+import { authAPI, clearLegacyAuthStorage } from '@/lib/api';
 
 const AuthContext = createContext(null);
 
@@ -23,7 +22,7 @@ export function AuthProvider({ children }) {
         setCapabilities(response.data.capabilities || {});
       }
     } catch (error) {
-      clearToken();
+      clearLegacyAuthStorage();
       setUser(null);
       setCapabilities({});
     }
@@ -54,7 +53,7 @@ export function AuthProvider({ children }) {
     } catch {
       // Clear local state even if the server logout call fails.
     }
-    clearToken();
+    clearLegacyAuthStorage();
     setUser(null);
     setCapabilities({});
   };
