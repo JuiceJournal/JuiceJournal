@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
   DEFAULT_LOCALE,
+  LEGACY_LOCALE_STORAGE_KEY,
   LOCALE_STORAGE_KEY,
   SUPPORTED_LOCALES,
   setCurrentLocale,
@@ -15,7 +16,7 @@ export function I18nProvider({ children }) {
   const [locale, setLocaleState] = useState(DEFAULT_LOCALE);
 
   useEffect(() => {
-    const storedLocale = localStorage.getItem(LOCALE_STORAGE_KEY);
+    const storedLocale = localStorage.getItem(LOCALE_STORAGE_KEY) || localStorage.getItem(LEGACY_LOCALE_STORAGE_KEY);
     const nextLocale = SUPPORTED_LOCALES.some((entry) => entry.code === storedLocale)
       ? storedLocale
       : DEFAULT_LOCALE;
@@ -23,6 +24,7 @@ export function I18nProvider({ children }) {
     setCurrentLocale(nextLocale);
     setLocaleState(nextLocale);
     document.documentElement.lang = nextLocale;
+    localStorage.removeItem(LEGACY_LOCALE_STORAGE_KEY);
   }, []);
 
   const setLocale = (nextLocale) => {

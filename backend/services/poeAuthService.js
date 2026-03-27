@@ -89,7 +89,7 @@ async function exchangeCode({ code, codeVerifier, redirectUri }) {
   const response = await axios.post(`${OAUTH_BASE_URL}/token`, body.toString(), {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': `OAuth ${env.poe.clientId}/0.1.0 (contact: ${env.poe.contact}) PoEFarmTracker`,
+      'User-Agent': `OAuth ${env.poe.clientId}/0.1.0 (contact: ${env.poe.contact}) JuiceJournal`,
     },
     timeout: 30000,
   });
@@ -101,7 +101,7 @@ async function fetchProfile(accessToken) {
   const response = await axios.get(`${API_BASE_URL}/profile`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      'User-Agent': `OAuth ${env.poe.clientId || 'poefarmtracker'}/0.1.0 (contact: ${env.poe.contact}) PoEFarmTracker`,
+      'User-Agent': `OAuth ${env.poe.clientId || 'juicejournal'}/0.1.0 (contact: ${env.poe.contact}) JuiceJournal`,
     },
     timeout: 30000,
   });

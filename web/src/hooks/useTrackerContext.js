@@ -4,7 +4,8 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { priceAPI } from '@/lib/api';
 import { getStorage, setStorage } from '@/lib/utils';
 
-const TRACKER_CONTEXT_STORAGE_KEY = 'poe-farm-tracker-context';
+const TRACKER_CONTEXT_STORAGE_KEY = 'juice-journal-tracker-context';
+const LEGACY_TRACKER_CONTEXT_STORAGE_KEY = 'poe-farm-tracker-context';
 const DEFAULT_TRACKER_CONTEXT = {
   poeVersion: 'poe1',
   league: 'Standard',
@@ -19,7 +20,8 @@ export function TrackerContextProvider({ children }) {
   const [loadingLeagues, setLoadingLeagues] = useState(false);
 
   useEffect(() => {
-    const storedContext = getStorage(TRACKER_CONTEXT_STORAGE_KEY, DEFAULT_TRACKER_CONTEXT);
+    const storedContext = getStorage(TRACKER_CONTEXT_STORAGE_KEY, null)
+      || getStorage(LEGACY_TRACKER_CONTEXT_STORAGE_KEY, DEFAULT_TRACKER_CONTEXT);
     if (storedContext?.poeVersion) {
       setPoeVersion(storedContext.poeVersion);
     }
@@ -33,6 +35,9 @@ export function TrackerContextProvider({ children }) {
       poeVersion,
       league: (league || DEFAULT_TRACKER_CONTEXT.league).trim() || DEFAULT_TRACKER_CONTEXT.league,
     });
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(LEGACY_TRACKER_CONTEXT_STORAGE_KEY);
+    }
   }, [poeVersion]);
 
   useEffect(() => {

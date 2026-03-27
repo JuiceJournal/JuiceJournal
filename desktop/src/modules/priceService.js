@@ -28,7 +28,7 @@ class PriceService {
     this.client = axios.create({
       timeout: 15000,
       headers: {
-        'User-Agent': 'PoEFarmTracker/1.0'
+        'User-Agent': 'JuiceJournal/1.0'
       }
     });
   }

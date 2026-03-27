@@ -1,5 +1,5 @@
 /**
- * PoE Farm Tracker - i18n Translation Module
+ * Juice Journal - i18n Translation Module
  * Reviewed locales: English (en), Turkish (tr)
  * Extended UI coverage: de, fr, es, it, pt-BR, ru
  * Safe fallback: ja, ko, zh-CN, zh-TW

@@ -1,4 +1,4 @@
-# PoE Farm Tracker - Desktop
+# Juice Journal - Desktop
 
 Electron tabanli masaustu uygulamasi.
 

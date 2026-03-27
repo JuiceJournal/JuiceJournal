@@ -1,5 +1,5 @@
 /**
- * PoE Farm Tracker - Desktop App JavaScript
+ * Juice Journal - Desktop App JavaScript
  * Renderer process logic
  */
 

@@ -1,5 +1,5 @@
 /**
- * PoE Farm Tracker - Desktop App
+ * Juice Journal - Desktop App
  * Electron main process
  * 
  * Ozellikler:
@@ -26,8 +26,8 @@ const PriceService = require('./src/modules/priceService');
 const StashAnalyzer = require('./src/modules/stashAnalyzer');
 const GameDetector = require('./src/modules/gameDetector');
 
-const APP_NAME = 'PoE Farm Tracker';
-const APP_ID = 'PoeFarmTracker.Desktop';
+const APP_NAME = 'Juice Journal';
+const APP_ID = 'JuiceJournal.Desktop';
 const DEFAULT_STRATEGY_PRESETS = ['Strongbox', 'Legion', 'Ritual', 'Expedition', 'Harvest', 'Boss Rush'];
 const MAX_PENDING_LOOT_ACTIONS = 100;
 const MAX_PENDING_SESSION_ACTIONS = 20;

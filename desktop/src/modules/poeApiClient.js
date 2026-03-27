@@ -31,7 +31,7 @@ class PoeApiClient {
       baseURL: POE_API_BASE,
       timeout: 15000,
       headers: {
-        'User-Agent': 'PoEFarmTracker/1.0 (contact: poefarmtracker@github.com)'
+        'User-Agent': 'JuiceJournal/1.0 (contact: juicejournal@github.com)'
       }
     });
   }

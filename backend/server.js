@@ -1,5 +1,5 @@
 /**
- * PoE Farm Tracker - Backend Server
+ * Juice Journal - Backend Server
  * Express + PostgreSQL + WebSocket + poe.ninja entegrasyonu
  */
 

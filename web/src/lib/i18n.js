@@ -5,7 +5,8 @@ import { IT_MESSAGES, PT_BR_MESSAGES, RU_MESSAGES } from '@/lib/locales/europe-e
 import { JA_MESSAGES, KO_MESSAGES, ZH_CN_MESSAGES, ZH_TW_MESSAGES } from '@/lib/locales/asia';
 
 export const DEFAULT_LOCALE = 'en';
-export const LOCALE_STORAGE_KEY = 'poe-farm-tracker-locale';
+export const LOCALE_STORAGE_KEY = 'juice-journal-locale';
+export const LEGACY_LOCALE_STORAGE_KEY = 'poe-farm-tracker-locale';
 
 export const SUPPORTED_LOCALES = [
   { code: 'en', label: 'English' },

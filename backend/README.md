@@ -1,4 +1,4 @@
-# PoE Farm Tracker - Backend
+# Juice Journal - Backend
 
 Node.js + Express + PostgreSQL API sunucusu.
 
@@ -121,7 +121,7 @@ DB_PASSWORD=your_password
 2. Giris yapin (admin@poefarm.local / admin123)
 3. "Add New Server" tiklayin
 4. General tab:
-   - Name: `PoE Farm`
+   - Name: `Juice Journal`
 5. Connection tab:
    - Host: `postgres` (container adi)
    - Port: `5432`

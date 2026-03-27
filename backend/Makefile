@@ -1,11 +1,11 @@
-# PoE Farm Tracker - Makefile
+# Juice Journal - Makefile
 # Docker ve diger yaygin komutlari kolaylastirir
 
 .PHONY: help up down logs psql pgadmin db-reset install dev test build
 
 # Varsayilan hedef
 help:
-	@echo "PoE Farm Tracker - Kullanilabilir Komutlar:"
+	@echo "Juice Journal - Kullanilabilir Komutlar:"
 	@echo ""
 	@echo "  make up          - Docker container'lari baslat (PostgreSQL, pgAdmin, Redis)"
 	@echo "  make down        - Docker container'lari durdur"

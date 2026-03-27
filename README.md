@@ -1,4 +1,4 @@
-# PoE Farm Tracker
+# Juice Journal
 
 A real-time farming efficiency tracker for **Path of Exile 1** and **Path of Exile 2**.
 
@@ -6,9 +6,9 @@ Inspired by [TLI Tracker](https://github.com/Giboork/TLI-tracker-translated) fro
 
 ---
 
-## Why PoE Farm Tracker?
+## Why Juice Journal?
 
-Most PoE players farm maps without knowing their actual profit rate. You might *feel* like Crimson Temple is profitable, but is it really better than Cemetery when you factor in map investment costs? PoE Farm Tracker answers that question with real data.
+Most PoE players farm maps without knowing their actual profit rate. You might *feel* like Crimson Temple is profitable, but is it really better than Cemetery when you factor in map investment costs? Juice Journal answers that question with real data.
 
 - **Before:** "I think I made some currency today"
 - **After:** "Cemetery averages 287c/hour with my current atlas setup, while Crimson Temple only does 215c/hour after scarab costs"
@@ -132,7 +132,7 @@ Prices sync automatically every hour with a 5-minute cooldown per `poeVersion:le
 ## Architecture
 
 ```
-PoeFarmTracker/
+JuiceJournal/
 │
 ├── backend/                        # Node.js + Express + PostgreSQL
 │   ├── config/
@@ -202,7 +202,7 @@ PoeFarmTracker/
 
 ```bash
 git clone https://github.com/<your-username>/PoeFarmTracker.git
-cd PoeFarmTracker
+cd JuiceJournal
 ```
 
 ### 2. Configure Environment

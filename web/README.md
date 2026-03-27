@@ -1,4 +1,4 @@
-# PoE Farm Tracker - Web Dashboard
+# Juice Journal - Web Dashboard
 
 Next.js 14 ile gelistirilmis web arayuzu.
 

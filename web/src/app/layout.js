@@ -18,8 +18,8 @@ const bodyFont = Source_Sans_3({
 });
 
 export const metadata = {
-  title: 'PoE Farm Tracker',
-  description: 'Path of Exile Farm Tracker',
+  title: 'Juice Journal',
+  description: 'Path of Exile farming journal and tracker',
 };
 
 export default function RootLayout({ children }) {

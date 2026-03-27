@@ -1,7 +1,7 @@
 {
-  "name": "poe-farm-tracker-desktop",
+  "name": "juice-journal-desktop",
   "version": "1.0.0",
-  "description": "PoE Farm Tracker Desktop App",
+  "description": "Juice Journal Desktop App",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -23,8 +23,8 @@
     "electron-builder": "^24.9.1"
   },
   "build": {
-    "appId": "PoeFarmTracker.Desktop",
-    "productName": "PoE Farm Tracker",
+    "appId": "JuiceJournal.Desktop",
+    "productName": "Juice Journal",
     "directories": {
       "output": "dist"
     },

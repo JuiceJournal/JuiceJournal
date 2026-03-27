@@ -1,5 +1,5 @@
 export const EN_MESSAGES = {
-  'app.name': 'PoE Farm Tracker',
+  'app.name': 'Juice Journal',
   'brand.kicker': 'Atlas Ledger',
   'nav.dashboard': 'Dashboard',
   'nav.sessions': 'Sessions',

@@ -1,7 +1,7 @@
 {
-  "name": "poe-farm-tracker-backend",
+  "name": "juice-journal-backend",
   "version": "1.0.0",
-  "description": "PoE Farm Tracker Backend API",
+  "description": "Juice Journal Backend API",
   "main": "server.js",
   "scripts": {
     "build": "node scripts/build-check.js",

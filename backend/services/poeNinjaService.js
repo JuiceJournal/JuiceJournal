@@ -19,7 +19,7 @@ const POE2_BASE_URL = 'https://poe.ninja/poe2/api';
 
 const REQUEST_HEADERS = {
   'Accept': 'application/json',
-  'User-Agent': 'PoE-Farm-Tracker/1.0'
+  'User-Agent': 'JuiceJournal/1.0'
 };
 
 // PoE 1 item tipi mapping (poe.ninja API type → internal category)
