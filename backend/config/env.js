@@ -63,6 +63,8 @@ module.exports = {
   auth: {
     jwtSecret: getRequired('JWT_SECRET', isProduction ? null : 'dev-jwt-secret-not-for-production'),
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    realtimeTokenExpiresIn: process.env.REALTIME_TOKEN_EXPIRES_IN || '10m',
+    authCookieName: process.env.AUTH_COOKIE_NAME || 'juice_journal_auth',
     requireAdminForPriceSync: parseBoolean(process.env.REQUIRE_ADMIN_FOR_PRICE_SYNC, false),
   },
   priceSync: {

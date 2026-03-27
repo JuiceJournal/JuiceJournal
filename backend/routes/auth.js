@@ -8,7 +8,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const { User } = require('../models');
-const { authenticate, generateToken } = require('../middleware/auth');
+const { authenticate, generateRealtimeToken, generateToken } = require('../middleware/auth');
 const poeAuthService = require('../services/poeAuthService');
 const env = require('../config/env');
 const { Op } = require('sequelize');
@@ -38,6 +38,42 @@ function errorResponse(res, status, error, errorCode) {
     error,
     errorCode
   });
+}
+
+function setAuthCookie(res, token) {
+  const secure = env.isProduction;
+  const sameSite = secure ? 'None' : 'Lax';
+  const parts = [
+    `${env.auth.authCookieName}=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    `SameSite=${sameSite}`,
+    'Max-Age=604800'
+  ];
+
+  if (secure) {
+    parts.push('Secure');
+  }
+
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function clearAuthCookie(res) {
+  const secure = env.isProduction;
+  const sameSite = secure ? 'None' : 'Lax';
+  const parts = [
+    `${env.auth.authCookieName}=`,
+    'Path=/',
+    'HttpOnly',
+    `SameSite=${sameSite}`,
+    'Max-Age=0'
+  ];
+
+  if (secure) {
+    parts.push('Secure');
+  }
+
+  res.setHeader('Set-Cookie', parts.join('; '));
 }
 
 /**
@@ -111,6 +147,7 @@ router.post('/register',
 
       // Token olustur
       const token = generateToken(user.id);
+      setAuthCookie(res, token);
 
       res.status(201).json({
         success: true,
@@ -181,6 +218,7 @@ router.post('/login',
 
       // Token olustur
       const token = generateToken(user.id);
+      setAuthCookie(res, token);
 
       res.json({
         success: true,
@@ -215,6 +253,29 @@ router.get('/me', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Profil getirme hatasi:', error);
     errorResponse(res, 500, 'Profil bilgileri alinirken hata olustu', 'PROFILE_LOAD_FAILED');
+  }
+});
+
+router.post('/logout', (req, res) => {
+  clearAuthCookie(res);
+  res.json({
+    success: true,
+    data: { loggedOut: true },
+    error: null
+  });
+});
+
+router.get('/realtime-token', authenticate, async (req, res) => {
+  try {
+    const token = generateRealtimeToken(req.userId);
+    res.json({
+      success: true,
+      data: { token },
+      error: null
+    });
+  } catch (error) {
+    console.error('Realtime token error:', error);
+    errorResponse(res, 500, 'Realtime token olusturulamadi', 'REALTIME_TOKEN_FAILED');
   }
 });
 

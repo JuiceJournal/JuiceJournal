@@ -8,31 +8,43 @@ const { User } = require('../models');
 const env = require('../config/env');
 
 const JWT_SECRET = env.auth.jwtSecret;
+const AUTH_COOKIE_NAME = env.auth.authCookieName;
+
+function getTokenFromRequest(req) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const bearerToken = authHeader.substring(7);
+    if (bearerToken) {
+      return bearerToken;
+    }
+  }
+
+  const cookieHeader = req.headers.cookie || '';
+  if (!cookieHeader) return null;
+
+  const cookie = cookieHeader
+    .split(';')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(`${AUTH_COOKIE_NAME}=`));
+
+  if (!cookie) return null;
+
+  return decodeURIComponent(cookie.substring(AUTH_COOKIE_NAME.length + 1));
+}
 
 /**
  * JWT token dogrulama middleware
  */
 const authenticate = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = getTokenFromRequest(req);
+
+    if (!token) {
       return res.status(401).json({
         success: false,
         data: null,
         error: 'Yetkilendirme tokeni gerekli',
         errorCode: 'AUTH_TOKEN_REQUIRED'
-      });
-    }
-
-    const token = authHeader.substring(7);
-    
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        data: null,
-        error: 'Token bulunamadi',
-        errorCode: 'AUTH_TOKEN_MISSING'
       });
     }
 
@@ -90,13 +102,10 @@ const authenticate = async (req, res, next) => {
  */
 const optionalAuth = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = getTokenFromRequest(req);
+    if (!token) {
       return next();
     }
-
-    const token = authHeader.substring(7);
     const decoded = jwt.verify(token, JWT_SECRET);
     const user = await User.findByPk(decoded.userId);
     
@@ -120,6 +129,14 @@ const generateToken = (userId) => {
     { userId },
     JWT_SECRET,
     { expiresIn: env.auth.jwtExpiresIn }
+  );
+};
+
+const generateRealtimeToken = (userId) => {
+  return jwt.sign(
+    { userId, kind: 'realtime' },
+    JWT_SECRET,
+    { expiresIn: env.auth.realtimeTokenExpiresIn }
   );
 };
 
@@ -150,5 +167,6 @@ module.exports = {
   optionalAuth,
   requireRole,
   generateToken,
+  generateRealtimeToken,
   JWT_SECRET
 };
