@@ -166,6 +166,7 @@ const elements = {
   pendingSyncList: document.getElementById('pending-sync-list'),
   auditTrailList: document.getElementById('audit-trail-list'),
   retryPendingSyncBtn: document.getElementById('retry-pending-sync'),
+  diagnosticsMode: document.getElementById('diagnostics-mode'),
   exportDiagnosticsBtn: document.getElementById('export-diagnostics'),
   saveSettingsBtn: document.getElementById('save-settings'),
   resetSettingsBtn: document.getElementById('reset-settings'),
@@ -1588,9 +1589,13 @@ async function handleExportDiagnostics() {
   elements.exportDiagnosticsBtn.textContent = window.t('settings.exportingDiagnostics');
 
   try {
-    const result = await window.electronAPI.exportDiagnostics();
+    const mode = elements.diagnosticsMode?.value === 'sensitive' ? 'sensitive' : 'safe';
+    const result = await window.electronAPI.exportDiagnostics(mode);
     if (!result?.canceled) {
-      showToast(window.t('settings.about'), window.t('toast.diagnosticsExported'), 'success');
+      const toastKey = mode === 'sensitive'
+        ? 'toast.diagnosticsExportedSensitive'
+        : 'toast.diagnosticsExportedSafe';
+      showToast(window.t('settings.about'), window.t(toastKey), 'success');
     }
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.unexpectedError'), 'error');

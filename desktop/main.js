@@ -624,15 +624,42 @@ async function flushPendingActions(forceBlocked = false) {
   };
 }
 
-async function buildDiagnosticsPayload() {
+function buildSafeSettingsSnapshot() {
   const settings = { ...store.store };
   delete settings.authToken;
   delete settings.auditTrail;
   delete settings.poeOAuthTokens;
   delete settings.poeOAuthTokensEncrypted;
+  delete settings.pendingLootActions;
+  delete settings.pendingSessionActions;
+  delete settings.queuedCurrentSession;
+
+  return {
+    language: settings.language || 'en',
+    notifications: Boolean(settings.notifications),
+    soundNotifications: Boolean(settings.soundNotifications),
+    autoStartSession: Boolean(settings.autoStartSession),
+    poeVersion: settings.poeVersion || 'poe1',
+    defaultLeague: settings.defaultLeague || 'Standard',
+    hasCustomApiUrl: Boolean(settings.apiUrl),
+    hasPoePath: Boolean(settings.poePath),
+    scanHotkey: settings.scanHotkey || 'F9'
+  };
+}
+
+function buildSensitiveSettingsSnapshot() {
+  const settings = { ...store.store };
+  delete settings.authToken;
+  delete settings.auditTrail;
+  delete settings.poeOAuthTokens;
+  delete settings.poeOAuthTokensEncrypted;
+  return settings;
+}
+
+async function buildDiagnosticsPayload(mode = 'safe') {
+  const exportMode = mode === 'sensitive' ? 'sensitive' : 'safe';
 
   const apiSnapshot = {
-    baseURL: apiClient?.baseURL || store.get('apiUrl'),
     authenticated: Boolean(apiClient?.token),
     status: 'unknown',
     latencyMs: null,
@@ -654,14 +681,38 @@ async function buildDiagnosticsPayload() {
     }
   }
 
-  return {
+  const basePayload = {
     generatedAt: new Date().toISOString(),
+    exportMode,
     appVersion: app.getVersion(),
     platform: process.platform,
     release: os.release(),
-    currentUserId: getCurrentUserId(),
     pendingSync: {
       snapshot: getPendingSyncSnapshot(),
+      hasQueuedCurrentSession: Boolean(getQueuedCurrentSession())
+    },
+    currentSession: currentSession ? {
+      status: currentSession.status,
+      localOnly: Boolean(currentSession.localOnly),
+      queued: Boolean(currentSession.queued)
+    } : null,
+    api: {
+      authenticated: apiSnapshot.authenticated,
+      status: apiSnapshot.status,
+      latencyMs: apiSnapshot.latencyMs
+    },
+    settings: buildSafeSettingsSnapshot()
+  };
+
+  if (exportMode === 'safe') {
+    return basePayload;
+  }
+
+  return {
+    ...basePayload,
+    currentUserId: getCurrentUserId(),
+    pendingSync: {
+      ...basePayload.pendingSync,
       sessionActions: getPendingSessionActions().map((action) => ({
         id: action.id,
         type: action.type,
@@ -685,9 +736,12 @@ async function buildDiagnosticsPayload() {
       startedAt: currentSession.startedAt,
       endedAt: currentSession.endedAt || null
     } : null,
-    api: apiSnapshot,
+    api: {
+      ...apiSnapshot,
+      baseURL: apiClient?.baseURL || store.get('apiUrl')
+    },
     auditTrail: getAuditTrail(),
-    settings
+    settings: buildSensitiveSettingsSnapshot()
   };
 }
 
@@ -1650,14 +1704,8 @@ function setupIPC() {
     }
   });
 
-  ipcMain.handle('get-pending-loot-actions', () => {
-    const queuedActions = getPendingLootActions();
-    return {
-      count: queuedActions.length
-    };
-  });
-
   ipcMain.handle('get-sync-status', () => {
+    assertDesktopUserAuthenticated();
     return {
       ...getPendingSyncSnapshot(),
       entries: getPendingSyncEntriesForView()
@@ -1665,17 +1713,21 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-audit-trail', () => {
+    assertDesktopUserAuthenticated();
     return {
       entries: getAuditTrail().slice().reverse().slice(0, 20)
     };
   });
 
   ipcMain.handle('retry-pending-loot-actions', async () => {
+    assertDesktopUserAuthenticated();
     return await flushPendingActions(true);
   });
 
-  ipcMain.handle('export-diagnostics', async () => {
-    const defaultPath = path.join(app.getPath('documents'), `poe-farm-diagnostics-${Date.now()}.json`);
+  ipcMain.handle('export-diagnostics', async (event, mode = 'safe') => {
+    assertDesktopUserAuthenticated();
+    const exportMode = mode === 'sensitive' ? 'sensitive' : 'safe';
+    const defaultPath = path.join(app.getPath('documents'), `juice-journal-diagnostics-${exportMode}-${Date.now()}.json`);
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
       title: 'Export Diagnostics',
       defaultPath,
@@ -1688,11 +1740,12 @@ function setupIPC() {
       return { canceled: true };
     }
 
-    const payload = await buildDiagnosticsPayload();
+    const payload = await buildDiagnosticsPayload(exportMode);
     fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
-    appendAuditTrail('auditDiagnosticsExported');
+    appendAuditTrail('auditDiagnosticsExported', { mode: exportMode });
     return {
       canceled: false,
+      mode: exportMode,
       filePath
     };
   });

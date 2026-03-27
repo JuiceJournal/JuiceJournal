@@ -40,11 +40,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addLoot: (data) => ipcRenderer.invoke('add-loot', data),
   scanScreen: () => ipcRenderer.invoke('scan-screen'),
   getRecentLoot: (params) => ipcRenderer.invoke('get-recent-loot', params),
-  getPendingLootActions: () => ipcRenderer.invoke('get-pending-loot-actions'),
   getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
   getAuditTrail: () => ipcRenderer.invoke('get-audit-trail'),
   retryPendingLootActions: () => ipcRenderer.invoke('retry-pending-loot-actions'),
-  exportDiagnostics: () => ipcRenderer.invoke('export-diagnostics'),
+  exportDiagnostics: (mode) => ipcRenderer.invoke('export-diagnostics', mode),
 
   // Stash & Prices
   syncPrices: (options) => ipcRenderer.invoke('sync-prices', options),
