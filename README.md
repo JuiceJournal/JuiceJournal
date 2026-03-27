@@ -1,8 +1,8 @@
 # Juice Journal
 
-A real-time farming efficiency tracker for **Path of Exile 1** and **Path of Exile 2**.
+A stash-first farming journal for **Path of Exile 1** and **Path of Exile 2**.
 
-Inspired by [TLI Tracker](https://github.com/Giboork/TLI-tracker-translated) from the Torchlight Infinite community — we bring the same concept to Path of Exile: track your map farming sessions, monitor loot drops in real time, calculate profit-per-hour, and optimize your farming strategies with data-driven insights.
+Inspired by [TLI Tracker](https://github.com/Giboork/TLI-tracker-translated) from the Torchlight Infinite community, Juice Journal focuses on stash-based farming analysis for Path of Exile: snapshot stash state, measure output, calculate profit-per-hour, and optimize strategies with data-backed comparisons.
 
 ---
 
@@ -18,32 +18,42 @@ Most PoE players farm maps without knowing their actual profit rate. You might *
 ## How It Works
 
 ```
-Start Session --> Select Map & League --> Farm Maps --> Log Loot Drops
-                                                            |
-                                                            v
-                                              Automatic Price Lookup
-                                              (poe.ninja - 20,000+ items)
-                                                            |
-                                                            v
-                                          Real-time Profit / Hour Calculation
-                                                            |
-                                                            v
-End Session --> Session Summary: Total Profit, Cost, Net Revenue, Item Breakdown
-                                                            |
-                                                            v
-                              Historical Analytics: Compare Maps, Strategies, Builds
+Start Session --> Select Map & League --> Snapshot Stash Before
+                                                           |
+                                                           v
+                                            Farm Maps / Dump Loot To Stash
+                                                           |
+                                                           v
+                                              Snapshot Stash After Session
+                                                           |
+                                                           v
+                                           Automatic Item Diff + Price Lookup
+                                                           |
+                                                           v
+                                 Session Summary: Profit, Cost, Net Revenue, Item Breakdown
+                                                           |
+                                                           v
+                             Historical Analytics: Compare Maps, Strategies, Builds
 ```
 
-### Planned: Automatic Stash Tracking (via GGG OAuth)
+### Primary Tracking Model: Stash Snapshots
 
-Once our OAuth application is approved by GGG, the app will support **automatic loot detection via stash tab snapshots**:
+Once our OAuth application is approved by GGG, the core tracking flow will use **stash tab snapshots**:
 
 1. Snapshot your stash tabs before a farming session (via PoE API)
 2. Run your maps and dump loot into stash as usual
 3. Snapshot stash tabs after session
 4. Diff between snapshots = items gained = automatic profit calculation
 
-No manual loot entry, no screen reading — just accurate data straight from GGG's servers.
+No manual loot entry and no screen reading in the main flow; just stash-based tracking from real account state.
+
+### OCR Status
+
+OCR remains available only as:
+- an experimental fallback
+- a temporary bridge when stash access is unavailable
+
+It is not the main product direction.
 
 ---
 
@@ -55,7 +65,7 @@ No manual loot entry, no screen reading — just accurate data straight from GGG
 |---------|-------------|
 | **Session Tracking** | Start/stop farming sessions tied to specific maps, zones, or boss encounters |
 | **Real-time Profit** | Live chaos-per-hour and divine-per-hour calculation during active sessions |
-| **Loot Logging** | Record every item drop with automatic price lookup and valuation |
+| **Stash-Based Loot Tracking** | Measure session gains by comparing stash snapshots before and after farming |
 | **Client.txt Parsing** | Auto-detect map entries, zone changes, and area transitions from PoE game logs |
 | **Map Cost Tracking** | Track map investment (scarabs, fragments, currency spent) vs. revenue earned |
 | **Currency Browser** | Browse all currencies with icons, prices, and category filters |
@@ -64,7 +74,7 @@ No manual loot entry, no screen reading — just accurate data straight from GGG
 | **PoE Account Linking** | OAuth 2.1 with PKCE for PoE account linking and stash access (pending GGG approval) |
 | **i18n Support** | Full Turkish and English interface with instant language switching |
 | **Settings Panel** | Tabbed settings with General, Path of Exile, Hotkeys, Notifications, API, and About sections |
-| **Global Hotkey** | F9 for quick loot scanning |
+| **Fallback OCR** | Optional experimental OCR path when stash-based tracking is unavailable |
 | **System Tray** | Background operation with full tray menu (sessions, navigation, quick actions) |
 | **Game Detection** | Auto-detect running PoE process |
 
