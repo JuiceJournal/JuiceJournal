@@ -971,7 +971,7 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
       if (error) {
         clearTimeout(timeout);
         res.writeHead(400, { 'Content-Type': 'text/html' });
-        res.end(renderBrowserCallbackPage('Linking Failed', 'Return to PoE Farm Tracker and try the connection again.'));
+        res.end(renderBrowserCallbackPage('Linking Failed', 'Return to Juice Journal and try the connection again.'));
         await closePoeAuthServer();
         reject(new Error(error));
         return;
@@ -987,7 +987,7 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
       }
 
       res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(renderBrowserCallbackPage('Account Linked', 'You can close this window and continue in PoE Farm Tracker.'));
+      res.end(renderBrowserCallbackPage('Account Linked', 'You can close this window and continue in Juice Journal.'));
 
       try {
         const result = await apiClient.completePoeConnect({

@@ -211,7 +211,7 @@ JuiceJournal/
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/<your-username>/PoeFarmTracker.git
+git clone https://github.com/JuiceJournal/JuiceJournal.git
 cd JuiceJournal
 ```
 
@@ -362,7 +362,7 @@ The application includes a complete OAuth 2.1 integration for linking Path of Ex
 | **Code Verifier** | 32-byte cryptographically random, base64url-encoded |
 | **Token Storage** | AES-256-GCM encrypted at rest with per-token random IV |
 | **Redirect URI** | `http://127.0.0.1:34127/oauth/poe/callback` (loopback) |
-| **User-Agent** | `OAuth <client_id>/0.1.0 (contact: <email>) PoEFarmTracker` |
+| **User-Agent** | `OAuth <client_id>/0.1.0 (contact: <email>) JuiceJournal` |
 | **Token Lifetime** | Access: 10 hours, Refresh: 7 days (public client limits) |
 
 ### Requested Scopes
