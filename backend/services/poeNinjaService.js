@@ -4,8 +4,9 @@
  * PoE 1 ve PoE 2 destegi
  *
  * API Endpoints:
- * - PoE 1: https://poe.ninja/api/data/currencyoverview?league=X&type=Currency
- * - PoE 1: https://poe.ninja/api/data/itemoverview?league=X&type=Map
+ * - PoE 1 currency: https://poe.ninja/poe1/api/economy/stash/current/currency/overview?league=X&type=Currency
+ * - PoE 1 items: https://poe.ninja/poe1/api/economy/stash/current/item/overview?league=X&type=Map
+ * - PoE 1 exchange: https://poe.ninja/poe1/api/economy/exchange/{slug}/overview?league=X&type=Currency
  * - PoE 2: https://poe.ninja/poe2/api/economy/exchange/{urlSlug}/overview?league=X&type=Currency
  * - PoE 2 leagues: https://poe.ninja/poe2/api/data/index-state
  */
@@ -13,7 +14,8 @@
 const axios = require('axios');
 const { Price } = require('../models');
 
-const POE1_BASE_URL = 'https://poe.ninja/api/data';
+const POE1_CURRENCY_URL = 'https://poe.ninja/poe1/api/economy/stash/current/currency/overview';
+const POE1_ITEM_URL = 'https://poe.ninja/poe1/api/economy/stash/current/item/overview';
 const POE1_EXCHANGE_URL = 'https://poe.ninja/poe1/api';
 const POE2_BASE_URL = 'https://poe.ninja/poe2/api';
 
@@ -36,7 +38,6 @@ const POE1_ITEM_TYPE_MAPPING = {
   'Oil': 'oil',
   'Incubator': 'incubator',
   'DeliriumOrb': 'delirium_orb',
-  'Catalyst': 'catalyst',
   'Essence': 'essence',
   'Fossil': 'fossil',
   'Resonator': 'fossil',
@@ -86,7 +87,7 @@ const POE1_SYNC_TYPES = [
   // Item API — high priority
   'Scarab', 'Map', 'DivinationCard', 'Essence', 'Oil',
   'SkillGem', 'UniqueMap', 'Fossil', 'Resonator',
-  'Incubator', 'DeliriumOrb', 'Catalyst',
+  'Incubator', 'DeliriumOrb',
   // Item API — uniques
   'UniqueJewel', 'UniqueFlask', 'UniqueWeapon', 'UniqueArmour', 'UniqueAccessory',
   'ForbiddenJewel', 'ShrineBelt', 'UniqueTincture', 'UniqueRelic', 'ClusterJewel',
@@ -253,7 +254,7 @@ const getCurrencyOverview = async (league = 'Standard', type = 'Currency', poeVe
       url = `${POE2_BASE_URL}/economy/exchange/${slug}/overview`;
       params = { league, type };
     } else {
-      url = `${POE1_BASE_URL}/currencyoverview`;
+      url = POE1_CURRENCY_URL;
       params = { league, type };
     }
 
@@ -280,7 +281,7 @@ const getItemOverview = async (league = 'Standard', type = 'Map', poeVersion = '
       return { lines: [] };
     }
 
-    const url = `${POE1_BASE_URL}/itemoverview`;
+    const url = POE1_ITEM_URL;
     const params = { league, type };
 
     const response = await axios.get(url, {
