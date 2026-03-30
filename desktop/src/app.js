@@ -2269,6 +2269,7 @@ async function loadCurrencyLeagues() {
   if (!select) return;
 
   let allLeagues = [];
+  let activeLeagueNames = [];
 
   try {
     const res = await window.electronAPI.getCurrencyLeagues(currencyState.poeVersion);
@@ -2277,7 +2278,8 @@ async function loadCurrencyLeagues() {
 
     // Use active leagues from poe.ninja if available
     if (leagueData.activeLeagues && leagueData.activeLeagues.length > 0) {
-      allLeagues = leagueData.activeLeagues.map(l => l.name || l.displayName);
+      activeLeagueNames = leagueData.activeLeagues.map(l => l.name || l.displayName).filter(Boolean);
+      allLeagues = [...activeLeagueNames];
     }
 
     // Add any DB-only leagues not in the active list
@@ -2295,14 +2297,16 @@ async function loadCurrencyLeagues() {
 
   select.innerHTML = allLeagues.map(l => `<option value="${escapeHTML(l)}">${escapeHTML(l)}</option>`).join('');
 
-  // Auto-select: defaultLeague from settings, or first league
-  const defaultLeague = state.settings.defaultLeague || allLeagues[0] || 'Standard';
-  if (allLeagues.includes(defaultLeague)) {
-    select.value = defaultLeague;
-    currencyState.league = defaultLeague;
-  } else {
-    currencyState.league = allLeagues[0] || 'Standard';
-  }
+  const preferredLeague = [
+    currencyState.league,
+    activeLeagueNames[0],
+    state.settings.defaultLeague,
+    allLeagues[0],
+    'Standard'
+  ].find((value) => value && allLeagues.includes(value));
+
+  currencyState.league = preferredLeague || 'Standard';
+  select.value = currencyState.league;
 }
 
 async function loadCurrencyPrices() {

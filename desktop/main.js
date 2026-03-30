@@ -32,6 +32,10 @@ const DEFAULT_STRATEGY_PRESETS = ['Strongbox', 'Legion', 'Ritual', 'Expedition',
 const MAX_PENDING_LOOT_ACTIONS = 100;
 const MAX_PENDING_SESSION_ACTIONS = 20;
 const MAX_AUDIT_TRAIL_ENTRIES = 200;
+const WINDOWS_APP_ICON_PATH = path.join(__dirname, 'src', 'assets', 'icon.ico');
+const APP_ICON_PATH = process.platform === 'win32'
+  ? WINDOWS_APP_ICON_PATH
+  : path.join(__dirname, 'src', 'assets', 'icon.png');
 const MAIN_PROCESS_TRANSLATIONS = {
   tr: {
     trayStillRunning: 'Uygulama sistem tepsisinde calismaya devam ediyor.',
@@ -1049,7 +1053,7 @@ function createMainWindow() {
       nodeIntegration: false,
       sandbox: true
     },
-    icon: path.join(__dirname, 'src', 'assets', 'icon.png'),
+    icon: APP_ICON_PATH,
     title: APP_NAME
   });
 
@@ -1388,7 +1392,7 @@ function showNotification(title, body) {
   const notification = new (require('electron').Notification)({
     title,
     body,
-    icon: path.join(__dirname, 'src', 'assets', 'icon.png')
+    icon: APP_ICON_PATH
   });
 
   notification.show();
@@ -1705,7 +1709,15 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-sync-status', () => {
-    assertDesktopUserAuthenticated();
+    if (!store.get('authToken') || !getCurrentUserId()) {
+      return {
+        pendingSession: 0,
+        pendingLoot: 0,
+        total: 0,
+        hasQueuedSession: false,
+        entries: []
+      };
+    }
     return {
       ...getPendingSyncSnapshot(),
       entries: getPendingSyncEntriesForView()
@@ -1713,7 +1725,9 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-audit-trail', () => {
-    assertDesktopUserAuthenticated();
+    if (!store.get('authToken') || !getCurrentUserId()) {
+      return { entries: [] };
+    }
     return {
       entries: getAuditTrail().slice().reverse().slice(0, 20)
     };
@@ -1959,7 +1973,15 @@ function setupIPC() {
 
   // Get price service status
   ipcMain.handle('get-price-status', async () => {
-    assertDesktopUserAuthenticated();
+    if (!store.get('authToken') || !getCurrentUserId()) {
+      return {
+        itemCount: 0,
+        lastSync: null,
+        cacheEntries: 0,
+        poeVersion: store.get('poeVersion') || 'poe1',
+        authenticated: false
+      };
+    }
     return priceService.getStatus();
   });
 
