@@ -26,9 +26,10 @@ const POE1_ITEM_TYPES = [
   'DivinationCard', 'SkillGem', 'UniqueMap', 'Map',
   'UniqueJewel', 'UniqueFlask', 'UniqueWeapon', 'UniqueArmour',
   'UniqueAccessory', 'Beast', 'DeliriumOrb', 'Omen',
-  'ClusterJewel', 'Invitation', 'Memory', 'Coffin', 'AllflameEmber',
+  'ClusterJewel', 'ForbiddenJewel', 'ShrineBelt', 'UniqueTincture',
+  'Invitation', 'ValdoMap', 'Memory', 'Coffin', 'AllflameEmber',
   'Incubator', 'Catalyst', 'Vial', 'BlightedMap', 'BlightRavagedMap',
-  'UniqueRelic', 'Tattoo', 'Rune'
+  'UniqueRelic', 'Tattoo', 'Runegraft', 'Artifact', 'DjinnCoin', 'Wombgift', 'BaseType'
 ];
 
 const POE2_CURRENCY_TYPES = [
@@ -40,7 +41,7 @@ const POE2_ITEM_TYPES = [];
 // Quick sync = most important types for profit tracking
 const POE1_QUICK_SYNC = [
   'Currency', 'Fragment', 'DivinationCard', 'Scarab',
-  'Essence', 'Oil', 'Fossil', 'UniqueMap'
+  'Essence', 'Oil', 'Fossil', 'UniqueMap', 'Catalyst'
 ];
 const POE2_QUICK_SYNC = [
   'Currency', 'Fragments', 'Essences', 'Runes',

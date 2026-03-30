@@ -86,8 +86,8 @@ class PriceService {
   // ─── Price Sync ─────────────────────────────────────────────
 
   /**
-   * Sync prices for the most important types (currency, fragments, div cards, scarabs)
-   * This builds the priceMap used for profit calculations
+   * Sync prices from poe.ninja into the local desktop cache.
+   * Full sync is the default to avoid missing categories.
    *
    * @param {string} league
    * @param {Object} options
@@ -98,7 +98,7 @@ class PriceService {
 
     // Get types from registry (version-aware, dynamic)
     const currencyTypes = registry.getCurrencyTypes();
-    const itemTypes = options.full
+    const itemTypes = options.full !== false
       ? registry.getItemTypes()
       : registry.getQuickSyncTypes().filter(t => !currencyTypes.includes(t));
 
