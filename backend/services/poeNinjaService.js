@@ -36,6 +36,7 @@ const POE1_ITEM_TYPE_MAPPING = {
   'SkillGem': 'gem',
   'UniqueMap': 'map',
   'Oil': 'oil',
+  'Catalyst': 'catalyst',
   'Incubator': 'incubator',
   'DeliriumOrb': 'delirium_orb',
   'Essence': 'essence',
@@ -48,7 +49,9 @@ const POE1_ITEM_TYPE_MAPPING = {
   'Artifact': 'other',
   'DjinnCoin': 'other',
   'Wombgift': 'other',
-  'Runegraft': 'other',
+  'Runegraft': 'rune',
+  'Memory': 'map',
+  'Coffin': 'other',
   'AllflameEmber': 'other',
   'ClusterJewel': 'unique',
   'ForbiddenJewel': 'unique',
@@ -87,12 +90,12 @@ const POE1_SYNC_TYPES = [
   // Item API — high priority
   'Scarab', 'Map', 'DivinationCard', 'Essence', 'Oil',
   'SkillGem', 'UniqueMap', 'Fossil', 'Resonator',
-  'Incubator', 'DeliriumOrb',
+  'Catalyst', 'Incubator', 'DeliriumOrb',
   // Item API — uniques
   'UniqueJewel', 'UniqueFlask', 'UniqueWeapon', 'UniqueArmour', 'UniqueAccessory',
   'ForbiddenJewel', 'ShrineBelt', 'UniqueTincture', 'UniqueRelic', 'ClusterJewel',
   // Item API — league-specific
-  'Beast', 'Tattoo', 'Omen',
+  'Beast', 'Tattoo', 'Omen', 'Memory', 'Coffin',
   'BlightedMap', 'BlightRavagedMap', 'Invitation', 'ValdoMap',
   // Item API — minor (mapped to 'other')
   'Vial', 'Artifact', 'DjinnCoin', 'Wombgift', 'Runegraft', 'AllflameEmber',
