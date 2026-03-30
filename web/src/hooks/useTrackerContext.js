@@ -49,16 +49,27 @@ export function TrackerContextProvider({ children }) {
       try {
         const response = await priceAPI.getLeagues({ poeVersion });
         const remoteLeagues = response.data?.leagues || [];
+        const activeLeagues = (response.data?.activeLeagues || [])
+          .map((entry) => entry?.name || entry?.displayName)
+          .filter(Boolean);
         const mergedLeagues = Array.from(new Set([
+          ...activeLeagues,
           (league || '').trim(),
-          DEFAULT_TRACKER_CONTEXT.league,
           ...remoteLeagues,
+          DEFAULT_TRACKER_CONTEXT.league,
         ].filter(Boolean)));
 
         if (!cancelled) {
           setLeagueOptions(mergedLeagues);
-          if (!league?.trim()) {
-            setLeague(mergedLeagues[0] || DEFAULT_TRACKER_CONTEXT.league);
+          const preferredLeague = [
+            (league || '').trim(),
+            activeLeagues[0],
+            mergedLeagues[0],
+            DEFAULT_TRACKER_CONTEXT.league,
+          ].find((value) => value && mergedLeagues.includes(value));
+
+          if (preferredLeague && preferredLeague !== league) {
+            setLeague(preferredLeague);
           }
         }
       } catch (error) {
