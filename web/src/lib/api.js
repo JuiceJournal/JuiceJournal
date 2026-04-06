@@ -125,7 +125,9 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       if (typeof window !== 'undefined') {
         clearLegacyAuthStorage();
-        if (window.location.pathname !== '/login') {
+        const requestUrl = error.config?.url || '';
+        const isProfileProbe = requestUrl === '/auth/me' || requestUrl.endsWith('/auth/me');
+        if (!isProfileProbe && window.location.pathname !== '/login') {
           window.location.href = '/login';
         }
       }
@@ -196,6 +198,20 @@ export const opsAPI = {
     const response = await axios.get(`${API_URL}/health`);
     return response.data;
   },
+};
+
+export const strategyAPI = {
+  getMine: (params) => apiClient.get('/strategies/mine', { params }),
+  getById: (id, params) => apiClient.get(`/strategies/${id}`, { params }),
+  create: (data) => apiClient.post('/strategies', data),
+  update: (id, data) => apiClient.put(`/strategies/${id}`, data),
+  publish: (id) => apiClient.post(`/strategies/${id}/publish`),
+  unpublish: (id) => apiClient.post(`/strategies/${id}/unpublish`),
+};
+
+export const publicStrategyAPI = {
+  getAll: (params) => apiClient.get('/public/strategies', { params }),
+  getBySlug: (slug, params) => apiClient.get(`/public/strategies/${encodeURIComponent(slug)}`, { params }),
 };
 
 export { clearLegacyAuthStorage };

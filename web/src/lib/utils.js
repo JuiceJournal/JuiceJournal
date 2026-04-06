@@ -95,6 +95,50 @@ export function formatCurrency(value) {
   return num.toFixed(0);
 }
 
+export function formatCompactChaos(value) {
+  const num = parseFloat(value);
+  if (isNaN(num)) return '0c';
+
+  if (Math.abs(num) >= 1000) {
+    return `${(num / 1000).toFixed(1)}k c`;
+  }
+
+  return `${num.toFixed(1)}c`;
+}
+
+export function formatPercent(value) {
+  const num = parseFloat(value);
+  if (isNaN(num)) return '0%';
+  const sign = num > 0 ? '+' : '';
+  return `${sign}${num.toFixed(1)}%`;
+}
+
+export function createSparklineSeries(points, key = 'totalProfitChaos') {
+  if (!Array.isArray(points)) {
+    return { data: [] };
+  }
+
+  return {
+    data: points.map((point) => {
+      const value = parseFloat(point?.[key]);
+      return Number.isFinite(value) ? value : 0;
+    })
+  };
+}
+
+export function parseTagInput(value) {
+  if (typeof value !== 'string') {
+    return [];
+  }
+
+  return Array.from(new Set(
+    value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  )).slice(0, 12);
+}
+
 /**
  * Format number
  */

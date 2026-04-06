@@ -23,8 +23,10 @@ export default function Navbar() {
   const navItems = [
     { href: '/dashboard', label: t('nav.dashboard'), icon: 'atlas' },
     { href: '/dashboard/sessions', label: t('nav.sessions'), icon: 'sessions' },
+    { href: '/dashboard/strategies', label: t('nav.strategies'), icon: 'route' },
     { href: '/dashboard/currency', label: t('nav.currency'), icon: 'market' },
     { href: '/dashboard/leaderboard', label: t('nav.leaderboard'), icon: 'ladder' },
+    { href: '/strategies/public', label: t('nav.publicStrategies'), icon: 'gate' },
   ];
 
   const commitLeague = () => {
@@ -51,22 +53,27 @@ export default function Navbar() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {navItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`rounded-full border px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] transition-all ${
-                    pathname === item.href
-                      ? 'border-poe-gold/50 bg-poe-gold/15 text-poe-gold shadow-[0_0_0_1px_rgba(198,161,91,0.1)_inset]'
-                      : 'border-poe-border bg-[rgba(28,23,20,0.6)] text-stone-300 hover:border-poe-gold/30 hover:text-stone-100'
-                  }`}
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <PoeChromeIcon type={item.icon} size={15} />
-                    <span>{item.label}</span>
-                  </span>
-                </Link>
-              ))}
+              {navItems.map((item) => {
+                const isRootDashboard = item.href === '/dashboard';
+                const isActive = pathname === item.href || (!isRootDashboard && pathname.startsWith(`${item.href}/`));
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`rounded-full border px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.16em] transition-all ${
+                      isActive
+                        ? 'border-poe-gold/50 bg-poe-gold/15 text-poe-gold shadow-[0_0_0_1px_rgba(198,161,91,0.1)_inset]'
+                        : 'border-poe-border bg-[rgba(28,23,20,0.6)] text-stone-300 hover:border-poe-gold/30 hover:text-stone-100'
+                    }`}
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <PoeChromeIcon type={item.icon} size={15} />
+                      <span>{item.label}</span>
+                    </span>
+                  </Link>
+                );
+              })}
             </div>
 
             <div className="flex items-center justify-end gap-4">
