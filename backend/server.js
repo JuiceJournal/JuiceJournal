@@ -25,6 +25,8 @@ const sessionRoutes = require('./routes/sessions');
 const lootRoutes = require('./routes/loot');
 const priceRoutes = require('./routes/prices');
 const statsRoutes = require('./routes/stats');
+const strategyRoutes = require('./routes/strategies');
+const publicStrategyRoutes = require('./routes/publicStrategies');
 
 const app = express();
 const server = http.createServer(app);
@@ -143,6 +145,8 @@ app.use('/api/sessions', sessionRoutes);
 app.use('/api/loot', lootRoutes);
 app.use('/api/prices', priceRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/strategies', strategyRoutes);
+app.use('/api/public/strategies', publicStrategyRoutes);
 
 // 404 handler
 app.use((req, res) => {
