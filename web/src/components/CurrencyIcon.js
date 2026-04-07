@@ -1,5 +1,7 @@
 'use client';
 
+import { memo } from 'react';
+
 const CURRENCY_ICONS = {
   chaos: { label: 'Chaos Orb', file: 'chaos.png' },
   divine: { label: 'Divine Orb', file: 'divine.png' },
@@ -19,7 +21,7 @@ const CURRENCY_ICONS = {
   chance: { label: 'Orb of Chance', file: 'chance.png' },
 };
 
-export default function CurrencyIcon({ type = 'chaos', size = 20, className = '' }) {
+export const CurrencyIcon = memo(function CurrencyIcon({ type = 'chaos', size = 20, className = '' }) {
   const currency = CURRENCY_ICONS[type];
   if (!currency) return null;
 
@@ -36,6 +38,8 @@ export default function CurrencyIcon({ type = 'chaos', size = 20, className = ''
     />
   );
 }
+
+export default CurrencyIcon;
 
 export function CurrencyValue({ value, type = 'chaos', size = 16, className = '', iconPosition = 'right' }) {
   const num = parseFloat(value);

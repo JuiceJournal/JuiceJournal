@@ -1,12 +1,13 @@
 'use client';
 
+import { memo } from 'react';
 import Link from 'next/link';
 import PoeChromeIcon from '@/components/PoeChromeIcon';
 import SparklineChart from '@/components/SparklineChart';
 import { CurrencyValue } from '@/components/CurrencyIcon';
 import { createSparklineSeries, formatDate, getPoeVersionLabel } from '@/lib/utils';
 
-export default function StrategyTable({ strategies, t }) {
+export default memo(function StrategyTable({ strategies, t }) {
   if (!strategies || strategies.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-poe-border bg-[rgba(11,9,8,0.6)] p-10 text-center">

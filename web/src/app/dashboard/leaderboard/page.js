@@ -51,7 +51,7 @@ export default function LeaderboardPage() {
     }
   };
 
-  if (authLoading || loading) {
+  if (authLoading || (!user && loading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-poe-gold text-xl">{t('common.loading')}</div>

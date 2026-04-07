@@ -18,6 +18,7 @@ export function TrackerContextProvider({ children }) {
   const [league, setLeague] = useState(DEFAULT_TRACKER_CONTEXT.league);
   const [leagueOptions, setLeagueOptions] = useState([DEFAULT_TRACKER_CONTEXT.league]);
   const [loadingLeagues, setLoadingLeagues] = useState(false);
+  const hasInitializedRef = useRef(false);
 
   useEffect(() => {
     const storedContext = getStorage(TRACKER_CONTEXT_STORAGE_KEY, null)
@@ -61,15 +62,18 @@ export function TrackerContextProvider({ children }) {
 
         if (!cancelled) {
           setLeagueOptions(mergedLeagues);
-          const preferredLeague = [
-            (league || '').trim(),
-            activeLeagues[0],
-            mergedLeagues[0],
-            DEFAULT_TRACKER_CONTEXT.league,
-          ].find((value) => value && mergedLeagues.includes(value));
+          if (!hasInitializedRef.current) {
+            const preferredLeague = [
+              (league || '').trim(),
+              activeLeagues[0],
+              mergedLeagues[0],
+              DEFAULT_TRACKER_CONTEXT.league,
+            ].find((value) => value && mergedLeagues.includes(value));
 
-          if (preferredLeague && preferredLeague !== league) {
-            setLeague(preferredLeague);
+            if (preferredLeague && preferredLeague !== league) {
+              setLeague(preferredLeague);
+            }
+            hasInitializedRef.current = true;
           }
         }
       } catch (error) {

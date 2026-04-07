@@ -1,6 +1,8 @@
 'use client';
 
-export default function SparklineChart({ data, width = 80, height = 24 }) {
+import { memo } from 'react';
+
+function SparklineChart({ data, width = 80, height = 24 }) {
   if (!data || !data.data || data.data.length === 0) return null;
 
   const values = data.data.filter(v => v !== null);
@@ -45,3 +47,5 @@ export default function SparklineChart({ data, width = 80, height = 24 }) {
     </svg>
   );
 }
+
+export default memo(SparklineChart);

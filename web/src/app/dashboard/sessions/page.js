@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
@@ -24,6 +24,14 @@ export default function SessionsPage() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
+  const filterRef = useRef(filter);
+  const poeVersionRef = useRef(poeVersion);
+  const leagueRef = useRef(league);
+
+  filterRef.current = filter;
+  poeVersionRef.current = poeVersion;
+  leagueRef.current = league;
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
@@ -33,21 +41,22 @@ export default function SessionsPage() {
     if (user) {
       loadSessions();
     }
-  }, [user, authLoading, router, filter, poeVersion, league]);
+  }, [user, authLoading, router, loadSessions]);
 
-  const loadSessions = async (pageNum = 1) => {
+  const loadSessions = useCallback(async (pageNum = 1) => {
     try {
       setLoading(true);
 
       const params = {
         limit: 20,
         offset: (pageNum - 1) * 20,
-        poeVersion,
-        league,
+        poeVersion: poeVersionRef.current,
+        league: leagueRef.current,
       };
 
-      if (filter !== 'all') {
-        params.status = filter;
+      const currentFilter = filterRef.current;
+      if (currentFilter !== 'all') {
+        params.status = currentFilter;
       }
 
       const response = await sessionAPI.getAll(params);
@@ -64,7 +73,7 @@ export default function SessionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   const handleEndSession = async (sessionId) => {
     if (!confirm(t('prompt.endSession'))) return;

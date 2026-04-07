@@ -30,6 +30,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [showLootModal, setShowLootModal] = useState(false);
   const refreshTimerRef = useRef(null);
+  const poeVersionRef = useRef(poeVersion);
+  const leagueRef = useRef(league);
+
+  poeVersionRef.current = poeVersion;
+  leagueRef.current = league;
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -61,7 +66,7 @@ export default function DashboardPage() {
         }, 350);
         break;
     }
-  }, [lastMessage, poeVersion, league]);
+  }, [lastMessage, loadDashboardData]);
 
   useEffect(() => () => {
     if (refreshTimerRef.current) {

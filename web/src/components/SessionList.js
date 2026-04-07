@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import {
   formatDate,
   formatTime,
@@ -12,7 +13,7 @@ import {
 import { CurrencyValue } from '@/components/CurrencyIcon';
 import { useI18n } from '@/hooks/useI18n';
 
-export default function SessionList({ sessions, showActions = false, onEndSession }) {
+export default memo(function SessionList({ sessions, showActions = false, onEndSession }) {
   const { t } = useI18n();
 
   if (!sessions || sessions.length === 0) {

@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import {
   LineChart,
   Line,
@@ -11,6 +12,23 @@ import {
 } from 'recharts';
 import { formatShortDate } from '@/lib/utils';
 import { useI18n } from '@/hooks/useI18n';
+
+const CustomTooltip = memo(function CustomTooltip({ active, payload, label }) {
+  if (active && payload && payload.length) {
+    return (
+      <div className="rounded-2xl border border-poe-border bg-[rgba(14,11,10,0.96)] px-4 py-3 shadow-[0_20px_40px_rgba(0,0,0,0.45)]">
+        <p className="section-kicker mb-2">{label}</p>
+        <p className="text-poe-gold font-semibold">
+          {`Profit: ${payload[0].value.toFixed(1)}c`}
+        </p>
+        <p className="mt-1 text-sm text-gray-400">
+          {`Maps: ${payload[0].payload.sessions}`}
+        </p>
+      </div>
+    );
+  }
+  return null;
+});
 
 export default function ProfitChart({ data }) {
   const { t } = useI18n();
@@ -31,23 +49,6 @@ export default function ProfitChart({ data }) {
     profit: parseFloat(item.totalProfit) || 0,
     sessions: parseInt(item.sessionCount) || 0,
   }));
-
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="rounded-2xl border border-poe-border bg-[rgba(14,11,10,0.96)] px-4 py-3 shadow-[0_20px_40px_rgba(0,0,0,0.45)]">
-          <p className="section-kicker mb-2">{label}</p>
-          <p className="text-poe-gold font-semibold">
-            {t('chart.tooltipProfit', { value: payload[0].value.toFixed(1) })}
-          </p>
-          <p className="mt-1 text-sm text-gray-400">
-            {t('chart.tooltipMaps', { count: payload[0].payload.sessions })}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
 
   return (
     <div className="card">

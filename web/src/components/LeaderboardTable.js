@@ -1,10 +1,11 @@
 'use client';
 
+import { memo } from 'react';
 import { formatNumber } from '@/lib/utils';
 import { CurrencyValue } from '@/components/CurrencyIcon';
 import { useI18n } from '@/hooks/useI18n';
 
-export default function LeaderboardTable({ data, currentUserId }) {
+export default memo(function LeaderboardTable({ data, currentUserId }) {
   const { t } = useI18n();
 
   if (!data || data.length === 0) {
@@ -49,7 +50,7 @@ export default function LeaderboardTable({ data, currentUserId }) {
 
               return (
                 <tr
-                  key={entry.rank}
+                  key={entry.userId || entry.username || entry.rank}
                   className={`transition-colors ${isCurrentUser ? 'bg-poe-gold/8' : 'hover:bg-[rgba(255,255,255,0.03)]'}`}
                 >
                   <td className="px-4 py-4 text-center">

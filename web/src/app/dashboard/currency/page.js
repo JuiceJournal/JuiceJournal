@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
@@ -13,6 +13,33 @@ import { getApiErrorMessage, priceAPI } from '@/lib/api';
 import { getCurrentLocale, getLocaleTag, translate } from '@/lib/i18n';
 import { getItemTypeLabel, getPoeVersionLabel } from '@/lib/utils';
 import toast from 'react-hot-toast';
+
+function SortHeader({ field, sortField, sortDir, onSort, children }) {
+  const isActive = sortField === field;
+  const ariaSort = isActive ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none';
+  return (
+    <th
+      className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist cursor-pointer hover:text-poe-gold select-none transition-colors"
+      onClick={() => onSort(field)}
+      aria-sort={ariaSort}
+      role="columnheader"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSort(field);
+        }
+      }}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        {isActive && (
+          <span className="text-poe-gold" aria-hidden="true">{sortDir === 'asc' ? '▲' : '▼'}</span>
+        )}
+      </span>
+    </th>
+  );
+}
 
 const POE1_TYPES = [
   { value: '', labelKey: 'common.all', icon: null },
@@ -75,6 +102,15 @@ export default function CurrencyPage() {
   const [totalCount, setTotalCount] = useState(0);
 
   const searchTimeout = useRef(null);
+  const sortFieldRef = useRef(sortField);
+  const sortDirRef = useRef(sortDir);
+  const searchQueryRef = useRef(searchQuery);
+  const selectedTypeRef = useRef(selectedType);
+
+  sortFieldRef.current = sortField;
+  sortDirRef.current = sortDir;
+  searchQueryRef.current = searchQuery;
+  selectedTypeRef.current = selectedType;
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -93,20 +129,20 @@ export default function CurrencyPage() {
     if (user) {
       loadPrices();
     }
-  }, [user, league, selectedType, poeVersion]);
+  }, [user, loadPrices]);
 
-  const loadPrices = async (search = searchQuery) => {
+  const loadPrices = useCallback(async (search) => {
     try {
       setLoading(true);
       const params = {
         poeVersion,
         league,
         limit: 200,
-        sortField,
-        sortDir,
+        sortField: sortFieldRef.current,
+        sortDir: sortDirRef.current,
       };
-      if (selectedType) params.type = selectedType;
-      if (search) params.search = search;
+      if (selectedTypeRef.current) params.type = selectedTypeRef.current;
+      if (search || searchQueryRef.current) params.search = search || searchQueryRef.current;
 
       const response = await priceAPI.getCurrent(params);
       const data = response.data || {};
@@ -118,7 +154,7 @@ export default function CurrencyPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [poeVersion, league, t]);
 
   const handleSearch = useCallback((value) => {
     setSearchQuery(value);
@@ -126,7 +162,7 @@ export default function CurrencyPage() {
     searchTimeout.current = setTimeout(() => {
       loadPrices(value);
     }, 300);
-  }, [league, selectedType, poeVersion]);
+  }, [loadPrices]);
 
   const handleSync = async () => {
     if (!capabilities?.canSyncPrices) {
@@ -146,60 +182,34 @@ export default function CurrencyPage() {
     }
   };
 
-  const handleSort = (field) => {
-    if (sortField === field) {
-      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+  const handleSort = useCallback((field) => {
+    if (sortFieldRef.current === field) {
+      setSortDir(sortDirRef.current === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
       setSortDir('desc');
     }
-  };
+  }, []);
 
   const sortedPrices = prices;
 
-  const SortHeader = ({ field, children }) => {
-    const isActive = sortField === field;
-    const ariaSort = isActive ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none';
-    return (
-      <th
-        className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist cursor-pointer hover:text-poe-gold select-none transition-colors"
-        onClick={() => handleSort(field)}
-        aria-sort={ariaSort}
-        role="columnheader"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleSort(field);
-          }
-        }}
-      >
-        <span className="inline-flex items-center gap-1">
-          {children}
-          {isActive && (
-            <span className="text-poe-gold" aria-hidden="true">{sortDir === 'asc' ? '▲' : '▼'}</span>
-          )}
-        </span>
-      </th>
-    );
-  };
+  const relativeTimeFormat = useMemo(() => new Intl.RelativeTimeFormat(getLocaleTag(getCurrentLocale()), { numeric: 'auto' }), []);
 
   const formatTimeAgo = (date) => {
     if (!date) return '-';
     const diff = Date.now() - new Date(date).getTime();
     const mins = Math.floor(diff / 60000);
-    const formatter = new Intl.RelativeTimeFormat(getLocaleTag(getCurrentLocale()), { numeric: 'auto' });
-    if (mins < 1) return formatter.format(0, 'minute');
-    if (mins < 60) return formatter.format(-mins, 'minute');
+    if (mins < 1) return relativeTimeFormat.format(0, 'minute');
+    if (mins < 60) return relativeTimeFormat.format(-mins, 'minute');
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return formatter.format(-hours, 'hour');
-    return formatter.format(-Math.floor(hours / 24), 'day');
+    if (hours < 24) return relativeTimeFormat.format(-hours, 'hour');
+    return relativeTimeFormat.format(-Math.floor(hours / 24), 'day');
   };
 
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-poe-dark">
-      <div className="text-poe-gold text-xl animate-pulse">{t('common.loading')}</div>
+        <div className="text-poe-gold text-xl animate-pulse">{t('common.loading')}</div>
       </div>
     );
   }
@@ -257,11 +267,10 @@ export default function CurrencyPage() {
                   onClick={() => setSelectedType(tab.value)}
                   role="tab"
                   aria-selected={selectedType === tab.value}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] transition-colors ${
-                    selectedType === tab.value
-                      ? 'border-poe-gold/50 bg-poe-gold/15 text-poe-gold'
-                      : 'border-poe-border bg-[rgba(24,19,16,0.68)] text-stone-300 hover:border-poe-gold/25 hover:text-stone-100'
-                  }`}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] transition-colors ${selectedType === tab.value
+                    ? 'border-poe-gold/50 bg-poe-gold/15 text-poe-gold'
+                    : 'border-poe-border bg-[rgba(24,19,16,0.68)] text-stone-300 hover:border-poe-gold/25 hover:text-stone-100'
+                    }`}
                 >
                   {tab.icon && <CurrencyIcon type={tab.icon} size={14} />}
                   {tab.labelKey ? t(tab.labelKey) : getItemTypeLabel(tab.itemType)}
@@ -303,12 +312,12 @@ export default function CurrencyPage() {
                   <th className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist w-12" scope="col">
                     <span className="sr-only">{t('common.icon')}</span>
                   </th>
-                  <SortHeader field="itemName">{t('common.name')}</SortHeader>
+                  <SortHeader field="itemName" sortField={sortField} sortDir={sortDir} onSort={handleSort}>{t('common.name')}</SortHeader>
                   <th className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist" scope="col">
                     {t('common.type')}
                   </th>
-                  <SortHeader field="chaosValue">{t('currency.chaos')}</SortHeader>
-                  <SortHeader field="divineValue">{t('currency.divine')}</SortHeader>
+                  <SortHeader field="chaosValue" sortField={sortField} sortDir={sortDir} onSort={handleSort}>{t('currency.chaos')}</SortHeader>
+                  <SortHeader field="divineValue" sortField={sortField} sortDir={sortDir} onSort={handleSort}>{t('currency.divine')}</SortHeader>
                   <th className="px-4 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist" scope="col">
                     {t('common.trend')}
                   </th>

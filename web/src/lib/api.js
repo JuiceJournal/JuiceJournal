@@ -5,7 +5,17 @@
 
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+let API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+if (
+  typeof process !== 'undefined' &&
+  process.env.NODE_ENV === 'production' &&
+  !API_URL.startsWith('https://')
+) {
+  console.warn(
+    `[api] NEXT_PUBLIC_API_URL must use https:// in production, got: ${API_URL}`
+  );
+}
 const LEGACY_TOKEN_KEY = 'token';
 
 const API_ERROR_MESSAGE_MAP = {
@@ -102,11 +112,11 @@ function clearLegacyAuthStorage() {
 
   try {
     window.sessionStorage.removeItem(LEGACY_TOKEN_KEY);
-  } catch {}
+  } catch { }
 
   try {
     window.localStorage.removeItem(LEGACY_TOKEN_KEY);
-  } catch {}
+  } catch { }
 }
 
 // Create Axios instance
@@ -163,7 +173,7 @@ export const sessionAPI = {
 export const lootAPI = {
   add: (data) => apiClient.post('/loot', data),
   addBulk: (data) => apiClient.post('/loot/bulk', data),
-  getBySession: (sessionId, params) => 
+  getBySession: (sessionId, params) =>
     apiClient.get(`/loot/session/${sessionId}`, { params }),
   update: (id, data) => apiClient.put(`/loot/${id}`, data),
   delete: (id) => apiClient.delete(`/loot/${id}`),
