@@ -249,32 +249,42 @@ router.post('/start',
       const { mapName, mapTier, mapType, costChaos = 0, poeVersion, league, startedAt } = req.body;
       const normalizedStartedAt = parseAndValidateClientTimestamp(startedAt, { field: 'startedAt' });
 
-      // Aktif session kontrolu
-      const activeSession = await Session.findOne({
-        where: {
-          userId: req.userId,
-          status: 'active'
+      // Aktif session kontrolu - atomic with transaction to prevent race condition
+      const session = await sequelize.transaction(
+        { isolationLevel: sequelize.Transaction.ISOLATION_LEVELS.SERIALIZABLE },
+        async (t) => {
+          const activeSession = await Session.findOne({
+            where: {
+              userId: req.userId,
+              status: 'active'
+            },
+            lock: t.LOCK.UPDATE,
+            transaction: t
+          });
+
+          if (activeSession) {
+            throw Object.assign(new Error('Zaten aktif bir session var. Once mevcut session\'i tamamlayin.'), {
+              status: 400,
+              errorCode: 'SESSION_ALREADY_ACTIVE'
+            });
+          }
+
+          // Yeni session olustur
+          return Session.create({
+            userId: req.userId,
+            mapName,
+            mapTier: mapTier || null,
+            mapType: mapType || null,
+            strategyTag: normalizeOptionalText(req.body.strategyTag, 50),
+            notes: normalizeOptionalText(req.body.notes, 2000),
+            poeVersion,
+            league,
+            costChaos,
+            status: 'active',
+            startedAt: normalizedStartedAt || new Date()
+          }, { transaction: t });
         }
-      });
-
-      if (activeSession) {
-        return errorResponse(res, 400, 'Zaten aktif bir session var. Once mevcut session\'i tamamlayin.', 'SESSION_ALREADY_ACTIVE');
-      }
-
-      // Yeni session olustur
-      const session = await Session.create({
-        userId: req.userId,
-        mapName,
-        mapTier: mapTier || null,
-        mapType: mapType || null,
-        strategyTag: normalizeOptionalText(req.body.strategyTag, 50),
-        notes: normalizeOptionalText(req.body.notes, 2000),
-        poeVersion,
-        league,
-        costChaos,
-        status: 'active',
-        startedAt: normalizedStartedAt || new Date()
-      });
+      );
 
       // WebSocket uzerinden broadcast
       if (req.app.broadcast) {
@@ -293,7 +303,7 @@ router.post('/start',
       });
     } catch (error) {
       console.error('Session baslatma hatasi:', error);
-      const errorMessage = error.errorCode ? 'Session zamani gecersiz' : (error.message || 'Session baslatilirken hata olustu');
+      const errorMessage = error.message || 'Session baslatilirken hata olustu';
       errorResponse(res, error.status || 500, errorMessage, error.errorCode || 'SESSION_START_FAILED');
     }
   }

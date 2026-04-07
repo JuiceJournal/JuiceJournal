@@ -49,11 +49,11 @@ const authenticate = async (req, res, next) => {
     }
 
     // Token'i dogrula
-    const decoded = jwt.verify(token, JWT_SECRET);
-    
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+
     // Kullaniciyi bul
     const user = await User.findByPk(decoded.userId);
-    
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -66,26 +66,26 @@ const authenticate = async (req, res, next) => {
     // Request'e kullanici bilgisini ekle
     req.user = user;
     req.userId = user.id;
-    
+
     next();
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
-        return res.status(401).json({
-          success: false,
-          data: null,
-          error: 'Token suresi doldu, lutfen tekrar giris yapin',
-          errorCode: 'AUTH_TOKEN_EXPIRED'
-        });
-      }
-    
+      return res.status(401).json({
+        success: false,
+        data: null,
+        error: 'Token suresi doldu, lutfen tekrar giris yapin',
+        errorCode: 'AUTH_TOKEN_EXPIRED'
+      });
+    }
+
     if (error.name === 'JsonWebTokenError') {
-        return res.status(401).json({
-          success: false,
-          data: null,
-          error: 'Gecersiz token',
-          errorCode: 'AUTH_TOKEN_INVALID'
-        });
-      }
+      return res.status(401).json({
+        success: false,
+        data: null,
+        error: 'Gecersiz token',
+        errorCode: 'AUTH_TOKEN_INVALID'
+      });
+    }
 
     console.error('Auth middleware hatasi:', error);
     return res.status(500).json({
@@ -106,14 +106,14 @@ const optionalAuth = async (req, res, next) => {
     if (!token) {
       return next();
     }
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     const user = await User.findByPk(decoded.userId);
-    
+
     if (user) {
       req.user = user;
       req.userId = user.id;
     }
-    
+
     next();
   } catch (error) {
     // Hata durumunda devam et, kullanici yokmus gibi
@@ -167,6 +167,5 @@ module.exports = {
   optionalAuth,
   requireRole,
   generateToken,
-  generateRealtimeToken,
-  JWT_SECRET
+  generateRealtimeToken
 };

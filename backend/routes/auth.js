@@ -13,6 +13,20 @@ const poeAuthService = require('../services/poeAuthService');
 const env = require('../config/env');
 const { Op } = require('sequelize');
 
+// OAuth state storage with 5-minute TTL to prevent CSRF
+const oauthStates = new Map();
+const OAUTH_STATE_TTL_MS = 5 * 60 * 1000;
+
+// Periodic cleanup of expired OAuth states
+setInterval(() => {
+  const now = Date.now();
+  for (const [state, data] of oauthStates.entries()) {
+    if (now - data.createdAt > OAUTH_STATE_TTL_MS) {
+      oauthStates.delete(state);
+    }
+  }
+}, 60 * 1000).unref();
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -41,17 +55,15 @@ function errorResponse(res, status, error, errorCode) {
 }
 
 function setAuthCookie(res, token) {
-  const secure = env.isProduction;
-  const sameSite = secure ? 'None' : 'Lax';
   const parts = [
     `${env.auth.authCookieName}=${encodeURIComponent(token)}`,
     'Path=/',
     'HttpOnly',
-    `SameSite=${sameSite}`,
+    'SameSite=Strict',
     'Max-Age=604800'
   ];
 
-  if (secure) {
+  if (env.isProduction) {
     parts.push('Secure');
   }
 
@@ -59,17 +71,15 @@ function setAuthCookie(res, token) {
 }
 
 function clearAuthCookie(res) {
-  const secure = env.isProduction;
-  const sameSite = secure ? 'None' : 'Lax';
   const parts = [
     `${env.auth.authCookieName}=`,
     'Path=/',
     'HttpOnly',
-    `SameSite=${sameSite}`,
+    'SameSite=Strict',
     'Max-Age=0'
   ];
 
-  if (secure) {
+  if (env.isProduction) {
     parts.push('Secure');
   }
 
@@ -128,7 +138,7 @@ router.post('/register',
         return res.status(400).json({
           success: false,
           data: null,
-          error: existingUser.username === username 
+          error: existingUser.username === username
             ? 'Bu kullanici adi zaten kullaniliyor'
             : 'Bu e-posta adresi zaten kullaniliyor',
           errorCode: existingUser.username === username ? 'USERNAME_TAKEN' : 'EMAIL_TAKEN'
@@ -318,10 +328,14 @@ router.post('/poe/login/start',
         return errorResponse(res, 400, 'Invalid redirect URI', 'INVALID_REDIRECT_URI');
       }
 
+      // Store state for verification on callback
+      const oauthState = state || `state-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      oauthStates.set(oauthState, { createdAt: Date.now() });
+
       const authUrl = poeAuthService.buildAuthorizationUrl({
         redirectUri,
         codeChallenge,
-        state,
+        state: oauthState,
       });
 
       res.json({
@@ -329,7 +343,7 @@ router.post('/poe/login/start',
         data: {
           mode: 'live',
           requiresBrowser: true,
-          state,
+          state: oauthState,
           authUrl,
           scopes: poeAuthService.getScopes()
         },
@@ -399,6 +413,13 @@ router.post('/poe/login/complete',
         return errorResponse(res, 400, 'Authorization code and PKCE verifier are required', 'POE_AUTHORIZATION_CODE_REQUIRED');
       }
 
+      // Verify OAuth state to prevent CSRF
+      const receivedState = req.body.state;
+      if (!receivedState || !oauthStates.has(receivedState)) {
+        return errorResponse(res, 400, 'Invalid or expired OAuth state', 'OAUTH_STATE_INVALID');
+      }
+      oauthStates.delete(receivedState);
+
       const tokenPayload = await poeAuthService.exchangeCode({
         code,
         codeVerifier,
@@ -435,6 +456,7 @@ router.post('/poe/login/complete',
  */
 router.post('/poe/connect/start',
   authenticate,
+  authLimiter,
   [
     body('redirectUri').optional().isString(),
     body('codeChallenge').optional().isString(),
@@ -467,10 +489,14 @@ router.post('/poe/connect/start',
         return errorResponse(res, 400, 'Invalid redirect URI', 'INVALID_REDIRECT_URI');
       }
 
+      // Store state for verification on callback
+      const oauthState = state || `state-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      oauthStates.set(oauthState, { createdAt: Date.now() });
+
       const authUrl = poeAuthService.buildAuthorizationUrl({
         redirectUri,
         codeChallenge,
-        state,
+        state: oauthState,
       });
 
       res.json({
@@ -478,7 +504,7 @@ router.post('/poe/connect/start',
         data: {
           mode: 'live',
           requiresBrowser: true,
-          state,
+          state: oauthState,
           authUrl,
           scopes: poeAuthService.getScopes()
         },
@@ -497,6 +523,7 @@ router.post('/poe/connect/start',
  */
 router.post('/poe/connect/complete',
   authenticate,
+  authLimiter,
   [
     body('redirectUri').optional().isString(),
     body('code').optional().isString(),
@@ -534,6 +561,13 @@ router.post('/poe/connect/complete',
       if (!code || !codeVerifier) {
         return errorResponse(res, 400, 'Authorization code and PKCE verifier are required', 'POE_AUTHORIZATION_CODE_REQUIRED');
       }
+
+      // Verify OAuth state to prevent CSRF
+      const receivedState = req.body.state;
+      if (!receivedState || !oauthStates.has(receivedState)) {
+        return errorResponse(res, 400, 'Invalid or expired OAuth state', 'OAUTH_STATE_INVALID');
+      }
+      oauthStates.delete(receivedState);
 
       const tokenPayload = await poeAuthService.exchangeCode({
         code,

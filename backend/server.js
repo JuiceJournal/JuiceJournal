@@ -15,7 +15,6 @@ require('dotenv').config();
 
 const { sequelize, Session } = require('./models');
 const cronService = require('./services/cronService');
-const { JWT_SECRET } = require('./middleware/auth');
 const env = require('./config/env');
 const logger = require('./services/logger');
 
@@ -58,7 +57,7 @@ wss.on('connection', (ws) => {
           return;
         }
 
-        const decoded = jwt.verify(data.token, JWT_SECRET);
+        const decoded = jwt.verify(data.token, env.auth.jwtSecret, { algorithms: ['HS256'] });
         clients.set(ws, { userId: decoded.userId });
         clearTimeout(authTimeout);
       }
@@ -162,12 +161,12 @@ app.use((req, res) => {
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('Sunucu hatasi:', err);
-  
+
   res.status(err.status || 500).json({
     success: false,
     data: null,
-    error: process.env.NODE_ENV === 'development' 
-      ? err.message 
+    error: process.env.NODE_ENV === 'development'
+      ? err.message
       : 'Bir hata olustu, lutfen daha sonra tekrar deneyin'
   });
 });
