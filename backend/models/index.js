@@ -14,6 +14,7 @@ const Price = require('./Price')(sequelize, DataTypes);
 const Strategy = require('./Strategy')(sequelize, DataTypes);
 const StrategySession = require('./StrategySession')(sequelize, DataTypes);
 const StrategyTag = require('./StrategyTag')(sequelize, DataTypes);
+const StashSnapshot = require('./StashSnapshot')(sequelize, DataTypes);
 
 // Iliskileri tanimla
 
@@ -92,6 +93,28 @@ StrategyTag.belongsTo(Strategy, {
   as: 'strategy'
 });
 
+// Stash snapshots: owned by a user, optionally linked to a session for
+// before/after pair tracking.
+User.hasMany(StashSnapshot, {
+  foreignKey: 'userId',
+  as: 'stashSnapshots',
+  onDelete: 'CASCADE'
+});
+StashSnapshot.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user'
+});
+
+Session.hasMany(StashSnapshot, {
+  foreignKey: 'sessionId',
+  as: 'stashSnapshots',
+  onDelete: 'SET NULL'
+});
+StashSnapshot.belongsTo(Session, {
+  foreignKey: 'sessionId',
+  as: 'session'
+});
+
 // Export
 module.exports = {
   sequelize,
@@ -101,5 +124,6 @@ module.exports = {
   Price,
   Strategy,
   StrategySession,
-  StrategyTag
+  StrategyTag,
+  StashSnapshot
 };
