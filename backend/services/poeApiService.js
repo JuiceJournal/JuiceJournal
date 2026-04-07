@@ -1,0 +1,196 @@
+/**
+ * PoE API Service (Backend)
+ * Wraps the GGG official Path of Exile API for endpoints that require an
+ * authenticated user (stash tabs, characters, etc.). Uses poeAuthService for
+ * encrypted token storage and automatic refresh.
+ *
+ * Docs: https://www.pathofexile.com/developer/docs/reference
+ */
+
+const axios = require('axios');
+const env = require('../config/env');
+const poeAuthService = require('./poeAuthService');
+
+const POE_API_BASE = 'https://api.pathofexile.com';
+
+// Conservative spacing between requests to stay under GGG's per-endpoint
+// rate limits. Real enforcement happens via 429 handling below.
+const RATE_LIMIT_SAFETY_MS = 250;
+
+let lastRequestAt = 0;
+
+async function throttle() {
+  const elapsed = Date.now() - lastRequestAt;
+  if (elapsed < RATE_LIMIT_SAFETY_MS) {
+    await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_SAFETY_MS - elapsed));
+  }
+  lastRequestAt = Date.now();
+}
+
+function buildUserAgent() {
+  const clientId = env.poe.clientId || 'juicejournal';
+  const contact = env.poe.contact || 'support@example.com';
+  return `OAuth ${clientId}/0.1.0 (contact: ${contact}) JuiceJournal`;
+}
+
+function tagPoeError(error, code, message) {
+  const wrapped = new Error(message || error.message);
+  wrapped.code = code;
+  wrapped.cause = error;
+  if (error.response?.status) wrapped.status = error.response.status;
+  return wrapped;
+}
+
+/**
+ * Make an authenticated request to the GGG API on behalf of `user`.
+ * Refreshes the access token automatically when expired.
+ */
+async function authenticatedRequest(user, { method = 'GET', path, params, data } = {}) {
+  // Will throw POE_REAUTH_REQUIRED if the user has no valid token + cannot refresh.
+  const accessToken = await poeAuthService.getValidAccessToken(user);
+
+  await throttle();
+
+  try {
+    const response = await axios.request({
+      method,
+      url: `${POE_API_BASE}${path}`,
+      params,
+      data,
+      timeout: 30000,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'User-Agent': buildUserAgent(),
+      },
+    });
+    return response.data;
+  } catch (error) {
+    const status = error.response?.status;
+
+    if (status === 401) {
+      // The token was rejected even after refresh. Clear the link so the user
+      // is forced to re-authenticate next time.
+      try { await poeAuthService.clearPoeLink(user); } catch (_) { /* ignore */ }
+      throw tagPoeError(error, 'POE_REAUTH_REQUIRED', 'Path of Exile session was rejected — please sign in again');
+    }
+
+    if (status === 403) {
+      throw tagPoeError(error, 'POE_SCOPE_MISSING', 'Missing required Path of Exile scope (account:stashes)');
+    }
+
+    if (status === 429) {
+      const retryAfter = parseInt(error.response.headers['retry-after'] || '60', 10);
+      const wrapped = tagPoeError(error, 'POE_RATE_LIMITED', `Rate limited by GGG API. Retry after ${retryAfter}s`);
+      wrapped.retryAfter = retryAfter;
+      throw wrapped;
+    }
+
+    throw tagPoeError(error, 'POE_REQUEST_FAILED', error.response?.data?.error?.message || error.message);
+  }
+}
+
+// ─── Mock-mode fixtures ─────────────────────────────────────────
+// Users linked via POE_OAUTH_MOCK=true have no real GGG token, so we must
+// return canned data for any stash endpoint instead of hitting the live API.
+// Keep the shapes identical to the real GGG payloads so downstream code
+// (stashSnapshotService, etc.) doesn't need mock-aware branches.
+
+const MOCK_STASHES = [
+  { id: 'mock-currency', name: 'Currency', type: 'CurrencyStash', index: 0 },
+  { id: 'mock-dump', name: 'Dump', type: 'PremiumStash', index: 1 },
+];
+
+function buildMockStashTab(stashId) {
+  const base = MOCK_STASHES.find((s) => s.id === stashId) || {
+    id: stashId,
+    name: stashId,
+    type: 'PremiumStash',
+    index: 0,
+  };
+  return {
+    stash: {
+      ...base,
+      items: [
+        { id: `${stashId}-item-1`, typeLine: 'Chaos Orb', baseType: 'Chaos Orb', stackSize: 100, maxStackSize: 10, frameType: 5, identified: true },
+        { id: `${stashId}-item-2`, typeLine: 'Divine Orb', baseType: 'Divine Orb', stackSize: 5, maxStackSize: 10, frameType: 5, identified: true },
+      ],
+    },
+  };
+}
+
+// ─── Stash endpoints ────────────────────────────────────────────
+
+/**
+ * List all stash tabs in a league.
+ * Returns the raw GGG payload: { stashes: [{ id, name, type, index, ... }] }
+ */
+async function listStashTabs(user, league) {
+  if (!league) throw new Error('league is required');
+  if (user?.poeMock) {
+    return { stashes: MOCK_STASHES };
+  }
+  return authenticatedRequest(user, {
+    method: 'GET',
+    path: `/stash/${encodeURIComponent(league)}`
+  });
+}
+
+/**
+ * Get items inside a single stash tab.
+ * Returns: { stash: { id, name, type, items: [...] } }
+ */
+async function getStashTab(user, league, stashId, substashId = null) {
+  if (!league || !stashId) throw new Error('league and stashId are required');
+  if (user?.poeMock) {
+    return buildMockStashTab(stashId);
+  }
+  let path = `/stash/${encodeURIComponent(league)}/${encodeURIComponent(stashId)}`;
+  if (substashId) path += `/${encodeURIComponent(substashId)}`;
+  return authenticatedRequest(user, { method: 'GET', path });
+}
+
+/**
+ * Fetch items from a list of tabs sequentially with retry-on-429.
+ * Returns an array of { stashId, stashName, stashType, items, error? }.
+ */
+async function getStashTabsBatch(user, league, stashIds = []) {
+  const results = [];
+  for (const stashId of stashIds) {
+    try {
+      const data = await getStashTab(user, league, stashId);
+      results.push({
+        stashId,
+        stashName: data?.stash?.name || stashId,
+        stashType: data?.stash?.type || 'unknown',
+        items: data?.stash?.items || []
+      });
+    } catch (error) {
+      if (error.code === 'POE_RATE_LIMITED') {
+        // Sleep then retry once
+        await new Promise((resolve) => setTimeout(resolve, (error.retryAfter || 60) * 1000));
+        try {
+          const data = await getStashTab(user, league, stashId);
+          results.push({
+            stashId,
+            stashName: data?.stash?.name || stashId,
+            stashType: data?.stash?.type || 'unknown',
+            items: data?.stash?.items || []
+          });
+          continue;
+        } catch (retryError) {
+          results.push({ stashId, stashName: stashId, stashType: 'error', items: [], error: retryError.message });
+          continue;
+        }
+      }
+      results.push({ stashId, stashName: stashId, stashType: 'error', items: [], error: error.message });
+    }
+  }
+  return results;
+}
+
+module.exports = {
+  authenticatedRequest,
+  listStashTabs,
+  getStashTab,
+  getStashTabsBatch,
+};

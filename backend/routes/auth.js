@@ -280,6 +280,156 @@ router.get('/realtime-token', authenticate, async (req, res) => {
 });
 
 /**
+ * POST /api/auth/poe/login/start
+ * Path of Exile OAuth login flow start (no existing session required).
+ * Builds the authorization URL the desktop app will open in the browser.
+ */
+router.post('/poe/login/start',
+  authLimiter,
+  [
+    body('redirectUri').optional().isString(),
+    body('codeChallenge').optional().isString(),
+    body('codeChallengeMethod').optional().isString(),
+    body('state').optional().isString(),
+    handleValidationErrors
+  ],
+  async (req, res) => {
+    try {
+      const { redirectUri, codeChallenge, state } = req.body;
+
+      if (poeAuthService.isMockMode()) {
+        return res.json({
+          success: true,
+          data: {
+            mode: 'mock',
+            requiresBrowser: false,
+            state: state || `mock-${Date.now()}`,
+            mockCode: 'poe-mock-login-code'
+          },
+          error: null
+        });
+      }
+
+      if (!poeAuthService.isConfigured()) {
+        return errorResponse(res, 400, 'Path of Exile OAuth is not configured', 'POE_OAUTH_NOT_CONFIGURED');
+      }
+
+      if (!redirectUri || redirectUri !== process.env.POE_REDIRECT_URI) {
+        return errorResponse(res, 400, 'Invalid redirect URI', 'INVALID_REDIRECT_URI');
+      }
+
+      const authUrl = poeAuthService.buildAuthorizationUrl({
+        redirectUri,
+        codeChallenge,
+        state,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          mode: 'live',
+          requiresBrowser: true,
+          state,
+          authUrl,
+          scopes: poeAuthService.getScopes()
+        },
+        error: null
+      });
+    } catch (error) {
+      console.error('PoE login start error:', error);
+      errorResponse(res, 500, 'Failed to start Path of Exile sign-in', 'POE_LOGIN_START_FAILED');
+    }
+  }
+);
+
+/**
+ * POST /api/auth/poe/login/complete
+ * Complete Path of Exile OAuth login. Exchanges the authorization code,
+ * finds or creates a user account from the PoE profile, and issues a JWT.
+ */
+router.post('/poe/login/complete',
+  authLimiter,
+  [
+    body('redirectUri').optional().isString(),
+    body('code').optional().isString(),
+    body('codeVerifier').optional().isString(),
+    body('state').optional().isString(),
+    handleValidationErrors
+  ],
+  async (req, res) => {
+    try {
+      const { redirectUri, code, codeVerifier } = req.body;
+
+      // Mock mode: provision a deterministic mock user so the UI flow works end-to-end.
+      if (poeAuthService.isMockMode()) {
+        const mockSub = `mock-${Date.now()}`;
+        const mockProfile = { uuid: mockSub, name: `Mock${Math.floor(Math.random() * 9000 + 1000)}` };
+        const mockTokenPayload = {
+          access_token: 'mock-access-token',
+          refresh_token: 'mock-refresh-token',
+          expires_in: 36000,
+        };
+
+        const user = await poeAuthService.findOrCreateFromPoeProfile(mockProfile, mockTokenPayload);
+        const token = generateToken(user.id);
+        setAuthCookie(res, token);
+
+        return res.json({
+          success: true,
+          data: {
+            mode: 'mock',
+            user,
+            token,
+            capabilities: getCapabilities(user),
+            poe: user.getPoeStatus()
+          },
+          error: null
+        });
+      }
+
+      if (!poeAuthService.isConfigured()) {
+        return errorResponse(res, 400, 'Path of Exile OAuth is not configured', 'POE_OAUTH_NOT_CONFIGURED');
+      }
+
+      if (!redirectUri || redirectUri !== process.env.POE_REDIRECT_URI) {
+        return errorResponse(res, 400, 'Invalid redirect URI', 'INVALID_REDIRECT_URI');
+      }
+
+      if (!code || !codeVerifier) {
+        return errorResponse(res, 400, 'Authorization code and PKCE verifier are required', 'POE_AUTHORIZATION_CODE_REQUIRED');
+      }
+
+      const tokenPayload = await poeAuthService.exchangeCode({
+        code,
+        codeVerifier,
+        redirectUri
+      });
+
+      const profile = await poeAuthService.fetchProfile(tokenPayload.access_token);
+      const user = await poeAuthService.findOrCreateFromPoeProfile(profile, tokenPayload);
+
+      const token = generateToken(user.id);
+      setAuthCookie(res, token);
+
+      res.json({
+        success: true,
+        data: {
+          mode: 'live',
+          user,
+          token,
+          capabilities: getCapabilities(user),
+          poe: user.getPoeStatus()
+        },
+        error: null
+      });
+    } catch (error) {
+      console.error('PoE login complete error:', error);
+      errorResponse(res, 500, 'Failed to complete Path of Exile sign-in', 'POE_LOGIN_COMPLETE_FAILED');
+    }
+  }
+);
+
+/**
  * POST /api/auth/poe/connect/start
  * Path of Exile account linking flow start
  */
