@@ -38,7 +38,7 @@ export function TrackerContextProvider({ children }) {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(LEGACY_TRACKER_CONTEXT_STORAGE_KEY);
     }
-  }, [poeVersion]);
+  }, [poeVersion, league]);
 
   useEffect(() => {
     let cancelled = false;
