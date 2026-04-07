@@ -43,6 +43,9 @@ const DEFAULT_LOG_PATHS = {
   ]
 };
 
+// Primary default PoE1 log path — single source of truth for main.js
+const DEFAULT_POE_LOG_PATH = 'E:\\Grinding Gear Games\\Path of Exile\\logs\\Client.txt';
+
 const POLL_INTERVAL_MS = 5000; // check every 5 seconds
 
 class GameDetector extends EventEmitter {
@@ -189,3 +192,4 @@ class GameDetector extends EventEmitter {
 }
 
 module.exports = GameDetector;
+module.exports.DEFAULT_POE_LOG_PATH = DEFAULT_POE_LOG_PATH;

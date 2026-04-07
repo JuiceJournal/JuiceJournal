@@ -115,15 +115,15 @@ const elements = {
   // Modals
   loginModal: document.getElementById('login-modal'),
   registerModal: document.getElementById('register-modal'),
-  
+
   // Forms
   loginForm: document.getElementById('login-form'),
   registerForm: document.getElementById('register-form'),
-  
+
   // Navigation
   navButtons: document.querySelectorAll('.nav-btn'),
   pages: document.querySelectorAll('.page'),
-  
+
   // Dashboard
   activeSession: document.getElementById('active-session'),
   startSessionBtn: document.getElementById('start-session-btn'),
@@ -133,7 +133,7 @@ const elements = {
   todayProfit: document.getElementById('today-profit'),
   todayAvg: document.getElementById('today-avg'),
   recentLootList: document.getElementById('recent-loot-list'),
-  
+
   // Sessions
   sessionsList: document.getElementById('sessions-list'),
   sessionFilter: document.getElementById('session-filter'),
@@ -149,7 +149,7 @@ const elements = {
   sessionDrawerAnalytics: document.getElementById('session-drawer-analytics'),
   sessionDrawerLoot: document.getElementById('session-drawer-loot'),
   sessionDrawerLootCount: document.getElementById('session-drawer-loot-count'),
-  
+
   // Settings
   apiUrl: document.getElementById('api-url'),
   poePath: document.getElementById('poe-path'),
@@ -179,13 +179,13 @@ const elements = {
   poeLinkMode: document.getElementById('poe-link-mode'),
   poeConnectBtn: document.getElementById('poe-connect-btn'),
   poeDisconnectBtn: document.getElementById('poe-disconnect-btn'),
-  
+
   // User
   username: document.getElementById('username'),
   userAvatar: document.getElementById('user-avatar'),
   logoutBtn: document.getElementById('logout-btn'),
   sessionBadge: document.getElementById('session-badge'),
-  
+
   // Toast
   toastContainer: document.getElementById('toast-container'),
 
@@ -228,7 +228,7 @@ async function init() {
   setupEventListeners();
   setupCurrencyListeners();
   setupIPCListeners();
-  
+
   // Mevcut kullaniciyi kontrol et
   const hasToken = await window.electronAPI.hasAuthToken();
   if (hasToken) {
@@ -247,7 +247,7 @@ async function init() {
   } else {
     showLoginModal();
   }
-  
+
   // Aktif session ve dashboard verilerini senkronize et
   await refreshTrackerData();
   await loadPendingLootState();
@@ -256,7 +256,7 @@ async function init() {
   renderAuditTrail();
   loadPriceStatus();
   checkInitialGameStatus();
-  
+
 }
 
 function populateLanguageOptions() {
@@ -387,10 +387,19 @@ function stopSessionClock() {
 
 function ensureSessionClock() {
   stopSessionClock();
-  if (state.currentSession) {
+  if (state.currentSession && !document.hidden) {
     startSessionClock();
   }
 }
+
+// Pause/resume session clock on visibility changes
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopSessionClock();
+  } else if (state.currentSession) {
+    startSessionClock();
+  }
+});
 
 /**
  * Ayarlari yukle
@@ -490,7 +499,7 @@ function setupEventListeners() {
       navigateTo(page);
     });
   });
-  
+
   // Auth
   elements.loginForm.addEventListener('submit', handleLogin);
   elements.registerForm.addEventListener('submit', handleRegister);
@@ -499,20 +508,20 @@ function setupEventListeners() {
   const poeOAuthBtn = document.getElementById('poe-oauth-login');
   if (poeOAuthBtn) poeOAuthBtn.addEventListener('click', handlePoeOAuthLogin);
   elements.logoutBtn.addEventListener('click', handleLogout);
-  
+
   // Session
   elements.startSessionBtn.addEventListener('click', handleStartSession);
   elements.endSessionBtn.addEventListener('click', handleEndSession);
-  
+
   // Loot
   elements.scanScreenBtn.addEventListener('click', handleScanScreen);
-  
+
   // Sessions filter
   elements.sessionFilter.addEventListener('change', loadSessions);
   if (elements.sessionDrawerClose) elements.sessionDrawerClose.addEventListener('click', closeSessionDrawer);
   if (elements.sessionDrawerBackdrop) elements.sessionDrawerBackdrop.addEventListener('click', closeSessionDrawer);
   if (elements.sessionDrawerSave) elements.sessionDrawerSave.addEventListener('click', handleSessionMetadataSave);
-  
+
   // Settings
   elements.saveSettingsBtn.addEventListener('click', handleSaveSettings);
   elements.resetSettingsBtn.addEventListener('click', handleResetSettings);
@@ -624,7 +633,7 @@ function setupIPCListeners() {
   window.electronAPI.onMapEntered((data) => {
     showToast(window.t('toast.mapEnteredTitle'), window.t('toast.mapEnteredBody', { mapName: data.mapName }));
   });
-  
+
   window.electronAPI.onMapExited((data) => {
     showToast(window.t('toast.mapExitedTitle'), window.t('toast.mapExitedBody', {
       mapName: data.mapName,
@@ -632,7 +641,7 @@ function setupIPCListeners() {
     }));
     refreshTrackerData({ includeSessions: true });
   });
-  
+
   // Session olaylari
   window.electronAPI.onSessionStarted((session) => {
     state.currentSession = session;
@@ -653,7 +662,7 @@ function setupIPCListeners() {
     showToast(window.t('toast.sessionCompletedTitle'), message, profit >= 0 ? 'success' : 'warning');
     refreshTrackerData({ includeSessions: true });
   });
-  
+
   // Loot olaylari
   window.electronAPI.onLootAdded((data) => {
     const itemCount = Array.isArray(data.items) ? data.items.length : 1;
@@ -682,7 +691,7 @@ function setupIPCListeners() {
       renderAuditTrail();
     });
   }
-  
+
   // Stash events
   if (window.electronAPI.onStashSnapshotTaken) {
     window.electronAPI.onStashSnapshotTaken((data) => {
@@ -762,12 +771,12 @@ function navigateTo(page) {
   elements.navButtons.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.page === page);
   });
-  
+
   // Sayfalari guncelle
   elements.pages.forEach(p => {
     p.classList.toggle('active', p.id === `${page}-page`);
   });
-  
+
   // Sayfa ozel yuklemeler
   if (page === 'sessions') {
     loadSessions();
@@ -799,13 +808,13 @@ function showRegisterModal() {
  */
 async function handleLogin(e) {
   e.preventDefault();
-  
+
   const username = document.getElementById('login-username').value;
   const password = document.getElementById('login-password').value;
-  
+
   try {
     const result = await window.electronAPI.login({ username, password });
-    
+
     if (result.success) {
       setCurrentUser({
         ...result.data.user,
@@ -869,14 +878,14 @@ async function handlePoeOAuthLogin() {
  */
 async function handleRegister(e) {
   e.preventDefault();
-  
+
   const username = document.getElementById('register-username').value;
   const email = document.getElementById('register-email').value;
   const password = document.getElementById('register-password').value;
-  
+
   try {
     const result = await window.electronAPI.register({ username, email, password });
-    
+
     if (result.success) {
       setCurrentUser({
         ...result.data.user,
@@ -1087,6 +1096,10 @@ async function refreshTrackerData({ includeSessions = false, includeCurrency = f
     }
 
     await Promise.allSettled(tasks);
+  }).catch(() => {
+    // Swallow unhandled rejections to prevent console noise from race conditions
+    _refreshPending = null;
+    _refreshOptions = {};
   });
 
   return _refreshPending;
@@ -1128,9 +1141,9 @@ async function handleStartSession() {
  */
 async function handleEndSession() {
   if (!state.currentSession) return;
-  
+
   if (!confirm(window.t('misc.endSessionConfirm'))) return;
-  
+
   try {
     const result = await window.electronAPI.endSession();
     state.currentSession = null;
@@ -1234,10 +1247,10 @@ async function handleScanScreen() {
     showToast(window.t('toast.error'), window.t('toast.noSession'), 'warning');
     return;
   }
-  
+
   elements.scanScreenBtn.disabled = true;
   elements.scanScreenBtn.textContent = window.t('dashboard.scanning');
-  
+
   try {
     const result = await window.electronAPI.scanScreen();
     if (result?.queued) {
@@ -1511,9 +1524,9 @@ function showToast(title, message, type = 'info') {
     <div class="toast-title">${escapeHTML(title)}</div>
     <div class="toast-message">${escapeHTML(message)}</div>
   `;
-  
+
   elements.toastContainer.appendChild(toast);
-  
+
   // 5 saniye sonra kaldir
   setTimeout(() => {
     toast.style.animation = 'fadeOut 0.3s ease';
@@ -2330,7 +2343,7 @@ async function loadCurrencyLeagues() {
     for (const l of dbLeagues) {
       if (!allLeagues.includes(l)) allLeagues.push(l);
     }
-  } catch {}
+  } catch { }
 
   // Always merge fallback leagues so standard options are available
   const fallback = currencyState.poeVersion === 'poe2' ? FALLBACK_POE2_LEAGUES : FALLBACK_POE1_LEAGUES;

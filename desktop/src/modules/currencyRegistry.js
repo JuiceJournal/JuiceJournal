@@ -152,6 +152,9 @@ const CATEGORY_KEYWORDS = [
 
 // ─── Registry Class ───────────────────────────────────────────────
 
+const MAX_ITEMS = 5000;
+const EVICT_COUNT = 500;
+
 class CurrencyRegistry {
   constructor() {
     this.poeVersion = 'poe1';
@@ -233,6 +236,7 @@ class CurrencyRegistry {
       const key = (item.name || '').toLowerCase().trim();
       if (!key) continue;
 
+      this._enforceItemsLimit();
       const existing = this.items.get(key);
       this.items.set(key, {
         name: item.name,
@@ -251,6 +255,7 @@ class CurrencyRegistry {
    */
   registerItem(name, data = {}) {
     const key = name.toLowerCase().trim();
+    this._enforceItemsLimit();
     const existing = this.items.get(key);
     this.items.set(key, {
       name: data.name || existing?.name || name,
@@ -260,6 +265,19 @@ class CurrencyRegistry {
       chaosValue: data.chaosValue ?? existing?.chaosValue ?? 0,
       source: data.source || existing?.source || 'manual'
     });
+  }
+
+  _evictOldest(count) {
+    const keys = [...this.items.keys()];
+    for (let i = 0; i < Math.min(count, keys.length); i++) {
+      this.items.delete(keys[i]);
+    }
+  }
+
+  _enforceItemsLimit() {
+    if (this.items.size >= MAX_ITEMS) {
+      this._evictOldest(EVICT_COUNT);
+    }
   }
 
   // ─── Lookups ──────────────────────────────────────────────────

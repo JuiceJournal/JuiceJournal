@@ -15,6 +15,8 @@ const POE2_BASE = 'https://poe.ninja/poe2/api/economy';
 
 // Cache duration: 10 minutes
 const CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_CACHE_SIZE = 5000;
+const MAX_PRICE_MAP_SIZE = 10000;
 
 class PriceService {
   constructor() {
@@ -61,6 +63,7 @@ class PriceService {
     const response = await this.client.get(url, { params });
     const data = response.data;
 
+    this._enforceCacheLimit();
     this.cache.set(cacheKey, { data, fetchedAt: Date.now() });
     return data;
   }
@@ -79,6 +82,7 @@ class PriceService {
     const response = await this.client.get(url, { params: { league, type } });
     const data = response.data;
 
+    this._enforceCacheLimit();
     this.cache.set(cacheKey, { data, fetchedAt: Date.now() });
     return data;
   }
@@ -216,7 +220,27 @@ class PriceService {
 
   _addPrice(name, data) {
     const key = name.toLowerCase().trim();
+    this._enforcePriceMapLimit();
     this.priceMap.set(key, { name, ...data });
+  }
+
+  _evictOldest(map, count) {
+    const keys = [...map.keys()];
+    for (let i = 0; i < Math.min(count, keys.length); i++) {
+      map.delete(keys[i]);
+    }
+  }
+
+  _enforcePriceMapLimit() {
+    if (this.priceMap.size >= MAX_PRICE_MAP_SIZE) {
+      this._evictOldest(this.priceMap, Math.ceil(MAX_PRICE_MAP_SIZE * 0.1));
+    }
+  }
+
+  _enforceCacheLimit() {
+    if (this.cache.size >= MAX_CACHE_SIZE) {
+      this._evictOldest(this.cache, Math.ceil(MAX_CACHE_SIZE * 0.1));
+    }
   }
 
   // ─── Lookup ─────────────────────────────────────────────────

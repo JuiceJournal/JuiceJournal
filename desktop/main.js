@@ -25,6 +25,7 @@ const PoeApiClient = require('./src/modules/poeApiClient');
 const PriceService = require('./src/modules/priceService');
 const StashAnalyzer = require('./src/modules/stashAnalyzer');
 const GameDetector = require('./src/modules/gameDetector');
+const DEFAULT_POE_LOG_PATH = GameDetector.DEFAULT_POE_LOG_PATH;
 
 const APP_NAME = 'Juice Journal';
 const APP_ID = 'JuiceJournal.Desktop';
@@ -156,7 +157,8 @@ const store = new Store({
   defaults: {
     apiUrl: 'http://localhost:3001',
     authToken: null,
-    poePath: 'E:\\Grinding Gear Games\\Path of Exile\\logs\\Client.txt',
+    authTokenEncrypted: null,
+    poePath: DEFAULT_POE_LOG_PATH,
     autoStartSession: true,
     notifications: true,
     language: 'en',
@@ -231,6 +233,29 @@ function toRendererError(error, fallback) {
   return new Error(normalizeErrorMessage(error, fallback));
 }
 
+// ─── URL validation for SSRF prevention ───────────────────────────────
+
+const INTERNAL_IP_PREFIXES = ['10.', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.', '192.168.', '169.254.'];
+
+function isValidApiUrl(urlString) {
+  if (!urlString || typeof urlString !== 'string') return false;
+  try {
+    const url = new URL(urlString);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    const hostname = url.hostname.toLowerCase();
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '0.0.0.0') {
+      const port = url.port ? parseInt(url.port, 10) : (url.protocol === 'https:' ? 443 : 80);
+      if (port !== 3000 && port !== 3001 && port !== 80 && port !== 443) return false;
+    }
+    for (const prefix of INTERNAL_IP_PREFIXES) {
+      if (hostname.startsWith(prefix)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function serializeSecurePayload(value) {
   const payload = JSON.stringify(value);
   if (!safeStorage.isEncryptionAvailable()) {
@@ -249,6 +274,36 @@ function deserializeSecurePayload(serialized) {
     const decrypted = safeStorage.decryptString(Buffer.from(serialized, 'base64'));
     return JSON.parse(decrypted);
   } catch {
+    return null;
+  }
+}
+
+function encryptAuthToken(token) {
+  if (!token || !safeStorage.isEncryptionAvailable()) {
+    return null;
+  }
+  try {
+    return safeStorage.encryptString(Buffer.from(token)).toString('base64');
+  } catch {
+    return null;
+  }
+}
+
+function getDecryptedAuthToken() {
+  if (!safeStorage.isEncryptionAvailable()) {
+    return store.get('authToken') || null;
+  }
+  const encrypted = store.get('authTokenEncrypted');
+  if (!encrypted) {
+    // Fallback to legacy plaintext token if available
+    const legacy = store.get('authToken');
+    if (legacy) return legacy;
+    return null;
+  }
+  try {
+    return safeStorage.decryptString(Buffer.from(encrypted, 'base64'))?.toString() || null;
+  } catch {
+    // Decryption failed (e.g., key changed) — require re-login
     return null;
   }
 }
@@ -291,7 +346,11 @@ function getQueuedCurrentSession() {
   if (!session) return null;
 
   const currentUserId = getCurrentUserId();
-  if (session.ownerUserId && currentUserId && session.ownerUserId !== currentUserId) {
+  if (!currentUserId) {
+    return null;
+  }
+
+  if (session.ownerUserId && session.ownerUserId !== currentUserId) {
     return null;
   }
 
@@ -335,7 +394,7 @@ function getCurrentUserId() {
 }
 
 function assertDesktopUserAuthenticated() {
-  if (!store.get('authToken') || !getCurrentUserId()) {
+  if (!getDecryptedAuthToken() || !getCurrentUserId()) {
     throw new Error('Yerel uygulama girisi gerekli');
   }
 }
@@ -462,9 +521,9 @@ function appendQueuedLootToCurrentSession(items) {
   ), 0);
   currentSession.totalLootChaos = totalLootChaos;
   currentSession.profitChaos = totalLootChaos - (parseFloat(currentSession.costChaos) || 0);
-  if (currentSession.localOnly) {
-    setQueuedCurrentSession(currentSession);
-  }
+
+  // Always persist the queued state so loot is preserved even for non-local sessions.
+  setQueuedCurrentSession(currentSession);
 }
 
 async function flushPendingSessionActions(forceBlocked = false) {
@@ -577,6 +636,9 @@ async function flushPendingLootActions(sessionIdMap = new Map(), forceBlocked = 
 
       const resolvedSessionId = sessionIdMap.get(action.sessionId) || action.sessionId;
       if (isLocalSessionId(resolvedSessionId)) {
+        if (!sessionIdMap.has(action.sessionId)) {
+          console.log('[flushPendingLootActions] Skipping loot item — unresolved local session ID:', action.sessionId);
+        }
         remainingActions.push(action);
         continue;
       }
@@ -612,8 +674,21 @@ async function flushPendingLootActions(sessionIdMap = new Map(), forceBlocked = 
 }
 
 async function flushPendingActions(forceBlocked = false) {
-  const sessionResult = await flushPendingSessionActions(forceBlocked);
-  const lootResult = await flushPendingLootActions(sessionResult.sessionIdMap, forceBlocked);
+  let sessionResult = { processed: 0, remaining: 0, sessionIdMap: new Map() };
+  try {
+    sessionResult = await flushPendingSessionActions(forceBlocked);
+  } catch (error) {
+    console.warn('[flushPendingActions] Session flush error (continuing with loot flush):', error?.message || error);
+  }
+
+  // Always run loot flush even if session flush partially failed.
+  // Loot flush will skip items with unresolved local session IDs gracefully.
+  let lootResult = { processed: 0, remaining: 0 };
+  try {
+    lootResult = await flushPendingLootActions(sessionResult.sessionIdMap, forceBlocked);
+  } catch (error) {
+    console.warn('[flushPendingActions] Loot flush error:', error?.message || error);
+  }
 
   if ((sessionResult.processed || 0) > 0 || (lootResult.processed || 0) > 0) {
     appendAuditTrail('auditPendingSyncFlushed', {
@@ -654,9 +729,13 @@ function buildSafeSettingsSnapshot() {
 function buildSensitiveSettingsSnapshot() {
   const settings = { ...store.store };
   delete settings.authToken;
+  delete settings.authTokenEncrypted;
   delete settings.auditTrail;
   delete settings.poeOAuthTokens;
   delete settings.poeOAuthTokensEncrypted;
+  delete settings.pendingLootActions;
+  delete settings.pendingSessionActions;
+  delete settings.queuedCurrentSession;
   return settings;
 }
 
@@ -767,15 +846,21 @@ function prepareOCRImage(imageBuffer) {
   const croppedSize = cropped.getSize();
   const resized = croppedSize.width > 1600
     ? cropped.resize({
-        width: 1600,
-        height: Math.round((croppedSize.height / croppedSize.width) * 1600)
-      })
+      width: 1600,
+      height: Math.round((croppedSize.height / croppedSize.width) * 1600)
+    })
     : cropped;
 
   return resized.toPNG();
 }
 
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function renderBrowserCallbackPage(title, message) {
+  const safeTitle = escapeHtml(title);
+  const safeMessage = escapeHtml(message);
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -793,8 +878,8 @@ function renderBrowserCallbackPage(title, message) {
   <body>
     <main>
       <section>
-        <h1>${title}</h1>
-        <p>${message}</p>
+        <h1>${safeTitle}</h1>
+        <p>${safeMessage}</p>
       </section>
     </main>
   </body>
@@ -849,6 +934,8 @@ function hideMainWindowToTray(showHint = false) {
 function toggleMainWindowVisibility() {
   if (!mainWindow || !mainWindow.isVisible()) {
     showMainWindow();
+    // Reset hint so it can be shown again on next minimize.
+    trayHintShown = false;
     return;
   }
 
@@ -942,13 +1029,18 @@ async function getCurrentSessionFromBackend() {
 }
 
 async function closePoeAuthServer() {
-  if (!poeAuthServer) return;
+  if (!poeAuthServer || !poeAuthServer.listening) {
+    poeAuthServer = null;
+    return;
+  }
 
   await new Promise((resolve) => {
     poeAuthServer.close(() => resolve());
   });
   poeAuthServer = null;
 }
+
+const POE_AUTH_FALLBACK_PORTS = [34128, 34129, 34130, 34131];
 
 async function openPoeLoginFlow(startResponse, { redirectUrl, redirectUri, expectedState, codeVerifier }) {
   await closePoeAuthServer();
@@ -1016,19 +1108,59 @@ async function openPoeLoginFlow(startResponse, { redirectUrl, redirectUri, expec
       reject(error);
     });
 
-    poeAuthServer.listen(Number(redirectUrl.port), redirectUrl.hostname, async () => {
+    const tryListen = (server, port) => {
+      return new Promise((resolveListen, rejectListen) => {
+        const handleError = (err) => {
+          server.removeListener('listening', handleListening);
+          rejectListen(err);
+        };
+        const handleListening = () => {
+          server.removeListener('error', handleError);
+          resolveListen();
+        };
+        server.once('error', handleError);
+        server.once('listening', handleListening);
+        server.listen(port, redirectUrl.hostname);
+      });
+    };
+
+    const primaryPort = Number(redirectUrl.port);
+    const tryListenWithFallbacks = async () => {
       try {
-        const parsedAuthUrl = new URL(startResponse.authUrl);
-        if (parsedAuthUrl.protocol !== 'https:' && parsedAuthUrl.protocol !== 'http:') {
-          throw new Error('Invalid auth URL scheme — only https/http allowed');
+        await tryListen(poeAuthServer, primaryPort);
+      } catch (err) {
+        if (err.code !== 'EADDRINUSE') throw err;
+        for (const fallbackPort of POE_AUTH_FALLBACK_PORTS) {
+          try {
+            await tryListen(poeAuthServer, fallbackPort);
+            return; // Success
+          } catch (fallbackErr) {
+            if (fallbackErr.code !== 'EADDRINUSE') throw fallbackErr;
+          }
         }
-        await shell.openExternal(startResponse.authUrl);
-      } catch (error) {
+        throw err; // Re-throw original EADDRINUSE if all ports failed
+      }
+    };
+
+    tryListenWithFallbacks()
+      .then(async () => {
+        try {
+          const parsedAuthUrl = new URL(startResponse.authUrl);
+          if (parsedAuthUrl.protocol !== 'https:' && parsedAuthUrl.protocol !== 'http:') {
+            throw new Error('Invalid auth URL scheme — only https/http allowed');
+          }
+          await shell.openExternal(startResponse.authUrl);
+        } catch (error) {
+          clearTimeout(timeout);
+          await closePoeAuthServer();
+          reject(error);
+        }
+      })
+      .catch(async (error) => {
         clearTimeout(timeout);
         await closePoeAuthServer();
         reject(error);
-      }
-    });
+      });
   });
 }
 
@@ -1098,19 +1230,59 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
       reject(error);
     });
 
-    poeAuthServer.listen(Number(redirectUrl.port), redirectUrl.hostname, async () => {
+    const tryListen = (server, port) => {
+      return new Promise((resolveListen, rejectListen) => {
+        const handleError = (err) => {
+          server.removeListener('listening', handleListening);
+          rejectListen(err);
+        };
+        const handleListening = () => {
+          server.removeListener('error', handleError);
+          resolveListen();
+        };
+        server.once('error', handleError);
+        server.once('listening', handleListening);
+        server.listen(port, redirectUrl.hostname);
+      });
+    };
+
+    const primaryPort = Number(redirectUrl.port);
+    const tryListenWithFallbacks = async () => {
       try {
-        const parsedAuthUrl = new URL(startResponse.authUrl);
-        if (parsedAuthUrl.protocol !== 'https:' && parsedAuthUrl.protocol !== 'http:') {
-          throw new Error('Invalid auth URL scheme — only https/http allowed');
+        await tryListen(poeAuthServer, primaryPort);
+      } catch (err) {
+        if (err.code !== 'EADDRINUSE') throw err;
+        for (const fallbackPort of POE_AUTH_FALLBACK_PORTS) {
+          try {
+            await tryListen(poeAuthServer, fallbackPort);
+            return;
+          } catch (fallbackErr) {
+            if (fallbackErr.code !== 'EADDRINUSE') throw fallbackErr;
+          }
         }
-        await shell.openExternal(startResponse.authUrl);
-      } catch (error) {
+        throw err;
+      }
+    };
+
+    tryListenWithFallbacks()
+      .then(async () => {
+        try {
+          const parsedAuthUrl = new URL(startResponse.authUrl);
+          if (parsedAuthUrl.protocol !== 'https:' && parsedAuthUrl.protocol !== 'http:') {
+            throw new Error('Invalid auth URL scheme — only https/http allowed');
+          }
+          await shell.openExternal(startResponse.authUrl);
+        } catch (error) {
+          clearTimeout(timeout);
+          await closePoeAuthServer();
+          reject(error);
+        }
+      })
+      .catch(async (error) => {
         clearTimeout(timeout);
         await closePoeAuthServer();
         reject(error);
-      }
-    });
+      });
   });
 }
 
@@ -1424,7 +1596,7 @@ async function endCurrentSession() {
     }
 
     const profit = parseFloat(session.profitChaos);
-    const message = profit >= 0 
+    const message = profit >= 0
       ? t('mapProfitBody', { label: t('mapProfit'), value: profit.toFixed(1) })
       : t('mapProfitBody', { label: t('mapLoss'), value: Math.abs(profit).toFixed(1) });
 
@@ -1447,19 +1619,20 @@ async function endCurrentSession() {
  * Map adi icin prompt goster
  */
 async function promptMapName() {
-  // Basit input dialog
-  const { value } = await dialog.showMessageBox(mainWindow, {
+  // showMessageBox cannot accept text input; return a default descriptive name.
+  // The user can edit it later in the session drawer.
+  const defaultName = `${t('unknownMap')} ${new Date().toLocaleString()}`;
+  const { response } = await dialog.showMessageBox(mainWindow, {
     type: 'question',
     buttons: [t('promptStart'), t('promptCancel')],
     defaultId: 0,
     title: t('promptTitle'),
     message: t('promptMessage'),
-    detail: t('promptDetail')
+    detail: `${t('promptDetail')}\n\n${defaultName}`
   });
 
-  if (value === 0) {
-    // Basit bir input - gercek implementasyonda custom dialog kullanilabilir
-    return t('unknownMap'); // Varsayilan deger
+  if (response === 0) {
+    return defaultName;
   }
 
   return null;
@@ -1485,10 +1658,10 @@ function showNotification(title, body) {
  */
 function setupLogParser() {
   let poePath = store.get('poePath');
-  
+
   // Varsayilan yol
-  const defaultPath = 'E:\\Grinding Gear Games\\Path of Exile\\logs\\Client.txt';
-  
+  const defaultPath = DEFAULT_POE_LOG_PATH;
+
   // Eger poePath bos veya dosya yoksa, varsayilani dene
   if (!poePath || !require('fs').existsSync(poePath)) {
     if (require('fs').existsSync(defaultPath)) {
@@ -1643,11 +1816,15 @@ function setupIPC() {
   ipcMain.handle('set-settings', (event, settings) => {
     for (const [key, value] of Object.entries(settings)) {
       if (SETTINGS_ALLOWLIST.has(key)) {
+        if (key === 'apiUrl' && value && !isValidApiUrl(value)) {
+          console.warn('[set-settings] Rejected invalid apiUrl:', value);
+          continue;
+        }
         store.set(key, value);
       }
     }
 
-    if (settings.apiUrl && apiClient) {
+    if (settings.apiUrl && apiClient && isValidApiUrl(settings.apiUrl)) {
       apiClient.setBaseURL(settings.apiUrl);
     }
     return true;
@@ -1655,7 +1832,7 @@ function setupIPC() {
 
   // Auth token kontrolu (token'i aciga cikarmadan)
   ipcMain.handle('has-auth-token', () => {
-    return !!store.get('authToken');
+    return !!getDecryptedAuthToken();
   });
 
   // Currency price sync (backend API uzerinden, token guvenli)
@@ -1791,7 +1968,7 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-sync-status', () => {
-    if (!store.get('authToken') || !getCurrentUserId()) {
+    if (!getDecryptedAuthToken() || !getCurrentUserId()) {
       return {
         pendingSession: 0,
         pendingLoot: 0,
@@ -1807,7 +1984,7 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-audit-trail', () => {
-    if (!store.get('authToken') || !getCurrentUserId()) {
+    if (!getDecryptedAuthToken() || !getCurrentUserId()) {
       return { entries: [] };
     }
     return {
@@ -1915,7 +2092,12 @@ function setupIPC() {
       // API yanıt formatı: { success: true, data: { user, token }, error: null }
       const token = result?.data?.token;
       if (token) {
-        store.set('authToken', token);
+        const encrypted = encryptAuthToken(token);
+        if (encrypted) {
+          store.set('authTokenEncrypted', encrypted);
+        } else {
+          store.set('authToken', token);
+        }
         apiClient.setToken(token);
         store.set('currentUserId', result?.data?.user?.id || null);
         await flushPendingActions();
@@ -1936,7 +2118,12 @@ function setupIPC() {
       const result = await apiClient.register(payload);
       const token = result?.token;
       if (token) {
-        store.set('authToken', token);
+        const encrypted = encryptAuthToken(token);
+        if (encrypted) {
+          store.set('authTokenEncrypted', encrypted);
+        } else {
+          store.set('authToken', token);
+        }
         apiClient.setToken(token);
         store.set('currentUserId', result?.user?.id || null);
         await flushPendingActions();
@@ -1991,7 +2178,12 @@ function setupIPC() {
           state,
         });
         if (result?.success && result?.data?.token) {
-          store.set('authToken', result.data.token);
+          const encrypted = encryptAuthToken(result.data.token);
+          if (encrypted) {
+            store.set('authTokenEncrypted', encrypted);
+          } else {
+            store.set('authToken', result.data.token);
+          }
           apiClient.setToken(result.data.token);
           store.set('currentUserId', result.data.user?.id || null);
           await flushPendingActions();
@@ -2012,7 +2204,12 @@ function setupIPC() {
       });
 
       if (result?.success && result?.data?.token) {
-        store.set('authToken', result.data.token);
+        const encrypted = encryptAuthToken(result.data.token);
+        if (encrypted) {
+          store.set('authTokenEncrypted', encrypted);
+        } else {
+          store.set('authToken', result.data.token);
+        }
         apiClient.setToken(result.data.token);
         store.set('currentUserId', result.data.user?.id || null);
         await flushPendingActions();
@@ -2082,8 +2279,21 @@ function setupIPC() {
 
   ipcMain.handle('disconnect-poe-account', async () => {
     try {
-      return await apiClient.disconnectPoeAccount();
+      const result = await apiClient.disconnectPoeAccount();
+      // Always clear local PoE tokens regardless of backend response.
+      store.delete('poeOAuthTokensEncrypted');
+      store.delete('poeOAuthTokens');
+      if (poeApiClient) {
+        poeApiClient.clearTokens();
+      }
+      return result;
     } catch (error) {
+      // Clear local tokens even if the backend call fails.
+      store.delete('poeOAuthTokensEncrypted');
+      store.delete('poeOAuthTokens');
+      if (poeApiClient) {
+        poeApiClient.clearTokens();
+      }
       throw toRendererError(error, 'Path of Exile baglantisi kaldirilamadi');
     }
   });
@@ -2117,7 +2327,7 @@ function setupIPC() {
 
   // Get price service status
   ipcMain.handle('get-price-status', async () => {
-    if (!store.get('authToken') || !getCurrentUserId()) {
+    if (!getDecryptedAuthToken() || !getCurrentUserId()) {
       return {
         itemCount: 0,
         lastSync: null,
@@ -2247,6 +2457,7 @@ function setupIPC() {
   ipcMain.handle('logout', () => {
     appendAuditTrail('auditLogout');
     store.set('authToken', null);
+    store.set('authTokenEncrypted', null);
     store.set('currentUserId', null);
     apiClient.setToken(null);
     currentSession = null;
@@ -2262,7 +2473,8 @@ app.whenReady().then(() => {
   app.setName(APP_NAME);
 
   // API client'i baslat
-  apiClient = new APIClient(store.get('apiUrl'), store.get('authToken'));
+  const resolvedToken = getDecryptedAuthToken();
+  apiClient = new APIClient(store.get('apiUrl'), resolvedToken);
   ocrScanner = new OCRScanner();
   poeApiClient = new PoeApiClient();
   priceService = new PriceService();
@@ -2281,7 +2493,7 @@ app.whenReady().then(() => {
 
   // IPC handler'lari once kaydet (pencere acilmadan)
   setupIPC();
-  
+
   createMainWindow();
   mainWindow.show(); // Pencereyi goster
   mainWindow.focus();
@@ -2291,10 +2503,14 @@ app.whenReady().then(() => {
   registerGlobalShortcuts();
   setupLogParser();
   setupGameDetector();
-  getCurrentSessionFromBackend().catch(() => {});
-  flushPendingActions().catch(() => {});
-  pendingLootFlushInterval = setInterval(() => {
-    flushPendingActions().catch(() => {});
+  getCurrentSessionFromBackend().catch(() => { });
+  flushPendingActions().catch(() => { });
+  pendingLootFlushInterval = setInterval(async () => {
+    const result = await flushPendingActions().catch(() => null);
+    if (result && (result.sessions?.remaining || 0) === 0 && (result.loot?.remaining || 0) === 0) {
+      clearInterval(pendingLootFlushInterval);
+      pendingLootFlushInterval = null;
+    }
   }, 30000);
 
 });
@@ -2332,7 +2548,7 @@ app.on('will-quit', () => {
   }
 
   if (ocrScanner) {
-    ocrScanner.terminate().catch(() => {});
+    ocrScanner.terminate().catch(() => { });
   }
 
   if (tray) {
