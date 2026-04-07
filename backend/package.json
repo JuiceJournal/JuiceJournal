@@ -13,7 +13,7 @@
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
     "docker:reset": "docker-compose down -v && docker-compose up -d",
-    "docker:psql": "docker exec -it poe-farm-db psql -U postgres -d poefarm"
+    "docker:psql": "docker exec -it juice-journal-db psql -U postgres -d juicejournal"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -24,7 +24,7 @@
     "pg": "^8.11.3",
     "pg-hstore": "^2.3.4",
     "sequelize": "^6.37.8",
-    "axios": "^1.6.2",
+    "axios": "1.13.6",
     "ws": "^8.14.2",
     "node-cron": "^3.0.3",
     "helmet": "^7.1.0",
@@ -35,8 +35,8 @@
     "nodemon": "^3.0.2"
   },
   "keywords": [
+    "juice-journal",
     "poe",
-    "farm-tracker",
     "path-of-exile"
   ],
   "author": "",

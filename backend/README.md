@@ -19,7 +19,7 @@ make up
 Container'lar baslatildiktan sonra:
 - **PostgreSQL**: `localhost:5432`
 - **pgAdmin**: http://localhost:5050
-  - Email: `admin@poefarm.com`
+  - Email: `admin@juicejournal.local`
   - Sifre: `admin123`
 
 ### 2. Node.js Kurulumu
@@ -79,7 +79,7 @@ docker-compose down
 docker-compose logs -f postgres
 
 # Veritabanina baglan
-docker exec -it poe-farm-db psql -U postgres -d poefarm
+docker exec -it juice-journal-db psql -U postgres -d juicejournal
 
 # Container'lari ve volumeleri sil (TUM VERILER SILINIR!)
 docker-compose down -v
@@ -90,7 +90,7 @@ docker-compose down -v
 Eger kendi PostgreSQL kurulumunuzu kullanmak istiyorsaniz:
 
 1. PostgreSQL kurun ve calistirin
-2. `poefarm` adinda bir veritabani olusturun
+2. `juicejournal` adinda bir veritabani olusturun
 3. `.env` dosyasinda baglanti bilgilerini guncelleyin
 4. `npm install && npm run dev`
 
@@ -100,7 +100,7 @@ Eger kendi PostgreSQL kurulumunuzu kullanmak istiyorsaniz:
 ```env
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=poefarm
+DB_NAME=juicejournal
 DB_USER=postgres
 DB_PASSWORD=postgres123
 DB_AUTO_SYNC=true
@@ -110,7 +110,7 @@ DB_AUTO_SYNC=true
 ```env
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=poefarm
+DB_NAME=juicejournal
 DB_USER=postgres
 DB_PASSWORD=your_password
 ```
@@ -118,14 +118,14 @@ DB_PASSWORD=your_password
 ## pgAdmin Kullanimi
 
 1. http://localhost:5050 adresine gidin
-2. Giris yapin (admin@poefarm.local / admin123)
+2. Giris yapin (admin@juicejournal.local / admin123)
 3. "Add New Server" tiklayin
 4. General tab:
    - Name: `Juice Journal`
 5. Connection tab:
    - Host: `postgres` (container adi)
    - Port: `5432`
-   - Database: `poefarm`
+   - Database: `juicejournal`
    - Username: `postgres`
    - Password: `postgres123`
 
@@ -201,10 +201,10 @@ SELECT * FROM sessions;
 ### Backup/Restore
 ```bash
 # Backup al
-docker exec poe-farm-db pg_dump -U postgres poefarm > backup.sql
+docker exec juice-journal-db pg_dump -U postgres juicejournal > backup.sql
 
 # Restore et
-docker exec -i poe-farm-db psql -U postgres poefarm < backup.sql
+docker exec -i juice-journal-db psql -U postgres juicejournal < backup.sql
 ```
 
 ## Sorun Giderme
@@ -227,7 +227,7 @@ docker-compose logs postgres
 docker ps
 
 # Container'a ping at
-docker exec poe-farm-db pg_isready -U postgres
+docker exec juice-journal-db pg_isready -U postgres
 ```
 
 ### Veritabani sifirlama

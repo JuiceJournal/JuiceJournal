@@ -34,11 +34,11 @@ logs:
 	docker-compose logs -f
 
 psql:
-	docker exec -it poe-farm-db psql -U postgres -d poefarm
+	docker exec -it juice-journal-db psql -U postgres -d juicejournal
 
 pgadmin:
 	@echo "pgAdmin aciliyor: http://localhost:5050"
-	@echo "Email: admin@poefarm.local"
+	@echo "Email: admin@juicejournal.local"
 	@echo "Sifre: admin123"
 	@start http://localhost:5050 || open http://localhost:5050 || xdg-open http://localhost:5050
 

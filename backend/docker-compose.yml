@@ -4,10 +4,10 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
-    container_name: poe-farm-db
+    container_name: juice-journal-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME:-poefarm}
+      POSTGRES_DB: ${DB_NAME:-juicejournal}
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       PGDATA: /var/lib/postgresql/data/pgdata
@@ -22,12 +22,12 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - poe-farm-network
+      - juice-journal-network
 
   # Backend API
   backend:
     image: node:20-alpine
-    container_name: poe-farm-backend
+    container_name: juice-journal-backend
     restart: unless-stopped
     working_dir: /app
     volumes:
@@ -39,7 +39,7 @@ services:
       - NODE_ENV=${NODE_ENV:-development}
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=poefarm
+      - DB_NAME=${DB_NAME:-juicejournal}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD in .env}
       - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
@@ -52,15 +52,15 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - poe-farm-network
+      - juice-journal-network
 
   # pgAdmin (Opsiyonel - Veritabani yonetimi icin)
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: poe-farm-pgadmin
+    container_name: juice-journal-pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@poefarm.com
+      PGADMIN_DEFAULT_EMAIL: admin@juicejournal.local
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?Set PGADMIN_PASSWORD in .env}
       PGADMIN_CONFIG_SERVER_MODE: 'False'
       PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: 'False'
@@ -72,7 +72,7 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - poe-farm-network
+      - juice-journal-network
 
 volumes:
   postgres_data:
@@ -81,5 +81,5 @@ volumes:
     driver: local
 
 networks:
-  poe-farm-network:
+  juice-journal-network:
     driver: bridge

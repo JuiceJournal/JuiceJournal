@@ -402,7 +402,7 @@ All configuration is managed via environment variables. See [`backend/.env.examp
 | `NODE_ENV` | `development` | Environment (`development` or `production`) |
 | `DB_HOST` | `localhost` | Database host |
 | `DB_PORT` | `5432` | Database port |
-| `DB_NAME` | `poefarm` | Database name |
+| `DB_NAME` | `juicejournal` | Database name |
 | `DB_USER` | `postgres` | Database user |
 | `DB_AUTO_SYNC` | `true` (dev) | Auto-sync Sequelize models (must be `false` in production) |
 | `DEFAULT_LEAGUE` | `Mirage` | Default league for price sync |

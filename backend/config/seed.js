@@ -7,7 +7,7 @@
  *
  * Environment variables (optional):
  *   SEED_USERNAME  - Admin username (default: admin)
- *   SEED_EMAIL     - Admin email (default: admin@poefarm.local)
+ *   SEED_EMAIL     - Admin email (default: admin@juicejournal.local)
  *   SEED_PASSWORD  - Admin password (auto-generated if not set)
  */
 
@@ -21,7 +21,7 @@ function generatePassword(length = 16) {
 
 async function seed() {
   const username = process.env.SEED_USERNAME || 'admin';
-  const email = process.env.SEED_EMAIL || 'admin@poefarm.local';
+  const email = process.env.SEED_EMAIL || 'admin@juicejournal.local';
   const password = process.env.SEED_PASSWORD || generatePassword();
   const role = 'admin';
 

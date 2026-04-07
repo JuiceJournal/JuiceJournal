@@ -55,7 +55,7 @@ module.exports = {
   db: {
     host: process.env.DB_HOST || 'localhost',
     port: parseInteger(process.env.DB_PORT, 5432),
-    name: process.env.DB_NAME || 'poefarm',
+    name: process.env.DB_NAME || 'juicejournal',
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || '',
     autoSync: parseBoolean(process.env.DB_AUTO_SYNC, !isProduction),
