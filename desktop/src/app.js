@@ -496,6 +496,8 @@ function setupEventListeners() {
   elements.registerForm.addEventListener('submit', handleRegister);
   document.getElementById('show-register').addEventListener('click', showRegisterModal);
   document.getElementById('show-login').addEventListener('click', showLoginModal);
+  const poeOAuthBtn = document.getElementById('poe-oauth-login');
+  if (poeOAuthBtn) poeOAuthBtn.addEventListener('click', handlePoeOAuthLogin);
   elements.logoutBtn.addEventListener('click', handleLogout);
   
   // Session
@@ -818,6 +820,47 @@ async function handleLogin(e) {
     }
   } catch (error) {
     showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
+  }
+}
+
+/**
+ * Path of Exile OAuth login.
+ * Opens the GGG consent page in the user's browser, waits for the local
+ * loopback callback, and signs the user in (creating an account on first use).
+ */
+async function handlePoeOAuthLogin() {
+  const button = document.getElementById('poe-oauth-login');
+  if (button) {
+    button.disabled = true;
+    button.classList.add('is-loading');
+  }
+
+  try {
+    const result = await window.electronAPI.startPoeLogin();
+
+    if (result?.success) {
+      setCurrentUser({
+        ...result.data.user,
+        capabilities: result.data.capabilities || {}
+      });
+      elements.loginModal.classList.add('hidden');
+      await loadPoeLinkStatus();
+      await refreshTrackerData();
+      showToast(window.t('login.title'), window.t('toast.loginSuccess'));
+    } else {
+      showToast(
+        window.t('toast.loginFailed'),
+        getUserFacingErrorMessage({ error: result?.error }, 'errors.loginFailed'),
+        'error'
+      );
+    }
+  } catch (error) {
+    showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.classList.remove('is-loading');
+    }
   }
 }
 

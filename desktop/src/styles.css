@@ -252,6 +252,30 @@ body {
   color: var(--gold-light);
 }
 
+.btn-poe-oauth {
+  background: linear-gradient(180deg, rgba(40, 26, 18, 0.95), rgba(20, 13, 9, 0.95));
+  color: var(--gold-light);
+  border: 1px solid rgba(214, 180, 110, 0.45);
+  box-shadow: 0 0 0 1px rgba(214, 180, 110, 0.08), 0 10px 24px rgba(0, 0, 0, 0.32);
+}
+.btn-poe-oauth:hover {
+  background: linear-gradient(180deg, rgba(54, 35, 22, 0.95), rgba(28, 18, 12, 0.95));
+  border-color: rgba(214, 180, 110, 0.7);
+  color: #f4dca0;
+  transform: translateY(-1px);
+}
+.btn-poe-oauth:active { transform: translateY(0); }
+.btn-poe-oauth:disabled,
+.btn-poe-oauth.is-loading {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+.btn-poe-oauth .poe-oauth-icon {
+  flex-shrink: 0;
+  color: var(--gold);
+}
+
 .btn-danger {
   background: var(--red-dim);
   color: var(--red);

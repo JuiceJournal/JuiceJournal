@@ -172,6 +172,27 @@ class APIClient {
   }
 
   /**
+   * Path of Exile OAuth login flow start (no existing session required)
+   */
+  async startPoeLogin(data = {}) {
+    const response = await this.client.post('/api/auth/poe/login/start', data);
+    return response.data;
+  }
+
+  /**
+   * Complete Path of Exile OAuth login.
+   * Returns the full envelope { success, data: { user, token, capabilities, poe }, error }
+   * so the caller can persist the JWT — mirrors login()/register() behaviour.
+   */
+  async completePoeLogin(data = {}) {
+    const response = await this.client.post('/api/auth/poe/login/complete', data);
+    if (response.success && response.data?.token) {
+      this.setToken(response.data.token);
+    }
+    return response;
+  }
+
+  /**
    * Get Path of Exile link status
    */
   async getPoeLinkStatus() {

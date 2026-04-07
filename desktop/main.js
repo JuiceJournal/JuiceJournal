@@ -950,6 +950,88 @@ async function closePoeAuthServer() {
   poeAuthServer = null;
 }
 
+async function openPoeLoginFlow(startResponse, { redirectUrl, redirectUri, expectedState, codeVerifier }) {
+  await closePoeAuthServer();
+
+  return await new Promise((resolve, reject) => {
+    const timeout = setTimeout(async () => {
+      await closePoeAuthServer();
+      reject(new Error('Path of Exile sign-in timed out'));
+    }, 3 * 60 * 1000);
+
+    poeAuthServer = http.createServer(async (req, res) => {
+      const url = new URL(req.url, redirectUri);
+
+      if (url.pathname !== redirectUrl.pathname) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not found');
+        return;
+      }
+
+      const error = url.searchParams.get('error');
+      const code = url.searchParams.get('code');
+      const state = url.searchParams.get('state');
+
+      if (error) {
+        clearTimeout(timeout);
+        res.writeHead(400, { 'Content-Type': 'text/html' });
+        res.end(renderBrowserCallbackPage('Sign-in Failed', 'Return to Juice Journal and try again.'));
+        await closePoeAuthServer();
+        reject(new Error(error));
+        return;
+      }
+
+      if (!code || state !== expectedState) {
+        clearTimeout(timeout);
+        res.writeHead(400, { 'Content-Type': 'text/html' });
+        res.end(renderBrowserCallbackPage('Sign-in Failed', 'The browser callback could not be validated. Return to the app and try again.'));
+        await closePoeAuthServer();
+        reject(new Error('Invalid callback state'));
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(renderBrowserCallbackPage('Signed In', 'You can close this window and return to Juice Journal.'));
+
+      try {
+        const result = await apiClient.completePoeLogin({
+          code,
+          codeVerifier,
+          redirectUri,
+          state,
+        });
+        clearTimeout(timeout);
+        await closePoeAuthServer();
+        resolve(result);
+      } catch (requestError) {
+        clearTimeout(timeout);
+        await closePoeAuthServer();
+        reject(new Error(requestError.message || 'Failed to complete Path of Exile sign-in'));
+      }
+    });
+
+    poeAuthServer.on('error', async (error) => {
+      clearTimeout(timeout);
+      await closePoeAuthServer();
+      reject(error);
+    });
+
+    poeAuthServer.listen(Number(redirectUrl.port), redirectUrl.hostname, async () => {
+      try {
+        const parsedAuthUrl = new URL(startResponse.authUrl);
+        if (parsedAuthUrl.protocol !== 'https:' && parsedAuthUrl.protocol !== 'http:') {
+          throw new Error('Invalid auth URL scheme — only https/http allowed');
+        }
+        await shell.openExternal(startResponse.authUrl);
+      } catch (error) {
+        clearTimeout(timeout);
+        await closePoeAuthServer();
+        reject(error);
+      }
+    });
+  });
+}
+
 async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expectedState, codeVerifier }) {
   await closePoeAuthServer();
 
@@ -1882,6 +1964,68 @@ function setupIPC() {
       return me;
     } catch (error) {
       throw toRendererError(error, 'Kullanici bilgileri alinamadi');
+    }
+  });
+
+  ipcMain.handle('start-poe-login', async () => {
+    try {
+      const redirectUri = process.env.POE_REDIRECT_URI || 'http://127.0.0.1:34127/oauth/poe/callback';
+      const redirectUrl = new URL(redirectUri);
+      const state = crypto.randomUUID();
+      const codeVerifier = crypto.randomBytes(32).toString('base64url');
+      const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+
+      const startResponse = await apiClient.startPoeLogin({
+        redirectUri,
+        codeChallenge,
+        codeChallengeMethod: 'S256',
+        state,
+      });
+
+      // Mock mode short-circuits the browser handshake.
+      if (startResponse?.mode === 'mock') {
+        const result = await apiClient.completePoeLogin({
+          code: startResponse.mockCode,
+          codeVerifier,
+          redirectUri,
+          state,
+        });
+        if (result?.success && result?.data?.token) {
+          store.set('authToken', result.data.token);
+          apiClient.setToken(result.data.token);
+          store.set('currentUserId', result.data.user?.id || null);
+          await flushPendingActions();
+          appendAuditTrail('auditLogin');
+        }
+        return result;
+      }
+
+      if (!startResponse?.authUrl) {
+        throw new Error('Path of Exile authorization URL could not be created');
+      }
+
+      const result = await openPoeLoginFlow(startResponse, {
+        redirectUrl,
+        redirectUri,
+        expectedState: state,
+        codeVerifier,
+      });
+
+      if (result?.success && result?.data?.token) {
+        store.set('authToken', result.data.token);
+        apiClient.setToken(result.data.token);
+        store.set('currentUserId', result.data.user?.id || null);
+        await flushPendingActions();
+        appendAuditTrail('auditLogin');
+      }
+
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        data: null,
+        error: normalizeErrorMessage(error, 'Path of Exile sign-in failed')
+      };
     }
   });
 

@@ -41,6 +41,7 @@ window.Translations = {
     'login.submit': 'Giris Yap',
     'login.or': 'veya',
     'login.createAccount': 'Yeni Hesap Olustur',
+    'login.poeOAuth': 'Path of Exile ile Juice Journey Baslat',
 
     // Register
     'register.title': 'Hesap Olustur',
@@ -399,6 +400,7 @@ window.Translations = {
     'login.password': 'Passwort',
     'login.submit': 'Anmelden',
     'login.createAccount': 'Neues Konto erstellen',
+    'login.poeOAuth': 'Starte deine Juice Journey mit Path of Exile',
     'register.title': 'Konto erstellen',
     'register.subtitle': 'Erstellen Sie ein neues Konto',
     'register.username': 'Benutzername',
@@ -465,6 +467,7 @@ window.Translations = {
     'login.password': 'Mot de passe',
     'login.submit': 'Connexion',
     'login.createAccount': 'Creer un compte',
+    'login.poeOAuth': 'Commencez votre Juice Journey avec Path of Exile',
     'register.title': 'Creer un compte',
     'register.subtitle': 'Creez un nouveau compte',
     'register.username': 'Nom d utilisateur',
@@ -512,6 +515,7 @@ window.Translations = {
     'login.password': 'Contrasena',
     'login.submit': 'Iniciar sesion',
     'login.createAccount': 'Crear cuenta',
+    'login.poeOAuth': 'Inicia tu Juice Journey con Path of Exile',
     'register.title': 'Crear cuenta',
     'register.subtitle': 'Crea una cuenta nueva',
     'register.username': 'Usuario',
@@ -559,6 +563,7 @@ window.Translations = {
     'login.password': 'Password',
     'login.submit': 'Accedi',
     'login.createAccount': 'Crea account',
+    'login.poeOAuth': 'Inizia il tuo Juice Journey con Path of Exile',
     'register.title': 'Crea account',
     'register.subtitle': 'Crea un nuovo account',
     'register.username': 'Username',
@@ -594,6 +599,7 @@ window.Translations = {
     'login.password': 'Senha',
     'login.submit': 'Entrar',
     'login.createAccount': 'Criar conta',
+    'login.poeOAuth': 'Inicie sua Juice Journey com Path of Exile',
     'register.title': 'Criar conta',
     'register.subtitle': 'Crie uma conta nova',
     'register.username': 'Usuario',
@@ -628,6 +634,7 @@ window.Translations = {
     'login.password': 'Parol',
     'login.submit': 'Voiti',
     'login.createAccount': 'Sozdat akkaunt',
+    'login.poeOAuth': 'Nachni svoe Juice Journey s Path of Exile',
     'register.title': 'Sozdat akkaunt',
     'register.subtitle': 'Sozdaite novyi akkaunt',
     'register.username': 'Imia polzovatelia',
@@ -706,6 +713,7 @@ window.Translations = {
     'login.submit': 'Sign In',
     'login.or': 'or',
     'login.createAccount': 'Create New Account',
+    'login.poeOAuth': 'Start Your Juice Journey with Path of Exile',
 
     // Register
     'register.title': 'Create Account',
