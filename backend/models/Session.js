@@ -159,12 +159,15 @@ module.exports = (sequelize, DataTypes) => {
       },
       {
         fields: ['poe_version', 'league']
+      },
+      {
+        fields: ['user_id', 'status']
       }
     ]
   });
 
   // Instance metodlari
-  Session.prototype.calculateProfit = async function() {
+  Session.prototype.calculateProfit = async function () {
     const LootEntry = this.sequelize.models.LootEntry;
     const [result] = await LootEntry.findAll({
       attributes: [[
@@ -178,37 +181,37 @@ module.exports = (sequelize, DataTypes) => {
 
     this.totalLootChaos = totalLoot;
     this.profitChaos = totalLoot - parseFloat(this.costChaos);
-    
+
     await this.save();
     return this.profitChaos;
   };
 
-  Session.prototype.complete = async function(endedAtOverride = null) {
+  Session.prototype.complete = async function (endedAtOverride = null) {
     this.status = 'completed';
     this.endedAt = endedAtOverride ? new Date(endedAtOverride) : new Date();
-    
+
     if (this.startedAt) {
       this.durationSec = Math.floor((this.endedAt - this.startedAt) / 1000);
     }
-    
+
     await this.calculateProfit();
     return this;
   };
 
-  Session.prototype.abandon = async function(endedAtOverride = null) {
+  Session.prototype.abandon = async function (endedAtOverride = null) {
     this.status = 'abandoned';
     this.endedAt = endedAtOverride ? new Date(endedAtOverride) : new Date();
-    
+
     if (this.startedAt) {
       this.durationSec = Math.floor((this.endedAt - this.startedAt) / 1000);
     }
-    
+
     await this.save();
     return this;
   };
 
   // Statik metodlar
-  Session.findActiveByUser = async function(userId) {
+  Session.findActiveByUser = async function (userId) {
     return await this.findOne({
       where: {
         userId,
@@ -217,7 +220,7 @@ module.exports = (sequelize, DataTypes) => {
     });
   };
 
-  Session.findByUserAndDateRange = async function(userId, startDate, endDate) {
+  Session.findByUserAndDateRange = async function (userId, startDate, endDate) {
     return await this.findAll({
       where: {
         userId,

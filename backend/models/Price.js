@@ -4,6 +4,7 @@
  */
 
 const { Op } = require('sequelize');
+const logger = require('../services/logger');
 
 module.exports = (sequelize, DataTypes) => {
   const Price = sequelize.define('Price', {
@@ -130,7 +131,7 @@ module.exports = (sequelize, DataTypes) => {
     ]
   });
 
-  Price.findByName = async function(itemName, league = 'Standard', poeVersion = 'poe1') {
+  Price.findByName = async function (itemName, league = 'Standard', poeVersion = 'poe1') {
     return await this.findOne({
       where: {
         itemName,
@@ -141,7 +142,7 @@ module.exports = (sequelize, DataTypes) => {
     });
   };
 
-  Price.findByType = async function(itemType, league = 'Standard', limit = 100, poeVersion = 'poe1') {
+  Price.findByType = async function (itemType, league = 'Standard', limit = 100, poeVersion = 'poe1') {
     return await this.findAll({
       where: {
         itemType,
@@ -154,7 +155,7 @@ module.exports = (sequelize, DataTypes) => {
     });
   };
 
-  Price.getCurrentLeague = async function(poeVersion = 'poe1') {
+  Price.getCurrentLeague = async function (poeVersion = 'poe1') {
     const where = { poeVersion };
     const result = await this.findOne({
       attributes: ['league'],
@@ -166,16 +167,26 @@ module.exports = (sequelize, DataTypes) => {
     return result?.league || process.env.DEFAULT_LEAGUE || 'Standard';
   };
 
-  Price.upsertPrice = async function(itemData) {
-    const [price, created] = await this.upsert(itemData, {
+  Price.upsertPrice = async function (itemData) {
+    // PostgreSQL's upsert() always returns [instance, null], so we query first
+    // to reliably determine whether this is a create or update.
+    const existing = await this.findOne({
+      where: {
+        itemName: itemData.itemName,
+        league: itemData.league,
+        poeVersion: itemData.poeVersion
+      }
+    });
+
+    const [price] = await this.upsert(itemData, {
       returning: true,
       conflictFields: ['item_name', 'league', 'poe_version']
     });
 
-    return { price, created };
+    return { price, created: !existing };
   };
 
-  Price.bulkUpsert = async function(items, league, poeVersion = 'poe1') {
+  Price.bulkUpsert = async function (items, league, poeVersion = 'poe1') {
     if (!items.length) return [];
 
     // Deduplicate by name (keep highest chaosValue) and filter invalid values
@@ -215,14 +226,14 @@ module.exports = (sequelize, DataTypes) => {
         });
         allResults.push(...result.map(price => ({ price, created: price.isNewRecord !== false })));
       } catch (error) {
-        console.error(`Bulk upsert chunk hatasi (${i}-${i+chunk.length}):`, error.message);
+        logger.warn('bulkUpsert fallback skipped', { error: error.message, range: `${i}-${i + chunk.length - 1}` });
         // Fallback to individual upserts for this chunk
         for (const record of chunk) {
           try {
             const result = await this.upsertPrice(record);
             allResults.push(result);
           } catch (err) {
-            // silently skip individual failures
+            logger.warn('bulkUpsert individual upsert skipped', { error: err.message, itemName: record.itemName });
           }
         }
       }
@@ -231,7 +242,7 @@ module.exports = (sequelize, DataTypes) => {
     return allResults;
   };
 
-  Price.deactivateOldPrices = async function(league, olderThanMinutes = 120, poeVersion = 'poe1') {
+  Price.deactivateOldPrices = async function (league, olderThanMinutes = 240, poeVersion = 'poe1') {
     const cutoffDate = new Date(Date.now() - olderThanMinutes * 60 * 1000);
 
     const [updatedCount] = await this.update(

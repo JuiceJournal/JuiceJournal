@@ -40,6 +40,8 @@ router.get('/mine',
     query('poeVersion').optional().isIn(['poe1', 'poe2']),
     query('league').optional().trim().isLength({ min: 1, max: 50 }),
     query('year').optional().isInt({ min: 2000, max: 2100 }),
+    query('limit').optional().isInt({ min: 1, max: 100 }),
+    query('offset').optional().isInt({ min: 0 }),
     handleValidationErrors
   ],
   async (req, res) => {

@@ -8,6 +8,7 @@ const router = express.Router();
 const { body, param, query, validationResult } = require('express-validator');
 const { Session, LootEntry } = require('../models');
 const { authenticate } = require('../middleware/auth');
+const logger = require('../services/logger');
 
 const { Op } = require('sequelize');
 
@@ -141,7 +142,7 @@ router.get('/',
         error: null
       });
     } catch (error) {
-      console.error('Session listeleme hatasi:', error);
+      logger.error('session list error', { message: error.message });
       errorResponse(res, 500, 'Session\'lar alinirken hata olustu', 'SESSION_LIST_LOAD_FAILED');
     }
   }
@@ -171,7 +172,7 @@ router.get('/active', authenticate, async (req, res) => {
       error: null
     });
   } catch (error) {
-    console.error('Aktif session getirme hatasi:', error);
+    logger.error('active session load failed', { message: error.message });
     errorResponse(res, 500, 'Aktif session alinirken hata olustu', 'ACTIVE_SESSION_LOAD_FAILED');
   }
 });
@@ -210,7 +211,7 @@ router.get('/:id',
         error: null
       });
     } catch (error) {
-      console.error('Session getirme hatasi:', error);
+      logger.error('session load failed', { message: error.message });
       errorResponse(res, 500, 'Session alinirken hata olustu', 'SESSION_LOAD_FAILED');
     }
   }
@@ -302,7 +303,7 @@ router.post('/start',
         error: null
       });
     } catch (error) {
-      console.error('Session baslatma hatasi:', error);
+      logger.error('session start failed', { message: error.message });
       const errorMessage = error.message || 'Session baslatilirken hata olustu';
       errorResponse(res, error.status || 500, errorMessage, error.errorCode || 'SESSION_START_FAILED');
     }
@@ -362,7 +363,7 @@ router.put('/:id',
         error: null
       });
     } catch (error) {
-      console.error('Session guncelleme hatasi:', error);
+      logger.error('session update failed', { message: error.message });
       errorResponse(res, 500, 'Session guncellenirken hata olustu', 'SESSION_UPDATE_FAILED');
     }
   }
@@ -417,7 +418,7 @@ router.put('/:id/end',
         error: null
       });
     } catch (error) {
-      console.error('Session tamamlama hatasi:', error);
+      logger.error('session complete failed', { message: error.message });
       const errorMessage = error.errorCode ? 'Session zamani gecersiz' : (error.message || 'Session tamamlanirken hata olustu');
       errorResponse(res, error.status || 500, errorMessage, error.errorCode || 'SESSION_END_FAILED');
     }
@@ -463,7 +464,7 @@ router.put('/:id/abandon',
         error: null
       });
     } catch (error) {
-      console.error('Session iptal hatasi:', error);
+      logger.error('session abandon failed', { message: error.message });
       const errorMessage = error.errorCode ? 'Session zamani gecersiz' : (error.message || 'Session iptal edilirken hata olustu');
       errorResponse(res, error.status || 500, errorMessage, error.errorCode || 'SESSION_ABANDON_FAILED');
     }
@@ -501,7 +502,7 @@ router.delete('/:id',
         error: null
       });
     } catch (error) {
-      console.error('Session silme hatasi:', error);
+      logger.error('session delete failed', { message: error.message });
       errorResponse(res, 500, 'Session silinirken hata olustu', 'SESSION_DELETE_FAILED');
     }
   }

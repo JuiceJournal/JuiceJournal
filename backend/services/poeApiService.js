@@ -28,8 +28,8 @@ async function throttle() {
 }
 
 function buildUserAgent() {
-  const clientId = env.poe.clientId || 'juicejournal';
-  const contact = env.poe.contact || 'support@example.com';
+  const clientId = env.poe.clientId || 'juicejournal/1.0.0 (contact: admin@juicejournal.local)';
+  const contact = env.poe.contact || 'admin@juicejournal.local';
   return `OAuth ${clientId}/0.1.0 (contact: ${contact}) JuiceJournal`;
 }
 

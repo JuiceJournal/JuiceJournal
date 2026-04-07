@@ -10,10 +10,46 @@ const { Price } = require('../models');
 const { authenticate } = require('../middleware/auth');
 const poeNinjaService = require('../services/poeNinjaService');
 const env = require('../config/env');
+const logger = require('../services/logger');
 
 const { Op } = require('sequelize');
 const syncState = new Map();
 const PRICE_SYNC_MIN_INTERVAL_MS = parseInt(process.env.PRICE_SYNC_MIN_INTERVAL_MS || '300000', 10);
+const SYNC_STATE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const MAX_SYNC_STATE_ENTRIES = 50;
+
+// Periodic cleanup of stale sync state entries
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, state] of syncState.entries()) {
+    if (state?.lastSuccessAt && (now - state.lastSuccessAt) > SYNC_STATE_TTL_MS) {
+      syncState.delete(key);
+    }
+  }
+  // LRU-style cap
+  while (syncState.size > MAX_SYNC_STATE_ENTRIES) {
+    const oldestKey = syncState.keys().next().value;
+    syncState.delete(oldestKey);
+  }
+}, 5 * 60 * 1000).unref(); // Run every 5 minutes
+
+// In-memory cache for /current endpoint (30s TTL)
+const priceCache = new Map();
+const PRICE_CACHE_TTL_MS = 30000;
+
+function getCachedPrice(poeVersion, league) {
+  const key = `${poeVersion}:${league}`;
+  const entry = priceCache.get(key);
+  if (entry && (Date.now() - entry.timestamp) < PRICE_CACHE_TTL_MS) {
+    return entry.data;
+  }
+  return null;
+}
+
+function setCachedPrice(poeVersion, league, data) {
+  const key = `${poeVersion}:${league}`;
+  priceCache.set(key, { data, timestamp: Date.now() });
+}
 
 function errorResponse(res, status, error, errorCode) {
   return res.status(status).json({
@@ -95,6 +131,19 @@ router.get('/current',
       // Find active league
       const activeLeague = league || await Price.getCurrentLeague(poeVersion) || 'Standard';
 
+      // Check cache (only for simple queries without type/search/sort overrides)
+      const cacheable = !type && !search && sortField === 'chaosValue' && sortDir === 'desc';
+      if (cacheable) {
+        const cached = getCachedPrice(poeVersion, activeLeague);
+        if (cached) {
+          return res.json({
+            success: true,
+            data: { ...cached, count: cached.prices.length },
+            error: null
+          });
+        }
+      }
+
       const where = {
         league: activeLeague,
         poeVersion,
@@ -117,19 +166,28 @@ router.get('/current',
         limit: parseInt(limit)
       });
 
+      const responseData = {
+        prices,
+        league: activeLeague,
+        poeVersion,
+        updatedAt: prices.length > 0 ? prices[0].updatedAt : null
+      };
+
+      // Store in cache
+      if (cacheable) {
+        setCachedPrice(poeVersion, activeLeague, responseData);
+      }
+
       res.json({
         success: true,
         data: {
-          prices,
-          league: activeLeague,
-          poeVersion,
-          count: prices.length,
-          updatedAt: prices.length > 0 ? prices[0].updatedAt : null
+          ...responseData,
+          count: prices.length
         },
         error: null
       });
     } catch (error) {
-      console.error('Price fetch error:', error);
+      logger.error('price fetch error', { message: error.message });
       errorResponse(res, 500, 'Failed to get prices', 'PRICES_LOAD_FAILED');
     }
   }
@@ -173,7 +231,7 @@ router.get('/item/:itemName',
         error: null
       });
     } catch (error) {
-      console.error('Price fetch error:', error);
+      logger.error('price fetch error', { message: error.message });
       errorResponse(res, 500, 'Failed to get price', 'PRICE_LOAD_FAILED');
     }
   }
@@ -207,7 +265,7 @@ router.get('/types',
         error: null
       });
     } catch (error) {
-      console.error('Type fetch error:', error);
+      logger.error('type fetch error', { message: error.message });
       errorResponse(res, 500, 'Failed to get types', 'PRICE_TYPES_LOAD_FAILED');
     }
   }
@@ -238,7 +296,7 @@ router.get('/leagues',
       let activeLeagues = null;
       try {
         activeLeagues = await poeNinjaService.getActiveLeagues(poeVersion);
-      } catch {}
+      } catch { }
 
       res.json({
         success: true,
@@ -249,7 +307,7 @@ router.get('/leagues',
         error: null
       });
     } catch (error) {
-      console.error('League fetch error:', error);
+      logger.error('league fetch error', { message: error.message });
       errorResponse(res, 500, 'Failed to get leagues', 'PRICE_LEAGUES_LOAD_FAILED');
     }
   }
@@ -271,7 +329,7 @@ router.get('/sync-status', authenticate, async (req, res) => {
       error: null
     });
   } catch (error) {
-    console.error('Price sync status error:', error);
+    logger.error('price sync status error', { message: error.message });
     errorResponse(res, 500, 'Failed to get sync status', 'PRICE_SYNC_STATUS_FAILED');
   }
 });
@@ -320,7 +378,7 @@ router.post('/sync',
         });
       }
 
-      console.log(`Price sync started: ${targetLeague} (${poeVersion})`);
+      logger.info('price sync started', { league: targetLeague, poeVersion });
       syncState.set(syncKey, {
         inFlight: true,
         lastSuccessAt: currentState?.lastSuccessAt || null
@@ -366,7 +424,7 @@ router.post('/sync',
         inFlight: false,
         lastSuccessAt: previousState?.lastSuccessAt || null
       });
-      console.error('Price sync error:', error);
+      logger.error('price sync error', { message: error.message });
       errorResponse(res, 500, 'Failed to sync prices', 'PRICE_SYNC_FAILED');
     }
   }
@@ -395,7 +453,7 @@ router.get('/currency-overview',
         error: null
       });
     } catch (error) {
-      console.error('Currency overview error:', error);
+      logger.error('currency overview error', { message: error.message });
       errorResponse(res, 500, 'Failed to get currency overview', 'PRICE_CURRENCY_OVERVIEW_FAILED');
     }
   }
@@ -424,7 +482,7 @@ router.get('/item-overview',
         error: null
       });
     } catch (error) {
-      console.error('Item overview error:', error);
+      logger.error('item overview error', { message: error.message });
       errorResponse(res, 500, 'Failed to get item overview', 'PRICE_ITEM_OVERVIEW_FAILED');
     }
   }

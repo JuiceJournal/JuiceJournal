@@ -3,6 +3,9 @@
  * Express + PostgreSQL + WebSocket + poe.ninja entegrasyonu
  */
 
+// Prevent prototype pollution via Object.freeze before any JSON.parse
+Object.freeze(Object.prototype);
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -106,11 +109,29 @@ const limiter = rateLimit({
 });
 
 // Middleware
-app.use(helmet());
+const helmetConfig = helmet({
+  crossOriginResourcePolicy: { policy: 'same-origin' },
+  crossOriginEmbedderPolicy: false
+});
+app.use(helmetConfig);
+
+// CORS origin validation — reject wildcards and null
+const rawOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+  : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+const corsOrigins = rawOrigins.filter(origin => {
+  if (origin === '*' || origin === 'null') {
+    logger.warn('cors origin rejected: unsafe value', { origin });
+    return false;
+  }
+  return true;
+});
+if (corsOrigins.length === 0) {
+  logger.error('no valid cors origins configured, defaulting to localhost');
+  corsOrigins.push('http://localhost:3000', 'http://127.0.0.1:3000');
+}
 app.use(cors({
-  origin: process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
-    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: corsOrigins,
   credentials: true
 }));
 app.use(limiter);
@@ -160,7 +181,7 @@ app.use((req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
-  console.error('Sunucu hatasi:', err);
+  logger.error('server_error', { message: err.message, stack: err.stack });
 
   res.status(err.status || 500).json({
     success: false,
@@ -225,6 +246,10 @@ const startServer = async () => {
 };
 
 // Graceful shutdown
+process.on('unhandledRejection', (reason) => {
+  logger.error('unhandled_promise_rejection', { reason: reason?.message || String(reason) });
+});
+
 process.on('SIGTERM', () => {
   logger.info('received SIGTERM, shutting down');
   server.close(() => {

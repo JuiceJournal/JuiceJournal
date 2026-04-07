@@ -57,16 +57,17 @@ function slugify(name) {
 }
 
 async function createUniqueSlug(name, currentStrategyId = null) {
+  const MAX_ITERATIONS = 100;
   const base = slugify(name);
   let candidate = base;
   let counter = 1;
 
-  while (true) {
+  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
     const where = currentStrategyId
       ? {
-          slug: candidate,
-          id: { [Op.ne]: currentStrategyId }
-        }
+        slug: candidate,
+        id: { [Op.ne]: currentStrategyId }
+      }
       : { slug: candidate };
 
     const existing = await Strategy.findOne({
@@ -82,6 +83,8 @@ async function createUniqueSlug(name, currentStrategyId = null) {
     counter += 1;
     candidate = `${base}-${counter}`;
   }
+
+  throw new Error(`Unable to generate unique slug for "${name}" after ${MAX_ITERATIONS} attempts`);
 }
 
 function getYearFromDate(value) {
@@ -278,6 +281,9 @@ async function loadStrategiesForUser(userId, filters = {}) {
     strategyWhere.league = filters.league;
   }
 
+  const limit = Math.min(parseInt(filters.limit, 10) || 50, 100);
+  const offset = parseInt(filters.offset, 10) || 0;
+
   return Strategy.findAll({
     where: strategyWhere,
     include: [
@@ -310,7 +316,9 @@ async function loadStrategiesForUser(userId, filters = {}) {
         ],
       }
     ],
-    order: [['updatedAt', 'DESC']]
+    order: [['updatedAt', 'DESC']],
+    limit,
+    offset
   });
 }
 
@@ -369,6 +377,9 @@ async function loadPublicStrategies(filters = {}) {
     };
   }
 
+  const limit = Math.min(parseInt(filters.limit, 10) || 50, 100);
+  const offset = parseInt(filters.offset, 10) || 0;
+
   return Strategy.findAll({
     where: strategyWhere,
     include: [
@@ -401,7 +412,9 @@ async function loadPublicStrategies(filters = {}) {
         ],
       }
     ],
-    order: [['publishedAt', 'DESC'], ['updatedAt', 'DESC']]
+    order: [['publishedAt', 'DESC'], ['updatedAt', 'DESC']],
+    limit,
+    offset
   });
 }
 
@@ -501,9 +514,9 @@ async function validateCompletedSessionsForStrategy(userId, sessionIds, currentS
 
   const conflictWhere = currentStrategyId
     ? {
-        sessionId: uniqueIds,
-        strategyId: { [Op.ne]: currentStrategyId }
-      }
+      sessionId: uniqueIds,
+      strategyId: { [Op.ne]: currentStrategyId }
+    }
     : { sessionId: uniqueIds };
 
   const conflictingLinks = await StrategySession.findAll({

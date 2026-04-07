@@ -8,6 +8,7 @@ const router = express.Router();
 const { query, param, validationResult } = require('express-validator');
 const { Session, User, sequelize } = require('../models');
 const { authenticate } = require('../middleware/auth');
+const logger = require('../services/logger');
 
 const { Op } = require('sequelize');
 
@@ -184,7 +185,7 @@ router.get('/personal',
         error: null
       });
     } catch (error) {
-      console.error('Statistics error:', error);
+      logger.error('statistics error', { message: error.message });
       errorResponse(res, 500, 'Failed to get statistics', 'STATS_PERSONAL_LOAD_FAILED');
     }
   }
@@ -263,7 +264,7 @@ router.get('/leaderboard/:league/:period',
         error: null
       });
     } catch (error) {
-      console.error('Leaderboard error:', error);
+      logger.error('leaderboard error', { message: error.message });
       errorResponse(res, 500, 'Failed to get leaderboard', 'STATS_LEADERBOARD_LOAD_FAILED');
     }
   }
@@ -341,7 +342,7 @@ router.get('/summary',
         error: null
       });
     } catch (error) {
-      console.error('Summary statistics error:', error);
+      logger.error('summary statistics error', { message: error.message });
       errorResponse(res, 500, 'Failed to get summary statistics', 'STATS_SUMMARY_LOAD_FAILED');
     }
   }

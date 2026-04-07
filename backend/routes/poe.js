@@ -16,6 +16,7 @@ const { StashSnapshot, Session } = require('../models');
 const { authenticate } = require('../middleware/auth');
 const poeApiService = require('../services/poeApiService');
 const stashSnapshotService = require('../services/stashSnapshotService');
+const logger = require('../services/logger');
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -57,7 +58,7 @@ function handlePoeError(res, error, fallbackMessage = 'Path of Exile request fai
   if (error?.code === 'LEAGUE_REQUIRED') {
     return errorResponse(res, 400, error.message, 'LEAGUE_REQUIRED');
   }
-  console.error('PoE route error:', error);
+  logger.error('poe request failed', { message: error?.message });
   return errorResponse(res, 500, fallbackMessage, 'POE_REQUEST_FAILED');
 }
 
@@ -203,7 +204,7 @@ router.get('/snapshots',
         error: null
       });
     } catch (error) {
-      console.error('Stash snapshot list error:', error);
+      logger.error('stash snapshot list failed', { message: error.message });
       errorResponse(res, 500, 'Failed to list stash snapshots', 'SNAPSHOT_LIST_FAILED');
     }
   }
@@ -226,7 +227,7 @@ router.get('/snapshots/:id',
       }
       res.json({ success: true, data: { snapshot }, error: null });
     } catch (error) {
-      console.error('Stash snapshot fetch error:', error);
+      logger.error('stash snapshot load failed', { message: error.message });
       errorResponse(res, 500, 'Failed to load stash snapshot', 'SNAPSHOT_LOAD_FAILED');
     }
   }
@@ -249,7 +250,7 @@ router.delete('/snapshots/:id',
       await snapshot.destroy();
       res.json({ success: true, data: { id: req.params.id }, error: null });
     } catch (error) {
-      console.error('Stash snapshot delete error:', error);
+      logger.error('stash snapshot delete failed', { message: error.message });
       errorResponse(res, 500, 'Failed to delete stash snapshot', 'SNAPSHOT_DELETE_FAILED');
     }
   }
@@ -289,7 +290,7 @@ router.post('/snapshots/diff',
 
       res.json({ success: true, data: { diff }, error: null });
     } catch (error) {
-      console.error('Stash snapshot diff error:', error);
+      logger.error('stash snapshot diff failed', { message: error.message });
       errorResponse(res, 500, error.message || 'Failed to diff stash snapshots', 'SNAPSHOT_DIFF_FAILED');
     }
   }

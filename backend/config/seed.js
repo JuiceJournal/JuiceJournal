@@ -11,7 +11,6 @@
  *   SEED_PASSWORD  - Admin password (auto-generated if not set)
  */
 
-require('dotenv').config();
 const crypto = require('crypto');
 const { sequelize, User } = require('../models');
 

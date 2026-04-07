@@ -8,6 +8,7 @@ const router = express.Router();
 const { body, param, query, validationResult } = require('express-validator');
 const { Session, LootEntry, Price } = require('../models');
 const { authenticate } = require('../middleware/auth');
+const logger = require('../services/logger');
 
 const { Op } = require('sequelize');
 
@@ -142,7 +143,7 @@ router.post('/',
         error: null
       });
     } catch (error) {
-      console.error('Loot ekleme hatasi:', error);
+      logger.error('loot add failed', { message: error.message });
       errorResponse(res, 500, 'Loot eklenirken hata olustu', 'LOOT_ADD_FAILED');
     }
   }
@@ -201,7 +202,7 @@ router.get('/session/:sessionId',
         error: null
       });
     } catch (error) {
-      console.error('Loot listeleme hatasi:', error);
+      logger.error('loot list failed', { message: error.message });
       errorResponse(res, 500, 'Loot entry\'ler alinirken hata olustu', 'LOOT_LIST_LOAD_FAILED');
     }
   }
@@ -267,7 +268,7 @@ router.get('/recent',
         error: null
       });
     } catch (error) {
-      console.error('Son loot listeleme hatasi:', error);
+      logger.error('recent loot list failed', { message: error.message });
       errorResponse(res, 500, 'Son loot entry\'ler alinirken hata olustu', 'RECENT_LOOT_LOAD_FAILED');
     }
   }
@@ -304,7 +305,7 @@ router.get('/:id',
         error: null
       });
     } catch (error) {
-      console.error('Loot getirme hatasi:', error);
+      logger.error('loot load failed', { message: error.message });
       errorResponse(res, 500, 'Loot entry alinirken hata olustu', 'LOOT_LOAD_FAILED');
     }
   }
@@ -354,7 +355,7 @@ router.put('/:id',
         error: null
       });
     } catch (error) {
-      console.error('Loot guncelleme hatasi:', error);
+      logger.error('loot update failed', { message: error.message });
       errorResponse(res, 500, 'Loot entry guncellenirken hata olustu', 'LOOT_UPDATE_FAILED');
     }
   }
@@ -397,7 +398,7 @@ router.delete('/:id',
         error: null
       });
     } catch (error) {
-      console.error('Loot silme hatasi:', error);
+      logger.error('loot delete failed', { message: error.message });
       errorResponse(res, 500, 'Loot entry silinirken hata olustu', 'LOOT_DELETE_FAILED');
     }
   }
@@ -519,7 +520,7 @@ router.post('/bulk',
         error: null
       });
     } catch (error) {
-      console.error('Toplu loot ekleme hatasi:', error);
+      logger.error('bulk loot add failed', { message: error.message });
       errorResponse(res, 500, 'Loot eklenirken hata olustu', 'LOOT_BULK_ADD_FAILED');
     }
   }

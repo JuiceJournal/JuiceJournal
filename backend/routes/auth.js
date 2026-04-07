@@ -11,6 +11,7 @@ const { User } = require('../models');
 const { authenticate, generateRealtimeToken, generateToken } = require('../middleware/auth');
 const poeAuthService = require('../services/poeAuthService');
 const env = require('../config/env');
+const logger = require('../services/logger');
 const { Op } = require('sequelize');
 
 // OAuth state storage with 5-minute TTL to prevent CSRF
@@ -65,6 +66,8 @@ function setAuthCookie(res, token) {
 
   if (env.isProduction) {
     parts.push('Secure');
+  } else {
+    logger.warn('auth cookie set without Secure flag — not suitable for production', { env: env.nodeEnv });
   }
 
   res.setHeader('Set-Cookie', parts.join('; '));
@@ -169,7 +172,7 @@ router.post('/register',
         error: null
       });
     } catch (error) {
-      console.error('Kayit hatasi:', error);
+      logger.error('registration failed', { message: error.message });
       errorResponse(res, 500, 'Kayit sirasinda bir hata olustu', 'REGISTER_FAILED');
     }
   }
@@ -240,7 +243,7 @@ router.post('/login',
         error: null
       });
     } catch (error) {
-      console.error('Giris hatasi:', error);
+      logger.error('login failed', { message: error.message });
       errorResponse(res, 500, 'Giris sirasinda bir hata olustu', 'LOGIN_FAILED');
     }
   }
@@ -261,7 +264,7 @@ router.get('/me', authenticate, async (req, res) => {
       error: null
     });
   } catch (error) {
-    console.error('Profil getirme hatasi:', error);
+    logger.error('profile load failed', { message: error.message });
     errorResponse(res, 500, 'Profil bilgileri alinirken hata olustu', 'PROFILE_LOAD_FAILED');
   }
 });
@@ -284,7 +287,7 @@ router.get('/realtime-token', authenticate, async (req, res) => {
       error: null
     });
   } catch (error) {
-    console.error('Realtime token error:', error);
+    logger.error('realtime token failed', { message: error.message });
     errorResponse(res, 500, 'Realtime token olusturulamadi', 'REALTIME_TOKEN_FAILED');
   }
 });
@@ -350,7 +353,7 @@ router.post('/poe/login/start',
         error: null
       });
     } catch (error) {
-      console.error('PoE login start error:', error);
+      logger.error('poe login start failed', { message: error.message });
       errorResponse(res, 500, 'Failed to start Path of Exile sign-in', 'POE_LOGIN_START_FAILED');
     }
   }
@@ -444,7 +447,7 @@ router.post('/poe/login/complete',
         error: null
       });
     } catch (error) {
-      console.error('PoE login complete error:', error);
+      logger.error('poe login complete failed', { message: error.message });
       errorResponse(res, 500, 'Failed to complete Path of Exile sign-in', 'POE_LOGIN_COMPLETE_FAILED');
     }
   }
@@ -511,7 +514,7 @@ router.post('/poe/connect/start',
         error: null
       });
     } catch (error) {
-      console.error('PoE connect start error:', error);
+      logger.error('poe connect start failed', { message: error.message });
       errorResponse(res, 500, 'Failed to start Path of Exile linking', 'POE_CONNECT_START_FAILED');
     }
   }
@@ -595,7 +598,7 @@ router.post('/poe/connect/complete',
         error: null
       });
     } catch (error) {
-      console.error('PoE connect complete error:', error);
+      logger.error('poe connect complete failed', { message: error.message });
       errorResponse(res, 500, 'Failed to complete Path of Exile linking', 'POE_CONNECT_COMPLETE_FAILED');
     }
   }
@@ -617,7 +620,7 @@ router.get('/poe/status', authenticate, async (req, res) => {
       error: null
     });
   } catch (error) {
-    console.error('PoE status error:', error);
+    logger.error('poe status failed', { message: error.message });
     errorResponse(res, 500, 'Failed to get Path of Exile link status', 'POE_STATUS_LOAD_FAILED');
   }
 });
@@ -638,7 +641,7 @@ router.delete('/poe/disconnect', authenticate, async (req, res) => {
       error: null
     });
   } catch (error) {
-    console.error('PoE disconnect error:', error);
+    logger.error('poe disconnect failed', { message: error.message });
     errorResponse(res, 500, 'Failed to disconnect Path of Exile account', 'POE_DISCONNECT_FAILED');
   }
 });
@@ -683,7 +686,7 @@ router.put('/me',
         error: null
       });
     } catch (error) {
-      console.error('Profil guncelleme hatasi:', error);
+      logger.error('profile update failed', { message: error.message });
       res.status(500).json({
         success: false,
         data: null,

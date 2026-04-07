@@ -57,6 +57,8 @@ router.get('/',
     query('search').optional().trim().isLength({ min: 1, max: 150 }),
     query('sort').optional().isIn(['newest', 'most_profitable', 'best_profit_per_hour', 'most_runs']),
     query('year').optional().isInt({ min: 2000, max: 2100 }),
+    query('limit').optional().isInt({ min: 1, max: 100 }),
+    query('offset').optional().isInt({ min: 0 }),
     handleValidationErrors
   ],
   async (req, res) => {

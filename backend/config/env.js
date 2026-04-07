@@ -78,6 +78,6 @@ module.exports = {
     tokenEncryptionKey: process.env.POE_TOKEN_ENCRYPTION_KEY || (isProduction ? '' : 'dev-poe-key-not-for-production'),
     mock: parseBoolean(process.env.POE_OAUTH_MOCK, !isProduction && !process.env.POE_CLIENT_ID),
     scopes: process.env.POE_SCOPES || 'account:profile',
-    contact: process.env.POE_CONTACT || 'support@example.com',
+    contact: process.env.POE_CONTACT || 'admin@juicejournal.local',
   }
 };
