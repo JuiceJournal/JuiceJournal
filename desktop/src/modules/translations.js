@@ -131,6 +131,11 @@ window.Translations = {
     'settings.themeDark': 'Koyu',
     'settings.league': 'Aktif Lig',
     'settings.leaguePlaceholder': 'Ornegin: Settlers of Kalguur',
+    'settings.leaguePlaceholderPoe1': 'Orn. PoE 1 aktif ligi',
+    'settings.leaguePlaceholderPoe2': 'Orn. PoE 2 aktif ligi',
+    'settings.leagueContextHint': 'Bu alan {game} icin aktif ligi kaydeder.',
+    'settings.leagueContextPoe1': 'Path of Exile 1',
+    'settings.leagueContextPoe2': 'Path of Exile 2',
 
     // Settings - PoE
     'settings.clientTxtPath': 'Client.txt Dosya Yolu',
@@ -803,6 +808,11 @@ window.Translations = {
     'settings.themeDark': 'Dark',
     'settings.league': 'Active League',
     'settings.leaguePlaceholder': 'e.g. Settlers of Kalguur',
+    'settings.leaguePlaceholderPoe1': 'e.g. active PoE 1 league',
+    'settings.leaguePlaceholderPoe2': 'e.g. active PoE 2 league',
+    'settings.leagueContextHint': 'This field saves the active league for {game}.',
+    'settings.leagueContextPoe1': 'Path of Exile 1',
+    'settings.leagueContextPoe2': 'Path of Exile 2',
 
     // Settings - PoE
     'settings.clientTxtPath': 'Client.txt File Path',

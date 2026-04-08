@@ -164,7 +164,6 @@ const store = new Store({
     language: 'en',
     soundNotifications: false,
     poeVersion: 'poe1',
-    defaultLeague: 'Standard',
     scanHotkey: 'F9',
     currentUserId: null,
     pendingSessionActions: [],
@@ -181,6 +180,47 @@ if (!store.get('_langMigrated')) {
   store.set('language', 'en');
   store.set('_langMigrated', true);
 }
+
+function normalizePoeVersion(version) {
+  return version === 'poe1' || version === 'poe2' ? version : null;
+}
+
+function getLeagueKeyForVersion(version) {
+  return version === 'poe2' ? 'defaultLeaguePoe2' : 'defaultLeaguePoe1';
+}
+
+function getLegacyDefaultLeagueForVersion(version) {
+  const legacyLeague = store.get('defaultLeague');
+  if (typeof legacyLeague !== 'string' || !legacyLeague.trim()) {
+    return null;
+  }
+
+  const legacyVersion = normalizePoeVersion(store.get('lastDetectedPoeVersion'))
+    || normalizePoeVersion(store.get('poeVersion'))
+    || 'poe1';
+
+  return legacyVersion === version ? legacyLeague.trim() : null;
+}
+
+function migrateLegacyDefaultLeagueSetting() {
+  const targetVersion = normalizePoeVersion(store.get('lastDetectedPoeVersion'))
+    || normalizePoeVersion(store.get('poeVersion'))
+    || 'poe1';
+  const legacyLeague = getLegacyDefaultLeagueForVersion(targetVersion);
+  if (!legacyLeague) {
+    return;
+  }
+
+  const targetKey = getLeagueKeyForVersion(targetVersion);
+  const storedLeague = store.get(targetKey);
+  if (typeof storedLeague === 'string' && storedLeague.trim()) {
+    return;
+  }
+
+  store.set(targetKey, legacyLeague);
+}
+
+migrateLegacyDefaultLeagueSetting();
 
 // Global degiskenler
 let mainWindow = null;
@@ -719,7 +759,9 @@ function buildSafeSettingsSnapshot() {
     soundNotifications: Boolean(settings.soundNotifications),
     autoStartSession: Boolean(settings.autoStartSession),
     poeVersion: settings.poeVersion || 'poe1',
-    defaultLeague: settings.defaultLeague || 'Standard',
+    lastDetectedPoeVersion: normalizePoeVersion(settings.lastDetectedPoeVersion),
+    defaultLeaguePoe1: typeof settings.defaultLeaguePoe1 === 'string' ? settings.defaultLeaguePoe1 : null,
+    defaultLeaguePoe2: typeof settings.defaultLeaguePoe2 === 'string' ? settings.defaultLeaguePoe2 : null,
     hasCustomApiUrl: Boolean(settings.apiUrl),
     hasPoePath: Boolean(settings.poePath),
     scanHotkey: settings.scanHotkey || 'F9'
@@ -1004,11 +1046,32 @@ function refreshTrayMenu() {
 }
 
 function getTrackerContextDefaults(overrides = {}) {
-  const poeVersion = overrides.poeVersion || store.get('poeVersion') || 'poe1';
-  const league = (overrides.league || store.get('defaultLeague') || 'Standard').trim() || 'Standard';
+  const { activeVersion, league } = resolveLeagueContext(overrides);
 
   return {
-    poeVersion,
+    poeVersion: activeVersion,
+    league
+  };
+}
+
+function resolveLeagueContext(overrides = {}) {
+  const overrideVersion = overrides.activeVersion || overrides.poeVersion;
+  const detectedVersion = gameDetector ? gameDetector.getDetectedGame() : null;
+  const lastDetectedVersion = normalizePoeVersion(store.get('lastDetectedPoeVersion'));
+  const storedVersion = normalizePoeVersion(store.get('poeVersion'));
+  const activeVersion = normalizePoeVersion(overrideVersion)
+    || normalizePoeVersion(detectedVersion)
+    || lastDetectedVersion
+    || storedVersion
+    || 'poe1';
+  const leagueKey = getLeagueKeyForVersion(activeVersion);
+  const storedLeague = store.get(leagueKey);
+  const legacyLeague = getLegacyDefaultLeagueForVersion(activeVersion);
+  const league = String(overrides.league ?? storedLeague ?? legacyLeague ?? 'Standard').trim() || 'Standard';
+
+  return {
+    activeVersion,
+    leagueKey,
     league
   };
 }
@@ -1485,8 +1548,7 @@ async function startNewSession(input = {}) {
       await endCurrentSession();
     }
 
-    const poeVersion = input.poeVersion || store.get('poeVersion') || 'poe1';
-    const league = (input.league || store.get('defaultLeague') || 'Standard').trim() || 'Standard';
+    const { activeVersion: poeVersion, league } = resolveLeagueContext(input);
 
     // Map adi al
     const mapName = input.mapName || await promptMapName();
@@ -1680,8 +1742,7 @@ function setupLogParser() {
       startNewSession({
         mapName: data.mapName,
         mapTier: data.mapTier,
-        poeVersion: store.get('poeVersion') || 'poe1',
-        league: (store.get('defaultLeague') || 'Standard').trim() || 'Standard'
+        ...getTrackerContextDefaults()
       }).then(session => {
         showNotification(t('notificationAutoSession'), t('autoSessionBody', { mapName: data.mapName }));
         if (mainWindow) {
@@ -1746,24 +1807,39 @@ function setupGameDetector() {
  * Apply detected game version — update store, price service, log parser, and notify renderer
  */
 function applyGameVersion(version) {
+  store.set('lastDetectedPoeVersion', version);
   const currentVersion = store.get('poeVersion');
-  if (version === currentVersion) return;
+  const storedPoePath = store.get('poePath');
+  const versionChanged = version !== currentVersion;
+  let detectedLogPath = null;
 
-  // Update store
-  store.set('poeVersion', version);
+  // Always re-check the runtime Client.txt path so same-version launches can refresh tracking.
+  detectedLogPath = GameDetector.findLogPath(version);
 
-  // Update price service
-  if (priceService) {
-    priceService.setPoeVersion(version);
-    priceService.clearCache();
+  if (versionChanged) {
+    // Update store
+    store.set('poeVersion', version);
+
+    // Update price service
+    if (priceService) {
+      priceService.setPoeVersion(version);
+      priceService.clearCache();
+    }
   }
 
-  // Try to find and switch Client.txt path for the new version
-  const detectedLogPath = GameDetector.findLogPath(version);
-  if (detectedLogPath) {
-    store.set('poePath', detectedLogPath);
+  const shouldUpdatePoePath = Boolean(detectedLogPath && detectedLogPath !== storedPoePath);
+  const storedPoePathUsable = Boolean(storedPoePath && fs.existsSync(storedPoePath));
+  const runtimeLogPath = detectedLogPath || (storedPoePathUsable ? storedPoePath : null);
+  const logParserNeedsResync = !logParser || !logParser.isRunning;
+  const shouldRestartLogParser = Boolean(
+    runtimeLogPath && (versionChanged || shouldUpdatePoePath || logParserNeedsResync)
+  );
 
-    // Restart log parser with new path
+  if (shouldUpdatePoePath) {
+    store.set('poePath', detectedLogPath);
+  }
+
+  if (shouldRestartLogParser) {
     if (logParser) {
       logParser.stop();
     }
@@ -1809,12 +1885,21 @@ function setupIPC() {
   // Ayarlari kaydet (sadece izin verilen anahtarlar)
   const SETTINGS_ALLOWLIST = new Set([
     'apiUrl', 'poePath', 'autoStartSession', 'notifications',
-    'soundNotifications', 'language', 'poeVersion', 'defaultLeague',
+    'soundNotifications', 'language', 'poeVersion', 'defaultLeaguePoe1', 'defaultLeaguePoe2',
     'scanHotkey', 'theme'
   ]);
 
   ipcMain.handle('set-settings', (event, settings) => {
     for (const [key, value] of Object.entries(settings)) {
+      if (key === 'defaultLeague') {
+        const { leagueKey } = resolveLeagueContext({
+          activeVersion: settings.poeVersion,
+          league: value
+        });
+        store.set(leagueKey, value);
+        continue;
+      }
+
       if (SETTINGS_ALLOWLIST.has(key)) {
         if (key === 'apiUrl' && value && !isValidApiUrl(value)) {
           console.warn('[set-settings] Rejected invalid apiUrl:', value);
@@ -2304,9 +2389,13 @@ function setupIPC() {
   ipcMain.handle('sync-prices', async (event, options = {}) => {
     try {
       assertDesktopUserAuthenticated();
-      const league = options.league || store.get('defaultLeague') || 'Standard';
-      priceService.setPoeVersion(store.get('poeVersion') || 'poe1');
-      const result = await priceService.syncPrices(league, options);
+      const { activeVersion: poeVersion, league } = resolveLeagueContext(options);
+      priceService.setPoeVersion(poeVersion);
+      const result = await priceService.syncPrices(league, {
+        ...options,
+        poeVersion,
+        league
+      });
       return result;
     } catch (error) {
       throw toRendererError(error, t('pricesSyncFailed'));
@@ -2346,7 +2435,7 @@ function setupIPC() {
       if (!poeApiClient.isAuthenticated()) {
         throw new Error(t('poeNotLinked'));
       }
-      const leagueName = league || store.get('defaultLeague') || 'Standard';
+      const { league: leagueName } = resolveLeagueContext({ league });
       return await poeApiClient.listStashTabs(leagueName);
     } catch (error) {
       throw toRendererError(error, t('stashSnapshotFailed'));
@@ -2360,7 +2449,7 @@ function setupIPC() {
       if (!poeApiClient.isAuthenticated()) {
         throw new Error(t('poeNotLinked'));
       }
-      const league = options.league || store.get('defaultLeague') || 'Standard';
+      const { league } = resolveLeagueContext(options);
       const snapshot = await poeApiClient.takeStashSnapshot(league, {
         tabIds: options.tabIds,
         allTabs: options.allTabs
@@ -2439,8 +2528,9 @@ function setupIPC() {
   // Get detected game status
   ipcMain.handle('get-detected-game', async () => {
     return {
-      version: gameDetector ? gameDetector.getDetectedGame() : null,
-      settingsVersion: store.get('poeVersion') || 'poe1'
+      version: normalizePoeVersion(gameDetector ? gameDetector.getDetectedGame() : null),
+      lastDetectedVersion: normalizePoeVersion(store.get('lastDetectedPoeVersion')),
+      settingsVersion: normalizePoeVersion(store.get('poeVersion'))
     };
   });
 
