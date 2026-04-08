@@ -164,9 +164,6 @@ const store = new Store({
     language: 'en',
     soundNotifications: false,
     poeVersion: 'poe1',
-    lastDetectedPoeVersion: 'poe1',
-    defaultLeaguePoe1: 'Standard',
-    defaultLeaguePoe2: 'Standard',
     scanHotkey: 'F9',
     currentUserId: null,
     pendingSessionActions: [],
@@ -183,6 +180,47 @@ if (!store.get('_langMigrated')) {
   store.set('language', 'en');
   store.set('_langMigrated', true);
 }
+
+function normalizePoeVersion(version) {
+  return version === 'poe1' || version === 'poe2' ? version : null;
+}
+
+function getLeagueKeyForVersion(version) {
+  return version === 'poe2' ? 'defaultLeaguePoe2' : 'defaultLeaguePoe1';
+}
+
+function getLegacyDefaultLeagueForVersion(version) {
+  const legacyLeague = store.get('defaultLeague');
+  if (typeof legacyLeague !== 'string' || !legacyLeague.trim()) {
+    return null;
+  }
+
+  const legacyVersion = normalizePoeVersion(store.get('lastDetectedPoeVersion'))
+    || normalizePoeVersion(store.get('poeVersion'))
+    || 'poe1';
+
+  return legacyVersion === version ? legacyLeague.trim() : null;
+}
+
+function migrateLegacyDefaultLeagueSetting() {
+  const targetVersion = normalizePoeVersion(store.get('lastDetectedPoeVersion'))
+    || normalizePoeVersion(store.get('poeVersion'))
+    || 'poe1';
+  const legacyLeague = getLegacyDefaultLeagueForVersion(targetVersion);
+  if (!legacyLeague) {
+    return;
+  }
+
+  const targetKey = getLeagueKeyForVersion(targetVersion);
+  const storedLeague = store.get(targetKey);
+  if (typeof storedLeague === 'string' && storedLeague.trim()) {
+    return;
+  }
+
+  store.set(targetKey, legacyLeague);
+}
+
+migrateLegacyDefaultLeagueSetting();
 
 // Global degiskenler
 let mainWindow = null;
@@ -721,9 +759,9 @@ function buildSafeSettingsSnapshot() {
     soundNotifications: Boolean(settings.soundNotifications),
     autoStartSession: Boolean(settings.autoStartSession),
     poeVersion: settings.poeVersion || 'poe1',
-    lastDetectedPoeVersion: settings.lastDetectedPoeVersion || 'poe1',
-    defaultLeaguePoe1: settings.defaultLeaguePoe1 || 'Standard',
-    defaultLeaguePoe2: settings.defaultLeaguePoe2 || 'Standard',
+    lastDetectedPoeVersion: normalizePoeVersion(settings.lastDetectedPoeVersion),
+    defaultLeaguePoe1: typeof settings.defaultLeaguePoe1 === 'string' ? settings.defaultLeaguePoe1 : null,
+    defaultLeaguePoe2: typeof settings.defaultLeaguePoe2 === 'string' ? settings.defaultLeaguePoe2 : null,
     hasCustomApiUrl: Boolean(settings.apiUrl),
     hasPoePath: Boolean(settings.poePath),
     scanHotkey: settings.scanHotkey || 'F9'
@@ -1019,19 +1057,17 @@ function getTrackerContextDefaults(overrides = {}) {
 function resolveLeagueContext(overrides = {}) {
   const overrideVersion = overrides.activeVersion || overrides.poeVersion;
   const detectedVersion = gameDetector ? gameDetector.getDetectedGame() : null;
-  const lastDetectedVersion = store.get('lastDetectedPoeVersion');
-  const storedVersion = store.get('poeVersion');
-  const activeVersion = overrideVersion === 'poe2' || overrideVersion === 'poe1'
-    ? overrideVersion
-    : detectedVersion === 'poe2' || detectedVersion === 'poe1'
-      ? detectedVersion
-      : lastDetectedVersion === 'poe2' || lastDetectedVersion === 'poe1'
-        ? lastDetectedVersion
-        : storedVersion === 'poe2' || storedVersion === 'poe1'
-          ? storedVersion
-          : 'poe1';
-  const leagueKey = activeVersion === 'poe2' ? 'defaultLeaguePoe2' : 'defaultLeaguePoe1';
-  const league = String(overrides.league ?? store.get(leagueKey) ?? 'Standard').trim() || 'Standard';
+  const lastDetectedVersion = normalizePoeVersion(store.get('lastDetectedPoeVersion'));
+  const storedVersion = normalizePoeVersion(store.get('poeVersion'));
+  const activeVersion = normalizePoeVersion(overrideVersion)
+    || normalizePoeVersion(detectedVersion)
+    || lastDetectedVersion
+    || storedVersion
+    || 'poe1';
+  const leagueKey = getLeagueKeyForVersion(activeVersion);
+  const storedLeague = store.get(leagueKey);
+  const legacyLeague = getLegacyDefaultLeagueForVersion(activeVersion);
+  const league = String(overrides.league ?? storedLeague ?? legacyLeague ?? 'Standard').trim() || 'Standard';
 
   return {
     activeVersion,
