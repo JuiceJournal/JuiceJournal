@@ -1828,9 +1828,11 @@ function applyGameVersion(version) {
   }
 
   const shouldUpdatePoePath = Boolean(detectedLogPath && detectedLogPath !== storedPoePath);
+  const storedPoePathUsable = Boolean(storedPoePath && fs.existsSync(storedPoePath));
+  const runtimeLogPath = detectedLogPath || (storedPoePathUsable ? storedPoePath : null);
   const logParserNeedsResync = !logParser || !logParser.isRunning;
   const shouldRestartLogParser = Boolean(
-    detectedLogPath && (versionChanged || shouldUpdatePoePath || logParserNeedsResync)
+    runtimeLogPath && (versionChanged || shouldUpdatePoePath || logParserNeedsResync)
   );
 
   if (shouldUpdatePoePath) {
