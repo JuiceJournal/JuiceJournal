@@ -3,9 +3,6 @@
  * Express + PostgreSQL + WebSocket + poe.ninja entegrasyonu
  */
 
-// Prevent prototype pollution via Object.freeze before any JSON.parse
-Object.freeze(Object.prototype);
-
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
