@@ -1809,27 +1809,29 @@ function setupGameDetector() {
 function applyGameVersion(version) {
   store.set('lastDetectedPoeVersion', version);
   const currentVersion = store.get('poeVersion');
-  if (version === currentVersion) return;
+  let detectedLogPath = null;
 
-  // Update store
-  store.set('poeVersion', version);
+  if (version !== currentVersion) {
+    // Update store
+    store.set('poeVersion', version);
 
-  // Update price service
-  if (priceService) {
-    priceService.setPoeVersion(version);
-    priceService.clearCache();
-  }
-
-  // Try to find and switch Client.txt path for the new version
-  const detectedLogPath = GameDetector.findLogPath(version);
-  if (detectedLogPath) {
-    store.set('poePath', detectedLogPath);
-
-    // Restart log parser with new path
-    if (logParser) {
-      logParser.stop();
+    // Update price service
+    if (priceService) {
+      priceService.setPoeVersion(version);
+      priceService.clearCache();
     }
-    setupLogParser();
+
+    // Try to find and switch Client.txt path for the new version
+    detectedLogPath = GameDetector.findLogPath(version);
+    if (detectedLogPath) {
+      store.set('poePath', detectedLogPath);
+
+      // Restart log parser with new path
+      if (logParser) {
+        logParser.stop();
+      }
+      setupLogParser();
+    }
   }
 
   // Notify renderer to update UI (icons, labels, etc.)
