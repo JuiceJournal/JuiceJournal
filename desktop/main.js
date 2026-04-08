@@ -1828,7 +1828,10 @@ function applyGameVersion(version) {
   }
 
   const shouldUpdatePoePath = Boolean(detectedLogPath && detectedLogPath !== storedPoePath);
-  const shouldRestartLogParser = Boolean(detectedLogPath && (versionChanged || shouldUpdatePoePath));
+  const logParserNeedsResync = !logParser || !logParser.isRunning;
+  const shouldRestartLogParser = Boolean(
+    detectedLogPath && (versionChanged || shouldUpdatePoePath || logParserNeedsResync)
+  );
 
   if (shouldUpdatePoePath) {
     store.set('poePath', detectedLogPath);
