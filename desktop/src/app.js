@@ -212,7 +212,8 @@ const elements = {
 };
 
 const activeLeagueInputState = {
-  dirty: false
+  dirty: false,
+  version: null
 };
 
 function normalizePoeVersion(version) {
@@ -259,11 +260,14 @@ function getDisplayedActiveLeague() {
 function refreshActiveLeagueDirtyState() {
   if (!elements.defaultLeague) {
     activeLeagueInputState.dirty = false;
+    activeLeagueInputState.version = null;
     return;
   }
 
+  const settingsVersion = getSettingsLeagueVersion();
   const currentValue = elements.defaultLeague.value.trim() || 'Standard';
   activeLeagueInputState.dirty = currentValue !== getDisplayedActiveLeague();
+  activeLeagueInputState.version = settingsVersion;
 }
 
 function updateActiveLeagueFieldContext(options = {}) {
@@ -278,9 +282,11 @@ function updateActiveLeagueFieldContext(options = {}) {
 
   if (elements.defaultLeague) {
     elements.defaultLeague.placeholder = window.t(placeholderKey);
-    if (syncValue && (forceValueSync || !activeLeagueInputState.dirty)) {
+    const canPreserveDraft = activeLeagueInputState.dirty && activeLeagueInputState.version === settingsVersion;
+    if (syncValue && (forceValueSync || !canPreserveDraft)) {
       elements.defaultLeague.value = getDisplayedActiveLeague();
       activeLeagueInputState.dirty = false;
+      activeLeagueInputState.version = settingsVersion;
     }
   }
 
