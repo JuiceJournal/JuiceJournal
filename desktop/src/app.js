@@ -229,6 +229,11 @@ function getSettingsLeagueVersion() {
   return getSelectedSettingsVersion() || 'poe1';
 }
 
+function getLeagueUiContextVersion() {
+  return normalizePoeVersion(state.detectedGameVersion)
+    || normalizePoeVersion(state.settings.lastDetectedPoeVersion);
+}
+
 function getLeagueValueForVersion(version = getResolvedLeagueVersion()) {
   const leagueKey = getLeagueSettingKey(version);
   const storedLeague = state.settings[leagueKey];
@@ -257,6 +262,16 @@ function getDisplayedActiveLeague() {
   return getLeagueValueForVersion(getSettingsLeagueVersion());
 }
 
+function getStoredLeagueValueForVersion(version = getSettingsLeagueVersion()) {
+  const leagueKey = getLeagueSettingKey(version);
+  const storedLeague = state.settings[leagueKey];
+  const legacyLeague = typeof state.settings.defaultLeague === 'string'
+    ? state.settings.defaultLeague.trim()
+    : '';
+
+  return String(storedLeague ?? legacyLeague ?? '').trim();
+}
+
 function refreshActiveLeagueDirtyState() {
   if (!elements.defaultLeague) {
     activeLeagueInputState.dirty = false;
@@ -273,9 +288,19 @@ function refreshActiveLeagueDirtyState() {
 function updateActiveLeagueFieldContext(options = {}) {
   const { syncValue = false, forceValueSync = false } = options;
   const settingsVersion = getSettingsLeagueVersion();
-  const placeholderKey = settingsVersion === 'poe2'
+  const contextVersion = getLeagueUiContextVersion();
+  const placeholderKey = contextVersion === 'poe2'
     ? 'settings.leaguePlaceholderPoe2'
-    : 'settings.leaguePlaceholderPoe1';
+    : (contextVersion === 'poe1' ? 'settings.leaguePlaceholderPoe1' : 'settings.leaguePlaceholder');
+  const gameLabel = contextVersion === 'poe2'
+    ? window.t('settings.leagueContextPoe2')
+    : (contextVersion === 'poe1'
+      ? window.t('settings.leagueContextPoe1')
+      : `${window.t('settings.leagueContextPoe1')} / ${window.t('settings.leagueContextPoe2')}`);
+  const syncedLeagueValue = contextVersion
+    ? getDisplayedActiveLeague()
+    : getStoredLeagueValueForVersion(settingsVersion);
+  const canSyncStoredValue = Boolean(syncedLeagueValue);
   const gameKey = settingsVersion === 'poe2'
     ? 'settings.leagueContextPoe2'
     : 'settings.leagueContextPoe1';
@@ -283,8 +308,12 @@ function updateActiveLeagueFieldContext(options = {}) {
   if (elements.defaultLeague) {
     elements.defaultLeague.placeholder = window.t(placeholderKey);
     const canPreserveDraft = activeLeagueInputState.dirty && activeLeagueInputState.version === settingsVersion;
-    if (syncValue && (forceValueSync || !canPreserveDraft)) {
-      elements.defaultLeague.value = getDisplayedActiveLeague();
+    if (syncValue && (forceValueSync || !canPreserveDraft) && (contextVersion || canSyncStoredValue)) {
+      elements.defaultLeague.value = syncedLeagueValue;
+      activeLeagueInputState.dirty = false;
+      activeLeagueInputState.version = settingsVersion;
+    } else if (syncValue && forceValueSync && !contextVersion && !canSyncStoredValue) {
+      elements.defaultLeague.value = '';
       activeLeagueInputState.dirty = false;
       activeLeagueInputState.version = settingsVersion;
     }
@@ -292,7 +321,7 @@ function updateActiveLeagueFieldContext(options = {}) {
 
   if (elements.activeLeagueContext) {
     elements.activeLeagueContext.textContent = window.t('settings.leagueContextHint', {
-      game: window.t(gameKey)
+      game: contextVersion ? window.t(gameKey) : gameLabel
     });
   }
 }
@@ -2018,7 +2047,8 @@ async function checkInitialGameStatus() {
   try {
     const status = await window.electronAPI.getDetectedGame();
     syncRendererGameContext(status.version, {
-      settingsVersion: status.version || status.settingsVersion || state.settings.poeVersion
+      settingsVersion: status.settingsVersion || state.settings.poeVersion,
+      lastDetectedVersion: status.lastDetectedVersion
     });
   } catch {
     // Ignore

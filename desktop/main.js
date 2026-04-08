@@ -2514,8 +2514,9 @@ function setupIPC() {
   // Get detected game status
   ipcMain.handle('get-detected-game', async () => {
     return {
-      version: gameDetector ? gameDetector.getDetectedGame() : null,
-      settingsVersion: store.get('poeVersion') || 'poe1'
+      version: normalizePoeVersion(gameDetector ? gameDetector.getDetectedGame() : null),
+      lastDetectedVersion: normalizePoeVersion(store.get('lastDetectedPoeVersion')),
+      settingsVersion: normalizePoeVersion(store.get('poeVersion'))
     };
   });
 
