@@ -1809,9 +1809,14 @@ function setupGameDetector() {
 function applyGameVersion(version) {
   store.set('lastDetectedPoeVersion', version);
   const currentVersion = store.get('poeVersion');
+  const storedPoePath = store.get('poePath');
+  const versionChanged = version !== currentVersion;
   let detectedLogPath = null;
 
-  if (version !== currentVersion) {
+  // Always re-check the runtime Client.txt path so same-version launches can refresh tracking.
+  detectedLogPath = GameDetector.findLogPath(version);
+
+  if (versionChanged) {
     // Update store
     store.set('poeVersion', version);
 
@@ -1820,18 +1825,20 @@ function applyGameVersion(version) {
       priceService.setPoeVersion(version);
       priceService.clearCache();
     }
+  }
 
-    // Try to find and switch Client.txt path for the new version
-    detectedLogPath = GameDetector.findLogPath(version);
-    if (detectedLogPath) {
-      store.set('poePath', detectedLogPath);
+  const shouldUpdatePoePath = Boolean(detectedLogPath && detectedLogPath !== storedPoePath);
+  const shouldRestartLogParser = Boolean(detectedLogPath && (versionChanged || shouldUpdatePoePath));
 
-      // Restart log parser with new path
-      if (logParser) {
-        logParser.stop();
-      }
-      setupLogParser();
+  if (shouldUpdatePoePath) {
+    store.set('poePath', detectedLogPath);
+  }
+
+  if (shouldRestartLogParser) {
+    if (logParser) {
+      logParser.stop();
     }
+    setupLogParser();
   }
 
   // Notify renderer to update UI (icons, labels, etc.)
