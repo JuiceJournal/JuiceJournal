@@ -45,3 +45,4 @@ redis_data/
 # Misc
 .cache/
 .temp/
+.worktrees/
