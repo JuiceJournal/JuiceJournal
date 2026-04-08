@@ -297,6 +297,34 @@ function updateActiveLeagueFieldContext(options = {}) {
   }
 }
 
+function syncRendererGameContext(version, options = {}) {
+  const normalizedDetectedVersion = normalizePoeVersion(version);
+  const normalizedSettingsVersion = normalizePoeVersion(options.settingsVersion)
+    || normalizedDetectedVersion
+    || normalizePoeVersion(state.settings.poeVersion);
+  const normalizedLastDetectedVersion = normalizePoeVersion(options.lastDetectedVersion)
+    || normalizedDetectedVersion
+    || normalizePoeVersion(state.settings.lastDetectedPoeVersion);
+
+  state.detectedGameVersion = normalizedDetectedVersion;
+  state.settings.lastDetectedPoeVersion = normalizedLastDetectedVersion;
+
+  if (normalizedSettingsVersion) {
+    state.settings.poeVersion = normalizedSettingsVersion;
+    elements.versionBtns.forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.version === normalizedSettingsVersion);
+    });
+    syncDesktopCurrencyIcons();
+  }
+
+  if (options.logPath) {
+    state.settings.poePath = options.logPath;
+  }
+
+  updateGameStatusIndicator(normalizedDetectedVersion);
+  updateActiveLeagueFieldContext({ syncValue: true });
+}
+
 /**
  * Uygulamayi baslat
  */
@@ -808,28 +836,13 @@ function setupIPCListeners() {
       const gameLabel = version === 'poe2' ? 'Path of Exile 2' : 'Path of Exile';
       showToast(window.t('stash.profitTracker'), window.t('game.detected', { game: gameLabel }), 'info');
 
-      // Update local state
-      state.detectedGameVersion = version;
-      state.settings.poeVersion = version;
-      if (logPath) state.settings.poePath = logPath;
-
-      // Update version buttons in settings
-      elements.versionBtns.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.version === version);
-      });
-
-      // Switch currency icons
-      syncDesktopCurrencyIcons();
+      syncRendererGameContext(version, { logPath });
 
       // Clear cached prices (they're version-specific)
       stashState.pricesSynced = false;
       if (elements.priceItemCount) {
         elements.priceItemCount.textContent = '—';
       }
-
-      // Update game status indicator
-      updateGameStatusIndicator(version);
-      updateActiveLeagueFieldContext({ syncValue: true });
 
       // Auto-refresh currency page if it's currently visible
       if (currencyState.poeVersion !== version) {
@@ -848,9 +861,7 @@ function setupIPCListeners() {
 
   if (window.electronAPI.onGameClosed) {
     window.electronAPI.onGameClosed(() => {
-      state.detectedGameVersion = null;
-      updateGameStatusIndicator(null);
-      updateActiveLeagueFieldContext({ syncValue: true });
+      syncRendererGameContext(null);
     });
   }
 
@@ -2006,19 +2017,9 @@ function updateGameStatusIndicator(version) {
 async function checkInitialGameStatus() {
   try {
     const status = await window.electronAPI.getDetectedGame();
-    state.detectedGameVersion = normalizePoeVersion(status.version);
-    updateGameStatusIndicator(status.version);
-
-    // If game is detected but settings version differs, the main process
-    // would have already sent game-version-changed, so just sync UI
-    if (status.version && status.version !== state.settings.poeVersion) {
-      state.settings.poeVersion = status.version;
-      elements.versionBtns.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.version === status.version);
-      });
-      syncDesktopCurrencyIcons();
-    }
-    updateActiveLeagueFieldContext({ syncValue: true });
+    syncRendererGameContext(status.version, {
+      settingsVersion: status.version || status.settingsVersion || state.settings.poeVersion
+    });
   } catch {
     // Ignore
   }
