@@ -16,6 +16,8 @@ web/.next/
 web/out/
 desktop/dist/
 desktop/dist_electron/
+desktop/test-results/
+desktop/playwright-report/
 
 # OS files
 .DS_Store

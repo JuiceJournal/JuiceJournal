@@ -150,6 +150,7 @@ window.Translations = {
     'settings.poeMockMode': 'Gercek GGG OAuth istemcisi gelene kadar mock mod kullanilacak.',
     'settings.poeSignInRequired': 'Giris gerekli',
     'settings.poeSignInHint': 'Path of Exile baglantisini yonetmek icin once yerel uygulama hesabi ile giris yapin.',
+    'settings.poeSignedOutMode': 'Yerel Juice Journal hesabiyla giris yapmadan Path of Exile baglantisi baslatilamaz.',
     'settings.poeLinked': 'Baglandi',
     'settings.poeLinkedMock': 'Baglandi (Mock)',
     'settings.poeLiveMode': 'Yapilandirilmis Path of Exile OAuth uygulamasi uzerinden baglandi.',
@@ -444,6 +445,7 @@ window.Translations = {
     'settings.language': 'Sprache',
     'settings.league': 'Aktive Liga',
     'settings.poeAccount': 'Path of Exile-Konto',
+    'settings.poeSignedOutMode': 'Melden Sie sich mit Ihrem lokalen Juice Journal-Konto an, bevor Sie die Path of Exile-Verknupfung starten.',
     'settings.connectPoe': 'Path of Exile verbinden',
     'settings.disconnectPoe': 'Trennen',
     'settings.save': 'Speichern',
@@ -494,6 +496,7 @@ window.Translations = {
     'settings.title': 'Parametres',
     'settings.language': 'Langue',
     'settings.poeAccount': 'Compte Path of Exile',
+    'settings.poeSignedOutMode': 'Connectez-vous avec votre compte Juice Journal local avant de demarrer la liaison Path of Exile.',
     'settings.connectPoe': 'Connecter Path of Exile',
     'settings.disconnectPoe': 'Deconnecter',
     'settings.save': 'Enregistrer',
@@ -542,6 +545,7 @@ window.Translations = {
     'settings.title': 'Ajustes',
     'settings.language': 'Idioma',
     'settings.poeAccount': 'Cuenta de Path of Exile',
+    'settings.poeSignedOutMode': 'Inicia sesion con tu cuenta local de Juice Journal antes de iniciar la vinculacion de Path of Exile.',
     'settings.connectPoe': 'Conectar Path of Exile',
     'settings.disconnectPoe': 'Desconectar',
     'settings.save': 'Guardar',
@@ -586,6 +590,7 @@ window.Translations = {
     'sessions.title': 'Sessioni mappa',
     'settings.title': 'Impostazioni',
     'settings.language': 'Lingua',
+    'settings.poeSignedOutMode': 'Accedi con il tuo account locale Juice Journal prima di avviare il collegamento a Path of Exile.',
     'settings.save': 'Salva',
     'settings.reset': 'Ripristina',
     'toast.loginFailed': 'Accesso non riuscito',
@@ -621,6 +626,7 @@ window.Translations = {
     'sessions.title': 'Sessoes de mapa',
     'settings.title': 'Configuracoes',
     'settings.language': 'Idioma',
+    'settings.poeSignedOutMode': 'Entre com sua conta local do Juice Journal antes de iniciar a vinculacao do Path of Exile.',
     'settings.save': 'Salvar',
     'settings.reset': 'Redefinir',
     'toast.loginFailed': 'Falha no login',
@@ -656,6 +662,7 @@ window.Translations = {
     'sessions.title': 'Sessii kart',
     'settings.title': 'Nastroiki',
     'settings.language': 'Iazyk',
+    'settings.poeSignedOutMode': 'Voidite v lokalnyi akkaunt Juice Journal pered tem, kak nachat priviazku Path of Exile.',
     'settings.save': 'Sokhranit',
     'settings.reset': 'Sbrosit',
     'toast.loginFailed': 'Oshibka vkho da',
@@ -669,6 +676,7 @@ window.Translations = {
     'login.title': 'Sign In',
     'register.title': 'Create Account',
     'settings.language': 'Language',
+    'settings.poeSignedOutMode': 'Sign in with your local Juice Journal account before starting Path of Exile linking.',
   },
 
   ko: {
@@ -678,6 +686,7 @@ window.Translations = {
     'login.title': 'Sign In',
     'register.title': 'Create Account',
     'settings.language': 'Language',
+    'settings.poeSignedOutMode': 'Sign in with your local Juice Journal account before starting Path of Exile linking.',
   },
 
   'zh-CN': {
@@ -687,6 +696,7 @@ window.Translations = {
     'login.title': 'Sign In',
     'register.title': 'Create Account',
     'settings.language': 'Language',
+    'settings.poeSignedOutMode': 'Sign in with your local Juice Journal account before starting Path of Exile linking.',
   },
 
   'zh-TW': {
@@ -696,6 +706,7 @@ window.Translations = {
     'login.title': 'Sign In',
     'register.title': 'Create Account',
     'settings.language': 'Language',
+    'settings.poeSignedOutMode': 'Sign in with your local Juice Journal account before starting Path of Exile linking.',
   },
 
   en: {
@@ -827,6 +838,7 @@ window.Translations = {
     'settings.poeMockMode': 'Mock mode will be used until a real GGG OAuth client is configured.',
     'settings.poeSignInRequired': 'Sign in required',
     'settings.poeSignInHint': 'Sign in with your local app account to manage Path of Exile linking.',
+    'settings.poeSignedOutMode': 'Sign in with your local Juice Journal account before starting Path of Exile linking.',
     'settings.poeLinked': 'Linked',
     'settings.poeLinkedMock': 'Linked (Mock)',
     'settings.poeLiveMode': 'Connected through the configured Path of Exile OAuth application.',

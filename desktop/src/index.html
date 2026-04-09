@@ -27,7 +27,7 @@
         <div class="logo-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#120f0d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/><path d="M12 7.25 16 9.5v5L12 16.75 8 14.5v-5Z"/></svg>
         </div>
-        <h1>PoE <span>Farm</span></h1>
+        <h1>Juice Journal</h1>
       </div>
       <nav class="nav" role="navigation" aria-label="Ana navigasyon">
         <button class="nav-btn active" data-page="dashboard">
@@ -48,7 +48,7 @@
         </button>
       </nav>
       <div class="user-info">
-        <span id="username" data-i18n="user.guest">Misafir</span>
+        <span id="username">Misafir</span>
         <div class="user-avatar" id="user-avatar">?</div>
         <button id="logout-btn" class="btn btn-ghost btn-small" aria-label="Cikis yap" data-i18n="user.logout">Cikis</button>
       </div>
@@ -533,6 +533,7 @@
               <div class="settings-group">
                 <h3 data-i18n="settings.league">Aktif Lig</h3>
                 <div class="form-group">
+                  <select id="default-league-select" hidden disabled></select>
                   <input type="text" id="default-league" placeholder="Standard">
                 </div>
                 <p id="active-league-context" class="settings-desc"></p>
@@ -577,9 +578,9 @@
                 <h3 data-i18n="settings.poeAccount">Path of Exile Account</h3>
                 <div class="poe-account-card">
                   <div class="poe-account-copy">
-                    <p id="poe-link-status" class="poe-link-status" data-i18n="settings.poeNotLinked">Not linked</p>
-                    <p id="poe-account-name" class="poe-account-name" data-i18n="settings.poeNoAccount">No Path of Exile account connected yet.</p>
-                    <p id="poe-link-mode" class="poe-link-mode" data-i18n="settings.poeMockMode">Mock mode will be used until a real GGG OAuth client is configured.</p>
+                    <p id="poe-link-status" class="poe-link-status">Not linked</p>
+                    <p id="poe-account-name" class="poe-account-name">No Path of Exile account connected yet.</p>
+                    <p id="poe-link-mode" class="poe-link-mode">Mock mode will be used until a real GGG OAuth client is configured.</p>
                   </div>
                   <div class="poe-account-actions">
                     <button id="poe-connect-btn" class="btn btn-primary" data-i18n="settings.connectPoe">Connect Path of Exile</button>
@@ -597,7 +598,7 @@
                 <div class="form-group">
                   <div class="hotkey-input">
                     <span class="hotkey-badge" id="scan-hotkey-display">F9</span>
-                    <input type="text" id="scan-hotkey" value="F9" readonly class="hotkey-field">
+                    <input type="text" id="scan-hotkey" value="F9" readonly class="hotkey-field" data-capture-hotkey="scan" spellcheck="false">
                   </div>
                 </div>
               </div>
@@ -606,8 +607,8 @@
                 <p class="settings-desc" data-i18n="settings.stashScanHotkeyDesc">Alternatif stash tarama kisayolu</p>
                 <div class="form-group">
                   <div class="hotkey-input">
-                    <span class="hotkey-badge">Ctrl+Shift+L</span>
-                    <input type="text" id="stash-scan-hotkey" value="Ctrl+Shift+L" readonly class="hotkey-field">
+                    <span class="hotkey-badge" id="stash-scan-hotkey-display">Ctrl+Shift+L</span>
+                    <input type="text" id="stash-scan-hotkey" value="Ctrl+Shift+L" readonly class="hotkey-field" data-capture-hotkey="stash" spellcheck="false">
                   </div>
                 </div>
               </div>
@@ -719,6 +720,7 @@
   </div>
 
   <script src="modules/translations.js"></script>
+  <script src="modules/hotkeyModel.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

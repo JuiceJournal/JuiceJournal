@@ -12,6 +12,8 @@ const state = {
   currentSession: null,
   settings: {},
   detectedGameVersion: null,
+  activeLeagueOptions: {},
+  leagueOptionsLoaded: false,
   sessions: [],
   recentLoot: [],
   poeLink: null,
@@ -158,8 +160,12 @@ const elements = {
   enableNotifications: document.getElementById('enable-notifications'),
   soundNotifications: document.getElementById('sound-notifications'),
   defaultLeague: document.getElementById('default-league'),
+  defaultLeagueSelect: document.getElementById('default-league-select'),
   activeLeagueContext: document.getElementById('active-league-context'),
   scanHotkey: document.getElementById('scan-hotkey'),
+  scanHotkeyDisplay: document.getElementById('scan-hotkey-display'),
+  stashScanHotkey: document.getElementById('stash-scan-hotkey'),
+  stashScanHotkeyDisplay: document.getElementById('stash-scan-hotkey-display'),
   testConnection: document.getElementById('test-connection'),
   connectionDot: document.getElementById('connection-dot'),
   connectionText: document.getElementById('connection-text'),
@@ -216,8 +222,133 @@ const activeLeagueInputState = {
   version: null
 };
 
+let settingsModelPromise = null;
+
+function ensureSettingsModelLoaded() {
+  if (window.settingsModel) {
+    return Promise.resolve(window.settingsModel);
+  }
+
+  if (settingsModelPromise) {
+    return settingsModelPromise;
+  }
+
+  settingsModelPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'modules/settingsModel.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.settingsModel) {
+        resolve(window.settingsModel);
+        return;
+      }
+
+      reject(new Error('settingsModel loaded without exposing window.settingsModel'));
+    };
+    script.onerror = () => reject(new Error('Failed to load settings model script'));
+    document.head.appendChild(script);
+  });
+
+  return settingsModelPromise;
+}
+
+function getSettingsModel() {
+  if (!window.settingsModel) {
+    throw new Error('settingsModel is not loaded');
+  }
+
+  return window.settingsModel;
+}
+
+function getHotkeyModel() {
+  if (!window.hotkeyModel) {
+    throw new Error('hotkeyModel is not loaded');
+  }
+
+  return window.hotkeyModel;
+}
+
+function getDefaultHotkeySettings() {
+  const {
+    DEFAULT_SCAN_HOTKEY,
+    DEFAULT_STASH_SCAN_HOTKEY
+  } = getHotkeyModel();
+
+  return {
+    scanHotkey: DEFAULT_SCAN_HOTKEY,
+    stashScanHotkey: DEFAULT_STASH_SCAN_HOTKEY
+  };
+}
+
+function getCompleteHotkeySettings(settingsDraft = {}) {
+  const defaults = getDefaultHotkeySettings();
+  const { validateHotkeys } = getHotkeyModel();
+
+  try {
+    return {
+      ...settingsDraft,
+      ...validateHotkeys({
+        scanHotkey: settingsDraft.scanHotkey || defaults.scanHotkey,
+        stashScanHotkey: settingsDraft.stashScanHotkey || defaults.stashScanHotkey
+      })
+    };
+  } catch {
+    return {
+      ...settingsDraft,
+      ...defaults
+    };
+  }
+}
+
+function getHotkeyDisplayPlatform() {
+  if (typeof navigator !== 'undefined' && typeof navigator.platform === 'string' && navigator.platform) {
+    return navigator.platform;
+  }
+
+  return 'win32';
+}
+
+function syncHotkeyFieldDisplay(inputElement, displayElement) {
+  if (!inputElement || !displayElement) {
+    return;
+  }
+
+  const { formatAcceleratorForDisplay } = getHotkeyModel();
+  const rawValue = String(inputElement.value || '').trim();
+
+  if (!rawValue) {
+    inputElement.value = '';
+    displayElement.textContent = '-';
+    return;
+  }
+
+  try {
+    const formattedValue = formatAcceleratorForDisplay(rawValue, {
+      platform: getHotkeyDisplayPlatform()
+    });
+    inputElement.value = formattedValue;
+    displayElement.textContent = formattedValue;
+  } catch {
+    displayElement.textContent = rawValue;
+  }
+}
+
+function syncHotkeyDisplays() {
+  syncHotkeyFieldDisplay(elements.scanHotkey, elements.scanHotkeyDisplay);
+  syncHotkeyFieldDisplay(elements.stashScanHotkey, elements.stashScanHotkeyDisplay);
+}
+
 function normalizePoeVersion(version) {
   return version === 'poe1' || version === 'poe2' ? version : null;
+}
+
+function applySettingsVersionSelection(version) {
+  const normalizedVersion = normalizePoeVersion(version) || 'poe1';
+  state.settings.poeVersion = normalizedVersion;
+  elements.versionBtns.forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.version === normalizedVersion);
+  });
+  return normalizedVersion;
 }
 
 function getSelectedSettingsVersion() {
@@ -229,19 +360,8 @@ function getSettingsLeagueVersion() {
   return getSelectedSettingsVersion() || 'poe1';
 }
 
-function getLeagueUiContextVersion() {
-  return normalizePoeVersion(state.detectedGameVersion)
-    || normalizePoeVersion(state.settings.lastDetectedPoeVersion);
-}
-
 function getLeagueValueForVersion(version = getResolvedLeagueVersion()) {
-  const leagueKey = getLeagueSettingKey(version);
-  const storedLeague = state.settings[leagueKey];
-  const legacyLeague = typeof state.settings.defaultLeague === 'string'
-    ? state.settings.defaultLeague.trim()
-    : '';
-
-  return String(storedLeague ?? legacyLeague ?? 'Standard').trim() || 'Standard';
+  return getLeagueFieldStateForVersion(version).value;
 }
 
 function getResolvedLeagueVersion() {
@@ -272,56 +392,163 @@ function getStoredLeagueValueForVersion(version = getSettingsLeagueVersion()) {
   return String(storedLeague ?? legacyLeague ?? '').trim();
 }
 
+function getLeagueFieldStateForVersion(version = getSettingsLeagueVersion()) {
+  const { deriveLeagueFieldState } = getSettingsModel();
+
+  return deriveLeagueFieldState({
+    settingsVersion: version,
+    storedLeague: getStoredLeagueValueForVersion(version),
+    activeLeagues: state.activeLeagueOptions?.[version] || [],
+    apiReachable: state.leagueOptionsLoaded
+  });
+}
+
+function getActiveLeagueControlType(preferredControlType = null) {
+  if (preferredControlType === 'select' && elements.defaultLeagueSelect) {
+    return 'select';
+  }
+
+  return 'input';
+}
+
+function getActiveLeagueFieldElement(preferredControlType = null) {
+  const controlType = getActiveLeagueControlType(preferredControlType);
+
+  if (controlType === 'select') {
+    return elements.defaultLeagueSelect;
+  }
+
+  return elements.defaultLeague;
+}
+
+function getActiveLeagueFieldValue(preferredControlType = null) {
+  const controlType = preferredControlType
+    || (elements.defaultLeagueSelect && !elements.defaultLeagueSelect.hidden ? 'select' : 'input');
+  const fieldElement = getActiveLeagueFieldElement(controlType);
+  const rawValue = typeof fieldElement?.value === 'string' ? fieldElement.value.trim() : '';
+
+  return rawValue || 'Standard';
+}
+
+function setActiveLeagueFieldValue(leagueValue) {
+  const normalizedLeagueValue = String(leagueValue ?? '').trim() || 'Standard';
+
+  if (elements.defaultLeague) {
+    elements.defaultLeague.value = normalizedLeagueValue;
+  }
+
+  if (elements.defaultLeagueSelect) {
+    elements.defaultLeagueSelect.value = normalizedLeagueValue;
+  }
+}
+
+function extractUsableActiveLeagues(activeLeagueEntries) {
+  if (!Array.isArray(activeLeagueEntries)) {
+    return [];
+  }
+
+  const usableLeagues = [];
+
+  activeLeagueEntries.forEach((entry) => {
+    if (typeof entry === 'string') {
+      const leagueName = entry.trim();
+      if (leagueName) {
+        usableLeagues.push(leagueName);
+      }
+      return;
+    }
+
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+
+    const status = typeof entry.status === 'string'
+      ? entry.status.trim().toLowerCase()
+      : '';
+    const isExplicitlyInactive = entry.active === false
+      || entry.isActive === false
+      || entry.current === false
+      || entry.isCurrent === false
+      || status === 'inactive';
+
+    if (isExplicitlyInactive) {
+      return;
+    }
+
+    const displayName = String(entry.displayName ?? '').trim();
+    const fallbackName = String(entry.name ?? '').trim();
+    const preferredLabel = displayName || fallbackName;
+    if (preferredLabel) {
+      usableLeagues.push(preferredLabel);
+    }
+  });
+
+  return Array.from(new Set(usableLeagues));
+}
+
 function refreshActiveLeagueDirtyState() {
-  if (!elements.defaultLeague) {
+  if (!elements.defaultLeague && !elements.defaultLeagueSelect) {
     activeLeagueInputState.dirty = false;
     activeLeagueInputState.version = null;
     return;
   }
 
   const settingsVersion = getSettingsLeagueVersion();
-  const currentValue = elements.defaultLeague.value.trim() || 'Standard';
-  activeLeagueInputState.dirty = currentValue !== getDisplayedActiveLeague();
+  const currentValue = getActiveLeagueFieldValue();
+  activeLeagueInputState.dirty = currentValue !== getLeagueFieldStateForVersion(settingsVersion).value;
   activeLeagueInputState.version = settingsVersion;
 }
 
 function updateActiveLeagueFieldContext(options = {}) {
   const { syncValue = false, forceValueSync = false } = options;
-  const settingsVersion = getSettingsLeagueVersion();
-  const contextVersion = getLeagueUiContextVersion();
-  const placeholderKey = contextVersion === 'poe2'
+  const uiVersion = getSettingsLeagueVersion();
+  const leagueFieldState = getLeagueFieldStateForVersion(uiVersion);
+  const placeholderKey = uiVersion === 'poe2'
     ? 'settings.leaguePlaceholderPoe2'
-    : (contextVersion === 'poe1' ? 'settings.leaguePlaceholderPoe1' : 'settings.leaguePlaceholder');
-  const gameLabel = contextVersion === 'poe2'
+    : (uiVersion === 'poe1' ? 'settings.leaguePlaceholderPoe1' : 'settings.leaguePlaceholder');
+  const gameLabel = uiVersion === 'poe2'
     ? window.t('settings.leagueContextPoe2')
-    : (contextVersion === 'poe1'
+    : (uiVersion === 'poe1'
       ? window.t('settings.leagueContextPoe1')
       : `${window.t('settings.leagueContextPoe1')} / ${window.t('settings.leagueContextPoe2')}`);
-  const syncedLeagueValue = contextVersion
-    ? getDisplayedActiveLeague()
-    : getStoredLeagueValueForVersion(settingsVersion);
-  const canSyncStoredValue = Boolean(syncedLeagueValue);
-  const gameKey = settingsVersion === 'poe2'
+  const syncedLeagueValue = leagueFieldState.value;
+  const gameKey = uiVersion === 'poe2'
     ? 'settings.leagueContextPoe2'
     : 'settings.leagueContextPoe1';
+  const controlType = getActiveLeagueControlType(leagueFieldState.controlType);
+  const currentDraftValue = getActiveLeagueFieldValue(controlType);
+  const canPreserveDraft = activeLeagueInputState.dirty && activeLeagueInputState.version === uiVersion;
+  const nextLeagueValue = canPreserveDraft ? currentDraftValue : syncedLeagueValue;
 
   if (elements.defaultLeague) {
     elements.defaultLeague.placeholder = window.t(placeholderKey);
-    const canPreserveDraft = activeLeagueInputState.dirty && activeLeagueInputState.version === settingsVersion;
-    if (syncValue && (forceValueSync || !canPreserveDraft) && (contextVersion || canSyncStoredValue)) {
-      elements.defaultLeague.value = syncedLeagueValue;
-      activeLeagueInputState.dirty = false;
-      activeLeagueInputState.version = settingsVersion;
-    } else if (syncValue && forceValueSync && !contextVersion && !canSyncStoredValue) {
-      elements.defaultLeague.value = '';
-      activeLeagueInputState.dirty = false;
-      activeLeagueInputState.version = settingsVersion;
+    elements.defaultLeague.hidden = controlType !== 'input';
+    elements.defaultLeague.disabled = controlType !== 'input';
+  }
+
+  if (elements.defaultLeagueSelect) {
+    elements.defaultLeagueSelect.hidden = controlType !== 'select';
+    elements.defaultLeagueSelect.disabled = controlType !== 'select';
+    if (controlType === 'select') {
+      elements.defaultLeagueSelect.innerHTML = leagueFieldState.options
+        .map((option) => `<option value="${escapeHTML(option)}">${escapeHTML(option)}</option>`)
+        .join('');
     }
+  }
+
+  if (syncValue && (forceValueSync || !canPreserveDraft)) {
+    setActiveLeagueFieldValue(nextLeagueValue);
+    activeLeagueInputState.dirty = false;
+    activeLeagueInputState.version = uiVersion;
+  } else if (controlType === 'select' && elements.defaultLeagueSelect) {
+    elements.defaultLeagueSelect.value = leagueFieldState.options.includes(nextLeagueValue)
+      ? nextLeagueValue
+      : syncedLeagueValue;
   }
 
   if (elements.activeLeagueContext) {
     elements.activeLeagueContext.textContent = window.t('settings.leagueContextHint', {
-      game: contextVersion ? window.t(gameKey) : gameLabel
+      game: uiVersion ? window.t(gameKey) : gameLabel
     });
   }
 }
@@ -329,7 +556,6 @@ function updateActiveLeagueFieldContext(options = {}) {
 function syncRendererGameContext(version, options = {}) {
   const normalizedDetectedVersion = normalizePoeVersion(version);
   const normalizedSettingsVersion = normalizePoeVersion(options.settingsVersion)
-    || normalizedDetectedVersion
     || normalizePoeVersion(state.settings.poeVersion);
   const normalizedLastDetectedVersion = normalizePoeVersion(options.lastDetectedVersion)
     || normalizedDetectedVersion
@@ -344,6 +570,7 @@ function syncRendererGameContext(version, options = {}) {
       btn.classList.toggle('active', btn.dataset.version === normalizedSettingsVersion);
     });
     syncDesktopCurrencyIcons();
+    void loadSettingsLeagueOptions(normalizedSettingsVersion);
   }
 
   if (options.logPath) {
@@ -358,6 +585,7 @@ function syncRendererGameContext(version, options = {}) {
  * Uygulamayi baslat
  */
 async function init() {
+  await ensureSettingsModelLoaded();
   populateLanguageOptions();
 
   // Ayarlari yukle
@@ -366,7 +594,7 @@ async function init() {
 
   // Set language from settings and apply translations
   window._appState.language = state.settings.language || 'en';
-  if (window.applyTranslations) window.applyTranslations();
+  applyLocalizedChrome();
   updateActiveLeagueFieldContext();
   syncDesktopCurrencyIcons();
 
@@ -414,6 +642,82 @@ function populateLanguageOptions() {
   elements.globalLanguage.innerHTML = locales
     .map((locale) => `<option value="${locale.code}">${locale.label}</option>`)
     .join('');
+}
+
+async function loadSettingsLeagueOptions(version = getSettingsLeagueVersion()) {
+  const normalizedVersion = normalizePoeVersion(version) || 'poe1';
+
+  try {
+    const response = await window.electronAPI.getCurrencyLeagues(normalizedVersion);
+    const leagueData = response?.data || response || {};
+    const activeLeagues = extractUsableActiveLeagues(leagueData.activeLeagues);
+
+    state.activeLeagueOptions = {
+      ...state.activeLeagueOptions,
+      [normalizedVersion]: activeLeagues
+    };
+  } catch {
+    state.activeLeagueOptions = {
+      ...state.activeLeagueOptions,
+      [normalizedVersion]: []
+    };
+  } finally {
+    state.leagueOptionsLoaded = true;
+    updateActiveLeagueFieldContext({ syncValue: true });
+  }
+}
+
+function applySettingsDraftToDom(settingsDraft = {}) {
+  const completeSettingsDraft = getCompleteHotkeySettings(settingsDraft);
+
+  if (elements.apiUrl) elements.apiUrl.value = completeSettingsDraft.apiUrl || '';
+  if (elements.poePath) elements.poePath.value = completeSettingsDraft.poePath || '';
+  if (elements.autoStartSession) elements.autoStartSession.checked = Boolean(completeSettingsDraft.autoStartSession);
+  if (elements.enableNotifications) elements.enableNotifications.checked = completeSettingsDraft.notifications !== false;
+  if (elements.soundNotifications) elements.soundNotifications.checked = Boolean(completeSettingsDraft.soundNotifications);
+  if (elements.scanHotkey) elements.scanHotkey.value = completeSettingsDraft.scanHotkey;
+  if (elements.stashScanHotkey) elements.stashScanHotkey.value = completeSettingsDraft.stashScanHotkey;
+  syncHotkeyDisplays();
+  if (elements.globalLanguage) elements.globalLanguage.value = completeSettingsDraft.language || 'en';
+  if (elements.defaultLeague || elements.defaultLeagueSelect) {
+    const leagueKey = getLeagueSettingKey(getSettingsLeagueVersion());
+    const leagueValue = completeSettingsDraft[leagueKey] ?? completeSettingsDraft.defaultLeague;
+    setActiveLeagueFieldValue(leagueValue);
+  }
+}
+
+function setupHotkeyCaptureFields() {
+  const { formatKeyboardEventToAccelerator } = getHotkeyModel();
+
+  [elements.scanHotkey, elements.stashScanHotkey]
+    .filter(Boolean)
+    .forEach((field) => {
+      field.addEventListener('keydown', (event) => {
+        if (event.key === 'Tab') {
+          return;
+        }
+
+        if (event.key === 'Escape') {
+          field.blur();
+          return;
+        }
+
+        event.preventDefault();
+
+        try {
+          field.value = formatKeyboardEventToAccelerator(event);
+          syncHotkeyDisplays();
+        } catch {
+          // Ignore modifier-only input while the capture field is focused.
+        }
+      });
+
+      field.addEventListener('focus', () => {
+        if (typeof field.select === 'function') {
+          field.select();
+        }
+      });
+    });
 }
 
 function populateStrategyPresets() {
@@ -552,25 +856,11 @@ document.addEventListener('visibilitychange', () => {
  */
 async function loadSettings() {
   try {
-    state.settings = await window.electronAPI.getSettings();
-
-    // Settings formunu doldur
-    if (elements.apiUrl) elements.apiUrl.value = state.settings.apiUrl || '';
-    if (elements.poePath) elements.poePath.value = state.settings.poePath || '';
-    if (elements.autoStartSession) elements.autoStartSession.checked = state.settings.autoStartSession || false;
-    if (elements.enableNotifications) elements.enableNotifications.checked = state.settings.notifications !== false;
-    if (elements.soundNotifications) elements.soundNotifications.checked = state.settings.soundNotifications || false;
-    if (elements.scanHotkey) elements.scanHotkey.value = state.settings.scanHotkey || 'F9';
-
-    const lang = state.settings.language || 'en';
-    if (elements.globalLanguage) elements.globalLanguage.value = lang;
-
-    // PoE version buttons
-    const ver = state.settings.poeVersion || 'poe1';
-    elements.versionBtns.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.version === ver);
-    });
+    state.settings = getCompleteHotkeySettings(await window.electronAPI.getSettings());
+    const ver = applySettingsVersionSelection(state.settings.poeVersion || 'poe1');
+    applySettingsDraftToDom(state.settings);
     updateActiveLeagueFieldContext({ syncValue: true, forceValueSync: true });
+    await loadSettingsLeagueOptions(ver);
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.settingsError'), 'error');
   }
@@ -694,7 +984,7 @@ function setupEventListeners() {
       const lang = elements.globalLanguage.value || 'en';
       state.settings.language = lang;
       window._appState.language = lang;
-      if (window.applyTranslations) window.applyTranslations();
+      applyLocalizedChrome();
       updateActiveLeagueFieldContext();
     });
   }
@@ -704,6 +994,12 @@ function setupEventListeners() {
       refreshActiveLeagueDirtyState();
     });
   }
+  if (elements.defaultLeagueSelect) {
+    elements.defaultLeagueSelect.addEventListener('change', () => {
+      refreshActiveLeagueDirtyState();
+    });
+  }
+  setupHotkeyCaptureFields();
 
   // PoE version switching
   elements.versionBtns.forEach(btn => {
@@ -713,6 +1009,7 @@ function setupEventListeners() {
       state.settings.poeVersion = btn.dataset.version;
       syncDesktopCurrencyIcons();
       updateActiveLeagueFieldContext({ syncValue: true });
+      void loadSettingsLeagueOptions(btn.dataset.version);
     });
   });
 
@@ -1055,8 +1352,7 @@ async function handleLogout() {
   state.recentLoot = [];
   state.poeLink = null;
   closeSessionDrawer();
-  elements.username.textContent = window.t('user.guest');
-  if (elements.userAvatar) elements.userAvatar.textContent = '?';
+  renderUserIdentity();
   resetDashboardSummary();
   updateActiveSessionUI();
   renderSessionsList();
@@ -1066,14 +1362,43 @@ async function handleLogout() {
 }
 
 /**
+ * Kullanici kimligini guncel duruma gore goster
+ */
+function renderUserIdentity() {
+  if (!elements.username) {
+    return;
+  }
+
+  const username = typeof state.currentUser?.username === 'string'
+    ? state.currentUser.username.trim()
+    : '';
+  const hasUserIdentity = Boolean(username);
+  const headerUsername = hasUserIdentity ? username : window.t('user.guest');
+
+  elements.username.textContent = headerUsername;
+
+  if (elements.userAvatar) {
+    elements.userAvatar.textContent = hasUserIdentity
+      ? headerUsername.charAt(0).toUpperCase()
+      : '?';
+  }
+}
+
+function applyLocalizedChrome() {
+  if (window.applyTranslations) {
+    window.applyTranslations();
+  }
+
+  renderUserIdentity();
+  renderPoeLinkStatus();
+}
+
+/**
  * Mevcut kullaniciyi ayarla
  */
 function setCurrentUser(user) {
   state.currentUser = user;
-  elements.username.textContent = user.username;
-  if (elements.userAvatar) {
-    elements.userAvatar.textContent = user.username.charAt(0).toUpperCase();
-  }
+  renderUserIdentity();
 }
 
 function canCurrentUserSyncPrices() {
@@ -1088,7 +1413,7 @@ function renderPoeLinkStatus() {
   if (!state.currentUser) {
     elements.poeLinkStatus.textContent = window.t('settings.poeSignInRequired');
     elements.poeAccountName.textContent = window.t('settings.poeSignInHint');
-    elements.poeLinkMode.textContent = window.t('settings.poeMockMode');
+    elements.poeLinkMode.textContent = window.t('settings.poeSignedOutMode');
     if (elements.poeConnectBtn) elements.poeConnectBtn.classList.remove('hidden');
     if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.classList.add('hidden');
     return;
@@ -1574,7 +1899,19 @@ async function handleSaveSettings() {
   const settingsVersion = normalizePoeVersion(activeVersion?.dataset.version)
     || getSettingsLeagueVersion();
   const leagueSettingKey = getLeagueSettingKey(settingsVersion);
-  const visibleLeague = elements.defaultLeague ? (elements.defaultLeague.value.trim() || 'Standard') : 'Standard';
+  const visibleLeague = getActiveLeagueFieldValue();
+  let hotkeys;
+
+  try {
+    const { validateHotkeys } = getHotkeyModel();
+    hotkeys = validateHotkeys({
+      scanHotkey: elements.scanHotkey ? elements.scanHotkey.value : undefined,
+      stashScanHotkey: elements.stashScanHotkey ? elements.stashScanHotkey.value : undefined
+    });
+  } catch (error) {
+    showToast(window.t('toast.error'), error.message || 'Invalid hotkeys', 'error');
+    return;
+  }
 
   const settings = {
     apiUrl: elements.apiUrl.value,
@@ -1585,12 +1922,14 @@ async function handleSaveSettings() {
     language: elements.globalLanguage ? elements.globalLanguage.value : 'en',
     poeVersion: activeVersion ? activeVersion.dataset.version : 'poe1',
     [leagueSettingKey]: visibleLeague,
-    scanHotkey: elements.scanHotkey ? elements.scanHotkey.value : 'F9'
+    scanHotkey: hotkeys.scanHotkey,
+    stashScanHotkey: hotkeys.stashScanHotkey
   };
 
   try {
     await window.electronAPI.setSettings(settings);
     state.settings = { ...state.settings, ...settings };
+    applySettingsDraftToDom(state.settings);
     activeLeagueInputState.dirty = false;
     updateActiveLeagueFieldContext({ syncValue: true, forceValueSync: true });
     syncDesktopCurrencyIcons();
@@ -1614,22 +1953,45 @@ async function handleSaveSettings() {
 async function handleResetSettings() {
   if (!confirm(window.t('settings.resetConfirm'))) return;
 
-  elements.apiUrl.value = 'http://localhost:3001';
-  elements.poePath.value = '';
-  elements.autoStartSession.checked = true;
-  elements.enableNotifications.checked = true;
-  if (elements.soundNotifications) elements.soundNotifications.checked = false;
-  if (elements.defaultLeague) elements.defaultLeague.value = 'Standard';
-  if (elements.scanHotkey) elements.scanHotkey.value = 'F9';
+  const { buildResetSettingsDraft } = getSettingsModel();
+  const previousContext = getSelectedTrackerContext();
+  const resetDraft = buildResetSettingsDraft({
+    settings: state.settings,
+    currentUser: state.currentUser
+  });
+  resetDraft.settings = {
+    ...resetDraft.settings,
+    ...getDefaultHotkeySettings()
+  };
 
-  // Reset language to EN
-  if (elements.globalLanguage) elements.globalLanguage.value = 'en';
-  window._appState.language = 'en';
-  if (window.applyTranslations) window.applyTranslations();
-  activeLeagueInputState.dirty = false;
-  updateActiveLeagueFieldContext({ syncValue: true, forceValueSync: true });
+  try {
+    await window.electronAPI.setSettings(resetDraft.settings);
 
-  await handleSaveSettings();
+    state.settings = { ...state.settings, ...resetDraft.settings };
+    const resetVersion = applySettingsVersionSelection(resetDraft.settings.poeVersion);
+    applySettingsDraftToDom(resetDraft.settings);
+    window._appState.language = resetDraft.settings.language || 'en';
+    applyLocalizedChrome();
+    activeLeagueInputState.dirty = false;
+    updateActiveLeagueFieldContext({ syncValue: true, forceValueSync: true });
+    syncDesktopCurrencyIcons();
+    await loadSettingsLeagueOptions(resetVersion);
+
+    const nextContext = getSelectedTrackerContext();
+    const contextChanged =
+      previousContext.poeVersion !== nextContext.poeVersion ||
+      previousContext.league !== nextContext.league;
+
+    if (contextChanged && state.currentUser) {
+      try {
+        await refreshTrackerData({ includeSessions: true, includeCurrency: true });
+      } catch { }
+    }
+
+    showToast(window.t('nav.settings'), window.t('toast.settingsSaved'));
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.settingsError'), 'error');
+  }
 }
 
 /**
@@ -2233,7 +2595,7 @@ async function handleSessionMetadataSave() {
     if (elements.sessionDrawerSave) {
       elements.sessionDrawerSave.disabled = false;
       elements.sessionDrawerSave.textContent = originalLabel;
-      if (window.applyTranslations) window.applyTranslations();
+      applyLocalizedChrome();
     }
   }
 }

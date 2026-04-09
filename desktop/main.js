@@ -25,6 +25,11 @@ const PoeApiClient = require('./src/modules/poeApiClient');
 const PriceService = require('./src/modules/priceService');
 const StashAnalyzer = require('./src/modules/stashAnalyzer');
 const GameDetector = require('./src/modules/gameDetector');
+const {
+  DEFAULT_SCAN_HOTKEY,
+  DEFAULT_STASH_SCAN_HOTKEY,
+  validateHotkeys
+} = require('./src/modules/hotkeyModel');
 const DEFAULT_POE_LOG_PATH = GameDetector.DEFAULT_POE_LOG_PATH;
 
 const APP_NAME = 'Juice Journal';
@@ -47,7 +52,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     trayCurrency: 'Currency',
     traySettings: 'Ayarlar',
     trayNewSession: 'Yeni Map Session',
-    trayAddLoot: 'Loot Ekle (F9)',
+    trayAddLoot: 'Loot Ekle',
     trayQuit: 'Cikis',
     notificationError: 'Hata',
     notificationInfo: 'Bilgi',
@@ -103,7 +108,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     trayCurrency: 'Currency',
     traySettings: 'Settings',
     trayNewSession: 'Start New Map',
-    trayAddLoot: 'Add Loot (F9)',
+    trayAddLoot: 'Add Loot',
     trayQuit: 'Quit',
     notificationError: 'Error',
     notificationInfo: 'Info',
@@ -164,7 +169,8 @@ const store = new Store({
     language: 'en',
     soundNotifications: false,
     poeVersion: 'poe1',
-    scanHotkey: 'F9',
+    scanHotkey: DEFAULT_SCAN_HOTKEY,
+    stashScanHotkey: DEFAULT_STASH_SCAN_HOTKEY,
     currentUserId: null,
     pendingSessionActions: [],
     pendingLootActions: [],
@@ -176,10 +182,20 @@ const store = new Store({
 });
 
 // Migrate old 'tr' default to 'en' (one-time)
-if (!store.get('_langMigrated')) {
-  store.set('language', 'en');
+function migrateLanguageSetting() {
+  if (store.get('_langMigrated')) {
+    return;
+  }
+
+  const savedLanguage = store.get('language');
+  if (typeof savedLanguage !== 'string' || !savedLanguage.trim()) {
+    store.set('language', 'en');
+  }
+
   store.set('_langMigrated', true);
 }
+
+migrateLanguageSetting();
 
 function normalizePoeVersion(version) {
   return version === 'poe1' || version === 'poe2' ? version : null;
@@ -1025,7 +1041,7 @@ function refreshTrayMenu() {
       }
     },
     {
-      label: t('trayAddLoot'),
+      label: `${t('trayAddLoot')} (${getValidatedHotkeySettings().scanHotkey})`,
       click: () => {
         showMainWindow('dashboard');
         captureAndScan();
@@ -1433,16 +1449,73 @@ function createTray() {
 /**
  * Global kisayol tanimla
  */
-function registerGlobalShortcuts() {
-  // F9 - Hizli loot ekle
-  globalShortcut.register('F9', () => {
-    captureAndScan();
-  });
+function getValidatedHotkeySettings(overrides = {}) {
+  const requestedScanHotkey = Object.prototype.hasOwnProperty.call(overrides, 'scanHotkey')
+    ? overrides.scanHotkey
+    : store.get('scanHotkey');
+  const requestedStashScanHotkey = Object.prototype.hasOwnProperty.call(overrides, 'stashScanHotkey')
+    ? overrides.stashScanHotkey
+    : store.get('stashScanHotkey');
 
-  // Ctrl+Shift+L - Stash tarama
-  globalShortcut.register('CommandOrControl+Shift+L', () => {
+  try {
+    return validateHotkeys({
+      scanHotkey: requestedScanHotkey || DEFAULT_SCAN_HOTKEY,
+      stashScanHotkey: requestedStashScanHotkey || DEFAULT_STASH_SCAN_HOTKEY
+    });
+  } catch (error) {
+    if (Object.prototype.hasOwnProperty.call(overrides, 'scanHotkey')
+      || Object.prototype.hasOwnProperty.call(overrides, 'stashScanHotkey')) {
+      throw error;
+    }
+
+    return {
+      scanHotkey: DEFAULT_SCAN_HOTKEY,
+      stashScanHotkey: DEFAULT_STASH_SCAN_HOTKEY
+    };
+  }
+}
+
+function registerHotkeySet({ scanHotkey, stashScanHotkey }) {
+  globalShortcut.unregisterAll();
+
+  if (!globalShortcut.register(scanHotkey, () => {
     captureAndScan();
-  });
+  })) {
+    globalShortcut.unregisterAll();
+    throw new Error(`Unable to register global shortcut: ${scanHotkey}`);
+  }
+
+  if (!globalShortcut.register(stashScanHotkey, () => {
+    captureAndScan();
+  })) {
+    globalShortcut.unregisterAll();
+    throw new Error(`Unable to register global shortcut: ${stashScanHotkey}`);
+  }
+
+  return {
+    scanHotkey,
+    stashScanHotkey
+  };
+}
+
+function registerGlobalShortcuts(overrides = {}) {
+  const nextHotkeys = getValidatedHotkeySettings(overrides);
+  const hasOverrides = Object.keys(overrides).length > 0;
+  const previousHotkeys = hasOverrides ? getValidatedHotkeySettings() : null;
+
+  try {
+    return registerHotkeySet(nextHotkeys);
+  } catch (error) {
+    if (previousHotkeys) {
+      try {
+        registerHotkeySet(previousHotkeys);
+      } catch {
+        // Keep the original registration error as the one surfaced to the caller.
+      }
+    }
+
+    throw error;
+  }
 }
 
 /**
@@ -1807,24 +1880,24 @@ function setupGameDetector() {
  * Apply detected game version — update store, price service, log parser, and notify renderer
  */
 function applyGameVersion(version) {
+  const previousDetectedVersion = store.get('lastDetectedPoeVersion');
+  const selectedSettingsVersion = store.get('poeVersion');
   store.set('lastDetectedPoeVersion', version);
-  const currentVersion = store.get('poeVersion');
   const storedPoePath = store.get('poePath');
-  const versionChanged = version !== currentVersion;
+  const versionChanged = version !== previousDetectedVersion;
+  const runtimePriceVersion = priceService?.poeVersion === 'poe2'
+    ? 'poe2'
+    : (priceService?.poeVersion === 'poe1' ? 'poe1' : null);
+  const shouldRetargetPriceService = Boolean(priceService && runtimePriceVersion !== version);
   let detectedLogPath = null;
 
   // Always re-check the runtime Client.txt path so same-version launches can refresh tracking.
   detectedLogPath = GameDetector.findLogPath(version);
 
-  if (versionChanged) {
-    // Update store
-    store.set('poeVersion', version);
-
-    // Update price service
-    if (priceService) {
-      priceService.setPoeVersion(version);
-      priceService.clearCache();
-    }
+  if (shouldRetargetPriceService) {
+    // Runtime services should follow the detected game without changing the user's saved selection.
+    priceService.setPoeVersion(version);
+    priceService.clearCache();
   }
 
   const shouldUpdatePoePath = Boolean(detectedLogPath && detectedLogPath !== storedPoePath);
@@ -1850,9 +1923,87 @@ function applyGameVersion(version) {
   if (mainWindow) {
     mainWindow.webContents.send('game-version-changed', {
       version,
+      settingsVersion: selectedSettingsVersion,
+      lastDetectedVersion: version,
       logPath: detectedLogPath || store.get('poePath')
     });
   }
+}
+
+const SETTINGS_ALLOWLIST = new Set([
+  'apiUrl', 'poePath', 'autoStartSession', 'notifications',
+  'soundNotifications', 'language', 'poeVersion', 'defaultLeaguePoe1', 'defaultLeaguePoe2',
+  'scanHotkey', 'stashScanHotkey', 'theme'
+]);
+
+function applyDesktopSettings(settings = {}) {
+  const hasApiUrl = Object.prototype.hasOwnProperty.call(settings, 'apiUrl');
+  const normalizedApiUrl = hasApiUrl && typeof settings.apiUrl === 'string'
+    ? settings.apiUrl.trim()
+    : settings.apiUrl;
+
+  if (hasApiUrl && !normalizedApiUrl) {
+    throw new Error('Invalid API URL');
+  }
+
+  if (hasApiUrl && !isValidApiUrl(normalizedApiUrl)) {
+    throw new Error('Invalid API URL');
+  }
+
+  const hasScanHotkey = Object.prototype.hasOwnProperty.call(settings, 'scanHotkey');
+  const hasStashScanHotkey = Object.prototype.hasOwnProperty.call(settings, 'stashScanHotkey');
+  const shouldRefreshHotkeys = hasScanHotkey || hasStashScanHotkey;
+  const hotkeyOverrides = {};
+  if (hasScanHotkey) {
+    hotkeyOverrides.scanHotkey = settings.scanHotkey;
+  }
+  if (hasStashScanHotkey) {
+    hotkeyOverrides.stashScanHotkey = settings.stashScanHotkey;
+  }
+  const normalizedHotkeys = shouldRefreshHotkeys
+    ? getValidatedHotkeySettings(hotkeyOverrides)
+    : null;
+
+  if (shouldRefreshHotkeys) {
+    registerGlobalShortcuts(normalizedHotkeys);
+  }
+
+  for (const [key, value] of Object.entries(settings)) {
+    if (key === 'defaultLeague') {
+      const { leagueKey } = resolveLeagueContext({
+        activeVersion: settings.poeVersion,
+        league: value
+      });
+      store.set(leagueKey, value);
+      continue;
+    }
+
+    if (!SETTINGS_ALLOWLIST.has(key)) {
+      continue;
+    }
+
+    if (key === 'scanHotkey' || key === 'stashScanHotkey') {
+      store.set(key, normalizedHotkeys[key]);
+      continue;
+    }
+
+    if (key === 'apiUrl') {
+      store.set(key, normalizedApiUrl);
+      continue;
+    }
+
+    store.set(key, value);
+  }
+
+  if (hasApiUrl && apiClient) {
+    apiClient.setBaseURL(normalizedApiUrl);
+  }
+
+  if (shouldRefreshHotkeys) {
+    refreshTrayMenu();
+  }
+
+  return true;
 }
 
 /**
@@ -1877,42 +2028,17 @@ function setupIPC() {
   ipcMain.handle('get-settings', () => {
     const allSettings = { ...store.store };
     delete allSettings.authToken;
+    delete allSettings.authTokenEncrypted;
     delete allSettings.poeOAuthTokens;
+    delete allSettings.poeOAuthTokensEncrypted;
     delete allSettings.currentUserId;
+    allSettings.scanHotkey = allSettings.scanHotkey || DEFAULT_SCAN_HOTKEY;
+    allSettings.stashScanHotkey = allSettings.stashScanHotkey || DEFAULT_STASH_SCAN_HOTKEY;
     return allSettings;
   });
 
-  // Ayarlari kaydet (sadece izin verilen anahtarlar)
-  const SETTINGS_ALLOWLIST = new Set([
-    'apiUrl', 'poePath', 'autoStartSession', 'notifications',
-    'soundNotifications', 'language', 'poeVersion', 'defaultLeaguePoe1', 'defaultLeaguePoe2',
-    'scanHotkey', 'theme'
-  ]);
-
   ipcMain.handle('set-settings', (event, settings) => {
-    for (const [key, value] of Object.entries(settings)) {
-      if (key === 'defaultLeague') {
-        const { leagueKey } = resolveLeagueContext({
-          activeVersion: settings.poeVersion,
-          league: value
-        });
-        store.set(leagueKey, value);
-        continue;
-      }
-
-      if (SETTINGS_ALLOWLIST.has(key)) {
-        if (key === 'apiUrl' && value && !isValidApiUrl(value)) {
-          console.warn('[set-settings] Rejected invalid apiUrl:', value);
-          continue;
-        }
-        store.set(key, value);
-      }
-    }
-
-    if (settings.apiUrl && apiClient && isValidApiUrl(settings.apiUrl)) {
-      apiClient.setBaseURL(settings.apiUrl);
-    }
-    return true;
+    return applyDesktopSettings(settings);
   });
 
   // Auth token kontrolu (token'i aciga cikarmadan)

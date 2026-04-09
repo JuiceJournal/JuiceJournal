@@ -1,0 +1,444 @@
+const fs = require('fs');
+const http = require('http');
+const os = require('os');
+const path = require('path');
+const { once } = require('events');
+const { test, expect } = require('playwright/test');
+const { _electron: electron } = require('playwright');
+
+const SMOKE_USER = {
+  id: 'smoke-user-id',
+  username: 'smoke-user',
+  password: 'smoke-password',
+};
+
+function toSlug(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    || 'desktop-smoke';
+}
+
+function writeJson(response, statusCode, payload) {
+  response.writeHead(statusCode, { 'Content-Type': 'application/json' });
+  response.end(JSON.stringify(payload));
+}
+
+function parseJsonBody(request) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+
+    request.on('data', (chunk) => {
+      body += chunk;
+    });
+
+    request.on('end', () => {
+      if (!body) {
+        resolve({});
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(body));
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    request.on('error', reject);
+  });
+}
+
+async function startSmokeBackend() {
+  const server = http.createServer(async (request, response) => {
+    const url = new URL(request.url || '/', 'http://127.0.0.1');
+
+    if (request.method === 'POST' && url.pathname === '/api/auth/login') {
+      const body = await parseJsonBody(request);
+      if (body.username !== SMOKE_USER.username || body.password !== SMOKE_USER.password) {
+        writeJson(response, 401, {
+          success: false,
+          data: null,
+          error: 'Invalid username or password',
+          errorCode: 'UNAUTHORIZED',
+        });
+        return;
+      }
+
+      writeJson(response, 200, {
+        success: true,
+        data: {
+          token: 'smoke-token',
+          user: {
+            id: SMOKE_USER.id,
+            username: SMOKE_USER.username,
+          },
+          capabilities: {},
+        },
+        error: null,
+      });
+      return;
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/auth/poe/status') {
+      writeJson(response, 200, {
+        success: true,
+        data: {
+          poe: null,
+        },
+        error: null,
+      });
+      return;
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/prices/leagues') {
+      writeJson(response, 200, {
+        success: true,
+        data: {
+          activeLeagues: ['Standard'],
+        },
+        error: null,
+      });
+      return;
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/sessions/active') {
+      writeJson(response, 200, {
+        success: true,
+        data: {
+          session: null,
+        },
+        error: null,
+      });
+      return;
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/stats/personal') {
+      writeJson(response, 200, {
+        success: true,
+        data: {
+          summary: {
+            totalSessions: 0,
+            totalProfit: 0,
+            avgProfitPerMap: 0,
+          },
+          dailyStats: [],
+          mapStats: [],
+        },
+        error: null,
+      });
+      return;
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/loot/recent') {
+      writeJson(response, 200, {
+        success: true,
+        data: {
+          lootEntries: [],
+        },
+        error: null,
+      });
+      return;
+    }
+
+    writeJson(response, 404, {
+      success: false,
+      data: null,
+      error: `Unhandled smoke endpoint: ${request.method} ${url.pathname}`,
+      errorCode: 'NOT_FOUND',
+    });
+  });
+
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Smoke backend did not expose a TCP port');
+  }
+
+  return {
+    server,
+    baseUrl: `http://127.0.0.1:${address.port}`,
+  };
+}
+
+function createIsolatedProfile(testInfo, apiUrl) {
+  const tempRoot = path.join(os.tmpdir(), 'juice-journal-playwright');
+  fs.mkdirSync(tempRoot, { recursive: true });
+  const rootDir = fs.mkdtempSync(path.join(tempRoot, `${toSlug(testInfo.title)}-`));
+  const appDataDir = path.join(rootDir, 'app-data');
+  const userDataDir = path.join(rootDir, 'user-data');
+  const tempDir = path.join(rootDir, 'temp');
+
+  fs.rmSync(rootDir, { recursive: true, force: true });
+  fs.mkdirSync(appDataDir, { recursive: true });
+  fs.mkdirSync(userDataDir, { recursive: true });
+  fs.mkdirSync(tempDir, { recursive: true });
+
+  return {
+    rootDir,
+    appDataDir,
+    userDataDir,
+    env: {
+      ...process.env,
+      NODE_ENV: 'test',
+      JUICE_JOURNAL_E2E_APP_DATA_DIR: appDataDir,
+      JUICE_JOURNAL_E2E_USER_DATA_DIR: userDataDir,
+      JUICE_JOURNAL_E2E_API_URL: apiUrl,
+      TMP: tempDir,
+      TEMP: tempDir,
+    },
+  };
+}
+
+function createBootstrapScript(testInfo) {
+  const bootstrapRoot = path.join(os.tmpdir(), 'juice-journal-playwright');
+  fs.mkdirSync(bootstrapRoot, { recursive: true });
+  const bootstrapDir = fs.mkdtempSync(path.join(bootstrapRoot, `${toSlug(testInfo.title)}-bootstrap-`));
+  const bootstrapPath = path.join(bootstrapDir, 'bootstrap.cjs');
+  fs.writeFileSync(bootstrapPath, `
+const fs = require('fs');
+const path = require('path');
+const { app } = require('electron');
+
+const appDataDir = process.env.JUICE_JOURNAL_E2E_APP_DATA_DIR;
+const userDataDir = process.env.JUICE_JOURNAL_E2E_USER_DATA_DIR;
+const apiUrl = process.env.JUICE_JOURNAL_E2E_API_URL;
+
+if (!appDataDir || !userDataDir || !apiUrl) {
+  throw new Error('Missing smoke harness path overrides');
+}
+
+fs.mkdirSync(appDataDir, { recursive: true });
+fs.mkdirSync(userDataDir, { recursive: true });
+
+app.setPath('appData', appDataDir);
+app.setPath('userData', userDataDir);
+app.setPath('sessionData', path.join(userDataDir, 'session-data'));
+
+const configPath = path.join(userDataDir, 'config.json');
+fs.writeFileSync(configPath, JSON.stringify({
+  apiUrl,
+  language: 'en',
+  poeVersion: 'poe1',
+  authToken: null,
+  authTokenEncrypted: null,
+  currentUserId: null
+}, null, '\\t'));
+`, 'utf8');
+
+  return {
+    bootstrapDir,
+    bootstrapPath,
+  };
+}
+
+async function waitForAppWindow(electronApp, expectedTitle) {
+  const timeoutAt = Date.now() + 30000;
+
+  while (Date.now() < timeoutAt) {
+    const windows = electronApp.windows();
+    for (const page of windows) {
+      try {
+        if (expectedTitle.test(await page.title())) {
+          return page;
+        }
+      } catch {
+        // Ignore windows that are still initializing.
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  throw new Error(`Timed out waiting for app window matching ${expectedTitle}`);
+}
+
+async function waitForGuestReady(page) {
+  await page.waitForLoadState('domcontentloaded');
+  await expect(page).toHaveTitle(/Juice Journal/i);
+  await expect(page.locator('#login-modal')).toBeVisible();
+  await expect(page.locator('#login-form button[type="submit"]')).toBeEnabled();
+  await expect(page.locator('#username')).toHaveText('Guest');
+}
+
+async function signIn(page) {
+  await page.locator('#login-username').fill(SMOKE_USER.username);
+  await page.locator('#login-password').fill(SMOKE_USER.password);
+  await page.locator('#login-form button[type="submit"]').click();
+  await expect(page.locator('#login-modal')).toBeHidden();
+  await expect(page.locator('#username')).toHaveText(SMOKE_USER.username);
+}
+
+async function closeServer(server) {
+  if (!server?.listening) {
+    return;
+  }
+
+  await new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
+async function waitForProcessExit(childProcess, timeoutMs) {
+  if (!childProcess) {
+    return { exitCode: null, signal: null };
+  }
+
+  if (childProcess.exitCode !== null) {
+    return {
+      exitCode: childProcess.exitCode,
+      signal: childProcess.signalCode,
+    };
+  }
+
+  return await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      childProcess.off('exit', handleExit);
+      childProcess.off('error', handleError);
+      reject(new Error(`Electron process did not exit within ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    function handleExit(exitCode, signal) {
+      clearTimeout(timeout);
+      childProcess.off('error', handleError);
+      resolve({ exitCode, signal });
+    }
+
+    function handleError(error) {
+      clearTimeout(timeout);
+      childProcess.off('exit', handleExit);
+      reject(error);
+    }
+
+    childProcess.once('exit', handleExit);
+    childProcess.once('error', handleError);
+  });
+}
+
+async function shutdownElectronApp(electronApp) {
+  const childProcess = electronApp?.process?.();
+  const cleanupErrors = [];
+
+  try {
+    await electronApp.evaluate(({ app, BrowserWindow }) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.destroy();
+      }
+
+      app.exit(0);
+    });
+  } catch (error) {
+    if (!childProcess || childProcess.exitCode === null) {
+      cleanupErrors.push(`Failed to request Electron shutdown: ${error.message}`);
+    }
+  }
+
+  try {
+    await waitForProcessExit(childProcess, 5000);
+  } catch (error) {
+    cleanupErrors.push(error.message);
+    if (childProcess && childProcess.exitCode === null) {
+      childProcess.kill('SIGKILL');
+      try {
+        await waitForProcessExit(childProcess, 5000);
+      } catch (forcedExitError) {
+        cleanupErrors.push(`Forced Electron shutdown failed: ${forcedExitError.message}`);
+      }
+    }
+  }
+
+  if (cleanupErrors.length > 0) {
+    throw new Error(cleanupErrors.join('; '));
+  }
+}
+
+test('settings smoke: launches desktop app and shows core settings controls', async ({}, testInfo) => {
+  const backend = await startSmokeBackend();
+  const isolatedProfile = createIsolatedProfile(testInfo, backend.baseUrl);
+  const bootstrap = createBootstrapScript(testInfo);
+  let electronApp;
+  let testError = null;
+
+  try {
+    electronApp = await electron.launch({
+      args: ['-r', bootstrap.bootstrapPath, path.join(__dirname, '..')],
+      cwd: path.join(__dirname, '..'),
+      env: isolatedProfile.env,
+    });
+    const page = await waitForAppWindow(electronApp, /Juice Journal/i);
+
+    await waitForGuestReady(page);
+    await signIn(page);
+
+    await page.locator('.nav-btn[data-page="settings"]').click();
+    await expect(page.locator('#settings-page')).toHaveClass(/active/);
+    await expect(page.locator('#save-settings')).toBeVisible();
+    await expect(page.locator('#reset-settings')).toBeVisible();
+
+    await expect(page.locator('#global-language')).toBeVisible();
+    await expect(page.locator('#api-url')).toHaveValue(backend.baseUrl);
+
+    await page.locator('.settings-nav-btn[data-settings-tab="poe"]').click();
+    await expect(page.locator('#settings-poe')).toHaveClass(/active/);
+    await expect(page.locator('#poe-path')).toBeVisible();
+    await expect(page.locator('#auto-start-session')).toBeVisible();
+
+    await page.locator('.settings-nav-btn[data-settings-tab="api"]').click();
+    await expect(page.locator('#settings-api')).toHaveClass(/active/);
+    await expect(page.locator('#api-url')).toHaveValue(backend.baseUrl);
+    await expect(page.locator('#test-connection')).toBeVisible();
+    await expect(page.locator('#pending-sync-count')).toBeVisible();
+  } catch (error) {
+    testError = error;
+  } finally {
+    const cleanupErrors = [];
+
+    if (electronApp) {
+      try {
+        await shutdownElectronApp(electronApp);
+      } catch (error) {
+        cleanupErrors.push(`Electron cleanup failed: ${error.message}`);
+      }
+    }
+
+    try {
+      await closeServer(backend.server);
+    } catch (error) {
+      cleanupErrors.push(`Smoke backend cleanup failed: ${error.message}`);
+    }
+
+    try {
+      fs.rmSync(isolatedProfile.rootDir, { recursive: true, force: true });
+    } catch (error) {
+      cleanupErrors.push(`Isolated profile cleanup failed: ${error.message}`);
+    }
+
+    try {
+      fs.rmSync(bootstrap.bootstrapDir, { recursive: true, force: true });
+    } catch (error) {
+      cleanupErrors.push(`Bootstrap cleanup failed: ${error.message}`);
+    }
+
+    if (cleanupErrors.length > 0) {
+      const cleanupError = new Error(cleanupErrors.join('\n'));
+      if (testError) {
+        throw new AggregateError([testError, cleanupError], 'Smoke test failed with cleanup errors');
+      }
+
+      throw cleanupError;
+    }
+
+    if (testError) {
+      throw testError;
+    }
+  }
+});
