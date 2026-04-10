@@ -937,13 +937,25 @@ function setupEventListeners() {
   });
 
   // Auth
-  elements.loginForm.addEventListener('submit', handleLogin);
-  elements.registerForm.addEventListener('submit', handleRegister);
-  document.getElementById('show-register').addEventListener('click', showRegisterModal);
-  document.getElementById('show-login').addEventListener('click', showLoginModal);
+  if (elements.loginForm) {
+    elements.loginForm.addEventListener('submit', handleLogin);
+  }
+  if (elements.registerForm) {
+    elements.registerForm.addEventListener('submit', handleRegister);
+  }
+  const showRegisterButton = document.getElementById('show-register');
+  if (showRegisterButton) {
+    showRegisterButton.addEventListener('click', showRegisterModal);
+  }
+  const showLoginButton = document.getElementById('show-login');
+  if (showLoginButton) {
+    showLoginButton.addEventListener('click', showLoginModal);
+  }
   const poeOAuthBtn = document.getElementById('poe-oauth-login');
   if (poeOAuthBtn) poeOAuthBtn.addEventListener('click', handlePoeOAuthLogin);
-  elements.logoutBtn.addEventListener('click', handleLogout);
+  if (elements.logoutBtn) {
+    elements.logoutBtn.addEventListener('click', handleLogout);
+  }
 
   // Session
   elements.startSessionBtn.addEventListener('click', handleStartSession);
@@ -1229,16 +1241,26 @@ function navigateTo(page) {
  * Login modal'i goster
  */
 function showLoginModal() {
-  elements.loginModal.classList.remove('hidden');
-  elements.registerModal.classList.add('hidden');
+  if (elements.loginModal) {
+    elements.loginModal.classList.remove('hidden');
+  }
+
+  if (elements.registerModal) {
+    elements.registerModal.classList.add('hidden');
+  }
 }
 
 /**
  * Register modal'i goster
  */
 function showRegisterModal() {
-  elements.loginModal.classList.add('hidden');
-  elements.registerModal.classList.remove('hidden');
+  if (elements.loginModal) {
+    elements.loginModal.classList.add('hidden');
+  }
+
+  if (elements.registerModal) {
+    elements.registerModal.classList.remove('hidden');
+  }
 }
 
 /**
@@ -1283,14 +1305,25 @@ async function handlePoeOAuthLogin() {
   }
 
   try {
-    const result = await window.electronAPI.startPoeLogin();
+    const startResult = await window.electronAPI.startPoeLogin();
+    const canCompleteLogin = typeof window.electronAPI.completePoeLogin === 'function';
+    const result = !startResult?.success && canCompleteLogin
+      ? await window.electronAPI.completePoeLogin({
+        code: startResult?.mockCode || startResult?.code || null,
+        state: startResult?.state || null,
+        codeVerifier: startResult?.codeVerifier || null,
+        redirectUri: startResult?.redirectUri || null
+      })
+      : startResult;
 
     if (result?.success) {
       setCurrentUser({
         ...result.data.user,
         capabilities: result.data.capabilities || {}
       });
-      elements.loginModal.classList.add('hidden');
+      if (elements.loginModal) {
+        elements.loginModal.classList.add('hidden');
+      }
       await loadPoeLinkStatus();
       await refreshTrackerData();
       showToast(window.t('login.title'), window.t('toast.loginSuccess'));
