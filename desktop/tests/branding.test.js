@@ -53,6 +53,15 @@ test('desktop package and main process point to the branded window metadata', ()
   assert.match(mainProcess, /title:\s*APP_NAME/);
 });
 
+test('desktop window opens large enough to avoid default dashboard scrolling', () => {
+  const mainProcess = fs.readFileSync(mainProcessPath, 'utf8');
+
+  assert.match(mainProcess, /width:\s*1440,/);
+  assert.match(mainProcess, /height:\s*960,/);
+  assert.match(mainProcess, /minWidth:\s*1180,/);
+  assert.match(mainProcess, /minHeight:\s*820,/);
+});
+
 test('windows icon includes taskbar-friendly sizes', () => {
   const iconBuffer = fs.readFileSync(windowsIconPath);
   const entries = parseIcoEntries(iconBuffer);

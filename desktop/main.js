@@ -1385,10 +1385,10 @@ const isDev = !app.isPackaged;
  */
 function createMainWindow() {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
+    width: 1440,
+    height: 960,
+    minWidth: 1180,
+    minHeight: 820,
     show: false,
     frame: false,
     backgroundColor: '#0d0e12',
