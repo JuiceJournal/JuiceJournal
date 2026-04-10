@@ -17,6 +17,7 @@ const state = {
   sessions: [],
   recentLoot: [],
   poeLink: null,
+  account: null,
   selectedSession: null,
   pendingLootCount: 0,
   pendingSyncEntries: [],
@@ -223,6 +224,7 @@ const activeLeagueInputState = {
 };
 
 let settingsModelPromise = null;
+let accountStateModelPromise = null;
 
 function ensureSettingsModelLoaded() {
   if (window.settingsModel) {
@@ -252,12 +254,48 @@ function ensureSettingsModelLoaded() {
   return settingsModelPromise;
 }
 
+function ensureAccountStateModelLoaded() {
+  if (window.accountStateModel) {
+    return Promise.resolve(window.accountStateModel);
+  }
+
+  if (accountStateModelPromise) {
+    return accountStateModelPromise;
+  }
+
+  accountStateModelPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'modules/accountStateModel.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.accountStateModel) {
+        resolve(window.accountStateModel);
+        return;
+      }
+
+      reject(new Error('accountStateModel loaded without exposing window.accountStateModel'));
+    };
+    script.onerror = () => reject(new Error('Failed to load account state model script'));
+    document.head.appendChild(script);
+  });
+
+  return accountStateModelPromise;
+}
+
 function getSettingsModel() {
   if (!window.settingsModel) {
     throw new Error('settingsModel is not loaded');
   }
 
   return window.settingsModel;
+}
+
+function getAccountStateModel() {
+  if (!window.accountStateModel) {
+    throw new Error('accountStateModel is not loaded');
+  }
+
+  return window.accountStateModel;
 }
 
 function getHotkeyModel() {
@@ -586,6 +624,7 @@ function syncRendererGameContext(version, options = {}) {
  */
 async function init() {
   await ensureSettingsModelLoaded();
+  await ensureAccountStateModelLoaded();
   populateLanguageOptions();
 
   // Ayarlari yukle
@@ -1384,6 +1423,7 @@ async function handleLogout() {
   state.sessions = [];
   state.recentLoot = [];
   state.poeLink = null;
+  state.account = null;
   closeSessionDrawer();
   renderUserIdentity();
   resetDashboardSummary();
@@ -1431,6 +1471,26 @@ function applyLocalizedChrome() {
  */
 function setCurrentUser(user) {
   state.currentUser = user;
+  const { deriveAccountState } = getAccountStateModel();
+  const poePayload = user?.poe || {};
+  state.account = deriveAccountState({
+    accountName: user?.accountName
+      || user?.poeAccountName
+      || poePayload.accountName
+      || poePayload.account?.name
+      || user?.username
+      || null,
+    selectedCharacterId: user?.selectedCharacterId
+      || user?.selectedCharacter?.id
+      || poePayload.selectedCharacterId
+      || poePayload.selectedCharacter?.id
+      || null,
+    selectedCharacter: user?.selectedCharacter || poePayload.selectedCharacter || null,
+    characters: user?.characters
+      || user?.poeCharacters
+      || poePayload.characters
+      || []
+  });
   renderUserIdentity();
 }
 
