@@ -206,7 +206,7 @@
           </div>
 
           <!-- Stash Profit Tracker -->
-          <div class="card stash-tracker-card">
+          <div class="card stash-tracker-card" id="stash-tracker-card" data-stash-capability="enabled">
             <div class="card-header">
               <h3 data-i18n="stash.profitTracker">Stash Profit Tracker</h3>
               <div class="card-header-right">
@@ -216,6 +216,7 @@
                 <span class="card-badge" id="stash-tracker-status" data-i18n="stash.ready">Ready</span>
               </div>
             </div>
+            <div class="stash-capability-unavailable hidden" id="stash-capability-unavailable" data-i18n="stash.capabilityUnavailable.poe2" hidden></div>
             <div class="stash-tracker-content">
               <!-- Price sync status -->
               <div class="stash-price-status" id="stash-price-status">
@@ -665,6 +666,7 @@
 
   <script src="modules/translations.js"></script>
   <script src="modules/hotkeyModel.js"></script>
+  <script src="modules/capabilityModel.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

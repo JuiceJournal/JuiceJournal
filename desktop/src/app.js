@@ -19,6 +19,7 @@ const state = {
   poeLink: null,
   account: null,
   runtimeSession: null,
+  capabilities: null,
   selectedSession: null,
   pendingLootCount: 0,
   pendingSyncEntries: [],
@@ -200,6 +201,8 @@ const elements = {
   toastContainer: document.getElementById('toast-container'),
 
   // Stash Profit Tracker
+  stashTrackerCard: document.getElementById('stash-tracker-card'),
+  stashCapabilityUnavailable: document.getElementById('stash-capability-unavailable'),
   syncPricesBtn: document.getElementById('sync-prices-btn'),
   priceItemCount: document.getElementById('price-item-count'),
   takeBeforeSnapshotBtn: document.getElementById('take-before-snapshot-btn'),
@@ -227,6 +230,7 @@ const activeLeagueInputState = {
 let settingsModelPromise = null;
 let accountStateModelPromise = null;
 let runtimeSessionModelPromise = null;
+let capabilityModelPromise = null;
 
 function ensureSettingsModelLoaded() {
   if (window.settingsModel) {
@@ -312,6 +316,34 @@ function ensureRuntimeSessionModelLoaded() {
   return runtimeSessionModelPromise;
 }
 
+function ensureCapabilityModelLoaded() {
+  if (window.capabilityModel) {
+    return Promise.resolve(window.capabilityModel);
+  }
+
+  if (capabilityModelPromise) {
+    return capabilityModelPromise;
+  }
+
+  capabilityModelPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'modules/capabilityModel.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.capabilityModel) {
+        resolve(window.capabilityModel);
+        return;
+      }
+
+      reject(new Error('capabilityModel loaded without exposing window.capabilityModel'));
+    };
+    script.onerror = () => reject(new Error('Failed to load capability model script'));
+    document.head.appendChild(script);
+  });
+
+  return capabilityModelPromise;
+}
+
 function getSettingsModel() {
   if (!window.settingsModel) {
     throw new Error('settingsModel is not loaded');
@@ -334,6 +366,14 @@ function getRuntimeSessionModel() {
   }
 
   return window.runtimeSessionModel;
+}
+
+function getCapabilityModel() {
+  if (!window.capabilityModel) {
+    throw new Error('capabilityModel is not loaded');
+  }
+
+  return window.capabilityModel;
 }
 
 function getHotkeyModel() {
@@ -655,6 +695,121 @@ function syncRendererGameContext(version, options = {}) {
 
   updateGameStatusIndicator(normalizedDetectedVersion);
   updateActiveLeagueFieldContext({ syncValue: true });
+  if (typeof applyDashboardCapabilities === 'function') {
+    applyDashboardCapabilities();
+  }
+}
+
+function getResolvedCapabilityGameVersion(preferredVersion = null) {
+  return normalizePoeVersion(state.detectedGameVersion)
+    || normalizePoeVersion(preferredVersion)
+    || normalizePoeVersion(state.settings?.poeVersion)
+    || 'poe1';
+}
+
+function getStashCapabilityUnavailableKey(reason, poeVersion) {
+  if (reason === 'poe2_not_supported_yet' || poeVersion === 'poe2') {
+    return 'stash.capabilityUnavailable.poe2';
+  }
+
+  return 'stash.capabilityUnavailable.generic';
+}
+
+function getStashCapabilityUnavailableText(reason, poeVersion) {
+  const translationKey = getStashCapabilityUnavailableKey(reason, poeVersion);
+  return typeof window !== 'undefined' && typeof window.t === 'function'
+    ? window.t(translationKey)
+    : translationKey;
+}
+
+function applyDashboardCapabilities(version = null) {
+  const capabilityVersion = getResolvedCapabilityGameVersion(version);
+  const capabilities = getCapabilityModel().getCapabilitiesForGame(capabilityVersion);
+  const stashCapability = capabilities.stashTracking || { enabled: true, reason: null };
+  const stashUnavailable = !stashCapability.enabled;
+  const unavailableText = stashUnavailable
+    ? getStashCapabilityUnavailableText(stashCapability.reason, capabilityVersion)
+    : '';
+
+  state.capabilities = capabilities;
+
+  if (elements.stashTrackerCard) {
+    elements.stashTrackerCard.dataset.stashCapability = stashUnavailable ? 'unavailable' : 'enabled';
+    elements.stashTrackerCard.classList.toggle('capability-unavailable', stashUnavailable);
+  }
+
+  if (elements.stashCapabilityUnavailable) {
+    elements.stashCapabilityUnavailable.hidden = !stashUnavailable;
+    elements.stashCapabilityUnavailable.textContent = unavailableText;
+    if (elements.stashCapabilityUnavailable.classList) {
+      elements.stashCapabilityUnavailable.classList.toggle('hidden', !stashUnavailable);
+    }
+  }
+
+  if (stashUnavailable) {
+    [
+      elements.syncPricesBtn,
+      elements.takeBeforeSnapshotBtn,
+      elements.takeAfterSnapshotBtn,
+      elements.calculateProfitBtn,
+      elements.resetSnapshotsBtn
+    ].forEach((button) => {
+      if (button) {
+        button.disabled = true;
+      }
+    });
+    if (elements.stashProfitResult?.classList) {
+      elements.stashProfitResult.classList.add('hidden');
+    }
+  } else {
+    if (elements.syncPricesBtn) {
+      elements.syncPricesBtn.disabled = false;
+    }
+    if (elements.takeBeforeSnapshotBtn) {
+      elements.takeBeforeSnapshotBtn.disabled = false;
+    }
+    if (elements.takeAfterSnapshotBtn) {
+      const hasBeforeSnapshot = typeof stashState !== 'undefined' && Boolean(stashState.beforeSnapshotId);
+      elements.takeAfterSnapshotBtn.disabled = !hasBeforeSnapshot;
+    }
+    if (elements.calculateProfitBtn) {
+      elements.calculateProfitBtn.disabled = false;
+    }
+    if (elements.resetSnapshotsBtn) {
+      elements.resetSnapshotsBtn.disabled = false;
+    }
+  }
+
+  if (elements.stashTrackerStatus && stashUnavailable) {
+    elements.stashTrackerStatus.textContent = unavailableText;
+    elements.stashTrackerStatus.style.color = '';
+  }
+
+  if (!stashUnavailable) {
+    updateStashTrackerStatus();
+  }
+
+  return capabilities;
+}
+
+function isStashTrackingEnabled() {
+  const capabilities = state.capabilities || applyDashboardCapabilities();
+  return capabilities.stashTracking?.enabled !== false;
+}
+
+function isStashTrackingUnavailable() {
+  return state.capabilities?.stashTracking?.enabled === false;
+}
+
+function getCurrentStashUnavailableText() {
+  return getStashCapabilityUnavailableText(
+    state.capabilities?.stashTracking?.reason,
+    getResolvedCapabilityGameVersion()
+  );
+}
+
+function showStashUnavailableToast() {
+  showToast(window.t('toast.error'), getCurrentStashUnavailableText(), 'warning');
 }
 
 function renderRuntimeSessionState() {
@@ -673,6 +828,7 @@ async function init() {
   await ensureSettingsModelLoaded();
   await ensureAccountStateModelLoaded();
   await ensureRuntimeSessionModelLoaded();
+  await ensureCapabilityModelLoaded();
   populateLanguageOptions();
 
   // Ayarlari yukle
@@ -684,6 +840,7 @@ async function init() {
   applyLocalizedChrome();
   updateActiveLeagueFieldContext();
   syncDesktopCurrencyIcons();
+  applyDashboardCapabilities();
 
   // Event listener'lari kur
   setupEventListeners();
@@ -1108,6 +1265,7 @@ function setupEventListeners() {
       state.settings.poeVersion = btn.dataset.version;
       syncDesktopCurrencyIcons();
       updateActiveLeagueFieldContext({ syncValue: true });
+      applyDashboardCapabilities();
       void loadSettingsLeagueOptions(btn.dataset.version);
     });
   });
@@ -2128,6 +2286,7 @@ async function handleResetSettings() {
     activeLeagueInputState.dirty = false;
     updateActiveLeagueFieldContext({ syncValue: true, forceValueSync: true });
     syncDesktopCurrencyIcons();
+    applyDashboardCapabilities();
     await loadSettingsLeagueOptions(resetVersion);
 
     const nextContext = getSelectedTrackerContext();
@@ -2333,6 +2492,11 @@ const stashState = {
 
 async function handleSyncPrices() {
   if (!elements.syncPricesBtn) return;
+  if (!isStashTrackingEnabled()) {
+    showStashUnavailableToast();
+    return;
+  }
+
   const btn = elements.syncPricesBtn;
   btn.disabled = true;
   const origHTML = btn.innerHTML;
@@ -2341,6 +2505,10 @@ async function handleSyncPrices() {
   try {
     const league = getResolvedActiveLeague();
     const result = await window.electronAPI.syncPrices({ league });
+    if (!isStashTrackingEnabled()) {
+      return;
+    }
+
     stashState.pricesSynced = true;
     if (elements.priceItemCount) {
       elements.priceItemCount.textContent = `${result.itemCount} items`;
@@ -2349,12 +2517,17 @@ async function handleSyncPrices() {
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.pricesSyncFailed'), 'error');
   } finally {
-    btn.disabled = false;
+    btn.disabled = !isStashTrackingEnabled();
     btn.innerHTML = origHTML;
   }
 }
 
 async function handleTakeSnapshot(type) {
+  if (!isStashTrackingEnabled()) {
+    showStashUnavailableToast();
+    return;
+  }
+
   const isAfter = type === 'after';
   const btn = isAfter ? elements.takeAfterSnapshotBtn : elements.takeBeforeSnapshotBtn;
   const infoEl = isAfter ? elements.afterSnapshotInfo : elements.beforeSnapshotInfo;
@@ -2375,6 +2548,9 @@ async function handleTakeSnapshot(type) {
   try {
     const snapshotId = type;
     const result = await window.electronAPI.takeStashSnapshot({ snapshotId });
+    if (!isStashTrackingEnabled()) {
+      return;
+    }
 
     if (isAfter) {
       stashState.afterSnapshotId = snapshotId;
@@ -2411,13 +2587,17 @@ async function handleTakeSnapshot(type) {
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.snapshotFailed'), 'error');
   } finally {
-    btn.disabled = false;
+    btn.disabled = !isStashTrackingEnabled();
     btn.innerHTML = origHTML;
   }
 }
 
 async function handleCalculateProfit() {
   if (!elements.calculateProfitBtn) return;
+  if (!isStashTrackingEnabled()) {
+    showStashUnavailableToast();
+    return;
+  }
 
   elements.calculateProfitBtn.disabled = true;
 
@@ -2426,16 +2606,20 @@ async function handleCalculateProfit() {
       stashState.beforeSnapshotId,
       stashState.afterSnapshotId
     );
+    if (!isStashTrackingEnabled()) {
+      return;
+    }
 
     renderProfitReport(report);
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.profitFailed'), 'error');
   } finally {
-    elements.calculateProfitBtn.disabled = false;
+    elements.calculateProfitBtn.disabled = !isStashTrackingEnabled();
   }
 }
 
 function renderProfitReport(report) {
+  if (isStashTrackingUnavailable()) return;
   if (!elements.stashProfitResult) return;
 
   const { summary, gained, lost } = report;
@@ -2500,6 +2684,11 @@ function renderProfitReport(report) {
 }
 
 function handleResetSnapshots() {
+  if (isStashTrackingUnavailable()) {
+    showStashUnavailableToast();
+    return;
+  }
+
   stashState.beforeSnapshotId = null;
   stashState.afterSnapshotId = null;
 
@@ -2535,6 +2724,12 @@ function handleResetSnapshots() {
 
 function updateStashTrackerStatus() {
   if (!elements.stashTrackerStatus) return;
+  if (state.capabilities?.stashTracking?.enabled === false) {
+    elements.stashTrackerStatus.textContent = getCurrentStashUnavailableText();
+    elements.stashTrackerStatus.style.color = '';
+    return;
+  }
+
   if (stashState.beforeSnapshotId && stashState.afterSnapshotId) {
     elements.stashTrackerStatus.textContent = window.t('stash.readyToCalc');
   } else if (stashState.beforeSnapshotId) {
