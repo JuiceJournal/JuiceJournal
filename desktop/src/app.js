@@ -19,6 +19,7 @@ const state = {
   poeLink: null,
   account: null,
   runtimeSession: null,
+  overlay: null,
   capabilities: null,
   selectedSession: null,
   pendingLootCount: 0,
@@ -231,6 +232,7 @@ let settingsModelPromise = null;
 let accountStateModelPromise = null;
 let runtimeSessionModelPromise = null;
 let capabilityModelPromise = null;
+let overlayStateModelPromise = null;
 
 function ensureSettingsModelLoaded() {
   if (window.settingsModel) {
@@ -344,6 +346,34 @@ function ensureCapabilityModelLoaded() {
   return capabilityModelPromise;
 }
 
+function ensureOverlayStateModelLoaded() {
+  if (window.overlayStateModel) {
+    return Promise.resolve(window.overlayStateModel);
+  }
+
+  if (overlayStateModelPromise) {
+    return overlayStateModelPromise;
+  }
+
+  overlayStateModelPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'modules/overlayStateModel.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.overlayStateModel) {
+        resolve(window.overlayStateModel);
+        return;
+      }
+
+      reject(new Error('overlayStateModel loaded without exposing window.overlayStateModel'));
+    };
+    script.onerror = () => reject(new Error('Failed to load overlay state model script'));
+    document.head.appendChild(script);
+  });
+
+  return overlayStateModelPromise;
+}
+
 function getSettingsModel() {
   if (!window.settingsModel) {
     throw new Error('settingsModel is not loaded');
@@ -374,6 +404,14 @@ function getCapabilityModel() {
   }
 
   return window.capabilityModel;
+}
+
+function getOverlayStateModel() {
+  if (!window.overlayStateModel) {
+    throw new Error('overlayStateModel is not loaded');
+  }
+
+  return window.overlayStateModel;
 }
 
 function getHotkeyModel() {
@@ -813,7 +851,22 @@ function showStashUnavailableToast() {
 }
 
 function renderRuntimeSessionState() {
-  // Dashboard and overlay surfaces consume state.runtimeSession in later tasks.
+  refreshRendererOverlayState();
+}
+
+function refreshRendererOverlayState() {
+  if (!window.overlayStateModel) {
+    return null;
+  }
+
+  const { deriveOverlayState } = getOverlayStateModel();
+  state.overlay = deriveOverlayState({
+    enabled: state.settings?.overlayEnabled === true,
+    character: state.account,
+    runtime: state.runtimeSession
+  });
+
+  return state.overlay;
 }
 
 function setRuntimeSessionState(runtimeSession) {
@@ -829,6 +882,7 @@ async function init() {
   await ensureAccountStateModelLoaded();
   await ensureRuntimeSessionModelLoaded();
   await ensureCapabilityModelLoaded();
+  await ensureOverlayStateModelLoaded();
   populateLanguageOptions();
 
   // Ayarlari yukle
@@ -1642,6 +1696,8 @@ async function handleLogout() {
   state.recentLoot = [];
   state.poeLink = null;
   state.account = null;
+  state.runtimeSession = null;
+  state.overlay = null;
   closeSessionDrawer();
   renderUserIdentity();
   resetDashboardSummary();
@@ -1710,6 +1766,9 @@ function setCurrentUser(user) {
       || []
   });
   renderUserIdentity();
+  if (typeof refreshRendererOverlayState === 'function') {
+    refreshRendererOverlayState();
+  }
 }
 
 function canCurrentUserSyncPrices() {

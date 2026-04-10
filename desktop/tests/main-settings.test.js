@@ -177,9 +177,59 @@ function getSettingsAllowlist() {
     'defaultLeaguePoe2',
     'scanHotkey',
     'stashScanHotkey',
+    'overlayEnabled',
     'theme'
   ]);
 }
+
+test('main overlay setting is disabled by default when no explicit setting exists', () => {
+  const context = loadFunctions(['isOverlayEnabled'], {
+    store: {
+      get(key) {
+        assert.equal(key, 'overlayEnabled');
+        return undefined;
+      }
+    }
+  });
+
+  assert.equal(context.isOverlayEnabled(), false);
+});
+
+test('main overlay window guard skips creation when disabled and creates when enabled later', () => {
+  const calls = [];
+  let overlayEnabled = false;
+  const context = loadFunctions(['isOverlayEnabled', 'ensureOverlayWindowForSettings'], {
+    store: {
+      get(key) {
+        assert.equal(key, 'overlayEnabled');
+        return overlayEnabled;
+      }
+    },
+    app: {
+      isReady() {
+        calls.push(['isReady']);
+        return true;
+      }
+    },
+    createOverlayWindow() {
+      calls.push(['createOverlayWindow']);
+    },
+    updateOverlayWindow() {
+      calls.push(['updateOverlayWindow']);
+    }
+  });
+
+  context.ensureOverlayWindowForSettings();
+  overlayEnabled = true;
+  context.ensureOverlayWindowForSettings();
+
+  assert.deepEqual(calls, [
+    ['updateOverlayWindow'],
+    ['isReady'],
+    ['createOverlayWindow'],
+    ['updateOverlayWindow']
+  ]);
+});
 
 test('main settings reject invalid apiUrl updates before any settings side effects occur', () => {
   const writes = [];
