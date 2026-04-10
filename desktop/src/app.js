@@ -18,6 +18,7 @@ const state = {
   recentLoot: [],
   poeLink: null,
   account: null,
+  runtimeSession: null,
   selectedSession: null,
   pendingLootCount: 0,
   pendingSyncEntries: [],
@@ -225,6 +226,7 @@ const activeLeagueInputState = {
 
 let settingsModelPromise = null;
 let accountStateModelPromise = null;
+let runtimeSessionModelPromise = null;
 
 function ensureSettingsModelLoaded() {
   if (window.settingsModel) {
@@ -282,6 +284,34 @@ function ensureAccountStateModelLoaded() {
   return accountStateModelPromise;
 }
 
+function ensureRuntimeSessionModelLoaded() {
+  if (window.runtimeSessionModel) {
+    return Promise.resolve(window.runtimeSessionModel);
+  }
+
+  if (runtimeSessionModelPromise) {
+    return runtimeSessionModelPromise;
+  }
+
+  runtimeSessionModelPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'modules/runtimeSessionModel.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.runtimeSessionModel) {
+        resolve(window.runtimeSessionModel);
+        return;
+      }
+
+      reject(new Error('runtimeSessionModel loaded without exposing window.runtimeSessionModel'));
+    };
+    script.onerror = () => reject(new Error('Failed to load runtime session model script'));
+    document.head.appendChild(script);
+  });
+
+  return runtimeSessionModelPromise;
+}
+
 function getSettingsModel() {
   if (!window.settingsModel) {
     throw new Error('settingsModel is not loaded');
@@ -296,6 +326,14 @@ function getAccountStateModel() {
   }
 
   return window.accountStateModel;
+}
+
+function getRuntimeSessionModel() {
+  if (!window.runtimeSessionModel) {
+    throw new Error('runtimeSessionModel is not loaded');
+  }
+
+  return window.runtimeSessionModel;
 }
 
 function getHotkeyModel() {
@@ -619,12 +657,22 @@ function syncRendererGameContext(version, options = {}) {
   updateActiveLeagueFieldContext({ syncValue: true });
 }
 
+function renderRuntimeSessionState() {
+  // Dashboard and overlay surfaces consume state.runtimeSession in later tasks.
+}
+
+function setRuntimeSessionState(runtimeSession) {
+  state.runtimeSession = runtimeSession || null;
+  renderRuntimeSessionState();
+}
+
 /**
  * Uygulamayi baslat
  */
 async function init() {
   await ensureSettingsModelLoaded();
   await ensureAccountStateModelLoaded();
+  await ensureRuntimeSessionModelLoaded();
   populateLanguageOptions();
 
   // Ayarlari yukle
@@ -1133,10 +1181,16 @@ function setupEventListeners() {
 function setupIPCListeners() {
   // Map olaylari
   window.electronAPI.onMapEntered((data) => {
+    if (data?.runtimeSession) {
+      setRuntimeSessionState(data.runtimeSession);
+    }
     showToast(window.t('toast.mapEnteredTitle'), window.t('toast.mapEnteredBody', { mapName: data.mapName }));
   });
 
   window.electronAPI.onMapExited((data) => {
+    if (data?.runtimeSession) {
+      setRuntimeSessionState(data.runtimeSession);
+    }
     showToast(window.t('toast.mapExitedTitle'), window.t('toast.mapExitedBody', {
       mapName: data.mapName,
       duration: formatDuration(data.duration)
@@ -1209,10 +1263,13 @@ function setupIPCListeners() {
 
   // Game detection
   if (window.electronAPI.onGameVersionChanged) {
-    window.electronAPI.onGameVersionChanged(({ version, logPath }) => {
+    window.electronAPI.onGameVersionChanged(({ version, logPath, runtimeSession }) => {
       const gameLabel = version === 'poe2' ? 'Path of Exile 2' : 'Path of Exile';
       showToast(window.t('stash.profitTracker'), window.t('game.detected', { game: gameLabel }), 'info');
 
+      if (runtimeSession) {
+        setRuntimeSessionState(runtimeSession);
+      }
       syncRendererGameContext(version, { logPath });
 
       // Clear cached prices (they're version-specific)
@@ -1237,7 +1294,10 @@ function setupIPCListeners() {
   }
 
   if (window.electronAPI.onGameClosed) {
-    window.electronAPI.onGameClosed(() => {
+    window.electronAPI.onGameClosed((data) => {
+      if (data?.runtimeSession) {
+        setRuntimeSessionState(data.runtimeSession);
+      }
       syncRendererGameContext(null);
     });
   }

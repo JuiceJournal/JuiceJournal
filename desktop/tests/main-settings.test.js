@@ -150,7 +150,9 @@ function extractFunctionSource(source, functionName, filePath) {
 function loadFunctions(functionNames, contextOverrides = {}) {
   const source = fs.readFileSync(mainJsPath, 'utf8');
   const context = vm.createContext({
-    console,
+    console: {
+      log() { }
+    },
     ...contextOverrides
   });
 
@@ -267,17 +269,33 @@ test('main settings reject blank apiUrl updates before persisting or mutating th
 });
 
 test('runtime game detection keeps the selected settings version while emitting runtime payload to the renderer', () => {
+  const {
+    createRuntimeSessionState,
+    applyRuntimeEvent,
+    clearRuntimeSessionState,
+    cloneRuntimeSessionState
+  } = require('../src/modules/runtimeSessionModel');
   const writes = [];
   const messages = [];
   const priceServiceCalls = [];
   let stopCalls = 0;
   let setupLogParserCalls = 0;
+  const runtimeSessionState = createRuntimeSessionState();
+  applyRuntimeEvent(runtimeSessionState, {
+    type: 'area_entered',
+    areaName: 'Stale Shores',
+    at: '2026-04-09T12:00:00.000Z'
+  });
   const storeState = {
     lastDetectedPoeVersion: 'poe1',
     poeVersion: 'poe1',
     poePath: 'C:/Users/test/Documents/Manual/Client.txt'
   };
-  const context = loadFunctions(['applyGameVersion'], {
+  const context = loadFunctions([
+    'getRuntimeSessionSnapshot',
+    'clearRuntimeSession',
+    'applyGameVersion'
+  ], {
     store: {
       get(key) {
         return storeState[key];
@@ -314,6 +332,9 @@ test('runtime game detection keeps the selected settings version while emitting 
     setupLogParser() {
       setupLogParserCalls += 1;
     },
+    runtimeSessionState,
+    clearRuntimeSessionState,
+    cloneRuntimeSessionState,
     mainWindow: {
       webContents: {
         send(channel, payload) {
@@ -336,18 +357,24 @@ test('runtime game detection keeps the selected settings version while emitting 
   ]);
   assert.equal(stopCalls, 1);
   assert.equal(setupLogParserCalls, 1);
-  assert.deepEqual(JSON.parse(JSON.stringify(messages)), [{
-    channel: 'game-version-changed',
-    payload: {
-      version: 'poe2',
-      settingsVersion: 'poe1',
-      lastDetectedVersion: 'poe2',
-      logPath: 'C:/Games/Path of Exile 2/logs/Client.txt'
-    }
-  }]);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].channel, 'game-version-changed');
+  assert.equal(messages[0].payload.version, 'poe2');
+  assert.equal(messages[0].payload.settingsVersion, 'poe1');
+  assert.equal(messages[0].payload.lastDetectedVersion, 'poe2');
+  assert.equal(messages[0].payload.logPath, 'C:/Games/Path of Exile 2/logs/Client.txt');
+  assert.equal(messages[0].payload.runtimeSession.currentInstance, null);
+  assert.equal(messages[0].payload.runtimeSession.summary.status, 'idle');
+  assert.equal(messages[0].payload.runtimeSession.summary.clearReason, 'log_parser_restarted');
+  assert.match(messages[0].payload.runtimeSession.summary.clearedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
 test('runtime game detection retargets pricing when the detected game matches the prior detection but not the saved settings version', () => {
+  const {
+    createRuntimeSessionState,
+    clearRuntimeSessionState,
+    cloneRuntimeSessionState
+  } = require('../src/modules/runtimeSessionModel');
   const writes = [];
   const priceServiceCalls = [];
   let stopCalls = 0;
@@ -358,7 +385,11 @@ test('runtime game detection retargets pricing when the detected game matches th
     poeVersion: 'poe1',
     poePath: detectedLogPath
   };
-  const context = loadFunctions(['applyGameVersion'], {
+  const context = loadFunctions([
+    'getRuntimeSessionSnapshot',
+    'clearRuntimeSession',
+    'applyGameVersion'
+  ], {
     store: {
       get(key) {
         return storeState[key];
@@ -397,6 +428,9 @@ test('runtime game detection retargets pricing when the detected game matches th
     setupLogParser() {
       setupLogParserCalls += 1;
     },
+    runtimeSessionState: createRuntimeSessionState(),
+    clearRuntimeSessionState,
+    cloneRuntimeSessionState,
     mainWindow: null
   });
 
@@ -410,6 +444,151 @@ test('runtime game detection retargets pricing when the detected game matches th
   assert.equal(stopCalls, 0);
   assert.equal(setupLogParserCalls, 0);
   assert.equal(context.priceService.poeVersion, 'poe2');
+});
+
+test('main runtime log events attach normalized runtime session state to existing map IPC payloads', () => {
+  const {
+    createRuntimeSessionState,
+    applyRuntimeEvent,
+    cloneRuntimeSessionState
+  } = require('../src/modules/runtimeSessionModel');
+  const messages = [];
+  const context = loadFunctions([
+    'normalizeRuntimeLogEvent',
+    'getRuntimeSessionSnapshot',
+    'publishRuntimeSessionEvent'
+  ], {
+    runtimeSessionState: createRuntimeSessionState(),
+    applyRuntimeEvent,
+    cloneRuntimeSessionState,
+    mainWindow: {
+      webContents: {
+        send(channel, payload) {
+          messages.push({ channel, payload });
+        }
+      }
+    }
+  });
+
+  context.publishRuntimeSessionEvent('area_entered', {
+    mapName: 'Crimson Shores',
+    mapTier: 16,
+    timestamp: new Date('2026-04-09T12:00:00.000Z')
+  });
+  context.publishRuntimeSessionEvent('area_exited', {
+    mapName: 'Crimson Shores',
+    timestamp: new Date('2026-04-09T12:05:30.000Z')
+  });
+
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0].channel, 'map-entered');
+  assert.equal(messages[0].payload.runtimeSession.currentInstance.areaName, 'Crimson Shores');
+  assert.equal(messages[0].payload.runtimeSession.currentInstance.status, 'active');
+  assert.equal(messages[1].channel, 'map-exited');
+  assert.equal(messages[1].payload.runtimeSession.instances.length, 1);
+  assert.equal(messages[1].payload.runtimeSession.instances[0].durationSeconds, 330);
+  assert.equal(messages[1].payload.runtimeSession.summary.status, 'idle');
+});
+
+test('main runtime log events normalize parser-shaped payloads and malformed timestamps', () => {
+  const {
+    createRuntimeSessionState,
+    applyRuntimeEvent,
+    cloneRuntimeSessionState
+  } = require('../src/modules/runtimeSessionModel');
+  const messages = [];
+  const context = loadFunctions([
+    'normalizeRuntimeLogEvent',
+    'getRuntimeSessionSnapshot',
+    'publishRuntimeSessionEvent'
+  ], {
+    runtimeSessionState: createRuntimeSessionState(),
+    applyRuntimeEvent,
+    cloneRuntimeSessionState,
+    mainWindow: {
+      webContents: {
+        send(channel, payload) {
+          messages.push({ channel, payload });
+        }
+      }
+    }
+  });
+
+  context.publishRuntimeSessionEvent('area_entered', {
+    mapName: 'Crimson Shores',
+    mapTier: 16,
+    timestamp: {}
+  });
+  context.publishRuntimeSessionEvent('area_exited', {
+    mapName: 'Crimson Shores',
+    timestamp: '2026-04-09T12:05:30.000Z'
+  });
+
+  assert.equal(messages[0].payload.runtimeSession.currentInstance.areaName, 'Crimson Shores');
+  assert.equal(messages[0].payload.runtimeSession.currentInstance.enteredAt, '1970-01-01T00:00:00.000Z');
+  assert.equal(messages[1].payload.runtimeSession.instances[0].mapTier, 16);
+  assert.ok(messages[1].payload.runtimeSession.instances[0].durationSeconds > 0);
+});
+
+test('main game close clears active runtime session state before notifying renderer', () => {
+  const {
+    createRuntimeSessionState,
+    applyRuntimeEvent,
+    clearRuntimeSessionState,
+    cloneRuntimeSessionState
+  } = require('../src/modules/runtimeSessionModel');
+  const messages = [];
+  const runtimeSessionState = createRuntimeSessionState();
+  applyRuntimeEvent(runtimeSessionState, {
+    type: 'area_entered',
+    areaName: 'Overgrown',
+    at: '2026-04-09T12:00:00.000Z'
+  });
+  const context = loadFunctions([
+    'getRuntimeSessionSnapshot',
+    'clearRuntimeSession',
+    'handleGameClosed'
+  ], {
+    runtimeSessionState,
+    clearRuntimeSessionState,
+    cloneRuntimeSessionState,
+    console: {
+      log() { }
+    },
+    mainWindow: {
+      webContents: {
+        send(channel, payload) {
+          messages.push({ channel, payload });
+        }
+      }
+    }
+  });
+
+  context.handleGameClosed('poe1', '2026-04-09T12:03:30.000Z');
+
+  assert.equal(context.runtimeSessionState.currentInstance, null);
+  assert.deepEqual(JSON.parse(JSON.stringify(messages)), [{
+    channel: 'game-closed',
+    payload: {
+      version: 'poe1',
+      runtimeSession: {
+        currentInstance: null,
+        instances: [],
+        totalActiveSeconds: 0,
+        summary: {
+          status: 'idle',
+          currentAreaName: null,
+          currentInstanceSeconds: 0,
+          totalActiveSeconds: 0,
+          instanceCount: 0,
+          lastAreaName: null,
+          lastExitedAt: null,
+          clearReason: 'game_closed',
+          clearedAt: '2026-04-09T12:03:30.000Z'
+        }
+      }
+    }
+  }]);
 });
 
 test('language migration preserves an existing saved locale while marking the migration complete', () => {

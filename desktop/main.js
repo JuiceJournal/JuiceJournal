@@ -26,6 +26,12 @@ const PriceService = require('./src/modules/priceService');
 const StashAnalyzer = require('./src/modules/stashAnalyzer');
 const GameDetector = require('./src/modules/gameDetector');
 const {
+  createRuntimeSessionState,
+  applyRuntimeEvent,
+  clearRuntimeSessionState,
+  cloneRuntimeSessionState
+} = require('./src/modules/runtimeSessionModel');
+const {
   DEFAULT_SCAN_HOTKEY,
   DEFAULT_STASH_SCAN_HOTKEY,
   validateHotkeys
@@ -249,6 +255,7 @@ let priceService = null;
 let stashAnalyzer = null;
 let gameDetector = null;
 let currentSession = null;
+let runtimeSessionState = createRuntimeSessionState();
 let poeAuthServer = null;
 let trayHintShown = false;
 let pendingLootFlushInProgress = false;
@@ -1791,6 +1798,57 @@ function showNotification(title, body) {
 /**
  * Log parser olaylarini dinle
  */
+function normalizeRuntimeLogEvent(type, data = {}) {
+  const areaName = data.areaName || data.mapName || data.location || 'Unknown Area';
+  const rawTimestamp = data.at ?? data.timestamp ?? 0;
+  const parsedTimestamp = rawTimestamp instanceof Date ? rawTimestamp : new Date(rawTimestamp);
+  const at = Number.isNaN(parsedTimestamp.getTime())
+    ? new Date(0).toISOString()
+    : parsedTimestamp.toISOString();
+
+  return {
+    type,
+    areaName,
+    at,
+    mapTier: data.mapTier ?? null,
+    source: 'logParser',
+    exitLocation: data.location || null
+  };
+}
+
+function getRuntimeSessionSnapshot(options = {}) {
+  return cloneRuntimeSessionState(runtimeSessionState, {
+    now: options.now ?? new Date()
+  });
+}
+
+function clearRuntimeSession(reason, options = {}) {
+  clearRuntimeSessionState(runtimeSessionState, {
+    reason,
+    at: options.at ?? options.now ?? new Date()
+  });
+  return getRuntimeSessionSnapshot({
+    now: options.at ?? options.now
+  });
+}
+
+function publishRuntimeSessionEvent(type, data = {}) {
+  const runtimeEvent = normalizeRuntimeLogEvent(type, data);
+  applyRuntimeEvent(runtimeSessionState, runtimeEvent);
+
+  const payload = {
+    ...data,
+    runtimeSession: getRuntimeSessionSnapshot({ now: runtimeEvent.at })
+  };
+  const channel = type === 'area_exited' ? 'map-exited' : 'map-entered';
+
+  if (mainWindow) {
+    mainWindow.webContents.send(channel, payload);
+  }
+
+  return payload;
+}
+
 function setupLogParser() {
   let poePath = store.get('poePath');
 
@@ -1826,9 +1884,7 @@ function setupLogParser() {
       });
     }
 
-    if (mainWindow) {
-      mainWindow.webContents.send('map-entered', data);
-    }
+    publishRuntimeSessionEvent('area_entered', data);
   });
 
   logParser.on('mapExited', (data) => {
@@ -1836,9 +1892,7 @@ function setupLogParser() {
       endCurrentSession();
     }
 
-    if (mainWindow) {
-      mainWindow.webContents.send('map-exited', data);
-    }
+    publishRuntimeSessionEvent('area_exited', data);
   });
 
   logParser.start();
@@ -1866,14 +1920,26 @@ function setupGameDetector() {
   });
 
   gameDetector.on('gameClosed', ({ version }) => {
-    const gameLabel = version === 'poe2' ? 'Path of Exile 2' : 'Path of Exile';
-    console.log(`[GameDetector] ${gameLabel} closed`);
-    if (mainWindow) {
-      mainWindow.webContents.send('game-closed', { version });
-    }
+    handleGameClosed(version);
   });
 
   gameDetector.start();
+}
+
+function handleGameClosed(version, at = new Date()) {
+  const gameLabel = version === 'poe2' ? 'Path of Exile 2' : 'Path of Exile';
+  const runtimeSession = clearRuntimeSession('game_closed', { at });
+  const payload = {
+    version,
+    runtimeSession
+  };
+
+  console.log(`[GameDetector] ${gameLabel} closed`);
+  if (mainWindow) {
+    mainWindow.webContents.send('game-closed', payload);
+  }
+
+  return payload;
 }
 
 /**
@@ -1907,12 +1973,14 @@ function applyGameVersion(version) {
   const shouldRestartLogParser = Boolean(
     runtimeLogPath && (versionChanged || shouldUpdatePoePath || logParserNeedsResync)
   );
+  let runtimeSession = null;
 
   if (shouldUpdatePoePath) {
     store.set('poePath', detectedLogPath);
   }
 
   if (shouldRestartLogParser) {
+    runtimeSession = clearRuntimeSession('log_parser_restarted');
     if (logParser) {
       logParser.stop();
     }
@@ -1925,7 +1993,8 @@ function applyGameVersion(version) {
       version,
       settingsVersion: selectedSettingsVersion,
       lastDetectedVersion: version,
-      logPath: detectedLogPath || store.get('poePath')
+      logPath: detectedLogPath || store.get('poePath'),
+      ...(runtimeSession ? { runtimeSession } : {})
     });
   }
 }
