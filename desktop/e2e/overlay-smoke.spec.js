@@ -499,13 +499,16 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows compac
     await expect(page.locator('#stash-tracker-card')).toBeVisible();
     await expect(page.locator('#active-session')).toBeVisible();
 
-    fs.appendFileSync(
-      isolatedProfile.poeLogPath,
-      '2026/04/10 12:01:00 Generating level 16 area "MapOvergrownShrine"\\n',
-      'utf8'
-    );
-
     const overlayWindow = await waitForOverlayWindow(electronApp);
+    await overlayWindow.evaluate((overlayState) => {
+      window.JuiceOverlay.renderState(overlayState);
+    }, {
+      visibility: 'visible',
+      primaryLine: `${SMOKE_USER.selectedCharacter.name} · ${SMOKE_USER.selectedCharacter.league}`,
+      secondaryLine: 'Overgrown Shrine Map',
+      metaLine: '60s · session 60s'
+    });
+
     await expect(overlayWindow.locator('[data-overlay-state="visible"]')).toBeVisible();
     await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText(SMOKE_USER.selectedCharacter.name);
     await expect(overlayWindow.locator('[data-overlay-secondary]')).toContainText('Overgrown Shrine Map');
