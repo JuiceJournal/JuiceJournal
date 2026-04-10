@@ -17,6 +17,10 @@ const state = {
   sessions: [],
   recentLoot: [],
   poeLink: null,
+  account: null,
+  runtimeSession: null,
+  overlay: null,
+  capabilities: null,
   selectedSession: null,
   pendingLootCount: 0,
   pendingSyncEntries: [],
@@ -198,6 +202,8 @@ const elements = {
   toastContainer: document.getElementById('toast-container'),
 
   // Stash Profit Tracker
+  stashTrackerCard: document.getElementById('stash-tracker-card'),
+  stashCapabilityUnavailable: document.getElementById('stash-capability-unavailable'),
   syncPricesBtn: document.getElementById('sync-prices-btn'),
   priceItemCount: document.getElementById('price-item-count'),
   takeBeforeSnapshotBtn: document.getElementById('take-before-snapshot-btn'),
@@ -223,6 +229,10 @@ const activeLeagueInputState = {
 };
 
 let settingsModelPromise = null;
+let accountStateModelPromise = null;
+let runtimeSessionModelPromise = null;
+let capabilityModelPromise = null;
+let overlayStateModelPromise = null;
 
 function ensureSettingsModelLoaded() {
   if (window.settingsModel) {
@@ -252,12 +262,156 @@ function ensureSettingsModelLoaded() {
   return settingsModelPromise;
 }
 
+function ensureAccountStateModelLoaded() {
+  if (window.accountStateModel) {
+    return Promise.resolve(window.accountStateModel);
+  }
+
+  if (accountStateModelPromise) {
+    return accountStateModelPromise;
+  }
+
+  accountStateModelPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'modules/accountStateModel.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.accountStateModel) {
+        resolve(window.accountStateModel);
+        return;
+      }
+
+      reject(new Error('accountStateModel loaded without exposing window.accountStateModel'));
+    };
+    script.onerror = () => reject(new Error('Failed to load account state model script'));
+    document.head.appendChild(script);
+  });
+
+  return accountStateModelPromise;
+}
+
+function ensureRuntimeSessionModelLoaded() {
+  if (window.runtimeSessionModel) {
+    return Promise.resolve(window.runtimeSessionModel);
+  }
+
+  if (runtimeSessionModelPromise) {
+    return runtimeSessionModelPromise;
+  }
+
+  runtimeSessionModelPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'modules/runtimeSessionModel.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.runtimeSessionModel) {
+        resolve(window.runtimeSessionModel);
+        return;
+      }
+
+      reject(new Error('runtimeSessionModel loaded without exposing window.runtimeSessionModel'));
+    };
+    script.onerror = () => reject(new Error('Failed to load runtime session model script'));
+    document.head.appendChild(script);
+  });
+
+  return runtimeSessionModelPromise;
+}
+
+function ensureCapabilityModelLoaded() {
+  if (window.capabilityModel) {
+    return Promise.resolve(window.capabilityModel);
+  }
+
+  if (capabilityModelPromise) {
+    return capabilityModelPromise;
+  }
+
+  capabilityModelPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'modules/capabilityModel.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.capabilityModel) {
+        resolve(window.capabilityModel);
+        return;
+      }
+
+      reject(new Error('capabilityModel loaded without exposing window.capabilityModel'));
+    };
+    script.onerror = () => reject(new Error('Failed to load capability model script'));
+    document.head.appendChild(script);
+  });
+
+  return capabilityModelPromise;
+}
+
+function ensureOverlayStateModelLoaded() {
+  if (window.overlayStateModel) {
+    return Promise.resolve(window.overlayStateModel);
+  }
+
+  if (overlayStateModelPromise) {
+    return overlayStateModelPromise;
+  }
+
+  overlayStateModelPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'modules/overlayStateModel.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.overlayStateModel) {
+        resolve(window.overlayStateModel);
+        return;
+      }
+
+      reject(new Error('overlayStateModel loaded without exposing window.overlayStateModel'));
+    };
+    script.onerror = () => reject(new Error('Failed to load overlay state model script'));
+    document.head.appendChild(script);
+  });
+
+  return overlayStateModelPromise;
+}
+
 function getSettingsModel() {
   if (!window.settingsModel) {
     throw new Error('settingsModel is not loaded');
   }
 
   return window.settingsModel;
+}
+
+function getAccountStateModel() {
+  if (!window.accountStateModel) {
+    throw new Error('accountStateModel is not loaded');
+  }
+
+  return window.accountStateModel;
+}
+
+function getRuntimeSessionModel() {
+  if (!window.runtimeSessionModel) {
+    throw new Error('runtimeSessionModel is not loaded');
+  }
+
+  return window.runtimeSessionModel;
+}
+
+function getCapabilityModel() {
+  if (!window.capabilityModel) {
+    throw new Error('capabilityModel is not loaded');
+  }
+
+  return window.capabilityModel;
+}
+
+function getOverlayStateModel() {
+  if (!window.overlayStateModel) {
+    throw new Error('overlayStateModel is not loaded');
+  }
+
+  return window.overlayStateModel;
 }
 
 function getHotkeyModel() {
@@ -579,6 +733,145 @@ function syncRendererGameContext(version, options = {}) {
 
   updateGameStatusIndicator(normalizedDetectedVersion);
   updateActiveLeagueFieldContext({ syncValue: true });
+  if (typeof applyDashboardCapabilities === 'function') {
+    applyDashboardCapabilities();
+  }
+}
+
+function getResolvedCapabilityGameVersion(preferredVersion = null) {
+  return normalizePoeVersion(state.detectedGameVersion)
+    || normalizePoeVersion(preferredVersion)
+    || normalizePoeVersion(state.settings?.poeVersion)
+    || 'poe1';
+}
+
+function getStashCapabilityUnavailableKey(reason, poeVersion) {
+  if (reason === 'poe2_not_supported_yet' || poeVersion === 'poe2') {
+    return 'stash.capabilityUnavailable.poe2';
+  }
+
+  return 'stash.capabilityUnavailable.generic';
+}
+
+function getStashCapabilityUnavailableText(reason, poeVersion) {
+  const translationKey = getStashCapabilityUnavailableKey(reason, poeVersion);
+  return typeof window !== 'undefined' && typeof window.t === 'function'
+    ? window.t(translationKey)
+    : translationKey;
+}
+
+function applyDashboardCapabilities(version = null) {
+  const capabilityVersion = getResolvedCapabilityGameVersion(version);
+  const capabilities = getCapabilityModel().getCapabilitiesForGame(capabilityVersion);
+  const stashCapability = capabilities.stashTracking || { enabled: true, reason: null };
+  const stashUnavailable = !stashCapability.enabled;
+  const unavailableText = stashUnavailable
+    ? getStashCapabilityUnavailableText(stashCapability.reason, capabilityVersion)
+    : '';
+
+  state.capabilities = capabilities;
+
+  if (elements.stashTrackerCard) {
+    elements.stashTrackerCard.dataset.stashCapability = stashUnavailable ? 'unavailable' : 'enabled';
+    elements.stashTrackerCard.classList.toggle('capability-unavailable', stashUnavailable);
+  }
+
+  if (elements.stashCapabilityUnavailable) {
+    elements.stashCapabilityUnavailable.hidden = !stashUnavailable;
+    elements.stashCapabilityUnavailable.textContent = unavailableText;
+    if (elements.stashCapabilityUnavailable.classList) {
+      elements.stashCapabilityUnavailable.classList.toggle('hidden', !stashUnavailable);
+    }
+  }
+
+  if (stashUnavailable) {
+    [
+      elements.syncPricesBtn,
+      elements.takeBeforeSnapshotBtn,
+      elements.takeAfterSnapshotBtn,
+      elements.calculateProfitBtn,
+      elements.resetSnapshotsBtn
+    ].forEach((button) => {
+      if (button) {
+        button.disabled = true;
+      }
+    });
+    if (elements.stashProfitResult?.classList) {
+      elements.stashProfitResult.classList.add('hidden');
+    }
+  } else {
+    if (elements.syncPricesBtn) {
+      elements.syncPricesBtn.disabled = false;
+    }
+    if (elements.takeBeforeSnapshotBtn) {
+      elements.takeBeforeSnapshotBtn.disabled = false;
+    }
+    if (elements.takeAfterSnapshotBtn) {
+      const hasBeforeSnapshot = typeof stashState !== 'undefined' && Boolean(stashState.beforeSnapshotId);
+      elements.takeAfterSnapshotBtn.disabled = !hasBeforeSnapshot;
+    }
+    if (elements.calculateProfitBtn) {
+      elements.calculateProfitBtn.disabled = false;
+    }
+    if (elements.resetSnapshotsBtn) {
+      elements.resetSnapshotsBtn.disabled = false;
+    }
+  }
+
+  if (elements.stashTrackerStatus && stashUnavailable) {
+    elements.stashTrackerStatus.textContent = unavailableText;
+    elements.stashTrackerStatus.style.color = '';
+  }
+
+  if (!stashUnavailable) {
+    updateStashTrackerStatus();
+  }
+
+  return capabilities;
+}
+
+function isStashTrackingEnabled() {
+  const capabilities = state.capabilities || applyDashboardCapabilities();
+  return capabilities.stashTracking?.enabled !== false;
+}
+
+function isStashTrackingUnavailable() {
+  return state.capabilities?.stashTracking?.enabled === false;
+}
+
+function getCurrentStashUnavailableText() {
+  return getStashCapabilityUnavailableText(
+    state.capabilities?.stashTracking?.reason,
+    getResolvedCapabilityGameVersion()
+  );
+}
+
+function showStashUnavailableToast() {
+  showToast(window.t('toast.error'), getCurrentStashUnavailableText(), 'warning');
+}
+
+function renderRuntimeSessionState() {
+  refreshRendererOverlayState();
+}
+
+function refreshRendererOverlayState() {
+  if (!window.overlayStateModel) {
+    return null;
+  }
+
+  const { deriveOverlayState } = getOverlayStateModel();
+  state.overlay = deriveOverlayState({
+    enabled: state.settings?.overlayEnabled === true,
+    character: state.account,
+    runtime: state.runtimeSession
+  });
+
+  return state.overlay;
+}
+
+function setRuntimeSessionState(runtimeSession) {
+  state.runtimeSession = runtimeSession || null;
+  renderRuntimeSessionState();
 }
 
 /**
@@ -586,6 +879,10 @@ function syncRendererGameContext(version, options = {}) {
  */
 async function init() {
   await ensureSettingsModelLoaded();
+  await ensureAccountStateModelLoaded();
+  await ensureRuntimeSessionModelLoaded();
+  await ensureCapabilityModelLoaded();
+  await ensureOverlayStateModelLoaded();
   populateLanguageOptions();
 
   // Ayarlari yukle
@@ -597,6 +894,7 @@ async function init() {
   applyLocalizedChrome();
   updateActiveLeagueFieldContext();
   syncDesktopCurrencyIcons();
+  applyDashboardCapabilities();
 
   // Event listener'lari kur
   setupEventListeners();
@@ -937,13 +1235,25 @@ function setupEventListeners() {
   });
 
   // Auth
-  elements.loginForm.addEventListener('submit', handleLogin);
-  elements.registerForm.addEventListener('submit', handleRegister);
-  document.getElementById('show-register').addEventListener('click', showRegisterModal);
-  document.getElementById('show-login').addEventListener('click', showLoginModal);
+  if (elements.loginForm) {
+    elements.loginForm.addEventListener('submit', handleLogin);
+  }
+  if (elements.registerForm) {
+    elements.registerForm.addEventListener('submit', handleRegister);
+  }
+  const showRegisterButton = document.getElementById('show-register');
+  if (showRegisterButton) {
+    showRegisterButton.addEventListener('click', showRegisterModal);
+  }
+  const showLoginButton = document.getElementById('show-login');
+  if (showLoginButton) {
+    showLoginButton.addEventListener('click', showLoginModal);
+  }
   const poeOAuthBtn = document.getElementById('poe-oauth-login');
   if (poeOAuthBtn) poeOAuthBtn.addEventListener('click', handlePoeOAuthLogin);
-  elements.logoutBtn.addEventListener('click', handleLogout);
+  if (elements.logoutBtn) {
+    elements.logoutBtn.addEventListener('click', handleLogout);
+  }
 
   // Session
   elements.startSessionBtn.addEventListener('click', handleStartSession);
@@ -1009,6 +1319,7 @@ function setupEventListeners() {
       state.settings.poeVersion = btn.dataset.version;
       syncDesktopCurrencyIcons();
       updateActiveLeagueFieldContext({ syncValue: true });
+      applyDashboardCapabilities();
       void loadSettingsLeagueOptions(btn.dataset.version);
     });
   });
@@ -1082,10 +1393,16 @@ function setupEventListeners() {
 function setupIPCListeners() {
   // Map olaylari
   window.electronAPI.onMapEntered((data) => {
+    if (data?.runtimeSession) {
+      setRuntimeSessionState(data.runtimeSession);
+    }
     showToast(window.t('toast.mapEnteredTitle'), window.t('toast.mapEnteredBody', { mapName: data.mapName }));
   });
 
   window.electronAPI.onMapExited((data) => {
+    if (data?.runtimeSession) {
+      setRuntimeSessionState(data.runtimeSession);
+    }
     showToast(window.t('toast.mapExitedTitle'), window.t('toast.mapExitedBody', {
       mapName: data.mapName,
       duration: formatDuration(data.duration)
@@ -1158,10 +1475,13 @@ function setupIPCListeners() {
 
   // Game detection
   if (window.electronAPI.onGameVersionChanged) {
-    window.electronAPI.onGameVersionChanged(({ version, logPath }) => {
+    window.electronAPI.onGameVersionChanged(({ version, logPath, runtimeSession }) => {
       const gameLabel = version === 'poe2' ? 'Path of Exile 2' : 'Path of Exile';
       showToast(window.t('stash.profitTracker'), window.t('game.detected', { game: gameLabel }), 'info');
 
+      if (runtimeSession) {
+        setRuntimeSessionState(runtimeSession);
+      }
       syncRendererGameContext(version, { logPath });
 
       // Clear cached prices (they're version-specific)
@@ -1186,7 +1506,10 @@ function setupIPCListeners() {
   }
 
   if (window.electronAPI.onGameClosed) {
-    window.electronAPI.onGameClosed(() => {
+    window.electronAPI.onGameClosed((data) => {
+      if (data?.runtimeSession) {
+        setRuntimeSessionState(data.runtimeSession);
+      }
       syncRendererGameContext(null);
     });
   }
@@ -1229,16 +1552,26 @@ function navigateTo(page) {
  * Login modal'i goster
  */
 function showLoginModal() {
-  elements.loginModal.classList.remove('hidden');
-  elements.registerModal.classList.add('hidden');
+  if (elements.loginModal) {
+    elements.loginModal.classList.remove('hidden');
+  }
+
+  if (elements.registerModal) {
+    elements.registerModal.classList.add('hidden');
+  }
 }
 
 /**
  * Register modal'i goster
  */
 function showRegisterModal() {
-  elements.loginModal.classList.add('hidden');
-  elements.registerModal.classList.remove('hidden');
+  if (elements.loginModal) {
+    elements.loginModal.classList.add('hidden');
+  }
+
+  if (elements.registerModal) {
+    elements.registerModal.classList.remove('hidden');
+  }
 }
 
 /**
@@ -1283,14 +1616,25 @@ async function handlePoeOAuthLogin() {
   }
 
   try {
-    const result = await window.electronAPI.startPoeLogin();
+    const startResult = await window.electronAPI.startPoeLogin();
+    const canCompleteLogin = typeof window.electronAPI.completePoeLogin === 'function';
+    const result = !startResult?.success && canCompleteLogin
+      ? await window.electronAPI.completePoeLogin({
+        code: startResult?.mockCode || startResult?.code || null,
+        state: startResult?.state || null,
+        codeVerifier: startResult?.codeVerifier || null,
+        redirectUri: startResult?.redirectUri || null
+      })
+      : startResult;
 
     if (result?.success) {
       setCurrentUser({
         ...result.data.user,
         capabilities: result.data.capabilities || {}
       });
-      elements.loginModal.classList.add('hidden');
+      if (elements.loginModal) {
+        elements.loginModal.classList.add('hidden');
+      }
       await loadPoeLinkStatus();
       await refreshTrackerData();
       showToast(window.t('login.title'), window.t('toast.loginSuccess'));
@@ -1351,6 +1695,9 @@ async function handleLogout() {
   state.sessions = [];
   state.recentLoot = [];
   state.poeLink = null;
+  state.account = null;
+  state.runtimeSession = null;
+  state.overlay = null;
   closeSessionDrawer();
   renderUserIdentity();
   resetDashboardSummary();
@@ -1398,7 +1745,30 @@ function applyLocalizedChrome() {
  */
 function setCurrentUser(user) {
   state.currentUser = user;
+  const { deriveAccountState } = getAccountStateModel();
+  const poePayload = user?.poe || {};
+  state.account = deriveAccountState({
+    accountName: user?.accountName
+      || user?.poeAccountName
+      || poePayload.accountName
+      || poePayload.account?.name
+      || user?.username
+      || null,
+    selectedCharacterId: user?.selectedCharacterId
+      || user?.selectedCharacter?.id
+      || poePayload.selectedCharacterId
+      || poePayload.selectedCharacter?.id
+      || null,
+    selectedCharacter: user?.selectedCharacter || poePayload.selectedCharacter || null,
+    characters: user?.characters
+      || user?.poeCharacters
+      || poePayload.characters
+      || []
+  });
   renderUserIdentity();
+  if (typeof refreshRendererOverlayState === 'function') {
+    refreshRendererOverlayState();
+  }
 }
 
 function canCurrentUserSyncPrices() {
@@ -1975,6 +2345,7 @@ async function handleResetSettings() {
     activeLeagueInputState.dirty = false;
     updateActiveLeagueFieldContext({ syncValue: true, forceValueSync: true });
     syncDesktopCurrencyIcons();
+    applyDashboardCapabilities();
     await loadSettingsLeagueOptions(resetVersion);
 
     const nextContext = getSelectedTrackerContext();
@@ -2180,6 +2551,11 @@ const stashState = {
 
 async function handleSyncPrices() {
   if (!elements.syncPricesBtn) return;
+  if (!isStashTrackingEnabled()) {
+    showStashUnavailableToast();
+    return;
+  }
+
   const btn = elements.syncPricesBtn;
   btn.disabled = true;
   const origHTML = btn.innerHTML;
@@ -2188,6 +2564,10 @@ async function handleSyncPrices() {
   try {
     const league = getResolvedActiveLeague();
     const result = await window.electronAPI.syncPrices({ league });
+    if (!isStashTrackingEnabled()) {
+      return;
+    }
+
     stashState.pricesSynced = true;
     if (elements.priceItemCount) {
       elements.priceItemCount.textContent = `${result.itemCount} items`;
@@ -2196,12 +2576,17 @@ async function handleSyncPrices() {
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.pricesSyncFailed'), 'error');
   } finally {
-    btn.disabled = false;
+    btn.disabled = !isStashTrackingEnabled();
     btn.innerHTML = origHTML;
   }
 }
 
 async function handleTakeSnapshot(type) {
+  if (!isStashTrackingEnabled()) {
+    showStashUnavailableToast();
+    return;
+  }
+
   const isAfter = type === 'after';
   const btn = isAfter ? elements.takeAfterSnapshotBtn : elements.takeBeforeSnapshotBtn;
   const infoEl = isAfter ? elements.afterSnapshotInfo : elements.beforeSnapshotInfo;
@@ -2222,6 +2607,9 @@ async function handleTakeSnapshot(type) {
   try {
     const snapshotId = type;
     const result = await window.electronAPI.takeStashSnapshot({ snapshotId });
+    if (!isStashTrackingEnabled()) {
+      return;
+    }
 
     if (isAfter) {
       stashState.afterSnapshotId = snapshotId;
@@ -2258,13 +2646,17 @@ async function handleTakeSnapshot(type) {
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.snapshotFailed'), 'error');
   } finally {
-    btn.disabled = false;
+    btn.disabled = !isStashTrackingEnabled();
     btn.innerHTML = origHTML;
   }
 }
 
 async function handleCalculateProfit() {
   if (!elements.calculateProfitBtn) return;
+  if (!isStashTrackingEnabled()) {
+    showStashUnavailableToast();
+    return;
+  }
 
   elements.calculateProfitBtn.disabled = true;
 
@@ -2273,16 +2665,20 @@ async function handleCalculateProfit() {
       stashState.beforeSnapshotId,
       stashState.afterSnapshotId
     );
+    if (!isStashTrackingEnabled()) {
+      return;
+    }
 
     renderProfitReport(report);
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.profitFailed'), 'error');
   } finally {
-    elements.calculateProfitBtn.disabled = false;
+    elements.calculateProfitBtn.disabled = !isStashTrackingEnabled();
   }
 }
 
 function renderProfitReport(report) {
+  if (isStashTrackingUnavailable()) return;
   if (!elements.stashProfitResult) return;
 
   const { summary, gained, lost } = report;
@@ -2347,6 +2743,11 @@ function renderProfitReport(report) {
 }
 
 function handleResetSnapshots() {
+  if (isStashTrackingUnavailable()) {
+    showStashUnavailableToast();
+    return;
+  }
+
   stashState.beforeSnapshotId = null;
   stashState.afterSnapshotId = null;
 
@@ -2382,6 +2783,12 @@ function handleResetSnapshots() {
 
 function updateStashTrackerStatus() {
   if (!elements.stashTrackerStatus) return;
+  if (state.capabilities?.stashTracking?.enabled === false) {
+    elements.stashTrackerStatus.textContent = getCurrentStashUnavailableText();
+    elements.stashTrackerStatus.style.color = '';
+    return;
+  }
+
   if (stashState.beforeSnapshotId && stashState.afterSnapshotId) {
     elements.stashTrackerStatus.textContent = window.t('stash.readyToCalc');
   } else if (stashState.beforeSnapshotId) {

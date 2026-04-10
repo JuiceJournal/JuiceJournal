@@ -367,6 +367,8 @@ window.Translations = {
     'stash.profitTracker': 'Stash Kar Takibi',
     'stash.ready': 'Hazir',
     'stash.readyToCalc': 'Hesaplanabilir',
+    'stash.capabilityUnavailable.poe2': 'Path of Exile 2 stash takibi desteklenen stash APIleri hazir olana kadar kullanilamaz.',
+    'stash.capabilityUnavailable.generic': 'Secili oyun icin stash takibi kullanilamaz.',
     'stash.runMaps': 'Map Kosun',
     'stash.priceData': 'Fiyat Verisi',
     'stash.syncPrices': 'Fiyatlari Guncelle',
@@ -1055,6 +1057,8 @@ window.Translations = {
     'stash.profitTracker': 'Stash Profit Tracker',
     'stash.ready': 'Ready',
     'stash.readyToCalc': 'Ready to Calculate',
+    'stash.capabilityUnavailable.poe2': 'PoE 2 stash tracking is unavailable until supported stash APIs are available.',
+    'stash.capabilityUnavailable.generic': 'Stash tracking is unavailable for the selected game.',
     'stash.runMaps': 'Run Maps',
     'stash.priceData': 'Price Data',
     'stash.syncPrices': 'Sync Prices',
@@ -1082,6 +1086,17 @@ window.Translations = {
     'misc.durationSec': 's',
   }
 };
+
+[
+  'stash.capabilityUnavailable.poe2',
+  'stash.capabilityUnavailable.generic'
+].forEach(function ensureRequiredTranslationKey(key) {
+  Object.keys(window.Translations).forEach(function applyFallback(localeCode) {
+    if (!window.Translations[localeCode][key]) {
+      window.Translations[localeCode][key] = window.Translations.en[key] || key;
+    }
+  });
+});
 
 /**
  * Get translation for a key

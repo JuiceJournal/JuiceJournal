@@ -26,6 +26,13 @@ const PriceService = require('./src/modules/priceService');
 const StashAnalyzer = require('./src/modules/stashAnalyzer');
 const GameDetector = require('./src/modules/gameDetector');
 const {
+  createRuntimeSessionState,
+  applyRuntimeEvent,
+  clearRuntimeSessionState,
+  cloneRuntimeSessionState
+} = require('./src/modules/runtimeSessionModel');
+const { deriveOverlayState } = require('./src/modules/overlayStateModel');
+const {
   DEFAULT_SCAN_HOTKEY,
   DEFAULT_STASH_SCAN_HOTKEY,
   validateHotkeys
@@ -171,6 +178,7 @@ const store = new Store({
     poeVersion: 'poe1',
     scanHotkey: DEFAULT_SCAN_HOTKEY,
     stashScanHotkey: DEFAULT_STASH_SCAN_HOTKEY,
+    overlayEnabled: false,
     currentUserId: null,
     pendingSessionActions: [],
     pendingLootActions: [],
@@ -249,6 +257,10 @@ let priceService = null;
 let stashAnalyzer = null;
 let gameDetector = null;
 let currentSession = null;
+let runtimeSessionState = createRuntimeSessionState();
+let overlayWindow = null;
+let overlayCharacterState = null;
+let overlayRuntimeState = null;
 let poeAuthServer = null;
 let trayHintShown = false;
 let pendingLootFlushInProgress = false;
@@ -1373,10 +1385,10 @@ const isDev = !app.isPackaged;
  */
 function createMainWindow() {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
+    width: 1440,
+    height: 960,
+    minWidth: 1180,
+    minHeight: 820,
     show: false,
     frame: false,
     backgroundColor: '#0d0e12',
@@ -1418,6 +1430,170 @@ function createMainWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+}
+
+function getOverlayWindowBounds() {
+  const display = screen.getPrimaryDisplay();
+  const workArea = display.workArea || display.bounds;
+  const width = 360;
+  const height = 112;
+
+  return {
+    width,
+    height,
+    x: Math.round(workArea.x + workArea.width - width - 24),
+    y: Math.round(workArea.y + 24)
+  };
+}
+
+function createOverlayWindow() {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    return overlayWindow;
+  }
+
+  overlayWindow = new BrowserWindow({
+    ...getOverlayWindowBounds(),
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    closable: false,
+    focusable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    alwaysOnTop: true,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    },
+    title: `${APP_NAME} Overlay`
+  });
+
+  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+  overlayWindow.loadFile(path.join(__dirname, 'src', 'overlay.html'));
+  overlayWindow.webContents.once('did-finish-load', () => {
+    updateOverlayWindow();
+  });
+  overlayWindow.on('closed', () => {
+    overlayWindow = null;
+  });
+
+  return overlayWindow;
+}
+
+function extractOverlayCharacterFromUser(user) {
+  if (!user || typeof user !== 'object') {
+    return null;
+  }
+
+  const poePayload = user.poe || {};
+  const characters = Array.isArray(user.characters)
+    ? user.characters
+    : (Array.isArray(user.poeCharacters)
+      ? user.poeCharacters
+      : (Array.isArray(poePayload.characters) ? poePayload.characters : []));
+  const selectedCharacterId = user.selectedCharacterId
+    || user.selectedCharacter?.id
+    || poePayload.selectedCharacterId
+    || poePayload.selectedCharacter?.id
+    || null;
+  const selectedCharacter = user.selectedCharacter
+    || poePayload.selectedCharacter
+    || characters.find((character) => character?.id && character.id === selectedCharacterId)
+    || characters[0]
+    || null;
+
+  if (selectedCharacter) {
+    return selectedCharacter;
+  }
+
+  const fallbackName = user.accountName
+    || user.poeAccountName
+    || poePayload.accountName
+    || poePayload.account?.name
+    || user.username
+    || null;
+  const fallbackLeague = user.league
+    || user.defaultLeague
+    || store.get(getLeagueKeyForVersion(normalizePoeVersion(store.get('poeVersion')) || 'poe1'))
+    || null;
+
+  return fallbackName
+    ? { name: fallbackName, league: fallbackLeague }
+    : null;
+}
+
+function isOverlayEnabled() {
+  return store.get('overlayEnabled') === true;
+}
+
+function buildOverlayState({ character = overlayCharacterState, runtimeSession = overlayRuntimeState } = {}) {
+  return deriveOverlayState({
+    enabled: isOverlayEnabled(),
+    character,
+    runtime: runtimeSession
+  });
+}
+
+function ensureOverlayWindowForSettings() {
+  if (isOverlayEnabled() && app.isReady()) {
+    createOverlayWindow();
+  }
+
+  updateOverlayWindow();
+}
+
+function applyOverlayWindowVisibility(overlayState) {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return;
+  }
+
+  if (overlayState.visibility === 'hidden') {
+    if (overlayWindow.isVisible()) {
+      overlayWindow.hide();
+    }
+    return;
+  }
+
+  overlayWindow.setBounds(getOverlayWindowBounds());
+  if (!overlayWindow.isVisible()) {
+    overlayWindow.showInactive();
+  }
+}
+
+function updateOverlayWindow({ character, runtimeSession } = {}) {
+  const options = arguments.length > 0 ? (arguments[0] || {}) : null;
+
+  if (options) {
+    if (Object.prototype.hasOwnProperty.call(options, 'character')) {
+      overlayCharacterState = character || null;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(options, 'runtimeSession')) {
+      overlayRuntimeState = runtimeSession || null;
+    }
+  }
+
+  const overlayState = buildOverlayState();
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return overlayState;
+  }
+
+  applyOverlayWindowVisibility(overlayState);
+
+  const serializedState = JSON.stringify(overlayState).replace(/</g, '\\u003c');
+  overlayWindow.webContents.executeJavaScript(
+    `window.JuiceOverlay && window.JuiceOverlay.renderState(${serializedState});`,
+    true
+  ).catch(() => { });
+
+  return overlayState;
 }
 
 /**
@@ -1791,6 +1967,65 @@ function showNotification(title, body) {
 /**
  * Log parser olaylarini dinle
  */
+function normalizeRuntimeLogEvent(type, data = {}) {
+  const areaName = data.areaName || data.mapName || data.location || 'Unknown Area';
+  const rawTimestamp = data.at ?? data.timestamp ?? 0;
+  const parsedTimestamp = rawTimestamp instanceof Date ? rawTimestamp : new Date(rawTimestamp);
+  const at = Number.isNaN(parsedTimestamp.getTime())
+    ? new Date(0).toISOString()
+    : parsedTimestamp.toISOString();
+
+  return {
+    type,
+    areaName,
+    at,
+    mapTier: data.mapTier ?? null,
+    source: 'logParser',
+    exitLocation: data.location || null
+  };
+}
+
+function getRuntimeSessionSnapshot(options = {}) {
+  return cloneRuntimeSessionState(runtimeSessionState, {
+    now: options.now ?? new Date()
+  });
+}
+
+function clearRuntimeSession(reason, options = {}) {
+  clearRuntimeSessionState(runtimeSessionState, {
+    reason,
+    at: options.at ?? options.now ?? new Date()
+  });
+  const runtimeSession = getRuntimeSessionSnapshot({
+    now: options.at ?? options.now
+  });
+  if (typeof updateOverlayWindow === 'function') {
+    updateOverlayWindow({ runtimeSession });
+  }
+  return runtimeSession;
+}
+
+function publishRuntimeSessionEvent(type, data = {}) {
+  const runtimeEvent = normalizeRuntimeLogEvent(type, data);
+  applyRuntimeEvent(runtimeSessionState, runtimeEvent);
+
+  const payload = {
+    ...data,
+    runtimeSession: getRuntimeSessionSnapshot({ now: runtimeEvent.at })
+  };
+  const channel = type === 'area_exited' ? 'map-exited' : 'map-entered';
+
+  if (mainWindow) {
+    mainWindow.webContents.send(channel, payload);
+  }
+
+  if (typeof updateOverlayWindow === 'function') {
+    updateOverlayWindow({ runtimeSession: payload.runtimeSession });
+  }
+
+  return payload;
+}
+
 function setupLogParser() {
   let poePath = store.get('poePath');
 
@@ -1826,9 +2061,7 @@ function setupLogParser() {
       });
     }
 
-    if (mainWindow) {
-      mainWindow.webContents.send('map-entered', data);
-    }
+    publishRuntimeSessionEvent('area_entered', data);
   });
 
   logParser.on('mapExited', (data) => {
@@ -1836,9 +2069,7 @@ function setupLogParser() {
       endCurrentSession();
     }
 
-    if (mainWindow) {
-      mainWindow.webContents.send('map-exited', data);
-    }
+    publishRuntimeSessionEvent('area_exited', data);
   });
 
   logParser.start();
@@ -1866,14 +2097,26 @@ function setupGameDetector() {
   });
 
   gameDetector.on('gameClosed', ({ version }) => {
-    const gameLabel = version === 'poe2' ? 'Path of Exile 2' : 'Path of Exile';
-    console.log(`[GameDetector] ${gameLabel} closed`);
-    if (mainWindow) {
-      mainWindow.webContents.send('game-closed', { version });
-    }
+    handleGameClosed(version);
   });
 
   gameDetector.start();
+}
+
+function handleGameClosed(version, at = new Date()) {
+  const gameLabel = version === 'poe2' ? 'Path of Exile 2' : 'Path of Exile';
+  const runtimeSession = clearRuntimeSession('game_closed', { at });
+  const payload = {
+    version,
+    runtimeSession
+  };
+
+  console.log(`[GameDetector] ${gameLabel} closed`);
+  if (mainWindow) {
+    mainWindow.webContents.send('game-closed', payload);
+  }
+
+  return payload;
 }
 
 /**
@@ -1907,12 +2150,14 @@ function applyGameVersion(version) {
   const shouldRestartLogParser = Boolean(
     runtimeLogPath && (versionChanged || shouldUpdatePoePath || logParserNeedsResync)
   );
+  let runtimeSession = null;
 
   if (shouldUpdatePoePath) {
     store.set('poePath', detectedLogPath);
   }
 
   if (shouldRestartLogParser) {
+    runtimeSession = clearRuntimeSession('log_parser_restarted');
     if (logParser) {
       logParser.stop();
     }
@@ -1925,7 +2170,8 @@ function applyGameVersion(version) {
       version,
       settingsVersion: selectedSettingsVersion,
       lastDetectedVersion: version,
-      logPath: detectedLogPath || store.get('poePath')
+      logPath: detectedLogPath || store.get('poePath'),
+      ...(runtimeSession ? { runtimeSession } : {})
     });
   }
 }
@@ -1933,7 +2179,7 @@ function applyGameVersion(version) {
 const SETTINGS_ALLOWLIST = new Set([
   'apiUrl', 'poePath', 'autoStartSession', 'notifications',
   'soundNotifications', 'language', 'poeVersion', 'defaultLeaguePoe1', 'defaultLeaguePoe2',
-  'scanHotkey', 'stashScanHotkey', 'theme'
+  'scanHotkey', 'stashScanHotkey', 'overlayEnabled', 'theme'
 ]);
 
 function applyDesktopSettings(settings = {}) {
@@ -2001,6 +2247,10 @@ function applyDesktopSettings(settings = {}) {
 
   if (shouldRefreshHotkeys) {
     refreshTrayMenu();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(settings, 'overlayEnabled')) {
+    ensureOverlayWindowForSettings();
   }
 
   return true;
@@ -2311,6 +2561,7 @@ function setupIPC() {
         }
         apiClient.setToken(token);
         store.set('currentUserId', result?.data?.user?.id || null);
+        updateOverlayWindow({ character: extractOverlayCharacterFromUser(result?.data?.user) });
         await flushPendingActions();
         appendAuditTrail('auditLogin');
       }
@@ -2337,6 +2588,7 @@ function setupIPC() {
         }
         apiClient.setToken(token);
         store.set('currentUserId', result?.user?.id || null);
+        updateOverlayWindow({ character: extractOverlayCharacterFromUser(result?.user) });
         await flushPendingActions();
         appendAuditTrail('auditLogin');
       }
@@ -2358,6 +2610,7 @@ function setupIPC() {
     try {
       const me = await apiClient.getMe();
       store.set('currentUserId', me?.user?.id || null);
+      updateOverlayWindow({ character: extractOverlayCharacterFromUser(me?.user) });
       await flushPendingActions();
       return me;
     } catch (error) {
@@ -2397,6 +2650,7 @@ function setupIPC() {
           }
           apiClient.setToken(result.data.token);
           store.set('currentUserId', result.data.user?.id || null);
+          updateOverlayWindow({ character: extractOverlayCharacterFromUser(result.data.user) });
           await flushPendingActions();
           appendAuditTrail('auditLogin');
         }
@@ -2423,6 +2677,7 @@ function setupIPC() {
         }
         apiClient.setToken(result.data.token);
         store.set('currentUserId', result.data.user?.id || null);
+        updateOverlayWindow({ character: extractOverlayCharacterFromUser(result.data.user) });
         await flushPendingActions();
         appendAuditTrail('auditLogin');
       }
@@ -2677,6 +2932,7 @@ function setupIPC() {
     store.set('currentUserId', null);
     apiClient.setToken(null);
     currentSession = null;
+    updateOverlayWindow({ character: null });
     return true;
   });
 }
@@ -2714,6 +2970,7 @@ app.whenReady().then(() => {
   mainWindow.show(); // Pencereyi goster
   mainWindow.focus();
   emitPendingSyncState();
+  ensureOverlayWindowForSettings();
 
   createTray();
   registerGlobalShortcuts();
@@ -2770,6 +3027,11 @@ app.on('will-quit', () => {
   if (tray) {
     tray.destroy();
     tray = null;
+  }
+
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.destroy();
+    overlayWindow = null;
   }
 
   if (pendingLootFlushInterval) {

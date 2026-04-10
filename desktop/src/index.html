@@ -66,7 +66,7 @@
     </header>
 
     <!-- Login Modal -->
-    <div id="login-modal" class="modal" role="dialog" aria-label="Giris yap">
+    <div id="login-modal" class="modal" role="dialog" aria-label="Path of Exile login">
       <div class="modal-content">
         <div class="modal-shell">
           <div class="modal-art">
@@ -104,74 +104,18 @@
             </div>
           </div>
 
-          <div class="modal-panel">
-            <h2 data-i18n="login.title">Giris Yap</h2>
-            <p class="modal-subtitle compact" data-i18n="login.subtitle">Hesabiniza giris yaparak devam edin</p>
-            <form id="login-form">
-              <div class="form-group">
-                <label for="login-username" data-i18n="login.username">Kullanici Adi veya Email</label>
-                <input type="text" id="login-username" data-i18n-placeholder="login.usernamePlaceholder" placeholder="testuser" required>
-              </div>
-              <div class="form-group">
-                <label for="login-password" data-i18n="login.password">Sifre</label>
-                <input type="password" id="login-password" data-i18n-placeholder="login.passwordPlaceholder" placeholder="Sifrenizi girin" required>
-              </div>
-              <div class="form-actions">
-                <button type="submit" class="btn btn-primary" data-i18n="login.submit">Giris Yap</button>
-                <div class="form-divider" data-i18n="login.or">veya</div>
-                <button type="button" class="btn btn-poe-oauth" id="poe-oauth-login" data-i18n="login.poeOAuth">
-                  <svg class="poe-oauth-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/>
-                    <path d="M12 7.25 16 9.5v5L12 16.75 8 14.5v-5Z"/>
-                  </svg>
-                  <span>Start Your Juice Journey with Path of Exile</span>
-                </button>
-                <button type="button" class="btn btn-secondary" id="show-register" data-i18n="login.createAccount">Yeni Hesap Olustur</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Register Modal -->
-    <div id="register-modal" class="modal hidden" role="dialog" aria-label="Hesap olustur">
-      <div class="modal-content">
-        <div class="modal-shell">
-          <div class="modal-art">
-            <div class="modal-logo">
-              <div class="modal-logo-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#120f0d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/><path d="M12 7.25 16 9.5v5L12 16.75 8 14.5v-5Z"/></svg>
-              </div>
-              <span>Juice Journal</span>
+          <div class="modal-panel oauth-only">
+            <h2>Login with Path of Exile</h2>
+            <p class="modal-subtitle compact">Juice Journal requires a linked Path of Exile account.</p>
+            <div class="form-actions">
+              <button type="button" class="btn btn-poe-oauth" id="poe-oauth-login">
+                <svg class="poe-oauth-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/>
+                  <path d="M12 7.25 16 9.5v5L12 16.75 8 14.5v-5Z"/>
+                </svg>
+                <span>Continue with Path of Exile</span>
+              </button>
             </div>
-            <p class="modal-kicker">Operator Access</p>
-            <h2 class="modal-display">Open a fresh ledger for your farming routes.</h2>
-            <p class="modal-subtitle">Create a new desktop operator profile and enter the command surface.</p>
-          </div>
-
-          <div class="modal-panel">
-            <h2 data-i18n="register.title">Hesap Olustur</h2>
-            <p class="modal-subtitle compact" data-i18n="register.subtitle">Yeni bir hesap olusturun</p>
-            <form id="register-form">
-              <div class="form-group">
-                <label for="register-username" data-i18n="register.username">Kullanici Adi</label>
-                <input type="text" id="register-username" data-i18n-placeholder="register.usernamePlaceholder" placeholder="En az 3 karakter" required minlength="3">
-              </div>
-              <div class="form-group">
-                <label for="register-email" data-i18n="register.email">Email</label>
-                <input type="email" id="register-email" data-i18n-placeholder="register.emailPlaceholder" placeholder="ornek@email.com" required>
-              </div>
-              <div class="form-group">
-                <label for="register-password" data-i18n="register.password">Sifre</label>
-                <input type="password" id="register-password" data-i18n-placeholder="register.passwordPlaceholder" placeholder="En az 6 karakter" required minlength="6">
-              </div>
-              <div class="form-actions">
-                <button type="submit" class="btn btn-primary" data-i18n="register.submit">Kayit Ol</button>
-                <div class="form-divider" data-i18n="register.or">veya</div>
-                <button type="button" class="btn btn-secondary" id="show-login" data-i18n="register.login">Giris Yap</button>
-              </div>
-            </form>
           </div>
         </div>
       </div>
@@ -262,7 +206,7 @@
           </div>
 
           <!-- Stash Profit Tracker -->
-          <div class="card stash-tracker-card">
+          <div class="card stash-tracker-card" id="stash-tracker-card" data-stash-capability="enabled">
             <div class="card-header">
               <h3 data-i18n="stash.profitTracker">Stash Profit Tracker</h3>
               <div class="card-header-right">
@@ -272,6 +216,7 @@
                 <span class="card-badge" id="stash-tracker-status" data-i18n="stash.ready">Ready</span>
               </div>
             </div>
+            <div class="stash-capability-unavailable hidden" id="stash-capability-unavailable" data-i18n="stash.capabilityUnavailable.poe2" hidden></div>
             <div class="stash-tracker-content">
               <!-- Price sync status -->
               <div class="stash-price-status" id="stash-price-status">
@@ -721,6 +666,7 @@
 
   <script src="modules/translations.js"></script>
   <script src="modules/hotkeyModel.js"></script>
+  <script src="modules/capabilityModel.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
