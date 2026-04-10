@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const { User } = require('../models');
 const { authenticate, generateRealtimeToken, generateToken } = require('../middleware/auth');
 const poeAuthService = require('../services/poeAuthService');
+const poeApiService = require('../services/poeApiService');
 const env = require('../config/env');
 const logger = require('../services/logger');
 const { Op } = require('sequelize');
@@ -43,6 +44,41 @@ const authLimiter = rateLimit({
 function getCapabilities(user) {
   return {
     canSyncPrices: !env.auth.requireAdminForPriceSync || user.role === 'admin'
+  };
+}
+
+async function buildCurrentUserPayload(user) {
+  let characterPayload = {
+    characters: [],
+    charactersByGame: { poe1: [], poe2: [] },
+    selectedCharacterByGame: {},
+    syncedAt: null
+  };
+
+  try {
+    if (user?.poeSub || user?.poeMock || poeAuthService.isMockMode()) {
+      characterPayload = await poeApiService.getAccountCharacters(user);
+    }
+  } catch (error) {
+    logger.warn('poe character sync failed', {
+      userId: user?.id,
+      code: error.code,
+      message: error.message
+    });
+  }
+
+  return {
+    user: {
+      ...user.toJSON(),
+      characters: characterPayload.characters,
+      charactersByGame: characterPayload.charactersByGame,
+      selectedCharacterByGame: characterPayload.selectedCharacterByGame,
+      characterSync: {
+        syncedAt: characterPayload.syncedAt,
+        available: characterPayload.characters.length > 0
+      }
+    },
+    capabilities: getCapabilities(user)
   };
 }
 
@@ -255,12 +291,11 @@ router.post('/login',
  */
 router.get('/me', authenticate, async (req, res) => {
   try {
+    const payload = await buildCurrentUserPayload(req.user);
+
     res.json({
       success: true,
-      data: {
-        user: req.user,
-        capabilities: getCapabilities(req.user)
-      },
+      data: payload,
       error: null
     });
   } catch (error) {
@@ -389,15 +424,15 @@ router.post('/poe/login/complete',
 
         const user = await poeAuthService.findOrCreateFromPoeProfile(mockProfile, mockTokenPayload);
         const token = generateToken(user.id);
+        const payload = await buildCurrentUserPayload(user);
         setAuthCookie(res, token);
 
         return res.json({
           success: true,
           data: {
             mode: 'mock',
-            user,
+            ...payload,
             token,
-            capabilities: getCapabilities(user),
             poe: user.getPoeStatus()
           },
           error: null
@@ -433,15 +468,15 @@ router.post('/poe/login/complete',
       const user = await poeAuthService.findOrCreateFromPoeProfile(profile, tokenPayload);
 
       const token = generateToken(user.id);
+      const payload = await buildCurrentUserPayload(user);
       setAuthCookie(res, token);
 
       res.json({
         success: true,
         data: {
           mode: 'live',
-          user,
+          ...payload,
           token,
-          capabilities: getCapabilities(user),
           poe: user.getPoeStatus()
         },
         error: null

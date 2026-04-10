@@ -100,6 +100,104 @@ const MOCK_STASHES = [
   { id: 'mock-dump', name: 'Dump', type: 'PremiumStash', index: 1 },
 ];
 
+const MOCK_CHARACTERS = {
+  poe1: [
+    {
+      id: 'mock-poe1-ranger',
+      name: 'MockRanger',
+      level: 94,
+      class: 'Ranger',
+      ascendancy: 'Deadeye',
+      league: 'Mercenaries'
+    }
+  ],
+  poe2: [
+    {
+      id: 'mock-poe2-shaman',
+      name: 'MockShaman',
+      level: 96,
+      class: 'Shaman',
+      ascendancy: 'Ritualist',
+      league: 'Fate of the Vaal'
+    }
+  ]
+};
+
+function normalizePoeVersion(realm) {
+  return realm === 'poe2' ? 'poe2' : 'poe1';
+}
+
+function normalizeCharacters(characters = [], poeVersion = 'poe1') {
+  if (!Array.isArray(characters)) {
+    return [];
+  }
+
+  return characters
+    .filter(Boolean)
+    .map((character) => ({
+      id: character.id || character.characterId || character.name || null,
+      name: character.name || null,
+      level: Number(character.level || 0),
+      class: character.class || character.className || null,
+      ascendancy: character.ascendancy || character.alternate_ascendancy || null,
+      league: character.league || null,
+      poeVersion: normalizePoeVersion(character.poeVersion || poeVersion)
+    }))
+    .filter((character) => character.name);
+}
+
+function buildCharacterPayload({ poe1 = [], poe2 = [] } = {}) {
+  const charactersByGame = {
+    poe1: normalizeCharacters(poe1, 'poe1'),
+    poe2: normalizeCharacters(poe2, 'poe2')
+  };
+
+  return {
+    characters: [
+      ...charactersByGame.poe1,
+      ...charactersByGame.poe2
+    ],
+    charactersByGame,
+    selectedCharacterByGame: {
+      ...(charactersByGame.poe1[0]?.id ? { poe1: charactersByGame.poe1[0].id } : {}),
+      ...(charactersByGame.poe2[0]?.id ? { poe2: charactersByGame.poe2[0].id } : {})
+    },
+    syncedAt: new Date().toISOString()
+  };
+}
+
+async function listCharacters(user, poeVersion = 'poe1') {
+  const normalizedVersion = normalizePoeVersion(poeVersion);
+
+  if (user?.poeMock || env.poe.mock) {
+    return normalizeCharacters(MOCK_CHARACTERS[normalizedVersion], normalizedVersion);
+  }
+
+  const realmPath = normalizedVersion === 'poe2' ? '/poe2' : '';
+  const payload = await authenticatedRequest(user, {
+    method: 'GET',
+    path: `/character${realmPath}`
+  });
+
+  return normalizeCharacters(payload?.characters || payload || [], normalizedVersion);
+}
+
+async function getAccountCharacters(user) {
+  if (user?.poeMock || env.poe.mock) {
+    return buildCharacterPayload(MOCK_CHARACTERS);
+  }
+
+  const [poe1, poe2] = await Promise.allSettled([
+    listCharacters(user, 'poe1'),
+    listCharacters(user, 'poe2')
+  ]);
+
+  return buildCharacterPayload({
+    poe1: poe1.status === 'fulfilled' ? poe1.value : [],
+    poe2: poe2.status === 'fulfilled' ? poe2.value : []
+  });
+}
+
 function buildMockStashTab(stashId) {
   const base = MOCK_STASHES.find((s) => s.id === stashId) || {
     id: stashId,
@@ -190,7 +288,11 @@ async function getStashTabsBatch(user, league, stashIds = []) {
 
 module.exports = {
   authenticatedRequest,
+  buildCharacterPayload,
+  getAccountCharacters,
   listStashTabs,
+  listCharacters,
   getStashTab,
   getStashTabsBatch,
+  normalizeCharacters,
 };
