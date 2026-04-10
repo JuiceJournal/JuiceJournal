@@ -249,11 +249,51 @@ test('account state model uses selected character payload when list cannot resol
   assert.equal(result.summary.className, 'Mercenary');
 });
 
+test('account state model selects the active game character from poe1 and poe2 pools', () => {
+  const deriveAccountState = getAccountStateModelExport('deriveAccountState');
+
+  const result = deriveAccountState({
+    accountName: 'HybridAccount',
+    activePoeVersion: 'poe2',
+    selectedCharacterByGame: {
+      poe1: 'poe1-main',
+      poe2: 'poe2-main'
+    },
+    characters: [
+      { id: 'poe1-main', name: 'PoeOneRanger', level: 95, class: 'Ranger', league: 'Mercenaries', poeVersion: 'poe1' },
+      { id: 'poe2-main', name: 'PoeTwoShaman', level: 96, class: 'Shaman', league: 'Fate of the Vaal', poeVersion: 'poe2' }
+    ]
+  });
+
+  assert.equal(result.selectedCharacter.name, 'PoeTwoShaman');
+  assert.equal(result.summary.poeVersion, 'poe2');
+  assert.equal(result.summary.className, 'Shaman');
+  assert.equal(result.charactersByGame.poe1[0].name, 'PoeOneRanger');
+  assert.equal(result.charactersByGame.poe2[0].name, 'PoeTwoShaman');
+});
+
+test('account state model falls back to first character for active game when no selected id exists', () => {
+  const deriveAccountState = getAccountStateModelExport('deriveAccountState');
+
+  const result = deriveAccountState({
+    accountName: 'HybridAccount',
+    activePoeVersion: 'poe2',
+    characters: [
+      { id: 'poe1-main', name: 'PoeOneRanger', level: 95, class: 'Ranger', league: 'Mercenaries', poeVersion: 'poe1' },
+      { id: 'poe2-alt', name: 'PoeTwoDruid', level: 80, class: 'Druid', league: 'Fate of the Vaal', poeVersion: 'poe2' }
+    ]
+  });
+
+  assert.equal(result.selectedCharacter.name, 'PoeTwoDruid');
+  assert.equal(result.summary.poeVersion, 'poe2');
+});
+
 test('renderer setCurrentUser stores normalized account state for later dashboard consumption', () => {
   const calls = [];
   const state = {};
-  const context = loadFunctions(['setCurrentUser'], {
+  const context = loadFunctions(['refreshAccountStateFromCurrentUser', 'setCurrentUser'], {
     state,
+    normalizePoeVersion: (value) => value,
     renderUserIdentity: () => calls.push(['renderUserIdentity']),
     getAccountStateModel: () => ({
       deriveAccountState: (payload) => ({

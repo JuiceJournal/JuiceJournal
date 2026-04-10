@@ -1581,6 +1581,8 @@ function setupIPCListeners() {
         setRuntimeSessionState(runtimeSession);
       }
       syncRendererGameContext(version, { logPath });
+      refreshAccountStateFromCurrentUser();
+      renderCharacterSummaryCard();
 
       // Clear cached prices (they're version-specific)
       stashState.pricesSynced = false;
@@ -1846,15 +1848,37 @@ function applyLocalizedChrome() {
  */
 function setCurrentUser(user) {
   state.currentUser = user;
+  refreshAccountStateFromCurrentUser();
+  renderUserIdentity();
+  if (typeof renderCharacterSummaryCard === 'function') {
+    renderCharacterSummaryCard();
+  }
+  if (typeof refreshRendererOverlayState === 'function') {
+    refreshRendererOverlayState();
+  }
+}
+
+function refreshAccountStateFromCurrentUser() {
+  const user = state.currentUser;
+  if (!user) {
+    state.account = null;
+    return;
+  }
+
   const { deriveAccountState } = getAccountStateModel();
   const poePayload = user?.poe || {};
   state.account = deriveAccountState({
+    activePoeVersion: normalizePoeVersion(state.detectedGameVersion)
+      || normalizePoeVersion(state.settings?.poeVersion),
     accountName: user?.accountName
       || user?.poeAccountName
       || poePayload.accountName
       || poePayload.account?.name
       || user?.username
       || null,
+    selectedCharacterByGame: user?.selectedCharacterByGame
+      || poePayload.selectedCharacterByGame
+      || {},
     selectedCharacterId: user?.selectedCharacterId
       || user?.selectedCharacter?.id
       || poePayload.selectedCharacterId
@@ -1866,13 +1890,6 @@ function setCurrentUser(user) {
       || poePayload.characters
       || []
   });
-  renderUserIdentity();
-  if (typeof renderCharacterSummaryCard === 'function') {
-    renderCharacterSummaryCard();
-  }
-  if (typeof refreshRendererOverlayState === 'function') {
-    refreshRendererOverlayState();
-  }
 }
 
 function canCurrentUserSyncPrices() {
