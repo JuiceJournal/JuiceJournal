@@ -132,6 +132,16 @@ const elements = {
   pages: document.querySelectorAll('.page'),
 
   // Dashboard
+  characterSummaryCard: document.getElementById('character-summary-card'),
+  characterPortrait: document.getElementById('character-portrait'),
+  characterPortraitBadge: document.getElementById('character-portrait-badge'),
+  characterName: document.getElementById('character-name'),
+  characterClass: document.getElementById('character-class'),
+  characterLevel: document.getElementById('character-level'),
+  characterLeague: document.getElementById('character-league'),
+  characterAccount: document.getElementById('character-account'),
+  characterStatus: document.getElementById('character-status'),
+  characterGameVersion: document.getElementById('character-game-version'),
   activeSession: document.getElementById('active-session'),
   startSessionBtn: document.getElementById('start-session-btn'),
   endSessionBtn: document.getElementById('end-session-btn'),
@@ -233,6 +243,7 @@ let accountStateModelPromise = null;
 let runtimeSessionModelPromise = null;
 let capabilityModelPromise = null;
 let overlayStateModelPromise = null;
+let characterVisualModelPromise = null;
 
 function ensureSettingsModelLoaded() {
   if (window.settingsModel) {
@@ -374,6 +385,34 @@ function ensureOverlayStateModelLoaded() {
   return overlayStateModelPromise;
 }
 
+function ensureCharacterVisualModelLoaded() {
+  if (window.characterVisualModel) {
+    return Promise.resolve(window.characterVisualModel);
+  }
+
+  if (characterVisualModelPromise) {
+    return characterVisualModelPromise;
+  }
+
+  characterVisualModelPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'modules/characterVisualModel.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.characterVisualModel) {
+        resolve(window.characterVisualModel);
+        return;
+      }
+
+      reject(new Error('characterVisualModel loaded without exposing window.characterVisualModel'));
+    };
+    script.onerror = () => reject(new Error('Failed to load character visual model script'));
+    document.head.appendChild(script);
+  });
+
+  return characterVisualModelPromise;
+}
+
 function getSettingsModel() {
   if (!window.settingsModel) {
     throw new Error('settingsModel is not loaded');
@@ -412,6 +451,14 @@ function getOverlayStateModel() {
   }
 
   return window.overlayStateModel;
+}
+
+function getCharacterVisualModel() {
+  if (!window.characterVisualModel) {
+    throw new Error('characterVisualModel is not loaded');
+  }
+
+  return window.characterVisualModel;
 }
 
 function getHotkeyModel() {
@@ -874,6 +921,53 @@ function setRuntimeSessionState(runtimeSession) {
   renderRuntimeSessionState();
 }
 
+function renderCharacterSummaryCard() {
+  if (!elements.characterSummaryCard) {
+    return;
+  }
+
+  const account = state.account || null;
+  const summary = account?.summary || { status: 'no_character_selected' };
+  const isReady = summary.status === 'ready';
+  const visual = isReady
+    ? getCharacterVisualModel().deriveCharacterVisual(summary)
+    : getCharacterVisualModel().deriveCharacterVisual({});
+
+  elements.characterSummaryCard.dataset.characterState = isReady ? 'ready' : 'empty';
+
+  if (elements.characterPortrait) {
+    elements.characterPortrait.dataset.characterPortrait = visual.portraitKey;
+    elements.characterPortrait.dataset.characterTone = visual.tone;
+  }
+  if (elements.characterPortraitBadge) {
+    elements.characterPortraitBadge.textContent = visual.badgeText;
+  }
+  if (elements.characterName) {
+    elements.characterName.textContent = isReady ? summary.name : 'No character selected';
+  }
+  if (elements.characterClass) {
+    elements.characterClass.textContent = isReady ? visual.classLabel : 'Unknown Class';
+  }
+  if (elements.characterLevel) {
+    elements.characterLevel.textContent = isReady && summary.level ? String(summary.level) : '—';
+  }
+  if (elements.characterLeague) {
+    elements.characterLeague.textContent = isReady ? (summary.league || 'Unknown League') : '—';
+  }
+  if (elements.characterAccount) {
+    elements.characterAccount.textContent = account?.accountName || state.currentUser?.username || '—';
+  }
+  if (elements.characterStatus) {
+    elements.characterStatus.textContent = isReady ? 'Synced from Path of Exile' : 'Character sync needed';
+  }
+  if (elements.characterGameVersion) {
+    const version = normalizePoeVersion(state.detectedGameVersion)
+      || normalizePoeVersion(state.settings?.poeVersion)
+      || 'poe1';
+    elements.characterGameVersion.textContent = version === 'poe2' ? 'PoE 2' : 'PoE 1';
+  }
+}
+
 /**
  * Uygulamayi baslat
  */
@@ -883,6 +977,7 @@ async function init() {
   await ensureRuntimeSessionModelLoaded();
   await ensureCapabilityModelLoaded();
   await ensureOverlayStateModelLoaded();
+  await ensureCharacterVisualModelLoaded();
   populateLanguageOptions();
 
   // Ayarlari yukle
@@ -892,6 +987,9 @@ async function init() {
   // Set language from settings and apply translations
   window._appState.language = state.settings.language || 'en';
   applyLocalizedChrome();
+  if (typeof renderCharacterSummaryCard === 'function') {
+    renderCharacterSummaryCard();
+  }
   updateActiveLeagueFieldContext();
   syncDesktopCurrencyIcons();
   applyDashboardCapabilities();
@@ -1483,6 +1581,8 @@ function setupIPCListeners() {
         setRuntimeSessionState(runtimeSession);
       }
       syncRendererGameContext(version, { logPath });
+      refreshAccountStateFromCurrentUser();
+      renderCharacterSummaryCard();
 
       // Clear cached prices (they're version-specific)
       stashState.pricesSynced = false;
@@ -1700,6 +1800,9 @@ async function handleLogout() {
   state.overlay = null;
   closeSessionDrawer();
   renderUserIdentity();
+  if (typeof renderCharacterSummaryCard === 'function') {
+    renderCharacterSummaryCard();
+  }
   resetDashboardSummary();
   updateActiveSessionUI();
   renderSessionsList();
@@ -1745,15 +1848,37 @@ function applyLocalizedChrome() {
  */
 function setCurrentUser(user) {
   state.currentUser = user;
+  refreshAccountStateFromCurrentUser();
+  renderUserIdentity();
+  if (typeof renderCharacterSummaryCard === 'function') {
+    renderCharacterSummaryCard();
+  }
+  if (typeof refreshRendererOverlayState === 'function') {
+    refreshRendererOverlayState();
+  }
+}
+
+function refreshAccountStateFromCurrentUser() {
+  const user = state.currentUser;
+  if (!user) {
+    state.account = null;
+    return;
+  }
+
   const { deriveAccountState } = getAccountStateModel();
   const poePayload = user?.poe || {};
   state.account = deriveAccountState({
+    activePoeVersion: normalizePoeVersion(state.detectedGameVersion)
+      || normalizePoeVersion(state.settings?.poeVersion),
     accountName: user?.accountName
       || user?.poeAccountName
       || poePayload.accountName
       || poePayload.account?.name
       || user?.username
       || null,
+    selectedCharacterByGame: user?.selectedCharacterByGame
+      || poePayload.selectedCharacterByGame
+      || {},
     selectedCharacterId: user?.selectedCharacterId
       || user?.selectedCharacter?.id
       || poePayload.selectedCharacterId
@@ -1763,11 +1888,27 @@ function setCurrentUser(user) {
     characters: user?.characters
       || user?.poeCharacters
       || poePayload.characters
-      || []
+      || [],
+    cachedAccountState: state.settings?.lastKnownAccountState || null
   });
-  renderUserIdentity();
-  if (typeof refreshRendererOverlayState === 'function') {
-    refreshRendererOverlayState();
+  persistLastKnownAccountState();
+}
+
+function persistLastKnownAccountState() {
+  if (!state.account || state.account.summary?.status !== 'ready') {
+    return;
+  }
+
+  const accountModel = getAccountStateModel();
+  if (typeof accountModel.createAccountStateCache !== 'function') {
+    return;
+  }
+
+  const lastKnownAccountState = accountModel.createAccountStateCache(state.account);
+  state.settings.lastKnownAccountState = lastKnownAccountState;
+
+  if (window.electronAPI?.setSettings) {
+    window.electronAPI.setSettings({ lastKnownAccountState }).catch(() => {});
   }
 }
 

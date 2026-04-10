@@ -57,6 +57,7 @@ window.Translations = {
     'register.login': 'Giris Yap',
 
     // Dashboard
+    'dashboard.characterSummary': 'Karakter Ozeti',
     'dashboard.activeSession': 'Aktif Map Session',
     'dashboard.waiting': 'Bekleniyor',
     'dashboard.active': 'Aktif',
@@ -747,6 +748,7 @@ window.Translations = {
     'register.login': 'Sign In',
 
     // Dashboard
+    'dashboard.characterSummary': 'Character Summary',
     'dashboard.activeSession': 'Active Map Session',
     'dashboard.waiting': 'Waiting',
     'dashboard.active': 'Active',
@@ -1088,6 +1090,7 @@ window.Translations = {
 };
 
 [
+  'dashboard.characterSummary',
   'stash.capabilityUnavailable.poe2',
   'stash.capabilityUnavailable.generic'
 ].forEach(function ensureRequiredTranslationKey(key) {
