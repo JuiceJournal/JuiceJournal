@@ -7,19 +7,18 @@ const { test, expect } = require('playwright/test');
 const { _electron: electron } = require('playwright');
 
 const SMOKE_USER = {
-  id: 'smoke-user-id',
+  id: 'smoke-poe-user-id',
   username: 'RangerMain',
-  password: 'smoke-password',
-  token: 'smoke-poe-token',
   accountName: 'SmokeAccount',
+  token: 'smoke-poe-token',
   selectedCharacter: {
     id: 'char-smoke-main',
     name: 'RangerMain',
     level: 96,
     class: 'Ranger',
     ascendancy: 'Deadeye',
-    league: 'Standard',
-  },
+    league: 'Standard'
+  }
 };
 
 function toSlug(value) {
@@ -72,8 +71,8 @@ function createSmokeUserPayload() {
     poe: {
       accountName: SMOKE_USER.accountName,
       selectedCharacter: SMOKE_USER.selectedCharacter,
-      characters: [SMOKE_USER.selectedCharacter],
-    },
+      characters: [SMOKE_USER.selectedCharacter]
+    }
   };
 }
 
@@ -87,9 +86,9 @@ async function startSmokeBackend() {
         data: {
           mode: 'mock',
           requiresBrowser: false,
-          mockCode: 'smoke-oauth-code',
+          mockCode: 'smoke-oauth-code'
         },
-        error: null,
+        error: null
       });
       return;
     }
@@ -101,7 +100,7 @@ async function startSmokeBackend() {
           success: false,
           data: null,
           error: 'Unexpected OAuth code',
-          errorCode: 'OAUTH_CODE_MISMATCH',
+          errorCode: 'OAUTH_CODE_MISMATCH'
         });
         return;
       }
@@ -112,38 +111,14 @@ async function startSmokeBackend() {
           token: SMOKE_USER.token,
           user: createSmokeUserPayload(),
           capabilities: {
-            canSyncPrices: true,
+            canSyncPrices: true
           },
           poe: {
             accountName: SMOKE_USER.accountName,
-            mock: true,
-          },
+            mock: true
+          }
         },
-        error: null,
-      });
-      return;
-    }
-
-    if (request.method === 'POST' && url.pathname === '/api/auth/login') {
-      const body = await parseJsonBody(request);
-      if (body.username !== SMOKE_USER.username || body.password !== SMOKE_USER.password) {
-        writeJson(response, 401, {
-          success: false,
-          data: null,
-          error: 'Invalid username or password',
-          errorCode: 'UNAUTHORIZED',
-        });
-        return;
-      }
-
-      writeJson(response, 200, {
-        success: true,
-        data: {
-          token: 'smoke-token',
-          user: createSmokeUserPayload(),
-          capabilities: {},
-        },
-        error: null,
+        error: null
       });
       return;
     }
@@ -155,10 +130,10 @@ async function startSmokeBackend() {
           poe: {
             linked: true,
             mock: true,
-            accountName: SMOKE_USER.accountName,
-          },
+            accountName: SMOKE_USER.accountName
+          }
         },
-        error: null,
+        error: null
       });
       return;
     }
@@ -167,9 +142,9 @@ async function startSmokeBackend() {
       writeJson(response, 200, {
         success: true,
         data: {
-          activeLeagues: ['Standard'],
+          activeLeagues: ['Standard']
         },
-        error: null,
+        error: null
       });
       return;
     }
@@ -178,9 +153,9 @@ async function startSmokeBackend() {
       writeJson(response, 200, {
         success: true,
         data: {
-          session: null,
+          session: null
         },
-        error: null,
+        error: null
       });
       return;
     }
@@ -192,12 +167,12 @@ async function startSmokeBackend() {
           summary: {
             totalSessions: 0,
             totalProfit: 0,
-            avgProfitPerMap: 0,
+            avgProfitPerMap: 0
           },
           dailyStats: [],
-          mapStats: [],
+          mapStats: []
         },
-        error: null,
+        error: null
       });
       return;
     }
@@ -206,9 +181,9 @@ async function startSmokeBackend() {
       writeJson(response, 200, {
         success: true,
         data: {
-          lootEntries: [],
+          lootEntries: []
         },
-        error: null,
+        error: null
       });
       return;
     }
@@ -217,7 +192,7 @@ async function startSmokeBackend() {
       success: false,
       data: null,
       error: `Unhandled smoke endpoint: ${request.method} ${url.pathname}`,
-      errorCode: 'NOT_FOUND',
+      errorCode: 'NOT_FOUND'
     });
   });
 
@@ -230,7 +205,7 @@ async function startSmokeBackend() {
 
   return {
     server,
-    baseUrl: `http://127.0.0.1:${address.port}`,
+    baseUrl: `http://127.0.0.1:${address.port}`
   };
 }
 
@@ -241,25 +216,30 @@ function createIsolatedProfile(testInfo, apiUrl) {
   const appDataDir = path.join(rootDir, 'app-data');
   const userDataDir = path.join(rootDir, 'user-data');
   const tempDir = path.join(rootDir, 'temp');
+  const poeLogPath = path.join(rootDir, 'Client.txt');
 
   fs.rmSync(rootDir, { recursive: true, force: true });
   fs.mkdirSync(appDataDir, { recursive: true });
   fs.mkdirSync(userDataDir, { recursive: true });
   fs.mkdirSync(tempDir, { recursive: true });
+  fs.writeFileSync(poeLogPath, '2026/04/10 12:00:00 Client started\n', 'utf8');
 
   return {
     rootDir,
     appDataDir,
     userDataDir,
+    tempDir,
+    poeLogPath,
     env: {
       ...process.env,
       NODE_ENV: 'test',
       JUICE_JOURNAL_E2E_APP_DATA_DIR: appDataDir,
       JUICE_JOURNAL_E2E_USER_DATA_DIR: userDataDir,
       JUICE_JOURNAL_E2E_API_URL: apiUrl,
+      JUICE_JOURNAL_E2E_POE_LOG_PATH: poeLogPath,
       TMP: tempDir,
-      TEMP: tempDir,
-    },
+      TEMP: tempDir
+    }
   };
 }
 
@@ -276,13 +256,19 @@ const { app } = require('electron');
 const appDataDir = process.env.JUICE_JOURNAL_E2E_APP_DATA_DIR;
 const userDataDir = process.env.JUICE_JOURNAL_E2E_USER_DATA_DIR;
 const apiUrl = process.env.JUICE_JOURNAL_E2E_API_URL;
+const poeLogPath = process.env.JUICE_JOURNAL_E2E_POE_LOG_PATH;
 
-if (!appDataDir || !userDataDir || !apiUrl) {
+if (!appDataDir || !userDataDir || !apiUrl || !poeLogPath) {
   throw new Error('Missing smoke harness path overrides');
 }
 
 fs.mkdirSync(appDataDir, { recursive: true });
 fs.mkdirSync(userDataDir, { recursive: true });
+fs.mkdirSync(path.dirname(poeLogPath), { recursive: true });
+
+if (!fs.existsSync(poeLogPath)) {
+  fs.writeFileSync(poeLogPath, '2026/04/10 12:00:00 Client started\\n', 'utf8');
+}
 
 app.setPath('appData', appDataDir);
 app.setPath('userData', userDataDir);
@@ -293,6 +279,9 @@ fs.writeFileSync(configPath, JSON.stringify({
   apiUrl,
   language: 'en',
   poeVersion: 'poe1',
+  poePath: poeLogPath,
+  autoStartSession: false,
+  overlayEnabled: true,
   authToken: null,
   authTokenEncrypted: null,
   currentUserId: null
@@ -301,7 +290,7 @@ fs.writeFileSync(configPath, JSON.stringify({
 
   return {
     bootstrapDir,
-    bootstrapPath,
+    bootstrapPath
   };
 }
 
@@ -326,6 +315,10 @@ async function waitForAppWindow(electronApp, expectedTitle) {
   throw new Error(`Timed out waiting for app window matching ${expectedTitle}`);
 }
 
+async function waitForOverlayWindow(electronApp) {
+  return waitForAppWindow(electronApp, /Juice Journal Overlay/i);
+}
+
 async function waitForGuestReady(page) {
   await page.waitForLoadState('domcontentloaded');
   await expect(page).toHaveTitle(/Juice Journal/i);
@@ -333,10 +326,9 @@ async function waitForGuestReady(page) {
   await expect(page.locator('#login-form')).toHaveCount(0);
   await expect(page.locator('#register-form')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /continue with path of exile/i })).toBeEnabled();
-  await expect(page.locator('#username')).toHaveText('Guest');
 }
 
-async function signIn(page) {
+async function signInWithPoeOAuth(page) {
   await page.getByRole('button', { name: /continue with path of exile/i }).click();
   await expect(page.locator('#login-modal')).toBeHidden();
   await expect(page.locator('#username')).toHaveText(SMOKE_USER.username);
@@ -367,7 +359,7 @@ async function waitForProcessExit(childProcess, timeoutMs) {
   if (childProcess.exitCode !== null) {
     return {
       exitCode: childProcess.exitCode,
-      signal: childProcess.signalCode,
+      signal: childProcess.signalCode
     };
   }
 
@@ -432,84 +424,111 @@ async function shutdownElectronApp(electronApp) {
   }
 }
 
-test('settings smoke: launches desktop app and shows core settings controls', async ({}, testInfo) => {
+async function launchDesktopWithStubbedPoeAuth(testInfo) {
   const backend = await startSmokeBackend();
   const isolatedProfile = createIsolatedProfile(testInfo, backend.baseUrl);
   const bootstrap = createBootstrapScript(testInfo);
-  let electronApp;
-  let testError = null;
+  const electronApp = await electron.launch({
+    args: ['-r', bootstrap.bootstrapPath, path.join(__dirname, '..')],
+    cwd: path.join(__dirname, '..'),
+    env: isolatedProfile.env
+  });
+  const page = await waitForAppWindow(electronApp, /^Juice Journal$/i);
 
-  try {
-    electronApp = await electron.launch({
-      args: ['-r', bootstrap.bootstrapPath, path.join(__dirname, '..')],
-      cwd: path.join(__dirname, '..'),
-      env: isolatedProfile.env,
-    });
-    const page = await waitForAppWindow(electronApp, /Juice Journal/i);
+  return {
+    backend,
+    bootstrap,
+    electronApp,
+    isolatedProfile,
+    page
+  };
+}
 
-    await waitForGuestReady(page);
-    await signIn(page);
+async function cleanupSmokeHarness(harness) {
+  const cleanupErrors = [];
 
-    await page.locator('.nav-btn[data-page="settings"]').click();
-    await expect(page.locator('#settings-page')).toHaveClass(/active/);
-    await expect(page.locator('#save-settings')).toBeVisible();
-    await expect(page.locator('#reset-settings')).toBeVisible();
-
-    await expect(page.locator('#global-language')).toBeVisible();
-    await expect(page.locator('#api-url')).toHaveValue(backend.baseUrl);
-
-    await page.locator('.settings-nav-btn[data-settings-tab="poe"]').click();
-    await expect(page.locator('#settings-poe')).toHaveClass(/active/);
-    await expect(page.locator('#poe-path')).toBeVisible();
-    await expect(page.locator('#auto-start-session')).toBeVisible();
-
-    await page.locator('.settings-nav-btn[data-settings-tab="api"]').click();
-    await expect(page.locator('#settings-api')).toHaveClass(/active/);
-    await expect(page.locator('#api-url')).toHaveValue(backend.baseUrl);
-    await expect(page.locator('#test-connection')).toBeVisible();
-    await expect(page.locator('#pending-sync-count')).toBeVisible();
-  } catch (error) {
-    testError = error;
-  } finally {
-    const cleanupErrors = [];
-
-    if (electronApp) {
-      try {
-        await shutdownElectronApp(electronApp);
-      } catch (error) {
-        cleanupErrors.push(`Electron cleanup failed: ${error.message}`);
-      }
-    }
-
+  if (harness?.electronApp) {
     try {
-      await closeServer(backend.server);
+      await shutdownElectronApp(harness.electronApp);
+    } catch (error) {
+      cleanupErrors.push(`Electron cleanup failed: ${error.message}`);
+    }
+  }
+
+  if (harness?.backend?.server) {
+    try {
+      await closeServer(harness.backend.server);
     } catch (error) {
       cleanupErrors.push(`Smoke backend cleanup failed: ${error.message}`);
     }
+  }
 
+  if (harness?.isolatedProfile?.rootDir) {
     try {
-      fs.rmSync(isolatedProfile.rootDir, { recursive: true, force: true });
+      fs.rmSync(harness.isolatedProfile.rootDir, { recursive: true, force: true });
     } catch (error) {
       cleanupErrors.push(`Isolated profile cleanup failed: ${error.message}`);
     }
+  }
 
+  if (harness?.bootstrap?.bootstrapDir) {
     try {
-      fs.rmSync(bootstrap.bootstrapDir, { recursive: true, force: true });
+      fs.rmSync(harness.bootstrap.bootstrapDir, { recursive: true, force: true });
     } catch (error) {
       cleanupErrors.push(`Bootstrap cleanup failed: ${error.message}`);
     }
+  }
 
-    if (cleanupErrors.length > 0) {
-      const cleanupError = new Error(cleanupErrors.join('\n'));
-      if (testError) {
-        throw new AggregateError([testError, cleanupError], 'Smoke test failed with cleanup errors');
-      }
+  if (cleanupErrors.length > 0) {
+    throw new Error(cleanupErrors.join('\n'));
+  }
+}
 
-      throw cleanupError;
+test('overlay smoke: launches app, signs in via poe oauth stub, and shows compact runtime summary', async ({}, testInfo) => {
+  let harness;
+  let testError = null;
+
+  try {
+    harness = await launchDesktopWithStubbedPoeAuth(testInfo);
+    const { electronApp, isolatedProfile, page } = harness;
+
+    await waitForGuestReady(page);
+    await signInWithPoeOAuth(page);
+
+    await expect(page.locator('#dashboard-page')).toHaveClass(/active/);
+    await expect(page.locator('#stash-tracker-card')).toBeVisible();
+    await expect(page.locator('#active-session')).toBeVisible();
+
+    fs.appendFileSync(
+      isolatedProfile.poeLogPath,
+      '2026/04/10 12:01:00 Generating level 16 area "MapOvergrownShrine"\\n',
+      'utf8'
+    );
+
+    const overlayWindow = await waitForOverlayWindow(electronApp);
+    await expect(overlayWindow.locator('[data-overlay-state="visible"]')).toBeVisible();
+    await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText(SMOKE_USER.selectedCharacter.name);
+    await expect(overlayWindow.locator('[data-overlay-secondary]')).toContainText('Overgrown Shrine Map');
+  } catch (error) {
+    testError = error;
+  } finally {
+    let cleanupError = null;
+    try {
+      await cleanupSmokeHarness(harness);
+    } catch (error) {
+      cleanupError = error;
+    }
+
+    if (testError && cleanupError) {
+      throw new AggregateError([testError, cleanupError], 'Overlay smoke test failed with cleanup errors');
     }
 
     if (testError) {
       throw testError;
+    }
+
+    if (cleanupError) {
+      throw cleanupError;
     }
   }
 });

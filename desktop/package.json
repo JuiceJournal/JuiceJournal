@@ -9,7 +9,7 @@
     "test": "node --test tests/*.test.js",
     "test:desktop": "node --test tests/*.test.js",
     "test:e2e": "playwright test",
-    "test:smoke": "playwright test e2e/settings-smoke.spec.js",
+    "test:smoke": "playwright test e2e/settings-smoke.spec.js e2e/overlay-smoke.spec.js",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "pack": "electron-builder --dir",
