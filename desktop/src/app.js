@@ -1888,8 +1888,28 @@ function refreshAccountStateFromCurrentUser() {
     characters: user?.characters
       || user?.poeCharacters
       || poePayload.characters
-      || []
+      || [],
+    cachedAccountState: state.settings?.lastKnownAccountState || null
   });
+  persistLastKnownAccountState();
+}
+
+function persistLastKnownAccountState() {
+  if (!state.account || state.account.summary?.status !== 'ready') {
+    return;
+  }
+
+  const accountModel = getAccountStateModel();
+  if (typeof accountModel.createAccountStateCache !== 'function') {
+    return;
+  }
+
+  const lastKnownAccountState = accountModel.createAccountStateCache(state.account);
+  state.settings.lastKnownAccountState = lastKnownAccountState;
+
+  if (window.electronAPI?.setSettings) {
+    window.electronAPI.setSettings({ lastKnownAccountState }).catch(() => {});
+  }
 }
 
 function canCurrentUserSyncPrices() {

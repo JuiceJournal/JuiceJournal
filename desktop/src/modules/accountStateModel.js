@@ -54,6 +54,23 @@
     };
   }
 
+  function flattenCachedCharacters(cachedAccountState) {
+    const directCharacters = normalizeCharacters(cachedAccountState?.characters);
+    const groupedCharacters = [
+      ...normalizeCharacters(cachedAccountState?.charactersByGame?.poe1),
+      ...normalizeCharacters(cachedAccountState?.charactersByGame?.poe2)
+    ];
+    const byId = new Map();
+
+    [...directCharacters, ...groupedCharacters].forEach((character) => {
+      if (character?.id && !byId.has(character.id)) {
+        byId.set(character.id, character);
+      }
+    });
+
+    return Array.from(byId.values());
+  }
+
   function findCharacterById(characters, characterId) {
     return characterId
       ? characters.find((character) => character.id === characterId) || null
@@ -66,14 +83,18 @@
     selectedCharacterId,
     selectedCharacterByGame = {},
     selectedCharacter: selectedCharacterPayload,
-    characters = []
+    characters = [],
+    cachedAccountState = null
   } = {}) {
     const normalizedCharacters = normalizeCharacters(characters);
+    const cachedCharacters = flattenCachedCharacters(cachedAccountState);
     const normalizedSelectedCharacter = normalizeCharacter(selectedCharacterPayload);
     const normalizedActivePoeVersion = normalizePoeVersion(activePoeVersion);
-    const charactersByGame = groupCharactersByGame(normalizedCharacters);
+    const allCharacters = normalizedCharacters.length ? normalizedCharacters : cachedCharacters;
+    const charactersByGame = groupCharactersByGame(allCharacters);
     const normalizedSelectedCharacterId = normalizeString(
       (normalizedActivePoeVersion ? selectedCharacterByGame[normalizedActivePoeVersion] : null)
+        ?? (normalizedActivePoeVersion ? cachedAccountState?.selectedCharacterByGame?.[normalizedActivePoeVersion] : null)
         ?? selectedCharacterId
         ?? selectedCharacterPayload?.id
         ?? selectedCharacterPayload?.characterId
@@ -83,16 +104,16 @@
       : [];
 
     const selectedCharacter = findCharacterById(activeGameCharacters, normalizedSelectedCharacterId)
-      || findCharacterById(normalizedCharacters, normalizedSelectedCharacterId)
+      || findCharacterById(allCharacters, normalizedSelectedCharacterId)
       || (normalizedSelectedCharacter?.poeVersion === normalizedActivePoeVersion ? normalizedSelectedCharacter : null)
       || activeGameCharacters[0]
       || normalizedSelectedCharacter
-      || normalizedCharacters[0]
+      || allCharacters[0]
       || null;
 
     return {
-      accountName: normalizeString(accountName),
-      characters: normalizedCharacters,
+      accountName: normalizeString(accountName) || normalizeString(cachedAccountState?.accountName),
+      characters: allCharacters,
       charactersByGame,
       activePoeVersion: normalizedActivePoeVersion,
       selectedCharacter,
@@ -111,7 +132,47 @@
     };
   }
 
+  function createAccountStateCache(accountState = {}) {
+    const characters = normalizeCharacters(accountState.characters);
+    const selectedCharacter = normalizeCharacter(accountState.selectedCharacter);
+    const byId = new Map();
+
+    characters.forEach((character) => {
+      if (character?.id) {
+        byId.set(character.id, character);
+      }
+    });
+
+    if (selectedCharacter?.id && !byId.has(selectedCharacter.id)) {
+      byId.set(selectedCharacter.id, selectedCharacter);
+    }
+
+    const allCharacters = Array.from(byId.values());
+    const charactersByGame = groupCharactersByGame(allCharacters);
+    const selectedCharacterByGame = {};
+
+    ['poe1', 'poe2'].forEach((poeVersion) => {
+      const selectedForGame = selectedCharacter?.poeVersion === poeVersion
+        ? selectedCharacter
+        : null;
+      const fallbackForGame = charactersByGame[poeVersion][0] || null;
+      const chosen = selectedForGame || fallbackForGame;
+      if (chosen?.id) {
+        selectedCharacterByGame[poeVersion] = chosen.id;
+      }
+    });
+
+    return {
+      accountName: normalizeString(accountState.accountName),
+      characters: allCharacters,
+      charactersByGame,
+      selectedCharacterByGame,
+      cachedAt: new Date().toISOString()
+    };
+  }
+
   return {
-    deriveAccountState
+    deriveAccountState,
+    createAccountStateCache
   };
 });

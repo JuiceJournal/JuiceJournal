@@ -288,34 +288,92 @@ test('account state model falls back to first character for active game when no 
   assert.equal(result.summary.poeVersion, 'poe2');
 });
 
+test('account state model uses last known character cache when live payload has no characters', () => {
+  const deriveAccountState = getAccountStateModelExport('deriveAccountState');
+
+  const result = deriveAccountState({
+    accountName: 'HybridAccount',
+    activePoeVersion: 'poe2',
+    characters: [],
+    cachedAccountState: {
+      accountName: 'HybridAccount',
+      selectedCharacterByGame: {
+        poe2: 'cached-shaman'
+      },
+      characters: [
+        { id: 'cached-shaman', name: 'CachedShaman', level: 96, class: 'Shaman', league: 'Fate of the Vaal', poeVersion: 'poe2' }
+      ]
+    }
+  });
+
+  assert.equal(result.selectedCharacter.name, 'CachedShaman');
+  assert.equal(result.summary.status, 'ready');
+  assert.equal(result.summary.poeVersion, 'poe2');
+});
+
+test('account state model creates a last known cache from current account state', () => {
+  const deriveAccountState = getAccountStateModelExport('deriveAccountState');
+  const createAccountStateCache = getAccountStateModelExport('createAccountStateCache');
+  const accountState = deriveAccountState({
+    accountName: 'HybridAccount',
+    activePoeVersion: 'poe2',
+    characters: [
+      { id: 'poe1-main', name: 'PoeOneRanger', level: 95, class: 'Ranger', league: 'Mercenaries', poeVersion: 'poe1' },
+      { id: 'poe2-main', name: 'PoeTwoShaman', level: 96, class: 'Shaman', league: 'Fate of the Vaal', poeVersion: 'poe2' }
+    ]
+  });
+
+  const cache = createAccountStateCache(accountState);
+
+  assert.equal(cache.accountName, 'HybridAccount');
+  assert.equal(cache.selectedCharacterByGame.poe2, 'poe2-main');
+  assert.equal(cache.charactersByGame.poe2[0].name, 'PoeTwoShaman');
+});
+
 test('renderer setCurrentUser stores normalized account state for later dashboard consumption', () => {
   const calls = [];
-  const state = {};
-  const context = loadFunctions(['refreshAccountStateFromCurrentUser', 'setCurrentUser'], {
+  const persistedSettings = [];
+  const state = {
+    settings: {
+      lastKnownAccountState: {
+        accountName: 'CachedAccount',
+        selectedCharacterByGame: { poe2: 'cached-shaman' },
+        characters: [
+          { id: 'cached-shaman', name: 'CachedShaman', level: 96, class: 'Shaman', league: 'Fate of the Vaal', poeVersion: 'poe2' }
+        ]
+      }
+    },
+    detectedGameVersion: 'poe2'
+  };
+  const context = loadFunctions(['persistLastKnownAccountState', 'refreshAccountStateFromCurrentUser', 'setCurrentUser'], {
     state,
     normalizePoeVersion: (value) => value,
+    window: {
+      electronAPI: {
+        setSettings: async (settings) => {
+          persistedSettings.push(settings);
+        }
+      }
+    },
     renderUserIdentity: () => calls.push(['renderUserIdentity']),
     getAccountStateModel: () => ({
-      deriveAccountState: (payload) => ({
-        accountName: payload.accountName,
-        selectedCharacter: payload.characters[0],
-        summary: { status: 'ready', name: payload.characters[0].name }
-      })
+      deriveAccountState: require('../src/modules/accountStateModel').deriveAccountState,
+      createAccountStateCache: require('../src/modules/accountStateModel').createAccountStateCache
     })
   });
 
   context.setCurrentUser({
     username: 'RangerMain',
     accountName: 'KocaGyVeMasha',
-    selectedCharacterId: 'char-1',
-    characters: [
-      { id: 'char-1', name: 'MainOne', level: 96, class: 'Shaman' }
-    ]
+    characters: []
   });
 
   assert.equal(state.account.accountName, 'KocaGyVeMasha');
-  assert.equal(state.account.summary.name, 'MainOne');
+  assert.equal(state.account.summary.name, 'CachedShaman');
+  assert.equal(state.account.summary.poeVersion, 'poe2');
   assert.deepEqual(calls, [['renderUserIdentity']]);
+  assert.equal(persistedSettings.length, 1);
+  assert.equal(persistedSettings[0].lastKnownAccountState.selectedCharacterByGame.poe2, 'cached-shaman');
 });
 
 test('renderer logout clears normalized account state', async () => {

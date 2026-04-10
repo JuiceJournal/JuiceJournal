@@ -2179,7 +2179,7 @@ function applyGameVersion(version) {
 const SETTINGS_ALLOWLIST = new Set([
   'apiUrl', 'poePath', 'autoStartSession', 'notifications',
   'soundNotifications', 'language', 'poeVersion', 'defaultLeaguePoe1', 'defaultLeaguePoe2',
-  'scanHotkey', 'stashScanHotkey', 'overlayEnabled', 'theme'
+  'scanHotkey', 'stashScanHotkey', 'overlayEnabled', 'lastKnownAccountState', 'theme'
 ]);
 
 function applyDesktopSettings(settings = {}) {
