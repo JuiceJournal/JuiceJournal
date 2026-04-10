@@ -579,8 +579,159 @@ body {
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1fr 340px;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto auto;
   gap: 1rem;
+}
+
+/* Character Summary Card */
+.character-card {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 128px 1fr;
+  gap: 1.25rem;
+  align-items: stretch;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 8% 20%, rgba(198, 161, 91, 0.22), transparent 24%),
+    linear-gradient(135deg, rgba(31, 25, 21, 0.98), rgba(13, 10, 9, 0.98));
+}
+
+.character-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 0 58%, rgba(255,255,255,0.04));
+  pointer-events: none;
+}
+
+.character-portrait {
+  position: relative;
+  z-index: 1;
+  min-height: 128px;
+  border-radius: 20px;
+  border: 1px solid rgba(230, 177, 92, 0.38);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05), 0 18px 34px rgba(0,0,0,0.28);
+}
+
+.character-portrait::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(circle at 42% 24%, rgba(255,255,255,0.22), transparent 15%),
+    radial-gradient(circle at 50% 52%, rgba(0,0,0,0.32), transparent 30%),
+    linear-gradient(135deg, rgba(198, 161, 91, 0.5), rgba(52, 39, 28, 0.9));
+  transform: rotate(-8deg);
+}
+
+.character-portrait[data-character-tone="ember"]::before {
+  background: radial-gradient(circle at 50% 22%, rgba(255,190,111,0.32), transparent 16%), linear-gradient(135deg, #5c2118, #b0602d 48%, #21130f);
+}
+
+.character-portrait[data-character-tone="verdant"]::before {
+  background: radial-gradient(circle at 48% 22%, rgba(189,255,196,0.3), transparent 16%), linear-gradient(135deg, #163d25, #6f8d49 52%, #11180f);
+}
+
+.character-portrait[data-character-tone="jade"]::before {
+  background: radial-gradient(circle at 48% 22%, rgba(178,255,228,0.25), transparent 16%), linear-gradient(135deg, #12372e, #4b8b72 54%, #0c1110);
+}
+
+.character-portrait[data-character-tone="violet"]::before {
+  background: radial-gradient(circle at 48% 22%, rgba(223,188,255,0.27), transparent 16%), linear-gradient(135deg, #2a183f, #7b5aa0 54%, #121018);
+}
+
+.character-portrait[data-character-tone="iron"]::before,
+.character-portrait[data-character-tone="brass"]::before,
+.character-portrait[data-character-tone="gold"]::before,
+.character-portrait[data-character-tone="azure"]::before,
+.character-portrait[data-character-tone="crystal"]::before {
+  background: radial-gradient(circle at 48% 22%, rgba(255,255,255,0.22), transparent 16%), linear-gradient(135deg, #222936, #997b44 50%, #101116);
+}
+
+.character-portrait span {
+  position: relative;
+  z-index: 2;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 4, 4, 0.58);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: var(--text-bright);
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  letter-spacing: 0.08em;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.55);
+}
+
+.character-main {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.character-card-header {
+  margin-bottom: 0;
+}
+
+.character-status {
+  margin-top: 0.32rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.character-identity {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.character-identity strong {
+  color: var(--text-bright);
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 2.8vw, 2.35rem);
+  letter-spacing: 0.06em;
+}
+
+.character-identity span {
+  color: var(--gold-light);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.character-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 0.7rem;
+}
+
+.character-meta-grid > div {
+  padding: 0.72rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.character-meta-label {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+}
+
+.character-meta-value {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 700;
 }
 
 /* Cards */
@@ -624,7 +775,7 @@ body {
 /* Active Session Card */
 .session-card {
   grid-column: 1;
-  grid-row: 1;
+  grid-row: 2;
 }
 
 #active-session {
@@ -690,7 +841,7 @@ body {
 /* Stats Card */
 .stats-card {
   grid-column: 2;
-  grid-row: 1;
+  grid-row: 2;
 }
 
 .stats-grid {
@@ -773,7 +924,7 @@ body {
 /* Quick Loot Card */
 .quick-loot-card {
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 3;
 }
 
 .quick-loot-content {
@@ -816,7 +967,7 @@ body {
 /* Recent Loot Card */
 .recent-loot-card {
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 3;
 }
 
 #recent-loot-list {
