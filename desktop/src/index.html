@@ -167,6 +167,15 @@
               <h3 data-i18n="dashboard.activeSession">Aktif Map Session</h3>
               <span class="card-badge" id="session-badge" data-i18n="dashboard.waiting">Bekleniyor</span>
             </div>
+            <div class="form-group">
+              <label for="session-farm-type-select">Farm Type</label>
+              <div class="input-with-btn">
+                <select id="session-farm-type-select">
+                  <option value="">No farm type</option>
+                </select>
+                <button id="clear-farm-type-btn" class="btn btn-secondary btn-small" type="button">Clear</button>
+              </div>
+            </div>
             <div id="active-session">
               <p class="empty-state">
                 <span class="empty-state-icon">
@@ -703,6 +712,7 @@
   <script src="modules/hotkeyModel.js"></script>
   <script src="modules/capabilityModel.js"></script>
   <script src="modules/characterVisualModel.js"></script>
+  <script src="modules/farmTypeModel.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -24,7 +24,10 @@ const state = {
   selectedSession: null,
   pendingLootCount: 0,
   pendingSyncEntries: [],
-  auditTrail: []
+  auditTrail: [],
+  farmType: window.farmTypeModel
+    ? window.farmTypeModel.createFarmTypeState()
+    : { selectedFarmTypeId: null }
 };
 
 const ERROR_MESSAGE_KEY_MAP = {
@@ -144,6 +147,8 @@ const elements = {
   characterStatus: document.getElementById('character-status'),
   characterGameVersion: document.getElementById('character-game-version'),
   activeSession: document.getElementById('active-session'),
+  sessionFarmTypeSelect: document.getElementById('session-farm-type-select'),
+  clearFarmTypeBtn: document.getElementById('clear-farm-type-btn'),
   startSessionBtn: document.getElementById('start-session-btn'),
   endSessionBtn: document.getElementById('end-session-btn'),
   scanScreenBtn: document.getElementById('scan-screen-btn'),
@@ -460,6 +465,14 @@ function getCharacterVisualModel() {
   }
 
   return window.characterVisualModel;
+}
+
+function getFarmTypeModel() {
+  if (!window.farmTypeModel) {
+    throw new Error('farmTypeModel is not loaded');
+  }
+
+  return window.farmTypeModel;
 }
 
 function getHotkeyModel() {
@@ -985,6 +998,36 @@ function renderCharacterSummaryCard() {
   }
 }
 
+function renderFarmTypeSelector() {
+  if (!elements.sessionFarmTypeSelect || !elements.clearFarmTypeBtn) {
+    return;
+  }
+
+  const { listFarmTypes } = getFarmTypeModel();
+  const selectedFarmTypeId = state.farmType?.selectedFarmTypeId || '';
+  const hasActiveSession = Boolean(state.currentSession);
+
+  elements.sessionFarmTypeSelect.innerHTML = [
+    '<option value="">No farm type</option>',
+    ...listFarmTypes().map((farmType) => `<option value="${escapeHTML(farmType.id)}">${escapeHTML(farmType.label)}</option>`)
+  ].join('');
+  elements.sessionFarmTypeSelect.value = selectedFarmTypeId;
+  elements.sessionFarmTypeSelect.disabled = hasActiveSession;
+  elements.clearFarmTypeBtn.disabled = hasActiveSession || !selectedFarmTypeId;
+}
+
+function handleFarmTypeSelectionChange() {
+  const { selectFarmType } = getFarmTypeModel();
+  selectFarmType(state.farmType, elements.sessionFarmTypeSelect?.value || '');
+  renderFarmTypeSelector();
+}
+
+function handleFarmTypeSelectionClear() {
+  const { clearFarmType } = getFarmTypeModel();
+  clearFarmType(state.farmType);
+  renderFarmTypeSelector();
+}
+
 /**
  * Uygulamayi baslat
  */
@@ -1007,6 +1050,7 @@ async function init() {
   if (typeof renderCharacterSummaryCard === 'function') {
     renderCharacterSummaryCard();
   }
+  renderFarmTypeSelector();
   updateActiveLeagueFieldContext();
   syncDesktopCurrencyIcons();
   applyDashboardCapabilities();
@@ -1373,6 +1417,12 @@ function setupEventListeners() {
   // Session
   elements.startSessionBtn.addEventListener('click', handleStartSession);
   elements.endSessionBtn.addEventListener('click', handleEndSession);
+  if (elements.sessionFarmTypeSelect) {
+    elements.sessionFarmTypeSelect.addEventListener('change', handleFarmTypeSelectionChange);
+  }
+  if (elements.clearFarmTypeBtn) {
+    elements.clearFarmTypeBtn.addEventListener('click', handleFarmTypeSelectionClear);
+  }
 
   // Loot
   elements.scanScreenBtn.addEventListener('click', handleScanScreen);
@@ -2033,10 +2083,12 @@ async function handlePoeDisconnect() {
 function getSelectedTrackerContext() {
   const poeVersion = getResolvedLeagueVersion();
   const league = getResolvedActiveLeague();
+  const farmTypeId = state.farmType?.selectedFarmTypeId || null;
 
   return {
     poeVersion,
     league,
+    farmTypeId,
     label: `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} • ${league}`
   };
 }
@@ -2107,13 +2159,18 @@ async function handleStartSession() {
   if (!mapName) return;
 
   const trackerContext = getSelectedTrackerContext();
+  const sessionPayload = {
+    mapName,
+    poeVersion: trackerContext.poeVersion,
+    league: trackerContext.league
+  };
+
+  if (trackerContext.farmTypeId) {
+    sessionPayload.farmTypeId = trackerContext.farmTypeId;
+  }
 
   try {
-    const session = await window.electronAPI.startSession({
-      mapName,
-      poeVersion: trackerContext.poeVersion,
-      league: trackerContext.league
-    });
+    const session = await window.electronAPI.startSession(sessionPayload);
     if (session) {
       state.currentSession = session;
       updateActiveSessionUI();
@@ -2231,6 +2288,8 @@ function updateActiveSessionUI() {
       elements.sessionBadge.style.color = '';
     }
   }
+
+  renderFarmTypeSelector();
 }
 
 /**
