@@ -31,6 +31,7 @@ const {
   clearRuntimeSessionState,
   cloneRuntimeSessionState
 } = require('./src/modules/runtimeSessionModel');
+const { appendMapResult } = require('./src/modules/mapResultStoreModel');
 const { deriveOverlayState } = require('./src/modules/overlayStateModel');
 const {
   DEFAULT_SCAN_HOTKEY,
@@ -564,6 +565,17 @@ function setActiveFarmTypeId(farmTypeId) {
   const normalized = normalizeStoredFarmTypeId(farmTypeId);
   store.set('activeFarmTypeId', normalized);
   return normalized;
+}
+
+function getStoredMapResults() {
+  const results = store.get('mapResults');
+  return Array.isArray(results) ? results : [];
+}
+
+function saveMapResultHistory(result) {
+  const nextResults = appendMapResult(getStoredMapResults(), result, { maxResults: 100 });
+  store.set('mapResults', nextResults);
+  return nextResults;
 }
 
 function emitPendingSyncState() {
@@ -2913,6 +2925,16 @@ function setupIPC() {
     } catch (error) {
       throw toRendererError(error, 'Profit calculation failed');
     }
+  });
+
+  ipcMain.handle('save-map-result', async (event, result) => {
+    assertDesktopUserAuthenticated();
+    return saveMapResultHistory(result);
+  });
+
+  ipcMain.handle('get-map-results', async () => {
+    assertDesktopUserAuthenticated();
+    return getStoredMapResults();
   });
 
   // List stored snapshots

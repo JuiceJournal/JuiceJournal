@@ -52,6 +52,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPriceStatus: () => ipcRenderer.invoke('get-price-status'),
   takeStashSnapshot: (options) => ipcRenderer.invoke('take-stash-snapshot', options),
   calculateProfit: (beforeId, afterId) => ipcRenderer.invoke('calculate-profit', beforeId, afterId),
+  saveMapResult: (result) => ipcRenderer.invoke('save-map-result', result),
+  getMapResults: () => ipcRenderer.invoke('get-map-results'),
   getDetectedGame: () => ipcRenderer.invoke('get-detected-game'),
 
   // Auth

@@ -15,6 +15,7 @@ const state = {
   activeLeagueOptions: {},
   leagueOptionsLoaded: false,
   sessions: [],
+  mapResults: [],
   recentLoot: [],
   poeLink: null,
   account: null,
@@ -1103,6 +1104,7 @@ async function init() {
   // Ayarlari yukle
   await loadSettings();
   await loadActiveFarmTypeSelection();
+  await loadMapResultHistory();
   populateStrategyPresets();
 
   // Set language from settings and apply translations
@@ -1921,6 +1923,7 @@ async function handleLogout() {
   state.currentUser = null;
   state.currentSession = null;
   state.sessions = [];
+  state.mapResults = [];
   state.recentLoot = [];
   state.poeLink = null;
   state.account = null;
@@ -2185,6 +2188,18 @@ function deriveCurrentMapResult() {
     accountName,
     poeVersion
   });
+}
+
+async function loadMapResultHistory() {
+  const results = await window.electronAPI.getMapResults();
+  state.mapResults = Array.isArray(results) ? results : [];
+  return state.mapResults;
+}
+
+async function persistMapResultHistory(result) {
+  const results = await window.electronAPI.saveMapResult(result);
+  state.mapResults = Array.isArray(results) ? results : [];
+  return state.mapResults;
 }
 
 function isPageActive(page) {
@@ -3003,6 +3018,9 @@ async function handleCalculateProfit() {
     }
 
     stashState.lastMapResult = deriveCurrentMapResult();
+    if (stashState.lastMapResult) {
+      await persistMapResultHistory(stashState.lastMapResult);
+    }
     renderProfitReport(report);
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.profitFailed'), 'error');
