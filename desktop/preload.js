@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startSession: (data) => ipcRenderer.invoke('start-session', data),
   endSession: () => ipcRenderer.invoke('end-session'),
   getCurrentSession: () => ipcRenderer.invoke('get-current-session'),
+  getActiveFarmType: () => ipcRenderer.invoke('get-active-farm-type'),
+  setActiveFarmType: (farmTypeId) => ipcRenderer.invoke('set-active-farm-type', farmTypeId),
   getSessionDetails: (sessionId) => ipcRenderer.invoke('get-session-details', sessionId),
   updateSessionDetails: (sessionId, payload) => ipcRenderer.invoke('update-session-details', sessionId, payload),
   getSessions: (params) => ipcRenderer.invoke('get-sessions', params),

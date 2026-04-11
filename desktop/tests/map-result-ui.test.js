@@ -208,6 +208,54 @@ test('renderer farm type selector populates options and reflects the active farm
   assert.equal(elements.clearFarmTypeBtn.disabled, false);
 });
 
+test('renderer selection changes sync the active farm type to the main process', async () => {
+  const calls = [];
+  const elements = {
+    sessionFarmTypeSelect: {
+      value: 'essence'
+    },
+    clearFarmTypeBtn: {
+      disabled: false
+    }
+  };
+  const farmTypeState = {
+    selectedFarmTypeId: null
+  };
+  const context = loadFunctions(['handleFarmTypeSelectionChange', 'handleFarmTypeSelectionClear'], {
+    elements,
+    state: {
+      farmType: farmTypeState
+    },
+    getFarmTypeModel: () => ({
+      selectFarmType(state, farmTypeId) {
+        state.selectedFarmTypeId = farmTypeId || null;
+        return state.selectedFarmTypeId;
+      },
+      clearFarmType(state) {
+        state.selectedFarmTypeId = null;
+      }
+    }),
+    renderFarmTypeSelector: () => calls.push(['renderFarmTypeSelector']),
+    window: {
+      electronAPI: {
+        async setActiveFarmType(farmTypeId) {
+          calls.push(['setActiveFarmType', farmTypeId]);
+        }
+      }
+    }
+  });
+
+  await context.handleFarmTypeSelectionChange();
+  await context.handleFarmTypeSelectionClear();
+
+  assert.deepEqual(calls, [
+    ['setActiveFarmType', 'essence'],
+    ['renderFarmTypeSelector'],
+    ['setActiveFarmType', null],
+    ['renderFarmTypeSelector']
+  ]);
+});
+
 test('starting a map session forwards the selected farm type without changing existing context fields', async () => {
   const startSessionCalls = [];
   const context = loadFunctions(['handleStartSession'], {

@@ -1016,16 +1016,38 @@ function renderFarmTypeSelector() {
   elements.clearFarmTypeBtn.disabled = hasActiveSession || !selectedFarmTypeId;
 }
 
-function handleFarmTypeSelectionChange() {
+async function handleFarmTypeSelectionChange() {
   const { selectFarmType } = getFarmTypeModel();
-  selectFarmType(state.farmType, elements.sessionFarmTypeSelect?.value || '');
+  const selectedFarmTypeId = selectFarmType(state.farmType, elements.sessionFarmTypeSelect?.value || '');
+  if (window.electronAPI?.setActiveFarmType) {
+    await window.electronAPI.setActiveFarmType(selectedFarmTypeId);
+  }
   renderFarmTypeSelector();
 }
 
-function handleFarmTypeSelectionClear() {
+async function handleFarmTypeSelectionClear() {
   const { clearFarmType } = getFarmTypeModel();
   clearFarmType(state.farmType);
+  if (window.electronAPI?.setActiveFarmType) {
+    await window.electronAPI.setActiveFarmType(null);
+  }
   renderFarmTypeSelector();
+}
+
+async function loadActiveFarmTypeSelection() {
+  if (!window.electronAPI?.getActiveFarmType) {
+    return;
+  }
+
+  const { selectFarmType, clearFarmType } = getFarmTypeModel();
+  const activeFarmTypeId = await window.electronAPI.getActiveFarmType();
+
+  if (activeFarmTypeId) {
+    selectFarmType(state.farmType, activeFarmTypeId);
+    return;
+  }
+
+  clearFarmType(state.farmType);
 }
 
 /**
@@ -1042,6 +1064,7 @@ async function init() {
 
   // Ayarlari yukle
   await loadSettings();
+  await loadActiveFarmTypeSelection();
   populateStrategyPresets();
 
   // Set language from settings and apply translations

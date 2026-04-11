@@ -182,6 +182,7 @@ const store = new Store({
     currentUserId: null,
     pendingSessionActions: [],
     pendingLootActions: [],
+    activeFarmTypeId: null,
     queuedCurrentSession: null,
     auditTrail: [],
     strategyPresets: DEFAULT_STRATEGY_PRESETS,
@@ -505,6 +506,7 @@ function createQueuedSession(input = {}) {
     mapName: input.mapName,
     mapTier: input.mapTier || null,
     mapType: input.mapType || null,
+    farmTypeId: input.farmTypeId || input.mapType || null,
     strategyTag: input.strategyTag || null,
     notes: input.notes || null,
     poeVersion: input.poeVersion,
@@ -547,6 +549,21 @@ function getPendingSyncEntriesForView() {
   ]
     .sort((a, b) => new Date(b.lastAttemptAt || b.queuedAt).getTime() - new Date(a.lastAttemptAt || a.queuedAt).getTime())
     .slice(0, 20);
+}
+
+function normalizeStoredFarmTypeId(farmTypeId) {
+  const normalized = typeof farmTypeId === 'string' ? farmTypeId.trim() : '';
+  return normalized || null;
+}
+
+function getActiveFarmTypeId() {
+  return normalizeStoredFarmTypeId(store.get('activeFarmTypeId'));
+}
+
+function setActiveFarmTypeId(farmTypeId) {
+  const normalized = normalizeStoredFarmTypeId(farmTypeId);
+  store.set('activeFarmTypeId', normalized);
+  return normalized;
 }
 
 function emitPendingSyncState() {
@@ -1798,6 +1815,7 @@ async function startNewSession(input = {}) {
     }
 
     const { activeVersion: poeVersion, league } = resolveLeagueContext(input);
+    const farmTypeId = normalizeStoredFarmTypeId(input.farmTypeId || input.mapType || getActiveFarmTypeId());
 
     // Map adi al
     const mapName = input.mapName || await promptMapName();
@@ -1809,7 +1827,8 @@ async function startNewSession(input = {}) {
       session = await apiClient.startSession({
         mapName,
         mapTier: input.mapTier || null,
-        mapType: input.mapType || null,
+        mapType: farmTypeId,
+        farmTypeId,
         costChaos: input.costChaos || 0,
         poeVersion,
         league
@@ -1825,7 +1844,8 @@ async function startNewSession(input = {}) {
         localSessionId: input.localSessionId,
         mapName,
         mapTier: input.mapTier || null,
-        mapType: input.mapType || null,
+        mapType: farmTypeId,
+        farmTypeId,
         strategyTag: input.strategyTag || null,
         notes: input.notes || null,
         costChaos: input.costChaos || 0,
@@ -1841,7 +1861,8 @@ async function startNewSession(input = {}) {
         payload: {
           mapName,
           mapTier: input.mapTier || null,
-          mapType: input.mapType || null,
+          mapType: farmTypeId,
+          farmTypeId,
           strategyTag: input.strategyTag || null,
           notes: input.notes || null,
           costChaos: input.costChaos || 0,
@@ -1867,6 +1888,23 @@ async function startNewSession(input = {}) {
   } catch (error) {
     showNotification(t('notificationError'), t('sessionStartFailed'));
   }
+}
+
+async function handleMapEntered(data) {
+  if (store.get('autoStartSession') && !currentSession) {
+    const session = await startNewSession({
+      mapName: data.mapName,
+      mapTier: data.mapTier,
+      farmTypeId: getActiveFarmTypeId(),
+      ...getTrackerContextDefaults()
+    });
+    showNotification(t('notificationAutoSession'), t('autoSessionBody', { mapName: data.mapName }));
+    if (mainWindow) {
+      mainWindow.webContents.send('session-started', session);
+    }
+  }
+
+  publishRuntimeSessionEvent('area_entered', data);
 }
 
 /**
@@ -2045,23 +2083,9 @@ function setupLogParser() {
   logParser = new LogParser(poePath);
 
   logParser.on('mapEntered', (data) => {
-    if (store.get('autoStartSession') && !currentSession) {
-      // Otomatik session baslat
-      startNewSession({
-        mapName: data.mapName,
-        mapTier: data.mapTier,
-        ...getTrackerContextDefaults()
-      }).then(session => {
-        showNotification(t('notificationAutoSession'), t('autoSessionBody', { mapName: data.mapName }));
-        if (mainWindow) {
-          mainWindow.webContents.send('session-started', session);
-        }
-      }).catch(() => {
+    handleMapEntered(data).catch(() => {
         showNotification(t('notificationError'), t('sessionStartFailed'));
-      });
-    }
-
-    publishRuntimeSessionEvent('area_entered', data);
+    });
   });
 
   logParser.on('mapExited', (data) => {
@@ -2337,6 +2361,12 @@ function setupIPC() {
   // Session baslat
   ipcMain.handle('start-session', async (event, data) => {
     return await startNewSession(data || {});
+  });
+
+  ipcMain.handle('get-active-farm-type', () => getActiveFarmTypeId());
+
+  ipcMain.handle('set-active-farm-type', (event, farmTypeId) => {
+    return setActiveFarmTypeId(farmTypeId);
   });
 
   // Session bitir

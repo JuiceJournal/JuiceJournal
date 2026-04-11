@@ -51,6 +51,15 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       field: 'map_type'
     },
+    farmTypeId: {
+      type: DataTypes.VIRTUAL,
+      get() {
+        return this.getDataValue('mapType');
+      },
+      set(value) {
+        this.setDataValue('mapType', value || null);
+      }
+    },
     strategyTag: {
       type: DataTypes.STRING(50),
       allowNull: true,
