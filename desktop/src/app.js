@@ -2178,10 +2178,11 @@ function deriveCurrentMapResult() {
   const poeVersion = capturedContext.poeVersion
     || state.currentSession?.poeVersion
     || trackerContext.poeVersion;
+  const runtimeSession = capturedContext.runtimeSession || state.runtimeSession;
 
   return deriveMapResult({
     farmType,
-    runtimeSession: state.runtimeSession,
+    runtimeSession,
     beforeSnapshot: stashState.beforeSnapshot,
     afterSnapshot: stashState.afterSnapshot,
     characterSummary,
@@ -2881,6 +2882,12 @@ const stashState = {
 
 function buildCurrentMapResultContext() {
   const trackerContext = getSelectedTrackerContext();
+  const runtimeSession = state.runtimeSession
+    ? {
+      ...JSON.parse(JSON.stringify(state.runtimeSession)),
+      sessionId: state.currentSession?.id || state.runtimeSession.sessionId || null
+    }
+    : null;
 
   return {
     farmTypeId: state.currentSession?.farmTypeId
@@ -2890,7 +2897,8 @@ function buildCurrentMapResultContext() {
     poeVersion: state.currentSession?.poeVersion || trackerContext.poeVersion || null,
     league: state.currentSession?.league || state.account?.summary?.league || null,
     accountName: state.account?.accountName || null,
-    characterSummary: state.account?.summary || null
+    characterSummary: state.account?.summary || null,
+    runtimeSession
   };
 }
 
@@ -2959,6 +2967,10 @@ async function handleTakeSnapshot(type) {
     if (isAfter) {
       stashState.afterSnapshotId = snapshotId;
       stashState.afterSnapshot = result;
+      stashState.mapResultContext = {
+        ...(stashState.mapResultContext || buildCurrentMapResultContext()),
+        runtimeSession: buildCurrentMapResultContext().runtimeSession
+      };
     } else {
       stashState.beforeSnapshotId = snapshotId;
       stashState.beforeSnapshot = result;

@@ -2892,6 +2892,8 @@ function setupIPC() {
       if (mainWindow) {
         mainWindow.webContents.send('stash-snapshot-taken', {
           snapshotId,
+          timestamp: snapshot.timestamp,
+          league: snapshot.league,
           itemCount: snapshot.items.length,
           totalChaos: snapshot.totalChaos,
           totalDivine: snapshot.totalDivine
@@ -2900,6 +2902,8 @@ function setupIPC() {
 
       return {
         snapshotId,
+        timestamp: snapshot.timestamp,
+        league: snapshot.league,
         itemCount: snapshot.items.length,
         totalChaos: snapshot.totalChaos,
         totalDivine: snapshot.totalDivine,

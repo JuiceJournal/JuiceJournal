@@ -253,3 +253,10 @@ test('desktop main process registers map-result save and list IPC handlers', () 
   assert.match(source, /ipcMain\.handle\('save-map-result'/);
   assert.match(source, /ipcMain\.handle\('get-map-results'/);
 });
+
+test('desktop main stash snapshot payload keeps timestamp metadata for later map-result derivation', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+
+  assert.match(source, /timestamp:\s*snapshot\.timestamp/);
+  assert.match(source, /league:\s*snapshot\.league/);
+});

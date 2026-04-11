@@ -583,7 +583,14 @@ test('renderer helper does not leak live account state when snapshot context is 
       poeVersion: 'poe2',
       league: 'Snapshot League',
       accountName: 'SnapshotAccount',
-      characterSummary: null
+      characterSummary: null,
+      runtimeSession: {
+        sessionId: 'captured-session',
+        lastCompletedInstance: {
+          durationSeconds: 88,
+          status: 'completed'
+        }
+      }
     }
   };
   const state = {
@@ -629,7 +636,7 @@ test('renderer helper does not leak live account state when snapshot context is 
 
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [{
     farmType: { id: 'ritual', label: 'Ritual' },
-    runtimeSession: state.runtimeSession,
+    runtimeSession: stashState.mapResultContext.runtimeSession,
     beforeSnapshot: stashState.beforeSnapshot,
     afterSnapshot: stashState.afterSnapshot,
     characterSummary: { league: 'Snapshot League' },
