@@ -424,6 +424,33 @@ test('map result model stays aligned with stash analyzer quantity-diff semantics
   assert.equal(result.netProfit, report.summary.netProfitChaos);
 });
 
+test('map result model matches stash analyzer when snapshot item casing differs', () => {
+  const deriveMapResult = getMapResultModelExport('deriveMapResult');
+  const analyzer = new StashAnalyzer();
+  const priceService = {
+    getChaosValue(name) {
+      return String(name).toLowerCase() === 'chaos orb' ? 1 : 0;
+    }
+  };
+  const beforeItems = [
+    { baseType: 'Chaos Orb', category: 'currency', quantity: 10, chaosValue: 1, totalChaosValue: 10 }
+  ];
+  const afterItems = [
+    { baseType: 'chaos orb', category: 'currency', quantity: 7, chaosValue: 1, totalChaosValue: 7 }
+  ];
+
+  const report = analyzer.diffItems(beforeItems, afterItems, priceService);
+  const result = deriveMapResult({
+    farmType: { id: 'ritual', label: 'Ritual' },
+    beforeSnapshot: createSnapshot(beforeItems),
+    afterSnapshot: createSnapshot(afterItems)
+  });
+
+  assert.equal(result.inputValue, report.summary.totalLostChaos);
+  assert.equal(result.outputValue, report.summary.totalGainedChaos);
+  assert.equal(result.netProfit, report.summary.netProfitChaos);
+});
+
 test('map result model sorts and caps top inputs and outputs', () => {
   const deriveMapResult = getMapResultModelExport('deriveMapResult');
 
@@ -458,26 +485,41 @@ test('map result model sorts and caps top inputs and outputs', () => {
   );
 });
 
-test('renderer helper derives the current map result from stored snapshots and active context', () => {
+test('renderer helper derives the current map result from snapshot-captured context instead of live mutable state', () => {
   const calls = [];
   const stashState = {
     beforeSnapshot: { items: [{ itemKey: 'chaos::currency', quantity: 3, chaosValue: 1 }] },
-    afterSnapshot: { items: [{ itemKey: 'chaos::currency', quantity: 5, chaosValue: 1 }] }
+    afterSnapshot: { items: [{ itemKey: 'chaos::currency', quantity: 5, chaosValue: 1 }] },
+    mapResultContext: {
+      farmTypeId: 'ritual',
+      poeVersion: 'poe2',
+      accountName: 'CapturedAccount',
+      characterSummary: {
+        id: 'captured-char',
+        name: 'CapturedMapper',
+        league: 'Captured League'
+      }
+    }
   };
   const state = {
+    currentSession: {
+      farmTypeId: 'essence',
+      poeVersion: 'poe1',
+      league: 'Wrong League'
+    },
     runtimeSession: {
       instances: [{ durationSeconds: 77, status: 'completed' }]
     },
     account: {
-      accountName: 'AccountName',
+      accountName: 'WrongAccount',
       summary: {
-        id: 'char-77',
-        name: 'Mapper',
-        league: 'Settlers'
+        id: 'wrong-char',
+        name: 'WrongMapper',
+        league: 'Wrong League'
       }
     },
     farmType: {
-      selectedFarmTypeId: 'ritual'
+      selectedFarmTypeId: 'essence'
     }
   };
   const context = loadFunctions(['deriveCurrentMapResult'], {
@@ -508,8 +550,8 @@ test('renderer helper derives the current map result from stored snapshots and a
     runtimeSession: state.runtimeSession,
     beforeSnapshot: stashState.beforeSnapshot,
     afterSnapshot: stashState.afterSnapshot,
-    characterSummary: state.account.summary,
-    accountName: 'AccountName',
-    poeVersion: 'poe1'
+    characterSummary: stashState.mapResultContext.characterSummary,
+    accountName: 'CapturedAccount',
+    poeVersion: 'poe2'
   }]);
 });

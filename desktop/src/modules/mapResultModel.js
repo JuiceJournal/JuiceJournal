@@ -34,14 +34,14 @@
   function getItemKey(item = {}) {
     const explicitKey = normalizeString(item.itemKey);
     if (explicitKey) {
-      return explicitKey;
+      return explicitKey.toLowerCase();
     }
 
-    const name = normalizeString(item.baseType ?? item.typeLine ?? item.name, 'Unknown Item');
-    const category = normalizeString(item.category, 'other');
+    const name = normalizeString(item.baseType ?? item.typeLine ?? item.name, 'Unknown Item').toLowerCase();
+    const category = normalizeString(item.category, 'other').toLowerCase();
 
     if (category === 'unique' && normalizeString(item.name)) {
-      return `${normalizeString(item.name)}::${category}`;
+      return `${normalizeString(item.name).toLowerCase()}::${category}`;
     }
 
     return `${name}::${category}`;
@@ -174,7 +174,9 @@
       const beforeQuantity = normalizeNumber(beforeItem?.quantity, 0);
       const afterQuantity = normalizeNumber(afterItem?.quantity, 0);
       const quantityDelta = afterQuantity - beforeQuantity;
-      const sourceItem = afterItem || beforeItem;
+      const sourceItem = quantityDelta < 0
+        ? (beforeItem || afterItem)
+        : (afterItem || beforeItem);
       const chaosValue = normalizeNumber(sourceItem?.chaosValue, 0);
       const valueDelta = Math.abs(quantityDelta * chaosValue);
 

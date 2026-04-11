@@ -2157,18 +2157,28 @@ function getSelectedTrackerContext() {
 function deriveCurrentMapResult() {
   const { deriveMapResult } = getMapResultModel();
   const { listFarmTypes } = getFarmTypeModel();
-  const selectedFarmTypeId = state.farmType?.selectedFarmTypeId || null;
+  const capturedContext = stashState.mapResultContext || {};
+  const selectedFarmTypeId = capturedContext.farmTypeId
+    || state.currentSession?.farmTypeId
+    || state.currentSession?.mapType
+    || state.farmType?.selectedFarmTypeId
+    || null;
   const farmType = listFarmTypes().find((entry) => entry.id === selectedFarmTypeId) || null;
   const trackerContext = getSelectedTrackerContext();
+  const characterSummary = capturedContext.characterSummary || state.account?.summary || null;
+  const accountName = capturedContext.accountName || state.account?.accountName || null;
+  const poeVersion = capturedContext.poeVersion
+    || state.currentSession?.poeVersion
+    || trackerContext.poeVersion;
 
   return deriveMapResult({
     farmType,
     runtimeSession: state.runtimeSession,
     beforeSnapshot: stashState.beforeSnapshot,
     afterSnapshot: stashState.afterSnapshot,
-    characterSummary: state.account?.summary || null,
-    accountName: state.account?.accountName || null,
-    poeVersion: trackerContext.poeVersion
+    characterSummary,
+    accountName,
+    poeVersion
   });
 }
 
@@ -2844,9 +2854,25 @@ const stashState = {
   afterSnapshotId: null,
   beforeSnapshot: null,
   afterSnapshot: null,
+  mapResultContext: null,
   lastMapResult: null,
   pricesSynced: false
 };
+
+function buildCurrentMapResultContext() {
+  const trackerContext = getSelectedTrackerContext();
+
+  return {
+    farmTypeId: state.currentSession?.farmTypeId
+      || state.currentSession?.mapType
+      || state.farmType?.selectedFarmTypeId
+      || null,
+    poeVersion: state.currentSession?.poeVersion || trackerContext.poeVersion || null,
+    league: state.currentSession?.league || state.account?.summary?.league || null,
+    accountName: state.account?.accountName || null,
+    characterSummary: state.account?.summary || null
+  };
+}
 
 async function handleSyncPrices() {
   if (!elements.syncPricesBtn) return;
@@ -2916,6 +2942,7 @@ async function handleTakeSnapshot(type) {
     } else {
       stashState.beforeSnapshotId = snapshotId;
       stashState.beforeSnapshot = result;
+      stashState.mapResultContext = buildCurrentMapResultContext();
       // Enable "after" button
       if (elements.takeAfterSnapshotBtn) {
         elements.takeAfterSnapshotBtn.disabled = false;
@@ -3054,6 +3081,7 @@ function handleResetSnapshots() {
   stashState.afterSnapshotId = null;
   stashState.beforeSnapshot = null;
   stashState.afterSnapshot = null;
+  stashState.mapResultContext = null;
   stashState.lastMapResult = null;
 
   // Reset step visuals
