@@ -155,6 +155,7 @@ test('dashboard html includes a character summary card with portrait fields', ()
 
   assert.match(html, /id="character-summary-card"/);
   assert.match(html, /id="character-portrait"/);
+  assert.match(html, /id="character-portrait-image"/);
   assert.match(html, /id="character-name"/);
   assert.match(html, /id="character-class"/);
   assert.match(html, /id="character-level"/);
@@ -165,6 +166,11 @@ test('renderer fills character summary card from normalized account state', () =
   const elements = {
     characterSummaryCard: { dataset: {} },
     characterPortrait: { dataset: {} },
+    characterPortraitImage: {
+      src: '',
+      hidden: true,
+      alt: ''
+    },
     characterPortraitBadge: { textContent: '' },
     characterName: { textContent: '' },
     characterClass: { textContent: '' },
@@ -198,7 +204,8 @@ test('renderer fills character summary card from normalized account state', () =
         portraitKey: 'shaman',
         tone: 'ember',
         badgeText: 'S',
-        classLabel: 'Shaman'
+        classLabel: 'Shaman',
+        portraitPath: 'assets/characters/poe2/druid-shaman.png'
       })
     })
   });
@@ -208,6 +215,8 @@ test('renderer fills character summary card from normalized account state', () =
   assert.equal(elements.characterSummaryCard.dataset.characterState, 'ready');
   assert.equal(elements.characterPortrait.dataset.characterPortrait, 'shaman');
   assert.equal(elements.characterPortrait.dataset.characterTone, 'ember');
+  assert.equal(elements.characterPortraitImage.hidden, false);
+  assert.equal(elements.characterPortraitImage.src, 'assets/characters/poe2/druid-shaman.png');
   assert.equal(elements.characterPortraitBadge.textContent, 'S');
   assert.equal(elements.characterName.textContent, 'KocaGyVeMasha');
   assert.equal(elements.characterClass.textContent, 'Shaman');

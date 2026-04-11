@@ -134,6 +134,7 @@ const elements = {
   // Dashboard
   characterSummaryCard: document.getElementById('character-summary-card'),
   characterPortrait: document.getElementById('character-portrait'),
+  characterPortraitImage: document.getElementById('character-portrait-image'),
   characterPortraitBadge: document.getElementById('character-portrait-badge'),
   characterName: document.getElementById('character-name'),
   characterClass: document.getElementById('character-class'),
@@ -939,8 +940,16 @@ function renderCharacterSummaryCard() {
     elements.characterPortrait.dataset.characterPortrait = visual.portraitKey;
     elements.characterPortrait.dataset.characterTone = visual.tone;
   }
+  if (elements.characterPortraitImage) {
+    elements.characterPortraitImage.hidden = !visual.portraitPath;
+    elements.characterPortraitImage.src = visual.portraitPath || '';
+    elements.characterPortraitImage.alt = isReady ? `${summary.name} portrait` : 'Character portrait';
+  }
   if (elements.characterPortraitBadge) {
     elements.characterPortraitBadge.textContent = visual.badgeText;
+    if (elements.characterPortraitBadge.style) {
+      elements.characterPortraitBadge.style.display = visual.portraitPath ? 'none' : '';
+    }
   }
   if (elements.characterName) {
     elements.characterName.textContent = isReady ? summary.name : 'No character selected';

@@ -14,18 +14,20 @@ test('character visual model maps PoE2 Shaman to a dedicated portrait treatment'
   assert.equal(visual.classLabel, 'Shaman');
   assert.equal(visual.badgeText, 'S');
   assert.equal(visual.tone, 'ember');
+  assert.equal(visual.portraitPath, 'assets/characters/poe2/druid-shaman.png');
 });
 
 test('character visual model maps PoE2 Druid to a dedicated portrait treatment', () => {
   const visual = deriveCharacterVisual({
     name: 'OakCaller',
-    className: 'Druid'
+    className: 'Druid2'
   });
 
   assert.equal(visual.portraitKey, 'druid');
   assert.equal(visual.classLabel, 'Druid');
   assert.equal(visual.badgeText, 'D');
   assert.equal(visual.tone, 'verdant');
+  assert.equal(visual.portraitPath, 'assets/characters/poe2/druid.png');
 });
 
 test('character visual model falls back to initials for unknown classes', () => {
@@ -38,4 +40,5 @@ test('character visual model falls back to initials for unknown classes', () => 
   assert.equal(visual.classLabel, 'UnreleasedClass');
   assert.equal(visual.badgeText, 'ME');
   assert.equal(visual.tone, 'neutral');
+  assert.equal(visual.portraitPath, null);
 });

@@ -152,6 +152,12 @@ function buildCharacterPayload({ poe1 = [], poe2 = [] } = {}) {
     poe2: normalizeCharacters(poe2, 'poe2')
   };
 
+  function getDefaultCharacterId(characters) {
+    return [...characters]
+      .sort((a, b) => (b.level || 0) - (a.level || 0))
+      [0]?.id || null;
+  }
+
   return {
     characters: [
       ...charactersByGame.poe1,
@@ -159,8 +165,8 @@ function buildCharacterPayload({ poe1 = [], poe2 = [] } = {}) {
     ],
     charactersByGame,
     selectedCharacterByGame: {
-      ...(charactersByGame.poe1[0]?.id ? { poe1: charactersByGame.poe1[0].id } : {}),
-      ...(charactersByGame.poe2[0]?.id ? { poe2: charactersByGame.poe2[0].id } : {})
+      ...(getDefaultCharacterId(charactersByGame.poe1) ? { poe1: getDefaultCharacterId(charactersByGame.poe1) } : {}),
+      ...(getDefaultCharacterId(charactersByGame.poe2) ? { poe2: getDefaultCharacterId(charactersByGame.poe2) } : {})
     },
     syncedAt: new Date().toISOString()
   };
