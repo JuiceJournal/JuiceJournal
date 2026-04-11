@@ -174,23 +174,22 @@
       const beforeQuantity = normalizeNumber(beforeItem?.quantity, 0);
       const afterQuantity = normalizeNumber(afterItem?.quantity, 0);
       const quantityDelta = afterQuantity - beforeQuantity;
-      const beforeValue = normalizeNumber(beforeItem?.totalValue, 0);
-      const afterValue = normalizeNumber(afterItem?.totalValue, 0);
-      const rawValueDelta = afterValue - beforeValue;
-      const valueDelta = Math.abs(rawValueDelta);
+      const sourceItem = afterItem || beforeItem;
+      const chaosValue = normalizeNumber(sourceItem?.chaosValue, 0);
+      const valueDelta = Math.abs(quantityDelta * chaosValue);
 
       if (valueDelta <= 0) {
         return;
       }
 
-      if (rawValueDelta < 0) {
+      if (quantityDelta < 0) {
         inputValue += valueDelta;
-        topInputs.push(createDeltaEntry(itemKey, beforeItem || afterItem, Math.abs(quantityDelta), valueDelta));
+        topInputs.push(createDeltaEntry(itemKey, sourceItem, Math.abs(quantityDelta), valueDelta));
         return;
       }
 
       outputValue += valueDelta;
-      topOutputs.push(createDeltaEntry(itemKey, afterItem || beforeItem, Math.abs(quantityDelta), valueDelta));
+      topOutputs.push(createDeltaEntry(itemKey, sourceItem, Math.abs(quantityDelta), valueDelta));
     });
 
     const netProfit = outputValue - inputValue;

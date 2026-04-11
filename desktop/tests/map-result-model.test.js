@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const StashAnalyzer = require('../src/modules/stashAnalyzer');
 
 const MAP_RESULT_MODEL_REQUEST = '../src/modules/mapResultModel';
 const desktopDir = path.resolve(__dirname, '..');
@@ -352,7 +353,7 @@ test('map result model derives normalized inputs outputs and net profit from sna
   ]);
 });
 
-test('map result model tracks value-only changes even when quantity does not change', () => {
+test('map result model ignores value-only repricing when quantity does not change', () => {
   const deriveMapResult = getMapResultModelExport('deriveMapResult');
 
   const result = deriveMapResult({
@@ -380,17 +381,47 @@ test('map result model tracks value-only changes even when quantity does not cha
   });
 
   assert.equal(result.inputValue, 0);
-  assert.equal(result.outputValue, 16);
-  assert.equal(result.netProfit, 16);
-  assert.deepEqual(result.topOutputs, [
-    {
-      itemKey: 'priced-item::currency',
-      label: 'Priced Item',
-      quantityDelta: 0,
-      valueDelta: 16,
-      currencyCode: 'chaos'
-    }
+  assert.equal(result.outputValue, 0);
+  assert.equal(result.netProfit, 0);
+  assert.deepEqual(result.topOutputs, []);
+});
+
+test('map result model stays aligned with stash analyzer quantity-diff semantics', () => {
+  const deriveMapResult = getMapResultModelExport('deriveMapResult');
+  const analyzer = new StashAnalyzer();
+  const priceByName = new Map([
+    ['Chaos Orb', 1],
+    ['Divination Scarab', 5],
+    ['Divine Orb', 120],
+    ['Stacked Deck', 2]
   ]);
+  const priceService = {
+    getChaosValue(name) {
+      return priceByName.get(name) || 0;
+    }
+  };
+  const beforeItems = [
+    { itemKey: 'chaos::currency', baseType: 'Chaos Orb', category: 'currency', quantity: 10, chaosValue: 1, totalChaosValue: 10 },
+    { itemKey: 'scarab::currency', baseType: 'Divination Scarab', category: 'currency', quantity: 4, chaosValue: 5, totalChaosValue: 20 },
+    { itemKey: 'divine::currency', baseType: 'Divine Orb', category: 'currency', quantity: 1, chaosValue: 120, totalChaosValue: 120 }
+  ];
+  const afterItems = [
+    { itemKey: 'chaos::currency', baseType: 'Chaos Orb', category: 'currency', quantity: 6, chaosValue: 1, totalChaosValue: 6 },
+    { itemKey: 'scarab::currency', baseType: 'Divination Scarab', category: 'currency', quantity: 3, chaosValue: 5, totalChaosValue: 15 },
+    { itemKey: 'divine::currency', baseType: 'Divine Orb', category: 'currency', quantity: 2, chaosValue: 120, totalChaosValue: 240 },
+    { itemKey: 'stacked-deck::currency', baseType: 'Stacked Deck', category: 'currency', quantity: 8, chaosValue: 2, totalChaosValue: 16 }
+  ];
+
+  const report = analyzer.diffItems(beforeItems, afterItems, priceService);
+  const result = deriveMapResult({
+    farmType: { id: 'ritual', label: 'Ritual' },
+    beforeSnapshot: createSnapshot(beforeItems),
+    afterSnapshot: createSnapshot(afterItems)
+  });
+
+  assert.equal(result.inputValue, report.summary.totalLostChaos);
+  assert.equal(result.outputValue, report.summary.totalGainedChaos);
+  assert.equal(result.netProfit, report.summary.netProfitChaos);
 });
 
 test('map result model sorts and caps top inputs and outputs', () => {
