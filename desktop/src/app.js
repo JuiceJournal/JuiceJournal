@@ -2158,6 +2158,7 @@ function deriveCurrentMapResult() {
   const { deriveMapResult } = getMapResultModel();
   const { listFarmTypes } = getFarmTypeModel();
   const capturedContext = stashState.mapResultContext || {};
+  const hasCapturedContext = Boolean(stashState.mapResultContext);
   const selectedFarmTypeId = capturedContext.farmTypeId
     || state.currentSession?.farmTypeId
     || state.currentSession?.mapType
@@ -2165,8 +2166,12 @@ function deriveCurrentMapResult() {
     || null;
   const farmType = listFarmTypes().find((entry) => entry.id === selectedFarmTypeId) || null;
   const trackerContext = getSelectedTrackerContext();
-  const characterSummary = capturedContext.characterSummary || state.account?.summary || null;
-  const accountName = capturedContext.accountName || state.account?.accountName || null;
+  const characterSummary = hasCapturedContext
+    ? (capturedContext.characterSummary || (capturedContext.league ? { league: capturedContext.league } : null))
+    : (state.account?.summary || null);
+  const accountName = hasCapturedContext
+    ? (capturedContext.accountName || null)
+    : (state.account?.accountName || null);
   const poeVersion = capturedContext.poeVersion
     || state.currentSession?.poeVersion
     || trackerContext.poeVersion;

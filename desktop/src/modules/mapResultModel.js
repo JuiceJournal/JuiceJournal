@@ -146,6 +146,27 @@
     return null;
   }
 
+  function getSnapshotTimestamp(snapshot = {}) {
+    const timestamp = normalizeNumber(snapshot?.timestamp, NaN);
+    if (Number.isFinite(timestamp)) {
+      return timestamp;
+    }
+
+    const parsedTimestamp = Date.parse(snapshot?.timestamp);
+    return Number.isFinite(parsedTimestamp) ? parsedTimestamp : null;
+  }
+
+  function getCreatedAt(beforeSnapshot, afterSnapshot) {
+    const timestamp = getSnapshotTimestamp(afterSnapshot) ?? getSnapshotTimestamp(beforeSnapshot);
+    return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+  }
+
+  function createResultId(runtimeSession, beforeSnapshot, afterSnapshot) {
+    const sessionId = normalizeString(runtimeSession?.sessionId, 'sessionless');
+    const timestamp = getSnapshotTimestamp(afterSnapshot) ?? getSnapshotTimestamp(beforeSnapshot) ?? 0;
+    return `map-result-${sessionId}-${timestamp}`;
+  }
+
   function deriveMapResult({
     farmType,
     runtimeSession,
@@ -196,9 +217,10 @@
 
     const netProfit = outputValue - inputValue;
     const lastCompletedInstance = getLastCompletedInstance(runtimeSession);
+    const createdAt = getCreatedAt(beforeSnapshot, afterSnapshot);
 
     return {
-      id: `map-result-${Date.now()}`,
+      id: createResultId(runtimeSession, beforeSnapshot, afterSnapshot),
       sessionId: normalizeString(runtimeSession?.sessionId),
       characterId: normalizeString(characterSummary?.id),
       characterName: normalizeString(characterSummary?.name),
@@ -213,7 +235,7 @@
       profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral',
       topInputs: topInputs.sort((a, b) => b.valueDelta - a.valueDelta).slice(0, MAX_TOP_ITEMS),
       topOutputs: topOutputs.sort((a, b) => b.valueDelta - a.valueDelta).slice(0, MAX_TOP_ITEMS),
-      createdAt: new Date().toISOString()
+      createdAt
     };
   }
 

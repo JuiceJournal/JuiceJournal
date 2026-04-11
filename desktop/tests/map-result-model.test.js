@@ -303,7 +303,7 @@ test('map result model derives normalized inputs outputs and net profit from sna
   });
 
   assert.equal(typeof result.id, 'string');
-  assert.match(result.id, /^map-result-\d+$/);
+  assert.equal(result.id, 'map-result-runtime-1-1775901600000');
   assert.equal(result.sessionId, 'runtime-1');
   assert.equal(result.characterId, 'char-1');
   assert.equal(result.characterName, 'MapRunner');
@@ -317,6 +317,7 @@ test('map result model derives normalized inputs outputs and net profit from sna
   assert.equal(result.netProfit, 127);
   assert.equal(result.profitState, 'positive');
   assert.equal(Number.isFinite(Date.parse(result.createdAt)), true);
+  assert.equal(result.createdAt, '2026-04-11T10:00:00.000Z');
 
   assert.deepEqual(result.topInputs, [
     {
@@ -451,6 +452,22 @@ test('map result model matches stash analyzer when snapshot item casing differs'
   assert.equal(result.netProfit, report.summary.netProfitChaos);
 });
 
+test('map result model is deterministic for the same snapshot inputs', () => {
+  const deriveMapResult = getMapResultModelExport('deriveMapResult');
+  const input = {
+    farmType: { id: 'ritual', label: 'Ritual' },
+    runtimeSession: { sessionId: 'runtime-1' },
+    beforeSnapshot: createSnapshot([
+      { itemKey: 'chaos::currency', baseType: 'Chaos Orb', category: 'currency', quantity: 5, chaosValue: 1, totalChaosValue: 5 }
+    ]),
+    afterSnapshot: createSnapshot([
+      { itemKey: 'chaos::currency', baseType: 'Chaos Orb', category: 'currency', quantity: 8, chaosValue: 1, totalChaosValue: 8 }
+    ])
+  };
+
+  assert.deepEqual(deriveMapResult(input), deriveMapResult(input));
+});
+
 test('map result model sorts and caps top inputs and outputs', () => {
   const deriveMapResult = getMapResultModelExport('deriveMapResult');
 
@@ -552,6 +569,71 @@ test('renderer helper derives the current map result from snapshot-captured cont
     afterSnapshot: stashState.afterSnapshot,
     characterSummary: stashState.mapResultContext.characterSummary,
     accountName: 'CapturedAccount',
+    poeVersion: 'poe2'
+  }]);
+});
+
+test('renderer helper does not leak live account state when snapshot context is only partially captured', () => {
+  const calls = [];
+  const stashState = {
+    beforeSnapshot: { items: [{ itemKey: 'chaos::currency', quantity: 3, chaosValue: 1 }] },
+    afterSnapshot: { items: [{ itemKey: 'chaos::currency', quantity: 5, chaosValue: 1 }] },
+    mapResultContext: {
+      farmTypeId: 'ritual',
+      poeVersion: 'poe2',
+      league: 'Snapshot League',
+      accountName: 'SnapshotAccount',
+      characterSummary: null
+    }
+  };
+  const state = {
+    currentSession: {
+      farmTypeId: 'essence',
+      poeVersion: 'poe1',
+      league: 'Wrong League'
+    },
+    runtimeSession: {
+      instances: [{ durationSeconds: 77, status: 'completed' }]
+    },
+    account: {
+      accountName: 'WrongAccount',
+      summary: {
+        id: 'wrong-char',
+        name: 'WrongMapper',
+        league: 'Wrong League'
+      }
+    },
+    farmType: {
+      selectedFarmTypeId: 'essence'
+    }
+  };
+  const context = loadFunctions(['deriveCurrentMapResult'], {
+    stashState,
+    state,
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe1' }),
+    getFarmTypeModel: () => ({
+      listFarmTypes: () => [
+        { id: 'ritual', label: 'Ritual' },
+        { id: 'essence', label: 'Essence' }
+      ]
+    }),
+    getMapResultModel: () => ({
+      deriveMapResult(input) {
+        calls.push(input);
+        return { id: 'map-result-2' };
+      }
+    })
+  });
+
+  context.deriveCurrentMapResult();
+
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [{
+    farmType: { id: 'ritual', label: 'Ritual' },
+    runtimeSession: state.runtimeSession,
+    beforeSnapshot: stashState.beforeSnapshot,
+    afterSnapshot: stashState.afterSnapshot,
+    characterSummary: { league: 'Snapshot League' },
+    accountName: 'SnapshotAccount',
     poeVersion: 'poe2'
   }]);
 });
