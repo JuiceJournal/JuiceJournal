@@ -320,42 +320,75 @@ test('map result model derives normalized inputs outputs and net profit from sna
   assert.deepEqual(result.topInputs, [
     {
       itemKey: 'scarab::currency',
-      name: 'Divination Scarab',
-      category: 'currency',
+      label: 'Divination Scarab',
       quantityDelta: 1,
       valueDelta: 5,
-      chaosValue: 5,
-      icon: null
+      currencyCode: 'chaos'
     },
     {
       itemKey: 'chaos::currency',
-      name: 'Chaos Orb',
-      category: 'currency',
+      label: 'Chaos Orb',
       quantityDelta: 4,
       valueDelta: 4,
-      chaosValue: 1,
-      icon: null
+      currencyCode: 'chaos'
     }
   ]);
 
   assert.deepEqual(result.topOutputs, [
     {
       itemKey: 'divine::currency',
-      name: 'Divine Orb',
-      category: 'currency',
+      label: 'Divine Orb',
       quantityDelta: 1,
       valueDelta: 120,
-      chaosValue: 120,
-      icon: null
+      currencyCode: 'chaos'
     },
     {
       itemKey: 'stacked-deck::currency',
-      name: 'Stacked Deck',
-      category: 'currency',
+      label: 'Stacked Deck',
       quantityDelta: 8,
       valueDelta: 16,
-      chaosValue: 2,
-      icon: null
+      currencyCode: 'chaos'
+    }
+  ]);
+});
+
+test('map result model tracks value-only changes even when quantity does not change', () => {
+  const deriveMapResult = getMapResultModelExport('deriveMapResult');
+
+  const result = deriveMapResult({
+    farmType: { id: 'breach', label: 'Breach' },
+    beforeSnapshot: createSnapshot([
+      {
+        itemKey: 'priced-item::currency',
+        baseType: 'Priced Item',
+        category: 'currency',
+        quantity: 2,
+        chaosValue: 10,
+        totalChaosValue: 20
+      }
+    ]),
+    afterSnapshot: createSnapshot([
+      {
+        itemKey: 'priced-item::currency',
+        baseType: 'Priced Item',
+        category: 'currency',
+        quantity: 2,
+        chaosValue: 18,
+        totalChaosValue: 36
+      }
+    ])
+  });
+
+  assert.equal(result.inputValue, 0);
+  assert.equal(result.outputValue, 16);
+  assert.equal(result.netProfit, 16);
+  assert.deepEqual(result.topOutputs, [
+    {
+      itemKey: 'priced-item::currency',
+      label: 'Priced Item',
+      quantityDelta: 0,
+      valueDelta: 16,
+      currencyCode: 'chaos'
     }
   ]);
 });

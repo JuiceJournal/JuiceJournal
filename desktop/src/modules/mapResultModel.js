@@ -114,15 +114,17 @@
     return index;
   }
 
+  function getCurrencyCode(item = {}) {
+    return normalizeString(item.currencyCode, 'chaos');
+  }
+
   function createDeltaEntry(itemKey, sourceItem, quantityDelta, valueDelta) {
     return {
       itemKey,
-      name: sourceItem?.name || 'Unknown Item',
-      category: sourceItem?.category || 'other',
+      label: sourceItem?.name || 'Unknown Item',
       quantityDelta,
       valueDelta,
-      chaosValue: normalizeNumber(sourceItem?.chaosValue, 0),
-      icon: sourceItem?.icon || null
+      currencyCode: getCurrencyCode(sourceItem)
     };
   }
 
@@ -172,27 +174,23 @@
       const beforeQuantity = normalizeNumber(beforeItem?.quantity, 0);
       const afterQuantity = normalizeNumber(afterItem?.quantity, 0);
       const quantityDelta = afterQuantity - beforeQuantity;
-
-      if (quantityDelta === 0) {
-        return;
-      }
-
-      const sourceItem = afterItem || beforeItem;
-      const chaosValue = normalizeNumber(sourceItem?.chaosValue, 0);
-      const valueDelta = Math.abs(quantityDelta * chaosValue);
+      const beforeValue = normalizeNumber(beforeItem?.totalValue, 0);
+      const afterValue = normalizeNumber(afterItem?.totalValue, 0);
+      const rawValueDelta = afterValue - beforeValue;
+      const valueDelta = Math.abs(rawValueDelta);
 
       if (valueDelta <= 0) {
         return;
       }
 
-      if (quantityDelta < 0) {
+      if (rawValueDelta < 0) {
         inputValue += valueDelta;
-        topInputs.push(createDeltaEntry(itemKey, sourceItem, Math.abs(quantityDelta), valueDelta));
+        topInputs.push(createDeltaEntry(itemKey, beforeItem || afterItem, Math.abs(quantityDelta), valueDelta));
         return;
       }
 
       outputValue += valueDelta;
-      topOutputs.push(createDeltaEntry(itemKey, sourceItem, quantityDelta, valueDelta));
+      topOutputs.push(createDeltaEntry(itemKey, afterItem || beforeItem, Math.abs(quantityDelta), valueDelta));
     });
 
     const netProfit = outputValue - inputValue;
