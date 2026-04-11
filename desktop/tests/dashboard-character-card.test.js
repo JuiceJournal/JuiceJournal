@@ -171,7 +171,7 @@ test('renderer fills character summary card from normalized account state', () =
       hidden: true,
       alt: ''
     },
-    characterPortraitBadge: { textContent: '' },
+    characterPortraitBadge: { textContent: '', style: {} },
     characterName: { textContent: '' },
     characterClass: { textContent: '' },
     characterLevel: { textContent: '' },
@@ -198,6 +198,12 @@ test('renderer fills character summary card from normalized account state', () =
       detectedGameVersion: 'poe2',
       settings: { poeVersion: 'poe1' }
     },
+    window: {
+      location: {
+        href: 'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/index.html'
+      }
+    },
+    URL,
     normalizePoeVersion: (value) => value,
     getCharacterVisualModel: () => ({
       deriveCharacterVisual: () => ({
@@ -216,8 +222,12 @@ test('renderer fills character summary card from normalized account state', () =
   assert.equal(elements.characterPortrait.dataset.characterPortrait, 'shaman');
   assert.equal(elements.characterPortrait.dataset.characterTone, 'ember');
   assert.equal(elements.characterPortraitImage.hidden, false);
-  assert.equal(elements.characterPortraitImage.src, 'assets/characters/poe2/druid-shaman.png');
+  assert.equal(
+    elements.characterPortraitImage.src,
+    'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/assets/characters/poe2/druid-shaman.png'
+  );
   assert.equal(elements.characterPortraitBadge.textContent, 'S');
+  assert.equal(elements.characterPortraitBadge.style.display, 'none');
   assert.equal(elements.characterName.textContent, 'KocaGyVeMasha');
   assert.equal(elements.characterClass.textContent, 'Shaman');
   assert.equal(elements.characterLevel.textContent, '96');

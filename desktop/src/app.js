@@ -941,8 +941,16 @@ function renderCharacterSummaryCard() {
     elements.characterPortrait.dataset.characterTone = visual.tone;
   }
   if (elements.characterPortraitImage) {
+    let portraitSource = visual.portraitPath || '';
+    if (portraitSource && typeof URL === 'function' && window?.location?.href) {
+      try {
+        portraitSource = new URL(portraitSource, window.location.href).toString();
+      } catch (error) {
+        portraitSource = visual.portraitPath;
+      }
+    }
     elements.characterPortraitImage.hidden = !visual.portraitPath;
-    elements.characterPortraitImage.src = visual.portraitPath || '';
+    elements.characterPortraitImage.src = portraitSource;
     elements.characterPortraitImage.alt = isReady ? `${summary.name} portrait` : 'Character portrait';
   }
   if (elements.characterPortraitBadge) {
