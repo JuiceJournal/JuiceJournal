@@ -247,6 +247,7 @@ const activeLeagueInputState = {
 let settingsModelPromise = null;
 let accountStateModelPromise = null;
 let runtimeSessionModelPromise = null;
+let mapResultModelPromise = null;
 let capabilityModelPromise = null;
 let overlayStateModelPromise = null;
 let characterVisualModelPromise = null;
@@ -333,6 +334,34 @@ function ensureRuntimeSessionModelLoaded() {
   });
 
   return runtimeSessionModelPromise;
+}
+
+function ensureMapResultModelLoaded() {
+  if (window.mapResultModel) {
+    return Promise.resolve(window.mapResultModel);
+  }
+
+  if (mapResultModelPromise) {
+    return mapResultModelPromise;
+  }
+
+  mapResultModelPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'modules/mapResultModel.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.mapResultModel) {
+        resolve(window.mapResultModel);
+        return;
+      }
+
+      reject(new Error('mapResultModel loaded without exposing window.mapResultModel'));
+    };
+    script.onerror = () => reject(new Error('Failed to load map result model script'));
+    document.head.appendChild(script);
+  });
+
+  return mapResultModelPromise;
 }
 
 function ensureCapabilityModelLoaded() {
@@ -441,6 +470,14 @@ function getRuntimeSessionModel() {
   }
 
   return window.runtimeSessionModel;
+}
+
+function getMapResultModel() {
+  if (!window.mapResultModel) {
+    throw new Error('mapResultModel is not loaded');
+  }
+
+  return window.mapResultModel;
 }
 
 function getCapabilityModel() {
@@ -1057,6 +1094,7 @@ async function init() {
   await ensureSettingsModelLoaded();
   await ensureAccountStateModelLoaded();
   await ensureRuntimeSessionModelLoaded();
+  await ensureMapResultModelLoaded();
   await ensureCapabilityModelLoaded();
   await ensureOverlayStateModelLoaded();
   await ensureCharacterVisualModelLoaded();
@@ -2116,6 +2154,24 @@ function getSelectedTrackerContext() {
   };
 }
 
+function deriveCurrentMapResult() {
+  const { deriveMapResult } = getMapResultModel();
+  const { listFarmTypes } = getFarmTypeModel();
+  const selectedFarmTypeId = state.farmType?.selectedFarmTypeId || null;
+  const farmType = listFarmTypes().find((entry) => entry.id === selectedFarmTypeId) || null;
+  const trackerContext = getSelectedTrackerContext();
+
+  return deriveMapResult({
+    farmType,
+    runtimeSession: state.runtimeSession,
+    beforeSnapshot: stashState.beforeSnapshot,
+    afterSnapshot: stashState.afterSnapshot,
+    characterSummary: state.account?.summary || null,
+    accountName: state.account?.accountName || null,
+    poeVersion: trackerContext.poeVersion
+  });
+}
+
 function isPageActive(page) {
   const pageElement = document.getElementById(`${page}-page`);
   return Boolean(pageElement?.classList.contains('active'));
@@ -2786,6 +2842,9 @@ async function handleExportDiagnostics() {
 const stashState = {
   beforeSnapshotId: null,
   afterSnapshotId: null,
+  beforeSnapshot: null,
+  afterSnapshot: null,
+  lastMapResult: null,
   pricesSynced: false
 };
 
@@ -2853,8 +2912,10 @@ async function handleTakeSnapshot(type) {
 
     if (isAfter) {
       stashState.afterSnapshotId = snapshotId;
+      stashState.afterSnapshot = result;
     } else {
       stashState.beforeSnapshotId = snapshotId;
+      stashState.beforeSnapshot = result;
       // Enable "after" button
       if (elements.takeAfterSnapshotBtn) {
         elements.takeAfterSnapshotBtn.disabled = false;
@@ -2909,6 +2970,7 @@ async function handleCalculateProfit() {
       return;
     }
 
+    stashState.lastMapResult = deriveCurrentMapResult();
     renderProfitReport(report);
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.profitFailed'), 'error');
@@ -2990,6 +3052,9 @@ function handleResetSnapshots() {
 
   stashState.beforeSnapshotId = null;
   stashState.afterSnapshotId = null;
+  stashState.beforeSnapshot = null;
+  stashState.afterSnapshot = null;
+  stashState.lastMapResult = null;
 
   // Reset step visuals
   if (elements.snapshotStepBefore) {
