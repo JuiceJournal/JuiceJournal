@@ -382,6 +382,7 @@ test('renderer logout clears normalized account state', async () => {
     currentUser: { username: 'RangerMain' },
     currentSession: { id: 'session-1' },
     sessions: [{ id: 'session-1' }],
+    mapResults: [{ id: 'map-result-1' }],
     recentLoot: [{ id: 'loot-1' }],
     poeLink: { linked: true },
     account: {
@@ -410,6 +411,8 @@ test('renderer logout clears normalized account state', async () => {
 
   assert.equal(state.account, null);
   assert.equal(state.currentUser, null);
+  assert.equal(Array.isArray(state.mapResults), true);
+  assert.equal(state.mapResults.length, 0);
   assert.deepEqual(calls.map(([name]) => name), [
     'logout',
     'closeSessionDrawer',

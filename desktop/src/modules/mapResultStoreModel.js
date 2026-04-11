@@ -9,6 +9,13 @@
   function appendMapResult(existingResults = [], nextResult, { maxResults = 100 } = {}) {
     return [nextResult, ...existingResults]
       .filter(Boolean)
+      .filter((entry, index, list) => {
+        if (!entry?.id) {
+          return true;
+        }
+
+        return index === list.findIndex((candidate) => candidate?.id === entry.id);
+      })
       .slice(0, maxResults);
   }
 

@@ -1104,7 +1104,6 @@ async function init() {
   // Ayarlari yukle
   await loadSettings();
   await loadActiveFarmTypeSelection();
-  await loadMapResultHistory();
   populateStrategyPresets();
 
   // Set language from settings and apply translations
@@ -1133,12 +1132,18 @@ async function init() {
           ...me.user,
           capabilities: me.capabilities || {}
         });
+        await loadMapResultHistory();
         await loadPoeLinkStatus();
+      } else {
+        state.mapResults = [];
+        showLoginModal();
       }
     } catch (error) {
+      state.mapResults = [];
       showLoginModal();
     }
   } else {
+    state.mapResults = [];
     showLoginModal();
   }
 
@@ -2192,8 +2197,12 @@ function deriveCurrentMapResult() {
 }
 
 async function loadMapResultHistory() {
-  const results = await window.electronAPI.getMapResults();
-  state.mapResults = Array.isArray(results) ? results : [];
+  try {
+    const results = await window.electronAPI.getMapResults();
+    state.mapResults = Array.isArray(results) ? results : [];
+  } catch {
+    state.mapResults = [];
+  }
   return state.mapResults;
 }
 
@@ -2902,6 +2911,22 @@ function buildCurrentMapResultContext() {
   };
 }
 
+function mergeMapResultRuntimeSession(previousRuntimeSession, nextRuntimeSession) {
+  if (!previousRuntimeSession) {
+    return nextRuntimeSession || null;
+  }
+
+  if (!nextRuntimeSession) {
+    return previousRuntimeSession;
+  }
+
+  return {
+    ...previousRuntimeSession,
+    ...nextRuntimeSession,
+    sessionId: nextRuntimeSession.sessionId || previousRuntimeSession.sessionId || null
+  };
+}
+
 async function handleSyncPrices() {
   if (!elements.syncPricesBtn) return;
   if (!isStashTrackingEnabled()) {
@@ -2967,9 +2992,13 @@ async function handleTakeSnapshot(type) {
     if (isAfter) {
       stashState.afterSnapshotId = snapshotId;
       stashState.afterSnapshot = result;
+      const nextContext = buildCurrentMapResultContext();
       stashState.mapResultContext = {
-        ...(stashState.mapResultContext || buildCurrentMapResultContext()),
-        runtimeSession: buildCurrentMapResultContext().runtimeSession
+        ...(stashState.mapResultContext || nextContext),
+        runtimeSession: mergeMapResultRuntimeSession(
+          stashState.mapResultContext?.runtimeSession || null,
+          nextContext.runtimeSession || null
+        )
       };
     } else {
       stashState.beforeSnapshotId = snapshotId;
@@ -3030,10 +3059,14 @@ async function handleCalculateProfit() {
     }
 
     stashState.lastMapResult = deriveCurrentMapResult();
-    if (stashState.lastMapResult) {
-      await persistMapResultHistory(stashState.lastMapResult);
-    }
     renderProfitReport(report);
+    if (stashState.lastMapResult) {
+      try {
+        await persistMapResultHistory(stashState.lastMapResult);
+      } catch (error) {
+        console.warn('Failed to persist map result history', error);
+      }
+    }
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.profitFailed'), 'error');
   } finally {

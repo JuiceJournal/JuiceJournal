@@ -567,14 +567,28 @@ function setActiveFarmTypeId(farmTypeId) {
   return normalized;
 }
 
+function getMapResultsStoreKey(userId = getCurrentUserId()) {
+  return userId ? `mapResults:${userId}` : null;
+}
+
 function getStoredMapResults() {
-  const results = store.get('mapResults');
+  const storeKey = getMapResultsStoreKey();
+  if (!storeKey) {
+    return [];
+  }
+
+  const results = store.get(storeKey);
   return Array.isArray(results) ? results : [];
 }
 
 function saveMapResultHistory(result) {
+  const storeKey = getMapResultsStoreKey();
+  if (!storeKey) {
+    return [];
+  }
+
   const nextResults = appendMapResult(getStoredMapResults(), result, { maxResults: 100 });
-  store.set('mapResults', nextResults);
+  store.set(storeKey, nextResults);
   return nextResults;
 }
 
