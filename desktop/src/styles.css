@@ -1019,10 +1019,82 @@ body {
   color: var(--text-bright);
 }
 
+/* Map Result History */
+.map-result-history-card {
+  grid-column: 1 / -1;
+  grid-row: 4;
+}
+
+.map-result-history-card .card-header {
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+#map-result-filter {
+  min-width: 180px;
+  max-width: 220px;
+  padding: 0.55rem 0.75rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.8rem;
+}
+
+.map-result-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.map-result-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(circle at top right, rgba(198, 161, 91, 0.08), transparent 26%),
+    var(--bg-card);
+}
+
+.map-result-history-main,
+.map-result-history-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.map-result-history-main strong {
+  color: var(--text-bright);
+  font-size: 0.95rem;
+}
+
+.map-result-history-main span,
+.map-result-history-meta span {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.map-result-history-meta {
+  align-items: flex-end;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.map-result-history-profit {
+  color: var(--text-bright);
+}
+
 /* Recent Loot Card */
 .recent-loot-card {
   grid-column: 2;
-  grid-row: 4;
+  grid-row: 5;
 }
 
 #recent-loot-list {
@@ -2264,6 +2336,7 @@ body {
   .session-card,
   .stats-card,
   .last-map-result-card,
+  .map-result-history-card,
   .quick-loot-card,
   .recent-loot-card {
     grid-column: 1;
@@ -2284,6 +2357,22 @@ body {
   }
   .nav { margin-left: 0; width: 100%; justify-content: center; }
   .main { padding: 1rem; }
+  .map-result-history-card .card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #map-result-filter {
+    max-width: none;
+    width: 100%;
+  }
+  .map-result-history-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .map-result-history-meta {
+    align-items: flex-start;
+    text-align: left;
+  }
 }
 
 /* ===== Game Status Indicator ===== */
@@ -2336,7 +2425,7 @@ body {
 
 .stash-tracker-card {
   grid-column: 1 / -1;
-  grid-row: 5;
+  grid-row: 6;
 }
 
 .stash-tracker-content {

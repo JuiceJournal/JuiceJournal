@@ -160,6 +160,8 @@ const elements = {
   lastMapResultFarmType: document.getElementById('last-map-result-farm-type'),
   lastMapResultDuration: document.getElementById('last-map-result-duration'),
   lastMapResultProfit: document.getElementById('last-map-result-profit'),
+  mapResultFilter: document.getElementById('map-result-filter'),
+  mapResultHistory: document.getElementById('map-result-history'),
   recentLootList: document.getElementById('recent-loot-list'),
 
   // Sessions
@@ -483,6 +485,14 @@ function getMapResultModel() {
   }
 
   return window.mapResultModel;
+}
+
+function getMapResultStoreModel() {
+  if (!window.mapResultStoreModel) {
+    throw new Error('mapResultStoreModel is not loaded');
+  }
+
+  return window.mapResultStoreModel;
 }
 
 function getCapabilityModel() {
@@ -1117,6 +1127,7 @@ async function init() {
     renderCharacterSummaryCard();
   }
   renderFarmTypeSelector();
+  renderMapResultHistory();
   updateActiveLeagueFieldContext();
   syncDesktopCurrencyIcons();
   applyDashboardCapabilities();
@@ -1546,6 +1557,9 @@ function setupEventListeners() {
       refreshActiveLeagueDirtyState();
     });
   }
+  if (elements.mapResultFilter) {
+    elements.mapResultFilter.addEventListener('change', renderMapResultHistory);
+  }
   setupHotkeyCaptureFields();
 
   // PoE version switching
@@ -1947,6 +1961,9 @@ async function handleLogout() {
   if (typeof renderLatestMapResult === 'function') {
     renderLatestMapResult();
   }
+  if (typeof renderMapResultHistory === 'function') {
+    renderMapResultHistory();
+  }
   updateActiveSessionUI();
   renderSessionsList();
   renderRecentLoot();
@@ -2209,6 +2226,9 @@ async function loadMapResultHistory() {
     if (typeof renderLatestMapResult === 'function') {
       renderLatestMapResult();
     }
+    if (typeof renderMapResultHistory === 'function') {
+      renderMapResultHistory();
+    }
     return state.mapResults;
   }
 
@@ -2222,6 +2242,9 @@ async function loadMapResultHistory() {
   if (typeof renderLatestMapResult === 'function') {
     renderLatestMapResult();
   }
+  if (typeof renderMapResultHistory === 'function') {
+    renderMapResultHistory();
+  }
   return state.mapResults;
 }
 
@@ -2230,6 +2253,9 @@ async function persistMapResultHistory(result) {
   state.mapResults = Array.isArray(results) ? results : [];
   if (typeof renderLatestMapResult === 'function') {
     renderLatestMapResult();
+  }
+  if (typeof renderMapResultHistory === 'function') {
+    renderMapResultHistory();
   }
   return state.mapResults;
 }
@@ -2277,6 +2303,61 @@ function renderLatestMapResult() {
   );
 }
 
+function renderMapResultHistory() {
+  if (!elements.mapResultFilter || !elements.mapResultHistory) {
+    return;
+  }
+
+  const results = Array.isArray(state.mapResults) ? state.mapResults : [];
+  const availableFarmTypes = [];
+  const seenFarmTypes = new Set();
+
+  results.forEach((result) => {
+    const farmType = typeof result?.farmType === 'string' ? result.farmType.trim() : '';
+    if (!farmType || seenFarmTypes.has(farmType)) {
+      return;
+    }
+
+    seenFarmTypes.add(farmType);
+    availableFarmTypes.push(farmType);
+  });
+
+  const selectedFarmType = availableFarmTypes.includes(elements.mapResultFilter.value)
+    ? elements.mapResultFilter.value
+    : '';
+
+  elements.mapResultFilter.innerHTML = [
+    '<option value="">All farms</option>',
+    ...availableFarmTypes.map((farmType) => `<option value="${escapeHTML(farmType)}">${escapeHTML(farmType)}</option>`)
+  ].join('');
+  elements.mapResultFilter.value = selectedFarmType;
+
+  const filteredResults = getMapResultStoreModel().filterMapResults(results, { farmType: selectedFarmType });
+
+  if (!filteredResults.length) {
+    elements.mapResultHistory.innerHTML = '<p class="empty-state">No map results recorded yet.</p>';
+    return;
+  }
+
+  elements.mapResultHistory.innerHTML = filteredResults.map((result) => `
+    <article class="map-result-history-item" data-result-id="${escapeHTML(result?.id || '')}">
+      <div class="map-result-history-main">
+        <strong>${escapeHTML(result?.farmType || 'Unknown farm type')}</strong>
+        <span>${formatDuration(Number(result?.durationSeconds || 0))}</span>
+      </div>
+      <div class="map-result-history-meta">
+        <span class="map-result-history-profit">${currencyHTML(
+          result?.netProfit || 0,
+          'chaos',
+          14,
+          result?.poeVersion || state.settings?.poeVersion || 'poe1'
+        )}</span>
+        <span>${escapeHTML(result?.createdAt ? timeAgo(result.createdAt) : 'Just now')}</span>
+      </div>
+    </article>
+  `).join('');
+}
+
 let _refreshPending = null;
 let _refreshOptions = {};
 
@@ -2296,6 +2377,7 @@ async function refreshTrackerData({ includeSessions = false, includeCurrency = f
       state.mapResults = [];
       resetDashboardSummary();
       renderLatestMapResult();
+      renderMapResultHistory();
       renderRecentLoot();
       renderSessionsList();
       updateActiveSessionUI();

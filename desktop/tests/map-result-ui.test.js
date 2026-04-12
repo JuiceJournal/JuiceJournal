@@ -301,6 +301,14 @@ test('dashboard html includes a last map result card with summary fields', () =>
   assert.match(html, /id="last-map-result-profit"/);
 });
 
+test('dashboard html includes a map result history card with a farm type filter', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+
+  assert.match(html, />Map Result History</);
+  assert.match(html, /id="map-result-filter"/);
+  assert.match(html, /id="map-result-history"/);
+});
+
 test('renderer shows an empty last map result state when no completed result exists', () => {
   const elements = {
     lastMapResultCard: {
@@ -429,4 +437,157 @@ test('renderer projects only the latest map result into the dashboard card', () 
   assert.equal(elements.lastMapResultFarmType.textContent, 'Ritual');
   assert.equal(elements.lastMapResultDuration.textContent, 'duration:185');
   assert.equal(elements.lastMapResultProfit.innerHTML, 'profit:127:chaos:16:poe2');
+});
+
+test('renderer map result history keeps persisted ordering and populates farm-type filter options', () => {
+  const filterCalls = [];
+  const elements = {
+    mapResultFilter: {
+      value: '',
+      innerHTML: ''
+    },
+    mapResultHistory: {
+      innerHTML: ''
+    }
+  };
+  const context = loadFunctions(['renderMapResultHistory'], {
+    elements,
+    state: {
+      settings: {
+        poeVersion: 'poe1'
+      },
+      mapResults: [
+        {
+          id: 'result-3',
+          farmType: 'Ritual',
+          durationSeconds: 185,
+          netProfit: 127,
+          poeVersion: 'poe2',
+          createdAt: '2026-04-12T09:30:00.000Z'
+        },
+        {
+          id: 'result-2',
+          farmType: 'Breach',
+          durationSeconds: 240,
+          netProfit: 88,
+          poeVersion: 'poe1',
+          createdAt: '2026-04-12T08:30:00.000Z'
+        },
+        {
+          id: 'result-1',
+          farmType: 'Ritual',
+          durationSeconds: 360,
+          netProfit: 42,
+          poeVersion: 'poe1',
+          createdAt: '2026-04-12T07:30:00.000Z'
+        }
+      ]
+    },
+    escapeHTML: (value) => String(value),
+    formatDuration: (seconds) => `duration:${seconds}`,
+    currencyHTML: (value, type, iconSize, poeVersion) => `profit:${value}:${type}:${iconSize}:${poeVersion}`,
+    timeAgo: (value) => `ago:${value}`,
+    getMapResultStoreModel: () => ({
+      filterMapResults(results, filters) {
+        filterCalls.push({
+          resultIds: results.map((entry) => entry.id),
+          filters: { ...filters }
+        });
+        return filters.farmType
+          ? results.filter((entry) => entry.farmType === filters.farmType)
+          : results;
+      }
+    })
+  });
+
+  context.renderMapResultHistory();
+
+  assert.deepEqual(filterCalls, [{
+    resultIds: ['result-3', 'result-2', 'result-1'],
+    filters: { farmType: '' }
+  }]);
+  assert.match(elements.mapResultFilter.innerHTML, /All farms/);
+  assert.match(elements.mapResultFilter.innerHTML, /value="Ritual"/);
+  assert.match(elements.mapResultFilter.innerHTML, /value="Breach"/);
+  assert.ok(
+    elements.mapResultHistory.innerHTML.indexOf('result-3') < elements.mapResultHistory.innerHTML.indexOf('result-2'),
+    'expected newest persisted result to render before older entries'
+  );
+  assert.ok(
+    elements.mapResultHistory.innerHTML.indexOf('result-2') < elements.mapResultHistory.innerHTML.indexOf('result-1'),
+    'expected renderer to keep state.mapResults ordering'
+  );
+});
+
+test('renderer map result history applies the selected farm-type filter through the store model', () => {
+  const filterCalls = [];
+  const elements = {
+    mapResultFilter: {
+      value: 'Ritual',
+      innerHTML: ''
+    },
+    mapResultHistory: {
+      innerHTML: ''
+    }
+  };
+  const context = loadFunctions(['renderMapResultHistory'], {
+    elements,
+    state: {
+      settings: {
+        poeVersion: 'poe1'
+      },
+      mapResults: [
+        {
+          id: 'result-3',
+          farmType: 'Ritual',
+          durationSeconds: 185,
+          netProfit: 127,
+          poeVersion: 'poe2',
+          createdAt: '2026-04-12T09:30:00.000Z'
+        },
+        {
+          id: 'result-2',
+          farmType: 'Breach',
+          durationSeconds: 240,
+          netProfit: 88,
+          poeVersion: 'poe1',
+          createdAt: '2026-04-12T08:30:00.000Z'
+        },
+        {
+          id: 'result-1',
+          farmType: 'Ritual',
+          durationSeconds: 360,
+          netProfit: 42,
+          poeVersion: 'poe1',
+          createdAt: '2026-04-12T07:30:00.000Z'
+        }
+      ]
+    },
+    escapeHTML: (value) => String(value),
+    formatDuration: (seconds) => `duration:${seconds}`,
+    currencyHTML: (value, type, iconSize, poeVersion) => `profit:${value}:${type}:${iconSize}:${poeVersion}`,
+    timeAgo: (value) => `ago:${value}`,
+    getMapResultStoreModel: () => ({
+      filterMapResults(results, filters) {
+        filterCalls.push({
+          resultIds: results.map((entry) => entry.id),
+          filters: { ...filters }
+        });
+        return filters.farmType
+          ? results.filter((entry) => entry.farmType === filters.farmType)
+          : results;
+      }
+    })
+  });
+
+  context.renderMapResultHistory();
+
+  assert.deepEqual(filterCalls, [{
+    resultIds: ['result-3', 'result-2', 'result-1'],
+    filters: { farmType: 'Ritual' }
+  }]);
+  assert.match(elements.mapResultHistory.innerHTML, /result-3/);
+  assert.match(elements.mapResultHistory.innerHTML, /result-1/);
+  assert.doesNotMatch(elements.mapResultHistory.innerHTML, /result-2/);
+  assert.equal(elements.mapResultFilter.value, 'Ritual');
 });

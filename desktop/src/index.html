@@ -261,6 +261,18 @@
             </div>
           </div>
 
+          <div class="card map-result-history-card">
+            <div class="card-header">
+              <h3>Map Result History</h3>
+              <select id="map-result-filter" aria-label="Filter map result history by farm type">
+                <option value="">All farms</option>
+              </select>
+            </div>
+            <div id="map-result-history" class="map-result-history-list">
+              <p class="empty-state">No map results recorded yet.</p>
+            </div>
+          </div>
+
           <!-- Stash Profit Tracker -->
           <div class="card stash-tracker-card" id="stash-tracker-card" data-stash-capability="enabled">
             <div class="card-header">
@@ -725,6 +737,7 @@
   <script src="modules/capabilityModel.js"></script>
   <script src="modules/characterVisualModel.js"></script>
   <script src="modules/farmTypeModel.js"></script>
+  <script src="modules/mapResultStoreModel.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
