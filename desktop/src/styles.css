@@ -974,10 +974,55 @@ body {
   line-height: 1.4;
 }
 
+/* Last Map Result Card */
+.last-map-result-card {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.map-result-summary {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  background:
+    radial-gradient(circle at top right, rgba(198, 161, 91, 0.12), transparent 28%),
+    var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.map-result-summary strong,
+.map-result-summary span {
+  display: block;
+}
+
+#last-map-result-farm-type {
+  color: var(--text-bright);
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  letter-spacing: 0.05em;
+}
+
+#last-map-result-duration,
+#last-map-result-profit {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.last-map-result-card[data-result-state="empty"] #last-map-result-farm-type,
+.last-map-result-card[data-result-state="empty"] #last-map-result-duration,
+.last-map-result-card[data-result-state="empty"] #last-map-result-profit {
+  color: var(--text-muted);
+}
+
+.last-map-result-card[data-result-state="ready"] #last-map-result-profit {
+  color: var(--text-bright);
+}
+
 /* Recent Loot Card */
 .recent-loot-card {
   grid-column: 2;
-  grid-row: 3;
+  grid-row: 4;
 }
 
 #recent-loot-list {
@@ -2218,6 +2263,7 @@ body {
   }
   .session-card,
   .stats-card,
+  .last-map-result-card,
   .quick-loot-card,
   .recent-loot-card {
     grid-column: 1;
@@ -2290,6 +2336,7 @@ body {
 
 .stash-tracker-card {
   grid-column: 1 / -1;
+  grid-row: 5;
 }
 
 .stash-tracker-content {

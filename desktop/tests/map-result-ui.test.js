@@ -291,3 +291,97 @@ test('starting a map session forwards the selected farm type without changing ex
     farmTypeId: 'breach'
   }]);
 });
+
+test('dashboard html includes a last map result card with summary fields', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+
+  assert.match(html, /id="last-map-result-card"/);
+  assert.match(html, /id="last-map-result-farm-type"/);
+  assert.match(html, /id="last-map-result-duration"/);
+  assert.match(html, /id="last-map-result-profit"/);
+});
+
+test('renderer shows an empty last map result state when no completed result exists', () => {
+  const elements = {
+    lastMapResultCard: {
+      dataset: {
+        resultState: 'ready'
+      }
+    },
+    lastMapResultFarmType: {
+      textContent: 'Old value'
+    },
+    lastMapResultDuration: {
+      textContent: '12m 34s'
+    },
+    lastMapResultProfit: {
+      innerHTML: '123c'
+    }
+  };
+  const context = loadFunctions(['renderLatestMapResult'], {
+    elements,
+    state: {
+      mapResults: []
+    },
+    formatDuration: () => {
+      throw new Error('formatDuration should not be called for the empty state');
+    },
+    currencyHTML: () => {
+      throw new Error('currencyHTML should not be called for the empty state');
+    }
+  });
+
+  context.renderLatestMapResult();
+
+  assert.equal(elements.lastMapResultCard.dataset.resultState, 'empty');
+  assert.equal(elements.lastMapResultFarmType.textContent, 'No completed map yet');
+  assert.equal(elements.lastMapResultDuration.textContent, '—');
+  assert.equal(elements.lastMapResultProfit.innerHTML, '—');
+});
+
+test('renderer projects only the latest map result into the dashboard card', () => {
+  const elements = {
+    lastMapResultCard: {
+      dataset: {
+        resultState: 'empty'
+      }
+    },
+    lastMapResultFarmType: {
+      textContent: ''
+    },
+    lastMapResultDuration: {
+      textContent: ''
+    },
+    lastMapResultProfit: {
+      innerHTML: ''
+    }
+  };
+  const context = loadFunctions(['renderLatestMapResult'], {
+    elements,
+    state: {
+      mapResults: [
+        {
+          farmType: 'Ritual',
+          durationSeconds: 185,
+          netProfit: 127,
+          poeVersion: 'poe2'
+        },
+        {
+          farmType: 'Breach',
+          durationSeconds: 999,
+          netProfit: 1,
+          poeVersion: 'poe1'
+        }
+      ]
+    },
+    formatDuration: (seconds) => `duration:${seconds}`,
+    currencyHTML: (value, type, iconSize, poeVersion) => `profit:${value}:${type}:${iconSize}:${poeVersion}`
+  });
+
+  context.renderLatestMapResult();
+
+  assert.equal(elements.lastMapResultCard.dataset.resultState, 'ready');
+  assert.equal(elements.lastMapResultFarmType.textContent, 'Ritual');
+  assert.equal(elements.lastMapResultDuration.textContent, 'duration:185');
+  assert.equal(elements.lastMapResultProfit.innerHTML, 'profit:127:chaos:16:poe2');
+});

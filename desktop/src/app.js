@@ -156,6 +156,10 @@ const elements = {
   todaySessions: document.getElementById('today-sessions'),
   todayProfit: document.getElementById('today-profit'),
   todayAvg: document.getElementById('today-avg'),
+  lastMapResultCard: document.getElementById('last-map-result-card'),
+  lastMapResultFarmType: document.getElementById('last-map-result-farm-type'),
+  lastMapResultDuration: document.getElementById('last-map-result-duration'),
+  lastMapResultProfit: document.getElementById('last-map-result-profit'),
   recentLootList: document.getElementById('recent-loot-list'),
 
   // Sessions
@@ -1940,6 +1944,7 @@ async function handleLogout() {
     renderCharacterSummaryCard();
   }
   resetDashboardSummary();
+  renderLatestMapResult();
   updateActiveSessionUI();
   renderSessionsList();
   renderRecentLoot();
@@ -2197,18 +2202,27 @@ function deriveCurrentMapResult() {
 }
 
 async function loadMapResultHistory() {
+  if (!state.currentUser) {
+    state.mapResults = [];
+    renderLatestMapResult();
+    return state.mapResults;
+  }
+
   try {
     const results = await window.electronAPI.getMapResults();
     state.mapResults = Array.isArray(results) ? results : [];
   } catch {
     state.mapResults = [];
   }
+
+  renderLatestMapResult();
   return state.mapResults;
 }
 
 async function persistMapResultHistory(result) {
   const results = await window.electronAPI.saveMapResult(result);
   state.mapResults = Array.isArray(results) ? results : [];
+  renderLatestMapResult();
   return state.mapResults;
 }
 
@@ -2221,6 +2235,37 @@ function resetDashboardSummary() {
   elements.todaySessions.textContent = '0';
   elements.todayProfit.innerHTML = currencyHTML(0, 'chaos', 18, state.settings.poeVersion || 'poe1');
   elements.todayAvg.innerHTML = currencyHTML(0, 'chaos', 18, state.settings.poeVersion || 'poe1');
+}
+
+function renderLatestMapResult() {
+  if (
+    !elements.lastMapResultCard
+    || !elements.lastMapResultFarmType
+    || !elements.lastMapResultDuration
+    || !elements.lastMapResultProfit
+  ) {
+    return;
+  }
+
+  const latest = state.mapResults?.[0] || null;
+
+  if (!latest) {
+    elements.lastMapResultCard.dataset.resultState = 'empty';
+    elements.lastMapResultFarmType.textContent = 'No completed map yet';
+    elements.lastMapResultDuration.textContent = '—';
+    elements.lastMapResultProfit.innerHTML = '—';
+    return;
+  }
+
+  elements.lastMapResultCard.dataset.resultState = 'ready';
+  elements.lastMapResultFarmType.textContent = latest.farmType || 'Unknown farm type';
+  elements.lastMapResultDuration.textContent = formatDuration(latest.durationSeconds || 0);
+  elements.lastMapResultProfit.innerHTML = currencyHTML(
+    latest.netProfit || 0,
+    'chaos',
+    16,
+    latest.poeVersion || state.settings?.poeVersion || 'poe1'
+  );
 }
 
 let _refreshPending = null;
@@ -2239,7 +2284,9 @@ async function refreshTrackerData({ includeSessions = false, includeCurrency = f
     _refreshPending = null;
 
     if (!state.currentUser) {
+      state.mapResults = [];
       resetDashboardSummary();
+      renderLatestMapResult();
       renderRecentLoot();
       renderSessionsList();
       updateActiveSessionUI();
@@ -2249,7 +2296,8 @@ async function refreshTrackerData({ includeSessions = false, includeCurrency = f
     const tasks = [
       loadCurrentSession(),
       loadDashboardStats(),
-      loadRecentLoot()
+      loadRecentLoot(),
+      loadMapResultHistory()
     ];
 
     if (opts.includeSessions || isPageActive('sessions')) {
