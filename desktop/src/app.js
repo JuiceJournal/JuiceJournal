@@ -3118,6 +3118,14 @@ async function handleCalculateProfit() {
     stashState.lastMapResult = deriveCurrentMapResult();
     renderProfitReport(report);
     if (stashState.lastMapResult) {
+      if (typeof window.electronAPI?.showMapResultOverlay === 'function') {
+        try {
+          await window.electronAPI.showMapResultOverlay(stashState.lastMapResult);
+        } catch (error) {
+          console.warn('Failed to show map result overlay', error);
+        }
+      }
+
       try {
         await persistMapResultHistory(stashState.lastMapResult);
       } catch (error) {

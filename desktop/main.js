@@ -32,6 +32,7 @@ const {
   cloneRuntimeSessionState
 } = require('./src/modules/runtimeSessionModel');
 const { appendMapResult } = require('./src/modules/mapResultStoreModel');
+const { deriveMapResultOverlayState } = require('./src/modules/mapResultOverlayModel');
 const { deriveOverlayState } = require('./src/modules/overlayStateModel');
 const {
   DEFAULT_SCAN_HOTKEY,
@@ -43,6 +44,7 @@ const DEFAULT_POE_LOG_PATH = GameDetector.DEFAULT_POE_LOG_PATH;
 const APP_NAME = 'Juice Journal';
 const APP_ID = 'JuiceJournal.Desktop';
 const DEFAULT_STRATEGY_PRESETS = ['Strongbox', 'Legion', 'Ritual', 'Expedition', 'Harvest', 'Boss Rush'];
+const MAP_RESULT_OVERLAY_DURATION_MS = 10_000;
 const MAX_PENDING_LOOT_ACTIONS = 100;
 const MAX_PENDING_SESSION_ACTIONS = 20;
 const MAX_AUDIT_TRAIL_ENTRIES = 200;
@@ -263,6 +265,8 @@ let runtimeSessionState = createRuntimeSessionState();
 let overlayWindow = null;
 let overlayCharacterState = null;
 let overlayRuntimeState = null;
+let overlayMapResultState = null;
+let overlayMapResultDismissTimer = null;
 let poeAuthServer = null;
 let trayHintShown = false;
 let pendingLootFlushInProgress = false;
@@ -1510,6 +1514,7 @@ function createOverlayWindow() {
     alwaysOnTop: true,
     backgroundColor: '#00000000',
     webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
@@ -1576,7 +1581,89 @@ function isOverlayEnabled() {
   return store.get('overlayEnabled') === true;
 }
 
+function clearOverlayMapResultDismissTimer() {
+  if (overlayMapResultDismissTimer) {
+    clearTimeout(overlayMapResultDismissTimer);
+    overlayMapResultDismissTimer = null;
+  }
+}
+
+function scheduleOverlayMapResultDismiss() {
+  clearOverlayMapResultDismissTimer();
+
+  if (!overlayMapResultState?.result || overlayMapResultState?.pinned || !overlayMapResultState?.dismissAt) {
+    return;
+  }
+
+  const delay = Math.max(0, overlayMapResultState.dismissAt - Date.now());
+  overlayMapResultDismissTimer = setTimeout(() => {
+    overlayMapResultDismissTimer = null;
+    overlayMapResultState = deriveMapResultOverlayState({
+      overlayEnabled: isOverlayEnabled(),
+      currentOverlayState: overlayMapResultState,
+      now: Date.now()
+    });
+
+    if (!overlayMapResultState?.visible) {
+      overlayMapResultState = null;
+    }
+
+    updateOverlayWindow();
+  }, delay);
+}
+
+function showMapResultOverlay(result, options = {}) {
+  overlayMapResultState = deriveMapResultOverlayState({
+    overlayEnabled: isOverlayEnabled(),
+    completedResult: result,
+    currentOverlayState: overlayMapResultState,
+    now: options.now ?? Date.now(),
+    durationMs: options.durationMs ?? 10_000
+  });
+
+  scheduleOverlayMapResultDismiss();
+  return updateOverlayWindow();
+}
+
+function toggleMapResultOverlayPin() {
+  if (!overlayMapResultState?.result) {
+    return updateOverlayWindow();
+  }
+
+  overlayMapResultState = {
+    ...overlayMapResultState,
+    visible: true,
+    pinned: !overlayMapResultState.pinned
+  };
+
+  if (!overlayMapResultState.pinned && overlayMapResultState.dismissAt && overlayMapResultState.dismissAt <= Date.now()) {
+    overlayMapResultState = null;
+  }
+
+  scheduleOverlayMapResultDismiss();
+  return updateOverlayWindow();
+}
+
 function buildOverlayState({ character = overlayCharacterState, runtimeSession = overlayRuntimeState } = {}) {
+  const mapResultState = deriveMapResultOverlayState({
+    overlayEnabled: isOverlayEnabled(),
+    currentOverlayState: overlayMapResultState,
+    now: Date.now()
+  });
+
+  if (mapResultState.visible && mapResultState.result) {
+    overlayMapResultState = mapResultState;
+    return {
+      visibility: 'visible',
+      mode: 'map-result',
+      mapResult: mapResultState
+    };
+  }
+
+  if (!mapResultState.visible) {
+    overlayMapResultState = null;
+  }
+
   return deriveOverlayState({
     enabled: isOverlayEnabled(),
     character,
@@ -2945,6 +3032,23 @@ function setupIPC() {
     }
   });
 
+  ipcMain.handle('show-map-result-overlay', async (event, result, options = {}) => {
+    assertDesktopUserAuthenticated();
+    return showMapResultOverlay(result, options || {});
+  });
+
+  ipcMain.handle('toggle-map-result-overlay-pin', async () => {
+    assertDesktopUserAuthenticated();
+    return toggleMapResultOverlayPin();
+  });
+
+  ipcMain.handle('set-overlay-pointer-passthrough', async (event, ignore = true) => {
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow.setIgnoreMouseEvents(ignore !== false, { forward: true });
+    }
+    return true;
+  });
+
   ipcMain.handle('save-map-result', async (event, result) => {
     assertDesktopUserAuthenticated();
     return saveMapResultHistory(result);
@@ -3002,6 +3106,8 @@ function setupIPC() {
     store.set('currentUserId', null);
     apiClient.setToken(null);
     currentSession = null;
+    overlayMapResultState = null;
+    clearOverlayMapResultDismissTimer();
     updateOverlayWindow({ character: null });
     return true;
   });

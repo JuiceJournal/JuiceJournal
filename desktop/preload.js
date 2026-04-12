@@ -54,6 +54,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   calculateProfit: (beforeId, afterId) => ipcRenderer.invoke('calculate-profit', beforeId, afterId),
   saveMapResult: (result) => ipcRenderer.invoke('save-map-result', result),
   getMapResults: () => ipcRenderer.invoke('get-map-results'),
+  showMapResultOverlay: (result, options) => ipcRenderer.invoke('show-map-result-overlay', result, options),
+  toggleMapResultOverlayPin: () => ipcRenderer.invoke('toggle-map-result-overlay-pin'),
+  setOverlayPointerPassthrough: (ignore) => ipcRenderer.invoke('set-overlay-pointer-passthrough', ignore),
   getDetectedGame: () => ipcRenderer.invoke('get-detected-game'),
 
   // Auth
