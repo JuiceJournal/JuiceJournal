@@ -6,35 +6,50 @@
 
   root.characterVisualModel = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createCharacterVisualModel() {
+  function createBaseVisual(game, key, badgeText, tone, classLabel, portraitPath, overrides = {}) {
+    const bannerKey = overrides.bannerKey || key;
+
+    return {
+      portraitKey: key,
+      bannerKey,
+      badgeText,
+      tone,
+      classLabel,
+      portraitPath,
+      bannerPath: `assets/characters/banners/${game}/${bannerKey}.jpg`,
+      ...overrides
+    };
+  }
+
   const CLASS_VISUALS = {
-    shaman: { portraitKey: 'shaman', badgeText: 'S', tone: 'ember', classLabel: 'Shaman', portraitPath: 'assets/characters/poe2/druid-shaman.png' },
-    druid: { portraitKey: 'druid', badgeText: 'D', tone: 'verdant', classLabel: 'Druid', portraitPath: 'assets/characters/poe2/druid.png' },
-    ranger: { portraitKey: 'ranger', badgeText: 'R', tone: 'jade', classLabel: 'Ranger', portraitPath: 'assets/characters/poe1/ranger.jpg' },
-    witch: { portraitKey: 'witch', badgeText: 'W', tone: 'violet', classLabel: 'Witch', portraitPath: 'assets/characters/poe1/witch.jpg' },
-    warrior: { portraitKey: 'warrior', badgeText: 'W', tone: 'iron', classLabel: 'Warrior', portraitPath: 'assets/characters/poe2/warrior.png' },
-    monk: { portraitKey: 'monk', badgeText: 'M', tone: 'azure', classLabel: 'Monk', portraitPath: 'assets/characters/poe2/monk.png' },
-    mercenary: { portraitKey: 'mercenary', badgeText: 'M', tone: 'brass', classLabel: 'Mercenary', portraitPath: 'assets/characters/poe2/mercenary.png' },
-    sorceress: { portraitKey: 'sorceress', badgeText: 'S', tone: 'crystal', classLabel: 'Sorceress', portraitPath: 'assets/characters/poe2/sorceress.png' },
-    huntress: { portraitKey: 'huntress', badgeText: 'H', tone: 'jade', classLabel: 'Huntress', portraitPath: 'assets/characters/poe2/huntress.png' },
-    marauder: { portraitKey: 'marauder', badgeText: 'M', tone: 'iron', classLabel: 'Marauder', portraitPath: 'assets/characters/poe1/marauder.jpg' },
-    templar: { portraitKey: 'templar', badgeText: 'T', tone: 'gold', classLabel: 'Templar', portraitPath: 'assets/characters/poe1/templar.jpg' },
-    duelist: { portraitKey: 'duelist', badgeText: 'D', tone: 'brass', classLabel: 'Duelist', portraitPath: 'assets/characters/poe1/duelist.jpg' },
-    shadow: { portraitKey: 'shadow', badgeText: 'S', tone: 'violet', classLabel: 'Shadow', portraitPath: 'assets/characters/poe1/shadow.jpg' },
-    scion: { portraitKey: 'scion', badgeText: 'S', tone: 'gold', classLabel: 'Scion', portraitPath: 'assets/characters/poe1/scion.jpg' }
+    shaman: createBaseVisual('poe2', 'shaman', 'S', 'ember', 'Shaman', 'assets/characters/poe2/druid-shaman.png'),
+    druid: createBaseVisual('poe2', 'druid', 'D', 'verdant', 'Druid', 'assets/characters/poe2/druid.png'),
+    ranger: createBaseVisual('poe1', 'ranger', 'R', 'jade', 'Ranger', 'assets/characters/poe1/ranger.jpg'),
+    witch: createBaseVisual('poe1', 'witch', 'W', 'violet', 'Witch', 'assets/characters/poe1/witch.jpg'),
+    warrior: createBaseVisual('poe2', 'warrior', 'W', 'iron', 'Warrior', 'assets/characters/poe2/warrior.png'),
+    monk: createBaseVisual('poe2', 'monk', 'M', 'azure', 'Monk', 'assets/characters/poe2/monk.png'),
+    mercenary: createBaseVisual('poe2', 'mercenary', 'M', 'brass', 'Mercenary', 'assets/characters/poe2/mercenary.png'),
+    sorceress: createBaseVisual('poe2', 'sorceress', 'S', 'crystal', 'Sorceress', 'assets/characters/poe2/sorceress.png'),
+    huntress: createBaseVisual('poe2', 'huntress', 'H', 'jade', 'Huntress', 'assets/characters/poe2/huntress.png'),
+    marauder: createBaseVisual('poe1', 'marauder', 'M', 'iron', 'Marauder', 'assets/characters/poe1/marauder.jpg'),
+    templar: createBaseVisual('poe1', 'templar', 'T', 'gold', 'Templar', 'assets/characters/poe1/templar.jpg'),
+    duelist: createBaseVisual('poe1', 'duelist', 'D', 'brass', 'Duelist', 'assets/characters/poe1/duelist.jpg'),
+    shadow: createBaseVisual('poe1', 'shadow', 'S', 'violet', 'Shadow', 'assets/characters/poe1/shadow.jpg'),
+    scion: createBaseVisual('poe1', 'scion', 'S', 'gold', 'Scion', 'assets/characters/poe1/scion.jpg')
   };
 
   const POE2_CLASS_VARIANTS = {
-    druid1: { portraitKey: 'druid', badgeText: 'D', tone: 'verdant', classLabel: 'Oracle', portraitPath: 'assets/characters/poe2/druid.png' },
-    druid2: { portraitKey: 'shaman', badgeText: 'S', tone: 'ember', classLabel: 'Shaman', portraitPath: 'assets/characters/poe2/druid-shaman.png' },
-    monk1: { portraitKey: 'monk', badgeText: 'M', tone: 'azure', classLabel: 'Acolyte of Chayula', portraitPath: 'assets/characters/poe2/monk.png' },
-    monk2: { portraitKey: 'monk', badgeText: 'M', tone: 'azure', classLabel: 'Invoker', portraitPath: 'assets/characters/poe2/monk.png' },
-    mercenary1: { portraitKey: 'mercenary', badgeText: 'M', tone: 'brass', classLabel: 'Witchhunter', portraitPath: 'assets/characters/poe2/mercenary.png' },
-    mercenary3: { portraitKey: 'mercenary', badgeText: 'M', tone: 'brass', classLabel: 'Gemling Legionnaire', portraitPath: 'assets/characters/poe2/mercenary.png' },
-    huntress1: { portraitKey: 'huntress', badgeText: 'H', tone: 'jade', classLabel: 'Amazon', portraitPath: 'assets/characters/poe2/huntress.png' },
-    ranger1: { portraitKey: 'ranger', badgeText: 'R', tone: 'jade', classLabel: 'Deadeye', portraitPath: 'assets/characters/poe2/ranger.png' },
-    witch1: { portraitKey: 'witch', badgeText: 'W', tone: 'violet', classLabel: 'Lich', portraitPath: 'assets/characters/poe2/witch.png' },
-    warrior1: { portraitKey: 'warrior', badgeText: 'W', tone: 'iron', classLabel: 'Smith of Kitava', portraitPath: 'assets/characters/poe2/warrior.png' },
-    warrior2: { portraitKey: 'warrior', badgeText: 'W', tone: 'iron', classLabel: 'Tactician', portraitPath: 'assets/characters/poe2/warrior.png' }
+    druid1: createBaseVisual('poe2', 'druid', 'D', 'verdant', 'Oracle', 'assets/characters/poe2/druid.png'),
+    druid2: createBaseVisual('poe2', 'shaman', 'S', 'ember', 'Shaman', 'assets/characters/poe2/druid-shaman.png'),
+    monk1: createBaseVisual('poe2', 'monk', 'M', 'azure', 'Acolyte of Chayula', 'assets/characters/poe2/monk.png'),
+    monk2: createBaseVisual('poe2', 'monk', 'M', 'azure', 'Invoker', 'assets/characters/poe2/monk.png', { bannerKey: 'monk-invoker' }),
+    mercenary1: createBaseVisual('poe2', 'mercenary', 'M', 'brass', 'Witchhunter', 'assets/characters/poe2/mercenary.png'),
+    mercenary3: createBaseVisual('poe2', 'mercenary', 'M', 'brass', 'Gemling Legionnaire', 'assets/characters/poe2/mercenary.png'),
+    huntress1: createBaseVisual('poe2', 'huntress', 'H', 'jade', 'Amazon', 'assets/characters/poe2/huntress.png'),
+    ranger1: createBaseVisual('poe2', 'ranger', 'R', 'jade', 'Deadeye', 'assets/characters/poe2/ranger.png'),
+    witch1: createBaseVisual('poe2', 'witch', 'W', 'violet', 'Lich', 'assets/characters/poe2/witch.png'),
+    warrior1: createBaseVisual('poe2', 'warrior', 'W', 'iron', 'Smith of Kitava', 'assets/characters/poe2/warrior.png'),
+    warrior2: createBaseVisual('poe2', 'warrior', 'W', 'iron', 'Tactician', 'assets/characters/poe2/warrior.png')
   };
 
   function normalizeString(value) {
@@ -77,8 +92,7 @@
         classLabel: visual.classLabel,
         baseClassLabel: CLASS_VISUALS[classKey]?.classLabel || visual.classLabel,
         detailLabel: ascendancy,
-        fallbackInitials: createInitials(character.name),
-        portraitPath: visual.portraitPath
+        fallbackInitials: createInitials(character.name)
       };
     }
 
@@ -90,7 +104,8 @@
       badgeText: createInitials(character.name),
       fallbackInitials: createInitials(character.name),
       tone: 'neutral',
-      portraitPath: null
+      portraitPath: null,
+      bannerPath: null
     };
   }
 

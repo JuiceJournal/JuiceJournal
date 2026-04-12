@@ -37,10 +37,27 @@ test('character visual model maps PoE2 Monk2 to Invoker while keeping the monk p
   });
 
   assert.equal(visual.portraitKey, 'monk');
+  assert.equal(visual.bannerKey, 'monk-invoker');
   assert.equal(visual.classLabel, 'Invoker');
   assert.equal(visual.badgeText, 'M');
   assert.equal(visual.tone, 'azure');
   assert.equal(visual.portraitPath, 'assets/characters/poe2/monk.png');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/monk-invoker.jpg');
+});
+
+test('character visual model maps PoE1 Templar to portrait and banner artwork', () => {
+  const visual = deriveCharacterVisual({
+    name: 'JaylenBaliston',
+    className: 'Templar'
+  });
+
+  assert.equal(visual.portraitKey, 'templar');
+  assert.equal(visual.bannerKey, 'templar');
+  assert.equal(visual.classLabel, 'Templar');
+  assert.equal(visual.badgeText, 'T');
+  assert.equal(visual.tone, 'gold');
+  assert.equal(visual.portraitPath, 'assets/characters/poe1/templar.jpg');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe1/templar.jpg');
 });
 
 test('character visual model maps PoE2 Mercenary3 to Gemling Legionnaire', () => {
@@ -80,4 +97,5 @@ test('character visual model falls back to initials for unknown classes', () => 
   assert.equal(visual.badgeText, 'ME');
   assert.equal(visual.tone, 'neutral');
   assert.equal(visual.portraitPath, null);
+  assert.equal(visual.bannerPath, null);
 });
