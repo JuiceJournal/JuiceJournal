@@ -2308,7 +2308,9 @@ function renderMapResultHistory() {
     return;
   }
 
-  const results = Array.isArray(state.mapResults) ? state.mapResults : [];
+  const results = Array.isArray(state.mapResults)
+    ? state.mapResults.filter((result) => Number(result?.durationSeconds || 0) > 0)
+    : [];
   const availableFarmTypes = [];
   const seenFarmTypes = new Set();
 

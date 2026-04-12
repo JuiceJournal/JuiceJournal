@@ -591,3 +591,64 @@ test('renderer map result history applies the selected farm-type filter through 
   assert.doesNotMatch(elements.mapResultHistory.innerHTML, /result-2/);
   assert.equal(elements.mapResultFilter.value, 'Ritual');
 });
+
+test('renderer map result history ignores incomplete results before applying farm filters', () => {
+  const filterCalls = [];
+  const elements = {
+    mapResultFilter: {
+      value: '',
+      innerHTML: ''
+    },
+    mapResultHistory: {
+      innerHTML: ''
+    }
+  };
+  const context = loadFunctions(['renderMapResultHistory'], {
+    elements,
+    state: {
+      settings: {
+        poeVersion: 'poe1'
+      },
+      mapResults: [
+        {
+          id: 'result-incomplete',
+          farmType: 'Ritual',
+          durationSeconds: 0,
+          netProfit: 999,
+          poeVersion: 'poe2',
+          createdAt: '2026-04-12T10:30:00.000Z'
+        },
+        {
+          id: 'result-complete',
+          farmType: 'Breach',
+          durationSeconds: 240,
+          netProfit: 88,
+          poeVersion: 'poe1',
+          createdAt: '2026-04-12T08:30:00.000Z'
+        }
+      ]
+    },
+    escapeHTML: (value) => String(value),
+    formatDuration: (seconds) => `duration:${seconds}`,
+    currencyHTML: (value, type, iconSize, poeVersion) => `profit:${value}:${type}:${iconSize}:${poeVersion}`,
+    timeAgo: (value) => `ago:${value}`,
+    getMapResultStoreModel: () => ({
+      filterMapResults(results, filters) {
+        filterCalls.push({
+          resultIds: results.map((entry) => entry.id),
+          filters: { ...filters }
+        });
+        return results;
+      }
+    })
+  });
+
+  context.renderMapResultHistory();
+
+  assert.deepEqual(filterCalls, [{
+    resultIds: ['result-complete'],
+    filters: { farmType: '' }
+  }]);
+  assert.match(elements.mapResultHistory.innerHTML, /result-complete/);
+  assert.doesNotMatch(elements.mapResultHistory.innerHTML, /result-incomplete/);
+});

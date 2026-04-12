@@ -434,6 +434,14 @@ test('map result history smoke: shows persisted results newest-first and filters
 
     await seedMapResults(page, [
       {
+        id: 'history-incomplete',
+        farmType: 'Ritual',
+        durationSeconds: 0,
+        netProfit: 999,
+        poeVersion: 'poe2',
+        createdAt: '2026-04-12T10:30:00.000Z'
+      },
+      {
         id: 'history-1',
         farmType: 'Ritual',
         durationSeconds: 300,
@@ -461,10 +469,12 @@ test('map result history smoke: shows persisted results newest-first and filters
 
     const historyItems = page.locator('#map-result-history .map-result-history-item');
     await expect(page.locator('#map-result-filter')).toBeVisible();
+    await expect(page.locator('#last-map-result-farm-type')).toContainText('Ritual');
     await expect(historyItems).toHaveCount(3);
     await expect(historyItems.nth(0)).toContainText('Ritual');
     await expect(historyItems.nth(1)).toContainText('Breach');
     await expect(historyItems.nth(2)).toContainText('Ritual');
+    await expect(page.locator('#map-result-history')).not.toContainText('history-incomplete');
 
     await page.locator('#map-result-filter').selectOption('Ritual');
 
