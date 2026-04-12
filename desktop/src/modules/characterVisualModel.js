@@ -23,6 +23,20 @@
     scion: { portraitKey: 'scion', badgeText: 'S', tone: 'gold', classLabel: 'Scion', portraitPath: 'assets/characters/poe1/scion.jpg' }
   };
 
+  const POE2_CLASS_VARIANTS = {
+    druid1: { portraitKey: 'druid', badgeText: 'D', tone: 'verdant', classLabel: 'Oracle', portraitPath: 'assets/characters/poe2/druid.png' },
+    druid2: { portraitKey: 'shaman', badgeText: 'S', tone: 'ember', classLabel: 'Shaman', portraitPath: 'assets/characters/poe2/druid-shaman.png' },
+    monk1: { portraitKey: 'monk', badgeText: 'M', tone: 'azure', classLabel: 'Acolyte of Chayula', portraitPath: 'assets/characters/poe2/monk.png' },
+    monk2: { portraitKey: 'monk', badgeText: 'M', tone: 'azure', classLabel: 'Invoker', portraitPath: 'assets/characters/poe2/monk.png' },
+    mercenary1: { portraitKey: 'mercenary', badgeText: 'M', tone: 'brass', classLabel: 'Witchhunter', portraitPath: 'assets/characters/poe2/mercenary.png' },
+    mercenary3: { portraitKey: 'mercenary', badgeText: 'M', tone: 'brass', classLabel: 'Gemling Legionnaire', portraitPath: 'assets/characters/poe2/mercenary.png' },
+    huntress1: { portraitKey: 'huntress', badgeText: 'H', tone: 'jade', classLabel: 'Amazon', portraitPath: 'assets/characters/poe2/huntress.png' },
+    ranger1: { portraitKey: 'ranger', badgeText: 'R', tone: 'jade', classLabel: 'Deadeye', portraitPath: 'assets/characters/poe2/ranger.png' },
+    witch1: { portraitKey: 'witch', badgeText: 'W', tone: 'violet', classLabel: 'Lich', portraitPath: 'assets/characters/poe2/witch.png' },
+    warrior1: { portraitKey: 'warrior', badgeText: 'W', tone: 'iron', classLabel: 'Smith of Kitava', portraitPath: 'assets/characters/poe2/warrior.png' },
+    warrior2: { portraitKey: 'warrior', badgeText: 'W', tone: 'iron', classLabel: 'Tactician', portraitPath: 'assets/characters/poe2/warrior.png' }
+  };
+
   function normalizeString(value) {
     const normalized = String(value ?? '').trim();
     return normalized || null;
@@ -30,6 +44,10 @@
 
   function normalizeKey(value) {
     return normalizeString(value)?.toLowerCase().replace(/\d+$/g, '').replace(/[^a-z0-9]+/g, '') || null;
+  }
+
+  function normalizeVariantKey(value) {
+    return normalizeString(value)?.toLowerCase().replace(/[^a-z0-9]+/g, '') || null;
   }
 
   function createInitials(name) {
@@ -48,14 +66,16 @@
   function deriveCharacterVisual(character = {}) {
     const className = normalizeString(character.className ?? character.class);
     const ascendancy = normalizeString(character.ascendancy);
+    const variantKey = normalizeVariantKey(className);
+    const variantVisual = variantKey ? POE2_CLASS_VARIANTS[variantKey] || null : null;
     const classKey = normalizeKey(className);
-    const visual = CLASS_VISUALS[classKey] || null;
+    const visual = variantVisual || CLASS_VISUALS[classKey] || null;
 
     if (visual) {
       return {
         ...visual,
         classLabel: visual.classLabel,
-        baseClassLabel: visual.classLabel,
+        baseClassLabel: CLASS_VISUALS[classKey]?.classLabel || visual.classLabel,
         detailLabel: ascendancy,
         fallbackInitials: createInitials(character.name),
         portraitPath: visual.portraitPath
