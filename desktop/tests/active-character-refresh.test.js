@@ -164,8 +164,9 @@ function loadFunctions(functionNames, contextOverrides = {}) {
 test('game version change schedules a delayed current-user refresh', async () => {
   const timers = [];
   const calls = [];
-  const context = loadFunctions(['scheduleActiveCharacterRefresh'], {
+  const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'scheduleActiveCharacterRefresh'], {
     activeCharacterRefreshTimer: null,
+    activeCharacterRefreshRequestId: 0,
     state: { currentUser: { id: 'user-1' } },
     window: {
       electronAPI: {
@@ -196,8 +197,9 @@ test('game version change schedules a delayed current-user refresh', async () =>
 test('refresh scheduler does not stack duplicate timers across repeated game-change events', () => {
   const cleared = [];
   const timers = [];
-  const context = loadFunctions(['scheduleActiveCharacterRefresh'], {
+  const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'scheduleActiveCharacterRefresh'], {
     activeCharacterRefreshTimer: null,
+    activeCharacterRefreshRequestId: 0,
     state: { currentUser: { id: 'user-1' } },
     window: {
       electronAPI: {
@@ -219,6 +221,49 @@ test('refresh scheduler does not stack duplicate timers across repeated game-cha
 
   assert.deepEqual(cleared, ['timer-1']);
   assert.equal(timers.length, 2);
+});
+
+test('refresh scheduler clears the pending timer when the detected game becomes null', () => {
+  const cleared = [];
+  const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'scheduleActiveCharacterRefresh'], {
+    activeCharacterRefreshTimer: 'timer-1',
+    activeCharacterRefreshRequestId: 0,
+    state: { currentUser: { id: 'user-1' } },
+    clearTimeout(timerId) {
+      cleared.push(timerId);
+    }
+  });
+
+  context.scheduleActiveCharacterRefresh({ version: null });
+
+  assert.deepEqual(cleared, ['timer-1']);
+});
+
+test('stale in-flight refresh does not overwrite a newer refresh generation', async () => {
+  const calls = [];
+  const timers = [];
+  const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'scheduleActiveCharacterRefresh'], {
+    activeCharacterRefreshTimer: null,
+    activeCharacterRefreshRequestId: 0,
+    state: { currentUser: { id: 'user-1' } },
+    window: {
+      electronAPI: {
+        getCurrentUser: async () => ({ user: { username: 'LateUser' }, capabilities: {} })
+      }
+    },
+    setTimeout(fn, delay) {
+      timers.push({ fn, delay });
+      return `timer-${timers.length}`;
+    },
+    clearTimeout() {},
+    setCurrentUser: (user) => calls.push(user.username)
+  });
+
+  context.scheduleActiveCharacterRefresh({ version: 'poe2' });
+  context.clearActiveCharacterRefreshTimers();
+  await timers[0].fn();
+
+  assert.deepEqual(calls, []);
 });
 
 test('syncRendererGameContext schedules an active-character refresh for detected games', () => {

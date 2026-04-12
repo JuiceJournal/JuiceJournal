@@ -259,6 +259,16 @@ let mapResultModelPromise = null;
 let capabilityModelPromise = null;
 let overlayStateModelPromise = null;
 let characterVisualModelPromise = null;
+let activeCharacterRefreshTimer = null;
+let activeCharacterRefreshRequestId = 0;
+
+function clearActiveCharacterRefreshTimers() {
+  if (activeCharacterRefreshTimer) {
+    clearTimeout(activeCharacterRefreshTimer);
+    activeCharacterRefreshTimer = null;
+  }
+  activeCharacterRefreshRequestId += 1;
+}
 
 function ensureSettingsModelLoaded() {
   if (window.settingsModel) {
@@ -856,20 +866,28 @@ function syncRendererGameContext(version, options = {}) {
 }
 
 function scheduleActiveCharacterRefresh({ version } = {}) {
-  if (!state.currentUser || !version) {
+  if (!version) {
+    clearActiveCharacterRefreshTimers();
     return;
   }
 
-  if (activeCharacterRefreshTimer) {
-    clearTimeout(activeCharacterRefreshTimer);
+  if (!state.currentUser) {
+    return;
   }
+
+  clearActiveCharacterRefreshTimers();
+  const requestId = activeCharacterRefreshRequestId;
 
   activeCharacterRefreshTimer = setTimeout(async () => {
     activeCharacterRefreshTimer = null;
 
     try {
       const result = await window.electronAPI.getCurrentUser();
-      if (result?.user) {
+      if (
+        requestId === activeCharacterRefreshRequestId
+        && state.currentUser
+        && result?.user
+      ) {
         setCurrentUser({
           ...result.user,
           capabilities: result.capabilities || {}
@@ -1793,6 +1811,7 @@ function setupIPCListeners() {
       if (data?.runtimeSession) {
         setRuntimeSessionState(data.runtimeSession);
       }
+      clearActiveCharacterRefreshTimers();
       syncRendererGameContext(null);
     });
   }
@@ -1972,6 +1991,7 @@ async function handleRegister(e) {
  * Cikis islemi
  */
 async function handleLogout() {
+  clearActiveCharacterRefreshTimers();
   await window.electronAPI.logout();
   state.currentUser = null;
   state.currentSession = null;

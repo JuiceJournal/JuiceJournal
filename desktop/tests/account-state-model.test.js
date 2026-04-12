@@ -402,6 +402,7 @@ test('renderer logout clears normalized account state', async () => {
   const context = loadFunctions(['handleLogout'], {
     state,
     stashState,
+    clearActiveCharacterRefreshTimers: () => calls.push(['clearActiveCharacterRefreshTimers']),
     window: {
       electronAPI: {
         logout: async () => calls.push(['logout'])
@@ -431,6 +432,7 @@ test('renderer logout clears normalized account state', async () => {
   assert.equal(stashState.lastMapResult, null);
   assert.equal(stashState.pricesSynced, false);
   assert.deepEqual(calls.map(([name]) => name), [
+    'clearActiveCharacterRefreshTimers',
     'logout',
     'closeSessionDrawer',
     'renderUserIdentity',
