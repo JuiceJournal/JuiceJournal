@@ -1287,7 +1287,7 @@ async function openPoeLoginFlow(startResponse, { redirectUrl, redirectUri, expec
           if (parsedAuthUrl.protocol !== 'https:' && parsedAuthUrl.protocol !== 'http:') {
             throw new Error('Invalid auth URL scheme — only https/http allowed');
           }
-          await shell.openExternal(startResponse.authUrl);
+          await openAuthUrlInBrowser(startResponse.authUrl);
         } catch (error) {
           clearTimeout(timeout);
           await closePoeAuthServer();
@@ -1299,6 +1299,24 @@ async function openPoeLoginFlow(startResponse, { redirectUrl, redirectUri, expec
         await closePoeAuthServer();
         reject(error);
       });
+  });
+}
+
+function openAuthUrlInBrowser(authUrl) {
+  return shell.openExternal(authUrl).catch((error) => {
+    if (process.platform !== 'win32') {
+      throw error;
+    }
+
+    return new Promise((resolve, reject) => {
+      execFile('cmd', ['/c', 'start', '', authUrl], (fallbackError) => {
+        if (fallbackError) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
   });
 }
 
@@ -1409,7 +1427,7 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
           if (parsedAuthUrl.protocol !== 'https:' && parsedAuthUrl.protocol !== 'http:') {
             throw new Error('Invalid auth URL scheme — only https/http allowed');
           }
-          await shell.openExternal(startResponse.authUrl);
+          await openAuthUrlInBrowser(startResponse.authUrl);
         } catch (error) {
           clearTimeout(timeout);
           await closePoeAuthServer();

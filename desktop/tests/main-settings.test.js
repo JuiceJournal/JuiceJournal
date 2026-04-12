@@ -231,6 +231,53 @@ test('main overlay window guard skips creation when disabled and creates when en
   ]);
 });
 
+test('openAuthUrlInBrowser uses shell.openExternal when it succeeds', async () => {
+  const calls = [];
+  const context = loadFunctions(['openAuthUrlInBrowser'], {
+    shell: {
+      openExternal: async (url) => {
+        calls.push(['openExternal', url]);
+      }
+    },
+    process: {
+      platform: 'win32'
+    },
+    execFile() {
+      calls.push(['execFile']);
+    }
+  });
+
+  await context.openAuthUrlInBrowser('https://www.pathofexile.com/oauth/authorize');
+
+  assert.deepEqual(calls, [['openExternal', 'https://www.pathofexile.com/oauth/authorize']]);
+});
+
+test('openAuthUrlInBrowser falls back to cmd start on Windows when shell.openExternal fails', async () => {
+  const calls = [];
+  const context = loadFunctions(['openAuthUrlInBrowser'], {
+    shell: {
+      openExternal: async (url) => {
+        calls.push(['openExternal', url]);
+        throw new Error('openExternal failed');
+      }
+    },
+    process: {
+      platform: 'win32'
+    },
+    execFile(command, args, callback) {
+      calls.push(['execFile', command, args]);
+      callback(null);
+    }
+  });
+
+  await context.openAuthUrlInBrowser('https://www.pathofexile.com/oauth/authorize');
+
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
+    ['openExternal', 'https://www.pathofexile.com/oauth/authorize'],
+    ['execFile', 'cmd', ['/c', 'start', '', 'https://www.pathofexile.com/oauth/authorize']]
+  ]);
+});
+
 test('main settings reject invalid apiUrl updates before any settings side effects occur', () => {
   const writes = [];
   let registerGlobalShortcutsCalls = 0;
