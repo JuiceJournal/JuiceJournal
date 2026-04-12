@@ -1944,7 +1944,9 @@ async function handleLogout() {
     renderCharacterSummaryCard();
   }
   resetDashboardSummary();
-  renderLatestMapResult();
+  if (typeof renderLatestMapResult === 'function') {
+    renderLatestMapResult();
+  }
   updateActiveSessionUI();
   renderSessionsList();
   renderRecentLoot();
@@ -2204,7 +2206,9 @@ function deriveCurrentMapResult() {
 async function loadMapResultHistory() {
   if (!state.currentUser) {
     state.mapResults = [];
-    renderLatestMapResult();
+    if (typeof renderLatestMapResult === 'function') {
+      renderLatestMapResult();
+    }
     return state.mapResults;
   }
 
@@ -2215,14 +2219,18 @@ async function loadMapResultHistory() {
     state.mapResults = [];
   }
 
-  renderLatestMapResult();
+  if (typeof renderLatestMapResult === 'function') {
+    renderLatestMapResult();
+  }
   return state.mapResults;
 }
 
 async function persistMapResultHistory(result) {
   const results = await window.electronAPI.saveMapResult(result);
   state.mapResults = Array.isArray(results) ? results : [];
-  renderLatestMapResult();
+  if (typeof renderLatestMapResult === 'function') {
+    renderLatestMapResult();
+  }
   return state.mapResults;
 }
 
