@@ -337,7 +337,10 @@ test('game-version change triggers active character refresh scheduling for poe2'
     renderAuditTrail() {},
     renderProfitReport() {},
     setRuntimeSessionState() {},
-    syncRendererGameContext() {},
+    syncRendererGameContext(version, options) {
+      calls.push(['syncRendererGameContext', version, options?.logPath || null]);
+      context.scheduleActiveCharacterRefresh({ version });
+    },
     refreshAccountStateFromCurrentUser() {},
     renderCharacterSummaryCard() {},
     scheduleActiveCharacterRefresh: (payload) => calls.push(payload),
@@ -356,6 +359,8 @@ test('game-version change triggers active character refresh scheduling for poe2'
   context.setupIPCListeners();
   context.window.electronAPI._handler({ version: 'poe2', logPath: 'F:/SteamLibrary/steamapps/common/Path of Exile 2/Client.txt' });
 
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].version, 'poe2');
+  assert.deepEqual(calls, [
+    ['syncRendererGameContext', 'poe2', 'F:/SteamLibrary/steamapps/common/Path of Exile 2/Client.txt'],
+    { version: 'poe2' }
+  ]);
 });
