@@ -308,3 +308,54 @@ test('syncRendererGameContext schedules an active-character refresh for detected
   assert.equal(scheduled.length, 1);
   assert.equal(scheduled[0].version, 'poe2');
 });
+
+test('game-version change triggers active character refresh scheduling for poe2', () => {
+  const calls = [];
+  const context = loadFunctions(['setupIPCListeners'], {
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        onMapEntered() {},
+        onMapExited() {},
+        onSessionStarted() {},
+        onSessionEnded() {},
+        onLootAdded() {},
+        onGameVersionChanged(handler) {
+          this._handler = handler;
+        },
+        onNavigate() {}
+      }
+    },
+    showToast() {},
+    formatDuration() { return '0m 0s'; },
+    refreshTrackerData() {},
+    updateActiveSessionUI() {},
+    ensureSessionClock() {},
+    stopSessionClock() {},
+    isPageActive() { return false; },
+    renderPendingSyncState() {},
+    renderAuditTrail() {},
+    renderProfitReport() {},
+    setRuntimeSessionState() {},
+    syncRendererGameContext() {},
+    refreshAccountStateFromCurrentUser() {},
+    renderCharacterSummaryCard() {},
+    scheduleActiveCharacterRefresh: (payload) => calls.push(payload),
+    stashState: { pricesSynced: false },
+    elements: { priceItemCount: { textContent: '' } },
+    currencyState: { poeVersion: 'poe1', type: '' },
+    document: { querySelectorAll: () => [] },
+    updateTypeFilterDropdown() {},
+    loadCurrencyLeagues() {},
+    loadCurrencyPrices() {},
+    clearActiveCharacterRefreshTimers() {},
+    navigateTo() {},
+    state: {}
+  });
+
+  context.setupIPCListeners();
+  context.window.electronAPI._handler({ version: 'poe2', logPath: 'F:/SteamLibrary/steamapps/common/Path of Exile 2/Client.txt' });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].version, 'poe2');
+});

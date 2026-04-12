@@ -1784,6 +1784,7 @@ function setupIPCListeners() {
       syncRendererGameContext(version, { logPath });
       refreshAccountStateFromCurrentUser();
       renderCharacterSummaryCard();
+      scheduleActiveCharacterRefresh({ version });
 
       // Clear cached prices (they're version-specific)
       stashState.pricesSynced = false;
