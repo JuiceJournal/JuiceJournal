@@ -120,6 +120,7 @@ const ERROR_MESSAGE_KEY_MAP = {
 };
 
 let sessionClockInterval = null;
+let activeCharacterRefreshTimer = null;
 
 // DOM Elementleri
 const elements = {
@@ -849,6 +850,35 @@ function syncRendererGameContext(version, options = {}) {
   if (typeof applyDashboardCapabilities === 'function') {
     applyDashboardCapabilities();
   }
+  if (typeof scheduleActiveCharacterRefresh === 'function') {
+    scheduleActiveCharacterRefresh({ version: normalizedDetectedVersion });
+  }
+}
+
+function scheduleActiveCharacterRefresh({ version } = {}) {
+  if (!state.currentUser || !version) {
+    return;
+  }
+
+  if (activeCharacterRefreshTimer) {
+    clearTimeout(activeCharacterRefreshTimer);
+  }
+
+  activeCharacterRefreshTimer = setTimeout(async () => {
+    activeCharacterRefreshTimer = null;
+
+    try {
+      const result = await window.electronAPI.getCurrentUser();
+      if (result?.user) {
+        setCurrentUser({
+          ...result.user,
+          capabilities: result.capabilities || {}
+        });
+      }
+    } catch {
+      // Ignore refresh failures; later game events can retry.
+    }
+  }, 3000);
 }
 
 function getResolvedCapabilityGameVersion(preferredVersion = null) {
