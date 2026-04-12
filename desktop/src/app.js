@@ -276,17 +276,14 @@ function clearActiveCharacterRefreshTimers() {
 }
 
 async function runActiveCharacterRefresh({ requestId } = {}) {
-  const currentRequestId = typeof activeCharacterRefreshRequestId === 'number'
-    ? activeCharacterRefreshRequestId
-    : 0;
   const expectedRequestId = typeof requestId === 'number'
     ? requestId
-    : currentRequestId;
+    : (typeof activeCharacterRefreshRequestId === 'number' ? activeCharacterRefreshRequestId : 0);
 
   try {
     const result = await window.electronAPI.getCurrentUser();
     if (
-      expectedRequestId !== currentRequestId
+      expectedRequestId !== activeCharacterRefreshRequestId
       || !state.currentUser
       || !result?.user
     ) {
