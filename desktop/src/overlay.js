@@ -5,12 +5,12 @@
     kicker: document.querySelector('[data-overlay-kicker]'),
     kickerLabel: document.querySelector('[data-overlay-kicker-label]'),
     pin: document.querySelector('[data-overlay-pin]'),
+    dismiss: document.querySelector('[data-overlay-dismiss]'),
     primary: document.querySelector('[data-overlay-primary]'),
     secondary: document.querySelector('[data-overlay-secondary]'),
     meta: document.querySelector('[data-overlay-meta]')
   };
   let passthroughEnabled = true;
-  let lastPointerEvent = null;
 
   function getOverlayModel() {
     return root.overlayStateModel || null;
@@ -126,25 +126,36 @@
   }
 
   function syncInteractivePassthrough(event) {
-    if (event) {
-      lastPointerEvent = {
-        clientX: event.clientX,
-        clientY: event.clientY
-      };
-    }
-
     if (!elements.pin || elements.pin.hidden) {
       setPointerPassthrough(true);
       return;
     }
 
-    const rect = elements.pin.getBoundingClientRect();
-    const isHoveringPin = event.clientX >= rect.left
-      && event.clientX <= rect.right
-      && event.clientY >= rect.top
-      && event.clientY <= rect.bottom;
+    const actionElements = [elements.pin, elements.dismiss].filter(Boolean).filter((element) => !element.hidden);
+    const isHoveringAction = actionElements.some((element) => {
+      const rect = element.getBoundingClientRect();
+      return event.clientX >= rect.left
+        && event.clientX <= rect.right
+        && event.clientY >= rect.top
+        && event.clientY <= rect.bottom;
+    });
 
-    setPointerPassthrough(!isHoveringPin);
+    setPointerPassthrough(!isHoveringAction);
+  }
+
+  async function syncCursorPassthroughFromMain() {
+    if (typeof root.electronAPI?.getOverlayCursorPosition !== 'function') {
+      return;
+    }
+
+    try {
+      const position = await root.electronAPI.getOverlayCursorPosition();
+      if (position) {
+        syncInteractivePassthrough(position);
+      }
+    } catch {
+      // Ignore overlay hover sync failures.
+    }
   }
 
   function renderState(input) {
@@ -171,10 +182,13 @@
       const showPin = state.mode === 'map-result' && visibility !== 'hidden';
       elements.pin.hidden = !showPin;
       elements.pin.setAttribute('aria-pressed', showPin && state.pinned ? 'true' : 'false');
+      if (elements.dismiss) {
+        elements.dismiss.hidden = !showPin;
+      }
       if (!showPin) {
         setPointerPassthrough(true);
-      } else if (lastPointerEvent) {
-        syncInteractivePassthrough(lastPointerEvent);
+      } else {
+        void syncCursorPassthroughFromMain();
       }
     }
 
@@ -207,6 +221,22 @@
         await root.electronAPI.toggleMapResultOverlayPin();
       } finally {
         elements.pin.disabled = false;
+        setPointerPassthrough(true);
+      }
+    });
+  }
+
+  if (elements.dismiss) {
+    elements.dismiss.addEventListener('click', async () => {
+      if (typeof root.electronAPI?.dismissMapResultOverlay !== 'function') {
+        return;
+      }
+
+      elements.dismiss.disabled = true;
+      try {
+        await root.electronAPI.dismissMapResultOverlay();
+      } finally {
+        elements.dismiss.disabled = false;
         setPointerPassthrough(true);
       }
     });

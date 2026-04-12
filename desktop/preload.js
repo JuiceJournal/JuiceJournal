@@ -57,6 +57,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showMapResultOverlay: (result, options) => ipcRenderer.invoke('show-map-result-overlay', result, options),
   showRuntimeOverlayPreview: (runtimeSession) => ipcRenderer.invoke('show-runtime-overlay-preview', runtimeSession),
   toggleMapResultOverlayPin: () => ipcRenderer.invoke('toggle-map-result-overlay-pin'),
+  dismissMapResultOverlay: () => ipcRenderer.invoke('dismiss-map-result-overlay'),
+  getOverlayCursorPosition: () => ipcRenderer.invoke('get-overlay-cursor-position'),
   setOverlayPointerPassthrough: (ignore) => ipcRenderer.invoke('set-overlay-pointer-passthrough', ignore),
   getDetectedGame: () => ipcRenderer.invoke('get-detected-game'),
 

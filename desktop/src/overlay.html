@@ -113,6 +113,31 @@
       transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
     }
 
+    .overlay-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      pointer-events: auto;
+    }
+
+    .overlay-dismiss {
+      border: 1px solid rgba(242, 141, 132, 0.28);
+      border-radius: 999px;
+      background: rgba(12, 14, 18, 0.72);
+      color: var(--overlay-text);
+      padding: 4px 9px;
+      font: inherit;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+    }
+
+    .overlay-dismiss[hidden] {
+      display: none;
+    }
+
     .overlay-pin[hidden] {
       display: none;
     }
@@ -184,7 +209,10 @@
     <section class="overlay-content">
       <div class="overlay-kicker" data-overlay-kicker>
         <span class="overlay-kicker-label" data-overlay-kicker-label>Juice Journal</span>
-        <button class="overlay-pin" type="button" data-overlay-pin aria-pressed="false" hidden>Pin</button>
+        <div class="overlay-actions">
+          <button class="overlay-pin" type="button" data-overlay-pin aria-pressed="false" hidden>Pin</button>
+          <button class="overlay-dismiss" type="button" data-overlay-dismiss hidden>Dismiss</button>
+        </div>
       </div>
       <div class="overlay-primary" data-overlay-primary>Waiting for game</div>
       <div class="overlay-secondary-row">

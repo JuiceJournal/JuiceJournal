@@ -571,6 +571,10 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     await page.waitForTimeout(350);
     await expect(overlayWindow.locator('main[data-overlay-mode="map-result"]')).toBeVisible();
     await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText('Expedition');
+
+    await overlayWindow.locator('[data-overlay-dismiss]').click();
+    await expect(overlayWindow.locator('main[data-overlay-mode="runtime"]')).toBeVisible({ timeout: 2000 });
+    await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText(SMOKE_USER.selectedCharacter.name);
   } catch (error) {
     testError = error;
   } finally {

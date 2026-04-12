@@ -1644,6 +1644,12 @@ function toggleMapResultOverlayPin() {
   return updateOverlayWindow();
 }
 
+function dismissMapResultOverlay() {
+  overlayMapResultState = null;
+  clearOverlayMapResultDismissTimer();
+  return updateOverlayWindow();
+}
+
 function buildOverlayState({ character = overlayCharacterState, runtimeSession = overlayRuntimeState } = {}) {
   const mapResultState = deriveMapResultOverlayState({
     overlayEnabled: isOverlayEnabled(),
@@ -3045,6 +3051,25 @@ function setupIPC() {
   ipcMain.handle('toggle-map-result-overlay-pin', async () => {
     assertDesktopUserAuthenticated();
     return toggleMapResultOverlayPin();
+  });
+
+  ipcMain.handle('dismiss-map-result-overlay', async () => {
+    assertDesktopUserAuthenticated();
+    return dismissMapResultOverlay();
+  });
+
+  ipcMain.handle('get-overlay-cursor-position', async () => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) {
+      return null;
+    }
+
+    const cursorPoint = screen.getCursorScreenPoint();
+    const bounds = overlayWindow.getBounds();
+
+    return {
+      clientX: cursorPoint.x - bounds.x,
+      clientY: cursorPoint.y - bounds.y
+    };
   });
 
   ipcMain.handle('set-overlay-pointer-passthrough', async (event, ignore = true) => {
