@@ -1952,6 +1952,13 @@ async function handleLogout() {
   state.account = null;
   state.runtimeSession = null;
   state.overlay = null;
+  stashState.beforeSnapshotId = null;
+  stashState.afterSnapshotId = null;
+  stashState.beforeSnapshot = null;
+  stashState.afterSnapshot = null;
+  stashState.mapResultContext = null;
+  stashState.lastMapResult = null;
+  stashState.pricesSynced = false;
   closeSessionDrawer();
   renderUserIdentity();
   if (typeof renderCharacterSummaryCard === 'function') {
@@ -2186,7 +2193,7 @@ function getSelectedTrackerContext() {
   };
 }
 
-function deriveCurrentMapResult() {
+function deriveCurrentMapResult(profitReport = null) {
   const { deriveMapResult } = getMapResultModel();
   const { listFarmTypes } = getFarmTypeModel();
   const capturedContext = stashState.mapResultContext || {};
@@ -2214,6 +2221,7 @@ function deriveCurrentMapResult() {
     runtimeSession,
     beforeSnapshot: stashState.beforeSnapshot,
     afterSnapshot: stashState.afterSnapshot,
+    profitReport,
     characterSummary,
     accountName,
     poeVersion
@@ -2281,7 +2289,9 @@ function renderLatestMapResult() {
     return;
   }
 
-  const latest = state.mapResults?.[0] || null;
+  const latest = Array.isArray(state.mapResults)
+    ? state.mapResults.find((result) => Number(result?.durationSeconds || 0) > 0) || null
+    : null;
   const hasCompletedResult = latest && Number(latest.durationSeconds || 0) > 0;
 
   if (!hasCompletedResult) {
@@ -3199,9 +3209,9 @@ async function handleCalculateProfit() {
       return;
     }
 
-    stashState.lastMapResult = deriveCurrentMapResult();
+    stashState.lastMapResult = deriveCurrentMapResult(report);
     renderProfitReport(report);
-    if (stashState.lastMapResult) {
+    if (stashState.lastMapResult && Number(stashState.lastMapResult.durationSeconds || 0) > 0) {
       if (typeof window.electronAPI?.showMapResultOverlay === 'function') {
         try {
           await window.electronAPI.showMapResultOverlay(stashState.lastMapResult);

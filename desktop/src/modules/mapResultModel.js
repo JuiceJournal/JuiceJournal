@@ -118,6 +118,36 @@
     return normalizeString(item.currencyCode, 'chaos');
   }
 
+  function normalizeReportEntry(entry = {}) {
+    return {
+      itemKey: getItemKey(entry),
+      label: normalizeString(entry.name, 'Unknown Item'),
+      quantityDelta: Math.abs(normalizeNumber(entry.quantityDiff, 0)),
+      valueDelta: Math.abs(normalizeNumber(entry.totalChaosValue, 0)),
+      currencyCode: 'chaos'
+    };
+  }
+
+  function deriveProfitValuesFromReport(profitReport = {}) {
+    const summary = profitReport?.summary || {};
+    const gained = Array.isArray(profitReport?.gained) ? profitReport.gained : [];
+    const lost = Array.isArray(profitReport?.lost) ? profitReport.lost : [];
+
+    return {
+      inputValue: Math.abs(normalizeNumber(summary.totalLostChaos, 0)),
+      outputValue: Math.abs(normalizeNumber(summary.totalGainedChaos, 0)),
+      netProfit: normalizeNumber(summary.netProfitChaos, 0),
+      topInputs: lost
+        .map((entry) => normalizeReportEntry(entry))
+        .sort((a, b) => b.valueDelta - a.valueDelta)
+        .slice(0, MAX_TOP_ITEMS),
+      topOutputs: gained
+        .map((entry) => normalizeReportEntry(entry))
+        .sort((a, b) => b.valueDelta - a.valueDelta)
+        .slice(0, MAX_TOP_ITEMS)
+    };
+  }
+
   function createDeltaEntry(itemKey, sourceItem, quantityDelta, valueDelta) {
     return {
       itemKey,
@@ -172,6 +202,7 @@
     runtimeSession,
     beforeSnapshot,
     afterSnapshot,
+    profitReport,
     characterSummary,
     accountName,
     poeVersion
@@ -181,41 +212,50 @@
       return null;
     }
 
-    const beforeIndex = indexSnapshotItems(beforeSnapshot);
-    const afterIndex = indexSnapshotItems(afterSnapshot);
-    const allKeys = new Set([...beforeIndex.keys(), ...afterIndex.keys()]);
-    const topInputs = [];
-    const topOutputs = [];
     let inputValue = 0;
     let outputValue = 0;
+    let netProfit = 0;
+    let topInputs = [];
+    let topOutputs = [];
 
-    allKeys.forEach((itemKey) => {
-      const beforeItem = beforeIndex.get(itemKey);
-      const afterItem = afterIndex.get(itemKey);
-      const beforeQuantity = normalizeNumber(beforeItem?.quantity, 0);
-      const afterQuantity = normalizeNumber(afterItem?.quantity, 0);
-      const quantityDelta = afterQuantity - beforeQuantity;
-      const sourceItem = quantityDelta < 0
-        ? (beforeItem || afterItem)
-        : (afterItem || beforeItem);
-      const chaosValue = normalizeNumber(sourceItem?.chaosValue, 0);
-      const valueDelta = Math.abs(quantityDelta * chaosValue);
+    if (profitReport && typeof profitReport === 'object') {
+      ({ inputValue, outputValue, netProfit, topInputs, topOutputs } = deriveProfitValuesFromReport(profitReport));
+    } else {
+      const beforeIndex = indexSnapshotItems(beforeSnapshot);
+      const afterIndex = indexSnapshotItems(afterSnapshot);
+      const allKeys = new Set([...beforeIndex.keys(), ...afterIndex.keys()]);
 
-      if (valueDelta <= 0) {
-        return;
-      }
+      allKeys.forEach((itemKey) => {
+        const beforeItem = beforeIndex.get(itemKey);
+        const afterItem = afterIndex.get(itemKey);
+        const beforeQuantity = normalizeNumber(beforeItem?.quantity, 0);
+        const afterQuantity = normalizeNumber(afterItem?.quantity, 0);
+        const quantityDelta = afterQuantity - beforeQuantity;
+        const sourceItem = quantityDelta < 0
+          ? (beforeItem || afterItem)
+          : (afterItem || beforeItem);
+        const chaosValue = normalizeNumber(sourceItem?.chaosValue, 0);
+        const valueDelta = Math.abs(quantityDelta * chaosValue);
 
-      if (quantityDelta < 0) {
-        inputValue += valueDelta;
-        topInputs.push(createDeltaEntry(itemKey, sourceItem, Math.abs(quantityDelta), valueDelta));
-        return;
-      }
+        if (valueDelta <= 0) {
+          return;
+        }
 
-      outputValue += valueDelta;
-      topOutputs.push(createDeltaEntry(itemKey, sourceItem, Math.abs(quantityDelta), valueDelta));
-    });
+        if (quantityDelta < 0) {
+          inputValue += valueDelta;
+          topInputs.push(createDeltaEntry(itemKey, sourceItem, Math.abs(quantityDelta), valueDelta));
+          return;
+        }
 
-    const netProfit = outputValue - inputValue;
+        outputValue += valueDelta;
+        topOutputs.push(createDeltaEntry(itemKey, sourceItem, Math.abs(quantityDelta), valueDelta));
+      });
+
+      netProfit = outputValue - inputValue;
+      topInputs = topInputs.sort((a, b) => b.valueDelta - a.valueDelta).slice(0, MAX_TOP_ITEMS);
+      topOutputs = topOutputs.sort((a, b) => b.valueDelta - a.valueDelta).slice(0, MAX_TOP_ITEMS);
+    }
+
     const lastCompletedInstance = getLastCompletedInstance(runtimeSession);
     const createdAt = getCreatedAt(beforeSnapshot, afterSnapshot);
 
@@ -233,8 +273,8 @@
       outputValue,
       netProfit,
       profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral',
-      topInputs: topInputs.sort((a, b) => b.valueDelta - a.valueDelta).slice(0, MAX_TOP_ITEMS),
-      topOutputs: topOutputs.sort((a, b) => b.valueDelta - a.valueDelta).slice(0, MAX_TOP_ITEMS),
+      topInputs,
+      topOutputs,
       createdAt
     };
   }

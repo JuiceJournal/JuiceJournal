@@ -3136,6 +3136,9 @@ function setupIPC() {
     store.set('currentUserId', null);
     apiClient.setToken(null);
     currentSession = null;
+    if (stashAnalyzer) {
+      stashAnalyzer.clearAll();
+    }
     overlayMapResultState = null;
     clearOverlayMapResultDismissTimer();
     updateOverlayWindow({ character: null });

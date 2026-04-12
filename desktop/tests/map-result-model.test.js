@@ -452,6 +452,58 @@ test('map result model matches stash analyzer when snapshot item casing differs'
   assert.equal(result.netProfit, report.summary.netProfitChaos);
 });
 
+test('map result model prefers canonical profit report totals when provided', () => {
+  const deriveMapResult = getMapResultModelExport('deriveMapResult');
+
+  const result = deriveMapResult({
+    farmType: { id: 'ritual', label: 'Ritual' },
+    runtimeSession: {
+      sessionId: 'runtime-1',
+      lastCompletedInstance: {
+        durationSeconds: 185,
+        status: 'completed'
+      }
+    },
+    beforeSnapshot: createSnapshot([
+      { itemKey: 'chaos::currency', baseType: 'Chaos Orb', category: 'currency', quantity: 10, chaosValue: 1, totalChaosValue: 10 }
+    ]),
+    afterSnapshot: createSnapshot([
+      { itemKey: 'chaos::currency', baseType: 'Chaos Orb', category: 'currency', quantity: 11, chaosValue: 999, totalChaosValue: 10989 }
+    ]),
+    profitReport: {
+      gained: [
+        { name: 'Divine Orb', category: 'currency', quantityDiff: 1, totalChaosValue: 120 }
+      ],
+      lost: [
+        { name: 'Breach Scarab', category: 'currency', quantityDiff: -2, totalChaosValue: 24 }
+      ],
+      summary: {
+        totalGainedChaos: 120,
+        totalLostChaos: 24,
+        netProfitChaos: 96
+      }
+    }
+  });
+
+  assert.equal(result.inputValue, 24);
+  assert.equal(result.outputValue, 120);
+  assert.equal(result.netProfit, 96);
+  assert.deepEqual(result.topOutputs, [{
+    itemKey: 'divine orb::currency',
+    label: 'Divine Orb',
+    quantityDelta: 1,
+    valueDelta: 120,
+    currencyCode: 'chaos'
+  }]);
+  assert.deepEqual(result.topInputs, [{
+    itemKey: 'breach scarab::currency',
+    label: 'Breach Scarab',
+    quantityDelta: 2,
+    valueDelta: 24,
+    currencyCode: 'chaos'
+  }]);
+});
+
 test('map result model is deterministic for the same snapshot inputs', () => {
   const deriveMapResult = getMapResultModelExport('deriveMapResult');
   const input = {
@@ -567,6 +619,7 @@ test('renderer helper derives the current map result from snapshot-captured cont
     runtimeSession: state.runtimeSession,
     beforeSnapshot: stashState.beforeSnapshot,
     afterSnapshot: stashState.afterSnapshot,
+    profitReport: null,
     characterSummary: stashState.mapResultContext.characterSummary,
     accountName: 'CapturedAccount',
     poeVersion: 'poe2'
@@ -639,6 +692,7 @@ test('renderer helper does not leak live account state when snapshot context is 
     runtimeSession: stashState.mapResultContext.runtimeSession,
     beforeSnapshot: stashState.beforeSnapshot,
     afterSnapshot: stashState.afterSnapshot,
+    profitReport: null,
     characterSummary: { league: 'Snapshot League' },
     accountName: 'SnapshotAccount',
     poeVersion: 'poe2'

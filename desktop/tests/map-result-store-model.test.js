@@ -435,3 +435,9 @@ test('desktop main stash snapshot payload keeps timestamp metadata for later map
   assert.match(source, /timestamp:\s*snapshot\.timestamp/);
   assert.match(source, /league:\s*snapshot\.league/);
 });
+
+test('desktop main logout clears stored stash snapshots before switching users', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+
+  assert.match(source, /if \(stashAnalyzer\) \{\s*stashAnalyzer\.clearAll\(\);/);
+});

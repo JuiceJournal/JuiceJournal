@@ -390,8 +390,18 @@ test('renderer logout clears normalized account state', async () => {
       selectedCharacter: { id: 'char-1', name: 'MainOne' }
     }
   };
+  const stashState = {
+    beforeSnapshotId: 'before',
+    afterSnapshotId: 'after',
+    beforeSnapshot: { items: [{}] },
+    afterSnapshot: { items: [{}] },
+    mapResultContext: { farmTypeId: 'ritual' },
+    lastMapResult: { id: 'map-result-1' },
+    pricesSynced: true
+  };
   const context = loadFunctions(['handleLogout'], {
     state,
+    stashState,
     window: {
       electronAPI: {
         logout: async () => calls.push(['logout'])
@@ -413,6 +423,13 @@ test('renderer logout clears normalized account state', async () => {
   assert.equal(state.currentUser, null);
   assert.equal(Array.isArray(state.mapResults), true);
   assert.equal(state.mapResults.length, 0);
+  assert.equal(stashState.beforeSnapshotId, null);
+  assert.equal(stashState.afterSnapshotId, null);
+  assert.equal(stashState.beforeSnapshot, null);
+  assert.equal(stashState.afterSnapshot, null);
+  assert.equal(stashState.mapResultContext, null);
+  assert.equal(stashState.lastMapResult, null);
+  assert.equal(stashState.pricesSynced, false);
   assert.deepEqual(calls.map(([name]) => name), [
     'logout',
     'closeSessionDrawer',
