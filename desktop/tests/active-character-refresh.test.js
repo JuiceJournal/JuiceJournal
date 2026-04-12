@@ -164,8 +164,9 @@ function loadFunctions(functionNames, contextOverrides = {}) {
 test('game version change schedules a delayed current-user refresh', async () => {
   const timers = [];
   const calls = [];
-  const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'scheduleActiveCharacterRefresh'], {
+  const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'runActiveCharacterRefresh', 'scheduleActiveCharacterRefresh'], {
     activeCharacterRefreshTimer: null,
+    activeCharacterRefreshRetryTimer: null,
     activeCharacterRefreshRequestId: 0,
     state: { currentUser: { id: 'user-1' } },
     window: {
@@ -197,8 +198,9 @@ test('game version change schedules a delayed current-user refresh', async () =>
 test('refresh scheduler does not stack duplicate timers across repeated game-change events', () => {
   const cleared = [];
   const timers = [];
-  const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'scheduleActiveCharacterRefresh'], {
+  const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'runActiveCharacterRefresh', 'scheduleActiveCharacterRefresh'], {
     activeCharacterRefreshTimer: null,
+    activeCharacterRefreshRetryTimer: null,
     activeCharacterRefreshRequestId: 0,
     state: { currentUser: { id: 'user-1' } },
     window: {
@@ -225,8 +227,9 @@ test('refresh scheduler does not stack duplicate timers across repeated game-cha
 
 test('refresh scheduler clears the pending timer when the detected game becomes null', () => {
   const cleared = [];
-  const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'scheduleActiveCharacterRefresh'], {
+  const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'runActiveCharacterRefresh', 'scheduleActiveCharacterRefresh'], {
     activeCharacterRefreshTimer: 'timer-1',
+    activeCharacterRefreshRetryTimer: null,
     activeCharacterRefreshRequestId: 0,
     state: { currentUser: { id: 'user-1' } },
     clearTimeout(timerId) {
@@ -242,8 +245,9 @@ test('refresh scheduler clears the pending timer when the detected game becomes 
 test('stale in-flight refresh does not overwrite a newer refresh generation', async () => {
   const calls = [];
   const timers = [];
-  const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'scheduleActiveCharacterRefresh'], {
+  const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'runActiveCharacterRefresh', 'scheduleActiveCharacterRefresh'], {
     activeCharacterRefreshTimer: null,
+    activeCharacterRefreshRetryTimer: null,
     activeCharacterRefreshRequestId: 0,
     state: { currentUser: { id: 'user-1' } },
     window: {
@@ -264,6 +268,60 @@ test('stale in-flight refresh does not overwrite a newer refresh generation', as
   await timers[0].fn();
 
   assert.deepEqual(calls, []);
+});
+
+test('failed character refresh keeps the previous character visible', async () => {
+  const calls = [];
+  const existingUser = { username: 'Esquetta4179' };
+  const context = loadFunctions(['runActiveCharacterRefresh'], {
+    state: { currentUser: existingUser },
+    window: {
+      electronAPI: {
+        getCurrentUser: async () => {
+          throw new Error('backend unavailable');
+        }
+      }
+    },
+    setCurrentUser: () => calls.push(['setCurrentUser'])
+  });
+
+  const result = await context.runActiveCharacterRefresh();
+
+  assert.equal(result, false);
+  assert.equal(context.state.currentUser, existingUser);
+  assert.deepEqual(calls, []);
+});
+
+test('failed scheduled refresh retries once after 5 seconds', async () => {
+  const timers = [];
+  let attempts = 0;
+  const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'runActiveCharacterRefresh', 'scheduleActiveCharacterRefresh'], {
+    activeCharacterRefreshTimer: null,
+    activeCharacterRefreshRetryTimer: null,
+    activeCharacterRefreshRequestId: 0,
+    state: { currentUser: { id: 'user-1' } },
+    window: {
+      electronAPI: {
+        getCurrentUser: async () => {
+          attempts += 1;
+          throw new Error('backend unavailable');
+        }
+      }
+    },
+    setTimeout(fn, delay) {
+      timers.push({ fn, delay });
+      return `timer-${timers.length}`;
+    },
+    clearTimeout() {},
+    setCurrentUser() {}
+  });
+
+  context.scheduleActiveCharacterRefresh({ version: 'poe2' });
+
+  await timers[0].fn();
+
+  assert.equal(attempts, 1);
+  assert.equal(timers[1].delay, 5000);
 });
 
 test('syncRendererGameContext schedules an active-character refresh for detected games', () => {

@@ -260,6 +260,7 @@ let capabilityModelPromise = null;
 let overlayStateModelPromise = null;
 let characterVisualModelPromise = null;
 let activeCharacterRefreshTimer = null;
+let activeCharacterRefreshRetryTimer = null;
 let activeCharacterRefreshRequestId = 0;
 
 function clearActiveCharacterRefreshTimers() {
@@ -267,7 +268,39 @@ function clearActiveCharacterRefreshTimers() {
     clearTimeout(activeCharacterRefreshTimer);
     activeCharacterRefreshTimer = null;
   }
+  if (activeCharacterRefreshRetryTimer) {
+    clearTimeout(activeCharacterRefreshRetryTimer);
+    activeCharacterRefreshRetryTimer = null;
+  }
   activeCharacterRefreshRequestId += 1;
+}
+
+async function runActiveCharacterRefresh({ requestId } = {}) {
+  const currentRequestId = typeof activeCharacterRefreshRequestId === 'number'
+    ? activeCharacterRefreshRequestId
+    : 0;
+  const expectedRequestId = typeof requestId === 'number'
+    ? requestId
+    : currentRequestId;
+
+  try {
+    const result = await window.electronAPI.getCurrentUser();
+    if (
+      expectedRequestId !== currentRequestId
+      || !state.currentUser
+      || !result?.user
+    ) {
+      return false;
+    }
+
+    setCurrentUser({
+      ...result.user,
+      capabilities: result.capabilities || {}
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function ensureSettingsModelLoaded() {
@@ -880,21 +913,13 @@ function scheduleActiveCharacterRefresh({ version } = {}) {
 
   activeCharacterRefreshTimer = setTimeout(async () => {
     activeCharacterRefreshTimer = null;
+    const refreshed = await runActiveCharacterRefresh({ requestId });
 
-    try {
-      const result = await window.electronAPI.getCurrentUser();
-      if (
-        requestId === activeCharacterRefreshRequestId
-        && state.currentUser
-        && result?.user
-      ) {
-        setCurrentUser({
-          ...result.user,
-          capabilities: result.capabilities || {}
-        });
-      }
-    } catch {
-      // Ignore refresh failures; later game events can retry.
+    if (!refreshed && requestId === activeCharacterRefreshRequestId && state.currentUser) {
+      activeCharacterRefreshRetryTimer = setTimeout(async () => {
+        activeCharacterRefreshRetryTimer = null;
+        await runActiveCharacterRefresh({ requestId });
+      }, 5000);
     }
   }, 3000);
 }
