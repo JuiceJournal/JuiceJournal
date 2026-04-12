@@ -2256,8 +2256,9 @@ function renderLatestMapResult() {
   }
 
   const latest = state.mapResults?.[0] || null;
+  const hasCompletedResult = latest && Number(latest.durationSeconds || 0) > 0;
 
-  if (!latest) {
+  if (!hasCompletedResult) {
     elements.lastMapResultCard.dataset.resultState = 'empty';
     elements.lastMapResultFarmType.textContent = 'No completed map yet';
     elements.lastMapResultDuration.textContent = '—';

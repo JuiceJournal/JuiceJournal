@@ -339,6 +339,51 @@ test('renderer shows an empty last map result state when no completed result exi
   assert.equal(elements.lastMapResultProfit.innerHTML, '—');
 });
 
+test('renderer keeps the last map result card empty when the latest result has no completed duration', () => {
+  const elements = {
+    lastMapResultCard: {
+      dataset: {
+        resultState: 'ready'
+      }
+    },
+    lastMapResultFarmType: {
+      textContent: 'Old value'
+    },
+    lastMapResultDuration: {
+      textContent: '12m 34s'
+    },
+    lastMapResultProfit: {
+      innerHTML: '123c'
+    }
+  };
+  const context = loadFunctions(['renderLatestMapResult'], {
+    elements,
+    state: {
+      mapResults: [
+        {
+          farmType: 'Ritual',
+          durationSeconds: 0,
+          netProfit: 127,
+          poeVersion: 'poe2'
+        }
+      ]
+    },
+    formatDuration: () => {
+      throw new Error('formatDuration should not be called for incomplete results');
+    },
+    currencyHTML: () => {
+      throw new Error('currencyHTML should not be called for incomplete results');
+    }
+  });
+
+  context.renderLatestMapResult();
+
+  assert.equal(elements.lastMapResultCard.dataset.resultState, 'empty');
+  assert.equal(elements.lastMapResultFarmType.textContent, 'No completed map yet');
+  assert.equal(elements.lastMapResultDuration.textContent, '—');
+  assert.equal(elements.lastMapResultProfit.innerHTML, '—');
+});
+
 test('renderer projects only the latest map result into the dashboard card', () => {
   const elements = {
     lastMapResultCard: {
