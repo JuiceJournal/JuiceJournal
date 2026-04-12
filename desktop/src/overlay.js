@@ -10,6 +10,7 @@
     meta: document.querySelector('[data-overlay-meta]')
   };
   let passthroughEnabled = true;
+  let lastPointerEvent = null;
 
   function getOverlayModel() {
     return root.overlayStateModel || null;
@@ -125,6 +126,13 @@
   }
 
   function syncInteractivePassthrough(event) {
+    if (event) {
+      lastPointerEvent = {
+        clientX: event.clientX,
+        clientY: event.clientY
+      };
+    }
+
     if (!elements.pin || elements.pin.hidden) {
       setPointerPassthrough(true);
       return;
@@ -165,6 +173,8 @@
       elements.pin.setAttribute('aria-pressed', showPin && state.pinned ? 'true' : 'false');
       if (!showPin) {
         setPointerPassthrough(true);
+      } else if (lastPointerEvent) {
+        syncInteractivePassthrough(lastPointerEvent);
       }
     }
 
@@ -197,6 +207,7 @@
         await root.electronAPI.toggleMapResultOverlayPin();
       } finally {
         elements.pin.disabled = false;
+        setPointerPassthrough(true);
       }
     });
   }

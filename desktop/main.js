@@ -1618,7 +1618,7 @@ function showMapResultOverlay(result, options = {}) {
     completedResult: result,
     currentOverlayState: overlayMapResultState,
     now: options.now ?? Date.now(),
-    durationMs: options.durationMs ?? 10_000
+    durationMs: options.durationMs ?? MAP_RESULT_OVERLAY_DURATION_MS
   });
 
   scheduleOverlayMapResultDismiss();
@@ -3035,6 +3035,11 @@ function setupIPC() {
   ipcMain.handle('show-map-result-overlay', async (event, result, options = {}) => {
     assertDesktopUserAuthenticated();
     return showMapResultOverlay(result, options || {});
+  });
+
+  ipcMain.handle('show-runtime-overlay-preview', async (event, runtimeSession) => {
+    assertDesktopUserAuthenticated();
+    return updateOverlayWindow({ runtimeSession: runtimeSession || null });
   });
 
   ipcMain.handle('toggle-map-result-overlay-pin', async () => {
