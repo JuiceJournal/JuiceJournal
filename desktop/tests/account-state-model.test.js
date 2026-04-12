@@ -272,6 +272,35 @@ test('account state model selects the active game character from poe1 and poe2 p
   assert.equal(result.charactersByGame.poe2[0].name, 'PoeTwoShaman');
 });
 
+test('refreshed poe2 payload prefers selectedCharacterByGame for the active game over stale selection fields', () => {
+  const deriveAccountState = getAccountStateModelExport('deriveAccountState');
+
+  const result = deriveAccountState({
+    accountName: 'Esquetta#4179',
+    activePoeVersion: 'poe2',
+    selectedCharacterId: 'char-koca',
+    selectedCharacterByGame: { poe2: 'char-kellee' },
+    selectedCharacter: {
+      id: 'char-koca',
+      name: 'KocaAyVeMasha',
+      level: 96,
+      class: 'Druid2',
+      league: 'Fate of the Vaal',
+      poeVersion: 'poe2'
+    },
+    cachedAccountState: {
+      selectedCharacterByGame: { poe2: 'char-koca' }
+    },
+    characters: [
+      { id: 'char-koca', name: 'KocaAyVeMasha', level: 96, class: 'Druid2', league: 'Fate of the Vaal', poeVersion: 'poe2' },
+      { id: 'char-kellee', name: 'KELLEE', level: 92, class: 'Monk2', league: 'Standard', poeVersion: 'poe2' }
+    ]
+  });
+
+  assert.equal(result.selectedCharacter.id, 'char-kellee');
+  assert.equal(result.summary.name, 'KELLEE');
+});
+
 test('account state model falls back to first character for active game when no selected id exists', () => {
   const deriveAccountState = getAccountStateModelExport('deriveAccountState');
 
