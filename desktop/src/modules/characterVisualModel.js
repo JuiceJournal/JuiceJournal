@@ -22,7 +22,7 @@
   }
 
   const CLASS_VISUALS = {
-    shaman: createBaseVisual('poe2', 'shaman', 'S', 'ember', 'Shaman', 'assets/characters/poe2/druid-shaman.png'),
+    shaman: createBaseVisual('poe2', 'shaman', 'S', 'ember', 'Shaman', 'assets/characters/poe2/druid-shaman.png', { bannerKey: 'druid-shaman', bannerPath: 'assets/characters/banners/poe2/druid-shaman.webp' }),
     druid: createBaseVisual('poe2', 'druid', 'D', 'verdant', 'Druid', 'assets/characters/poe2/druid.png'),
     ranger: createBaseVisual('poe1', 'ranger', 'R', 'jade', 'Ranger', 'assets/characters/poe1/ranger.jpg'),
     witch: createBaseVisual('poe1', 'witch', 'W', 'violet', 'Witch', 'assets/characters/poe1/witch.jpg'),
@@ -40,12 +40,12 @@
 
   const POE2_CLASS_VARIANTS = {
     druid1: createBaseVisual('poe2', 'druid', 'D', 'verdant', 'Oracle', 'assets/characters/poe2/druid.png'),
-    druid2: createBaseVisual('poe2', 'shaman', 'S', 'ember', 'Shaman', 'assets/characters/poe2/druid-shaman.png'),
+    druid2: createBaseVisual('poe2', 'shaman', 'S', 'ember', 'Shaman', 'assets/characters/poe2/druid-shaman.png', { bannerKey: 'druid-shaman', bannerPath: 'assets/characters/banners/poe2/druid-shaman.webp' }),
     monk1: createBaseVisual('poe2', 'monk', 'M', 'azure', 'Acolyte of Chayula', 'assets/characters/poe2/monk.png'),
-    monk2: createBaseVisual('poe2', 'monk', 'M', 'azure', 'Invoker', 'assets/characters/poe2/monk.png', { bannerKey: 'monk-invoker' }),
+    monk2: createBaseVisual('poe2', 'monk', 'M', 'azure', 'Invoker', 'assets/characters/poe2/monk.png', { bannerKey: 'monk-invoker', bannerPath: 'assets/characters/banners/poe2/monk-invoker.webp' }),
     mercenary1: createBaseVisual('poe2', 'mercenary', 'M', 'brass', 'Witchhunter', 'assets/characters/poe2/mercenary.png'),
-    mercenary3: createBaseVisual('poe2', 'mercenary', 'M', 'brass', 'Gemling Legionnaire', 'assets/characters/poe2/mercenary.png'),
-    huntress1: createBaseVisual('poe2', 'huntress', 'H', 'jade', 'Amazon', 'assets/characters/poe2/huntress.png'),
+    mercenary3: createBaseVisual('poe2', 'mercenary', 'M', 'brass', 'Gemling Legionnaire', 'assets/characters/poe2/mercenary.png', { bannerKey: 'mercenary-gemling', bannerPath: 'assets/characters/banners/poe2/mercenary-gemling.webp' }),
+    huntress1: createBaseVisual('poe2', 'huntress', 'H', 'jade', 'Amazon', 'assets/characters/poe2/huntress.png', { bannerKey: 'huntress-amazon', bannerPath: 'assets/characters/banners/poe2/huntress-amazon.webp' }),
     ranger1: createBaseVisual('poe2', 'ranger', 'R', 'jade', 'Deadeye', 'assets/characters/poe2/ranger.png'),
     witch1: createBaseVisual('poe2', 'witch', 'W', 'violet', 'Lich', 'assets/characters/poe2/witch.png'),
     warrior1: createBaseVisual('poe2', 'warrior', 'W', 'iron', 'Smith of Kitava', 'assets/characters/poe2/warrior.png'),

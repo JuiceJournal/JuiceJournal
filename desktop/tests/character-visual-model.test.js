@@ -17,9 +17,9 @@ test('character visual model maps PoE2 Shaman to a dedicated portrait treatment'
   assert.equal(visual.classLabel, 'Shaman');
   assert.equal(visual.badgeText, 'S');
   assert.equal(visual.tone, 'ember');
-  assert.equal(visual.bannerKey, 'shaman');
+  assert.equal(visual.bannerKey, 'druid-shaman');
   assert.equal(visual.portraitPath, 'assets/characters/poe2/druid-shaman.png');
-  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/shaman.jpg');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/druid-shaman.webp');
 });
 
 test('character visual model maps PoE2 Druid2 to the Shaman portrait treatment', () => {
@@ -32,9 +32,9 @@ test('character visual model maps PoE2 Druid2 to the Shaman portrait treatment',
   assert.equal(visual.classLabel, 'Shaman');
   assert.equal(visual.badgeText, 'S');
   assert.equal(visual.tone, 'ember');
-  assert.equal(visual.bannerKey, 'shaman');
+  assert.equal(visual.bannerKey, 'druid-shaman');
   assert.equal(visual.portraitPath, 'assets/characters/poe2/druid-shaman.png');
-  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/shaman.jpg');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/druid-shaman.webp');
 });
 
 test('character visual model maps PoE2 Monk2 to Invoker while keeping the monk portrait family', () => {
@@ -49,7 +49,7 @@ test('character visual model maps PoE2 Monk2 to Invoker while keeping the monk p
   assert.equal(visual.badgeText, 'M');
   assert.equal(visual.tone, 'azure');
   assert.equal(visual.portraitPath, 'assets/characters/poe2/monk.png');
-  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/monk-invoker.jpg');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/monk-invoker.webp');
 });
 
 test('character visual model maps PoE1 Templar to portrait and banner artwork', () => {
@@ -77,9 +77,9 @@ test('character visual model maps PoE2 Mercenary3 to Gemling Legionnaire', () =>
   assert.equal(visual.classLabel, 'Gemling Legionnaire');
   assert.equal(visual.badgeText, 'M');
   assert.equal(visual.tone, 'brass');
-  assert.equal(visual.bannerKey, 'mercenary');
+  assert.equal(visual.bannerKey, 'mercenary-gemling');
   assert.equal(visual.portraitPath, 'assets/characters/poe2/mercenary.png');
-  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/mercenary.jpg');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/mercenary-gemling.webp');
 });
 
 test('character visual model maps PoE2 Huntress1 to Amazon', () => {
@@ -92,9 +92,9 @@ test('character visual model maps PoE2 Huntress1 to Amazon', () => {
   assert.equal(visual.classLabel, 'Amazon');
   assert.equal(visual.badgeText, 'H');
   assert.equal(visual.tone, 'jade');
-  assert.equal(visual.bannerKey, 'huntress');
+  assert.equal(visual.bannerKey, 'huntress-amazon');
   assert.equal(visual.portraitPath, 'assets/characters/poe2/huntress.png');
-  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/huntress.jpg');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/huntress-amazon.webp');
 });
 
 test('character visual model falls back to initials for unknown classes', () => {
