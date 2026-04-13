@@ -7,7 +7,11 @@
   root.nativeCharacterHintModel = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createNativeCharacterHintModel() {
   function normalizeString(value, fallback = null) {
-    const normalized = String(value ?? '').trim();
+    if (typeof value !== 'string') {
+      return fallback;
+    }
+
+    const normalized = value.trim();
     return normalized || fallback;
   }
 
@@ -17,6 +21,10 @@
   }
 
   function deriveNativeCharacterHint(payload = {}) {
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+
     const poeVersion = normalizePoeVersion(payload.poeVersion || payload.gameVersion || payload.game);
     const characterName = normalizeString(payload.characterName || payload.name);
     const className = normalizeString(payload.className || payload.class);
