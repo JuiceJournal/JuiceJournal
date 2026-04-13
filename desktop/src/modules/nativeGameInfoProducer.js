@@ -7,6 +7,18 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
   let sessionId = 0;
   let activeSession = null;
 
+  function warnFailClosed(error) {
+    try {
+      const warn = logger?.warn;
+
+      if (typeof warn !== 'function') {
+        return;
+      }
+
+      Promise.resolve(warn.call(logger, error)).catch(() => {});
+    } catch {}
+  }
+
   function hasActiveSession(session) {
     return Boolean(session) && activeSession?.id === session.id;
   }
@@ -55,7 +67,7 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
     if (hasActiveSession(session)) {
       activeSession = null;
       sessionId += 1;
-      logger?.warn?.(error);
+      warnFailClosed(error);
     }
 
     return false;
@@ -115,7 +127,7 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
       try {
         await emitFromInfo(currentSession, updatedGameId);
       } catch (error) {
-        logger?.warn?.(error);
+        warnFailClosed(error);
       }
     };
 
@@ -127,7 +139,7 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
       try {
         await stop();
       } catch (error) {
-        logger?.warn?.(error);
+        warnFailClosed(error);
       }
     };
 

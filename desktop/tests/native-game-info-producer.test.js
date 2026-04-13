@@ -76,6 +76,37 @@ function createListenerRegistry() {
   };
 }
 
+async function startProducerForGameExitTest({ logger, removeListener }) {
+  const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
+  const listeners = new Map();
+  const gep = {
+    async setRequiredFeatures() {},
+    async getInfo() {
+      return null;
+    },
+    on(eventName, handler) {
+      listeners.set(eventName, handler);
+    },
+    removeListener
+  };
+
+  const producer = createNativeGameInfoProducer({
+    gep,
+    logger
+  });
+
+  const started = await producer.start({
+    poeVersion: 'poe2',
+    gameId: 24886
+  });
+
+  assert.equal(started, true);
+
+  return {
+    gameExitHandler: listeners.get('game-exit')
+  };
+}
+
 test('producer emits a high-confidence hint after immediate getInfo and subscribes to lifecycle events', async () => {
   const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
   const emitted = [];
@@ -522,37 +553,64 @@ test('producer logs post-start refresh failures without rejecting the update han
 });
 
 test('producer game-exit handler does not reject when stop cleanup fails and logger has no warn method', async () => {
-  const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
-  const listeners = new Map();
   const cleanupError = new Error('native cleanup failed');
-  const gep = {
-    async setRequiredFeatures() {},
-    async getInfo() {
-      return null;
-    },
-    on(eventName, handler) {
-      listeners.set(eventName, handler);
+  const { gameExitHandler } = await startProducerForGameExitTest({
+    logger: {},
+    removeListener() {
+      throw cleanupError;
+    }
+  });
+
+  await assert.doesNotReject(async () => gameExitHandler({}, 24886));
+});
+
+test('producer game-exit handler does not reject when stop cleanup fails and logger.warn throws', async () => {
+  const cleanupError = new Error('native cleanup failed');
+  const warnError = new Error('warn failed');
+  const { gameExitHandler } = await startProducerForGameExitTest({
+    logger: {
+      warn(error) {
+        assert.equal(error, cleanupError);
+        throw warnError;
+      }
     },
     removeListener() {
       throw cleanupError;
     }
-  };
-
-  const producer = createNativeGameInfoProducer({
-    gep,
-    logger: {}
   });
-
-  const started = await producer.start({
-    poeVersion: 'poe2',
-    gameId: 24886
-  });
-
-  assert.equal(started, true);
-
-  const gameExitHandler = listeners.get('game-exit');
 
   await assert.doesNotReject(async () => gameExitHandler({}, 24886));
+});
+
+test('producer game-exit handler does not reject when logger.warn returns a rejected promise', async t => {
+  const cleanupError = new Error('native cleanup failed');
+  const warnError = new Error('warn rejected');
+  const unhandledRejections = [];
+  const onUnhandledRejection = reason => {
+    unhandledRejections.push(reason);
+  };
+
+  process.on('unhandledRejection', onUnhandledRejection);
+  t.after(() => {
+    process.removeListener('unhandledRejection', onUnhandledRejection);
+  });
+
+  const { gameExitHandler } = await startProducerForGameExitTest({
+    logger: {
+      warn(error) {
+        assert.equal(error, cleanupError);
+        return Promise.reject(warnError);
+      }
+    },
+    removeListener() {
+      throw cleanupError;
+    }
+  });
+
+  await assert.doesNotReject(async () => gameExitHandler({}, 24886));
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.deepEqual(unhandledRejections, []);
 });
 
 test('producer ignores stale info updates after the active session changes', async () => {
