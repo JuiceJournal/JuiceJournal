@@ -128,35 +128,39 @@
         <div class="dashboard-grid">
           <!-- Character Summary -->
           <div class="card character-card" id="character-summary-card" data-character-state="empty">
-            <div class="character-portrait" id="character-portrait" data-character-portrait="unknown" data-character-tone="neutral">
-              <img id="character-portrait-image" alt="" hidden>
-              <span id="character-portrait-badge">?</span>
-            </div>
-            <div class="character-main">
-              <div class="card-header character-card-header">
-                <div>
+            <div class="character-banner" id="character-banner" data-character-tone="neutral">
+              <img id="character-banner-image" alt="" hidden>
+              <div class="character-banner-scrim"></div>
+              <div class="character-hero">
+                <div class="character-portrait-shell" id="character-portrait" data-character-portrait="unknown" data-character-tone="neutral">
+                  <img id="character-portrait-image" alt="" hidden>
+                  <span id="character-portrait-badge">?</span>
+                  <strong id="character-level">—</strong>
+                </div>
+                <div class="character-hero-copy">
                   <h3 data-i18n="dashboard.characterSummary">Character Summary</h3>
                   <p class="character-status" id="character-status">Character sync needed</p>
+                  <div class="character-heading-row">
+                    <strong id="character-name">No character selected</strong>
+                    <span id="character-league">—</span>
+                    <span id="character-class">Unknown Class</span>
+                  </div>
+                  <div class="character-meta-grid">
+                    <div class="character-meta">
+                      <span>Level</span>
+                      <strong id="character-level-meta">—</strong>
+                    </div>
+                    <div class="character-meta">
+                      <span>League</span>
+                      <strong id="character-league-meta">—</strong>
+                    </div>
+                    <div class="character-meta">
+                      <span>Account</span>
+                      <strong id="character-account">—</strong>
+                    </div>
+                  </div>
                 </div>
                 <span class="card-badge" id="character-game-version">PoE</span>
-              </div>
-              <div class="character-identity">
-                <strong id="character-name">No character selected</strong>
-                <span id="character-class">Unknown Class</span>
-              </div>
-              <div class="character-meta-grid">
-                <div>
-                  <span class="character-meta-label">Level</span>
-                  <span class="character-meta-value" id="character-level">—</span>
-                </div>
-                <div>
-                  <span class="character-meta-label">League</span>
-                  <span class="character-meta-value" id="character-league">—</span>
-                </div>
-                <div>
-                  <span class="character-meta-label">Account</span>
-                  <span class="character-meta-value" id="character-account">—</span>
-                </div>
               </div>
             </div>
           </div>

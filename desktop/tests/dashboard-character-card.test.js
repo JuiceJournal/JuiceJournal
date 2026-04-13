@@ -150,11 +150,16 @@ function loadFunctions(functionNames, contextOverrides = {}) {
   return context;
 }
 
-test('dashboard html includes a character summary card with portrait fields', () => {
+test('dashboard html exposes hero banner targets for the character summary card', () => {
   const html = fs.readFileSync(indexHtmlPath, 'utf8');
 
   assert.match(html, /id="character-summary-card"/);
-  assert.match(html, /id="character-portrait"/);
+  assert.match(html, /class="character-banner"/);
+  assert.match(html, /id="character-banner"/);
+  assert.match(html, /id="character-banner-image"/);
+  assert.match(html, /class="character-hero"/);
+  assert.match(html, /class="character-hero-copy"/);
+  assert.match(html, /class="character-portrait-shell"/);
   assert.match(html, /id="character-portrait-image"/);
   assert.match(html, /id="character-name"/);
   assert.match(html, /id="character-class"/);
