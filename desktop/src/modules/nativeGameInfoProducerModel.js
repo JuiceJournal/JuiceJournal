@@ -17,12 +17,34 @@
   }
 
   function normalizeNumber(value) {
+    if (value == null || typeof value === 'boolean') {
+      return null;
+    }
+
+    if (typeof value === 'string') {
+      value = value.trim();
+
+      if (!value) {
+        return null;
+      }
+    }
+
     const normalized = Number(value);
     return Number.isFinite(normalized) ? normalized : null;
   }
 
+  function normalizePoeVersion(value) {
+    const normalized = normalizeString(value).toLowerCase();
+
+    if (normalized === 'poe2') {
+      return 'poe2';
+    }
+
+    return null;
+  }
+
   function getRequiredFeaturesForVersion(poeVersion) {
-    if (poeVersion === 'poe2') {
+    if (normalizePoeVersion(poeVersion) === 'poe2') {
       return [...POE2_REQUIRED_FEATURES];
     }
 
@@ -30,16 +52,17 @@
   }
 
   function normalizeNativeInfoPayload({ poeVersion, info } = {}) {
+    const normalizedPoeVersion = normalizePoeVersion(poeVersion);
     const me = info && typeof info === 'object' ? info.me : null;
     const characterName = normalizeString(me?.character_name);
 
-    if (!poeVersion || !characterName) {
+    if (!normalizedPoeVersion || !characterName) {
       return null;
     }
 
     return {
       source: 'native-info',
-      poeVersion,
+      poeVersion: normalizedPoeVersion,
       characterName,
       level: normalizeNumber(me?.character_level),
       experience: normalizeNumber(me?.character_exp),

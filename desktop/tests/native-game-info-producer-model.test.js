@@ -83,3 +83,93 @@ test('normalizeNativeInfoPayload returns null without character_name', () => {
     null
   );
 });
+
+test('normalizeNativeInfoPayload treats empty-ish numeric fields as null', () => {
+  const normalizeNativeInfoPayload = getNativeGameInfoProducerModelExport('normalizeNativeInfoPayload');
+
+  const cases = [
+    {
+      message: 'blank strings',
+      me: {
+        character_name: 'KELLEE',
+        character_level: '',
+        character_exp: '   '
+      }
+    },
+    {
+      message: 'null and undefined',
+      me: {
+        character_name: 'KELLEE',
+        character_level: null,
+        character_exp: undefined
+      }
+    },
+    {
+      message: 'booleans',
+      me: {
+        character_name: 'KELLEE',
+        character_level: false,
+        character_exp: true
+      }
+    }
+  ];
+
+  for (const { message, me } of cases) {
+    const hint = normalizeNativeInfoPayload({
+      poeVersion: 'poe2',
+      info: { me }
+    });
+
+    assert.deepEqual(
+      hint,
+      {
+        source: 'native-info',
+        poeVersion: 'poe2',
+        characterName: 'KELLEE',
+        level: null,
+        experience: null,
+        confidence: 'high'
+      },
+      `Expected null numeric hint values for ${message}`
+    );
+  }
+});
+
+test('poeVersion normalization trims and lowercases across exported behaviors', () => {
+  const getRequiredFeaturesForVersion = getNativeGameInfoProducerModelExport('getRequiredFeaturesForVersion');
+  const normalizeNativeInfoPayload = getNativeGameInfoProducerModelExport('normalizeNativeInfoPayload');
+
+  assert.deepEqual(
+    getRequiredFeaturesForVersion('  PoE2  '),
+    ['gep_internal', 'me', 'match_info']
+  );
+  assert.deepEqual(getRequiredFeaturesForVersion(' PoE 1 '), []);
+
+  const hint = normalizeNativeInfoPayload({
+    poeVersion: '  PoE2  ',
+    info: {
+      me: {
+        character_name: 'KELLEE',
+        character_level: 92,
+        character_exp: 123456789
+      }
+    }
+  });
+
+  assert.deepEqual(hint, {
+    source: 'native-info',
+    poeVersion: 'poe2',
+    characterName: 'KELLEE',
+    level: 92,
+    experience: 123456789,
+    confidence: 'high'
+  });
+
+  assert.equal(
+    normalizeNativeInfoPayload({
+      poeVersion: ' PathOfExile2 ',
+      info: { me: { character_name: 'KELLEE' } }
+    }),
+    null
+  );
+});
