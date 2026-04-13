@@ -166,7 +166,9 @@ test('renderer applies a high-confidence native poe2 character hint without wait
   let overlayRefreshCalls = 0;
   const context = loadFunctions(['applyNativeCharacterHint'], {
     state: {
+      detectedGameVersion: 'poe2',
       account: {
+        activePoeVersion: 'poe2',
         charactersByGame: {
           poe2: [
             { id: 'char-koca', name: 'KocaAyVeMasha', className: 'Druid2', league: 'Fate of the Vaal', poeVersion: 'poe2' },
@@ -200,6 +202,44 @@ test('renderer applies a high-confidence native poe2 character hint without wait
   assert.equal(context.state.account.summary.league, 'Standard');
   assert.equal(renderCalls, 1);
   assert.equal(overlayRefreshCalls, 1);
+});
+
+test('renderer ignores a high-confidence native hint for a different game version', () => {
+  let renderCalls = 0;
+  const context = loadFunctions(['applyNativeCharacterHint'], {
+    state: {
+      detectedGameVersion: 'poe1',
+      settings: { poeVersion: 'poe1' },
+      account: {
+        activePoeVersion: 'poe1',
+        charactersByGame: {
+          poe1: [
+            { id: 'char-templar', name: 'JaylenBaliston', className: 'Templar', league: 'Mirage', poeVersion: 'poe1' }
+          ],
+          poe2: [
+            { id: 'char-kellee', name: 'KELLEE', className: 'Monk2', league: 'Standard', poeVersion: 'poe2' }
+          ]
+        },
+        summary: { status: 'ready', name: 'JaylenBaliston' }
+      }
+    },
+    renderCharacterSummaryCard() {
+      renderCalls += 1;
+    },
+    refreshRendererOverlayState() {}
+  });
+
+  const result = context.applyNativeCharacterHint({
+    source: 'native-game-info',
+    poeVersion: 'poe2',
+    characterName: 'KELLEE',
+    className: 'Monk2',
+    confidence: 'high'
+  });
+
+  assert.equal(result, false);
+  assert.equal(context.state.account.summary.name, 'JaylenBaliston');
+  assert.equal(renderCalls, 0);
 });
 
 test('renderer subscribes native active-character hints through setupIPCListeners', () => {

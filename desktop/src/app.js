@@ -1075,8 +1075,11 @@ function applyNativeCharacterHint(nativeHint) {
   }
 
   const poeVersion = normalizeVersion(nativeHint.poeVersion);
+  const activePoeVersion = normalizeVersion(state.detectedGameVersion)
+    || normalizeVersion(account.activePoeVersion)
+    || normalizeVersion(state.settings?.poeVersion);
   const characterName = normalizeText(nativeHint.characterName);
-  if (!poeVersion || !characterName) {
+  if (!poeVersion || !characterName || !activePoeVersion || poeVersion !== activePoeVersion) {
     return false;
   }
 
