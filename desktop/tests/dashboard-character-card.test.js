@@ -198,7 +198,7 @@ test('renderer fills hero banner artwork and meta fields from normalized account
     characterLevel: { textContent: '' },
     characterLevelMeta: { textContent: '' },
     characterLeague: { textContent: '' },
-    characterLeagueMeta: { textContent: '' },
+    characterClassMeta: { textContent: '' },
     characterAccount: { textContent: '' },
     characterStatus: { textContent: '' },
     characterGameVersion: { textContent: '' }
@@ -265,7 +265,7 @@ test('renderer fills hero banner artwork and meta fields from normalized account
   assert.equal(elements.characterLevel.textContent, '96');
   assert.equal(elements.characterLevelMeta.textContent, '96');
   assert.equal(elements.characterLeague.textContent, 'Fate of the Vaal');
-  assert.equal(elements.characterLeagueMeta.textContent, 'Fate of the Vaal');
+  assert.equal(elements.characterClassMeta.textContent, 'Shaman');
   assert.equal(elements.characterAccount.textContent, 'KocaGyVeMasha');
   assert.equal(elements.characterGameVersion.textContent, 'PoE 2');
 });
@@ -291,7 +291,7 @@ test('renderer keeps hero text current when character art is unavailable', () =>
     characterLevel: { textContent: '' },
     characterLevelMeta: { textContent: '' },
     characterLeague: { textContent: '' },
-    characterLeagueMeta: { textContent: '' },
+    characterClassMeta: { textContent: '' },
     characterAccount: { textContent: '' },
     characterStatus: { textContent: '' },
     characterGameVersion: { textContent: '' }
@@ -347,6 +347,6 @@ test('renderer keeps hero text current when character art is unavailable', () =>
   assert.equal(elements.characterLevel.textContent, '92');
   assert.equal(elements.characterLevelMeta.textContent, '92');
   assert.equal(elements.characterLeague.textContent, 'Standard');
-  assert.equal(elements.characterLeagueMeta.textContent, 'Standard');
+  assert.equal(elements.characterClassMeta.textContent, 'Invoker');
   assert.equal(elements.characterAccount.textContent, 'Esquetta#4179');
 });

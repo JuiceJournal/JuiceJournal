@@ -147,7 +147,7 @@ const elements = {
   characterLevel: document.getElementById('character-level'),
   characterLevelMeta: document.getElementById('character-level-meta'),
   characterLeague: document.getElementById('character-league'),
-  characterLeagueMeta: document.getElementById('character-league-meta'),
+  characterClassMeta: document.getElementById('character-class-meta'),
   characterAccount: document.getElementById('character-account'),
   characterStatus: document.getElementById('character-status'),
   characterGameVersion: document.getElementById('character-game-version'),
@@ -1131,10 +1131,10 @@ function renderCharacterSummaryCard() {
   if (elements.characterLeague) {
     elements.characterLeague.textContent = isReady ? (summary.league || 'Unknown League') : '—';
   }
-  if (elements.characterLeagueMeta) {
-    elements.characterLeagueMeta.textContent = elements.characterLeague
-      ? elements.characterLeague.textContent
-      : (isReady ? (summary.league || 'Unknown League') : 'â€”');
+  if (elements.characterClassMeta) {
+    elements.characterClassMeta.textContent = elements.characterClass
+      ? elements.characterClass.textContent
+      : (isReady ? visual.classLabel : 'Unknown Class');
   }
   if (elements.characterAccount) {
     elements.characterAccount.textContent = account?.accountName || state.currentUser?.username || '—';
