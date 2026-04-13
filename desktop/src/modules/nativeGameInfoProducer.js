@@ -29,11 +29,19 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
     }
 
     if (session.infoUpdateHandler) {
-      gep.removeListener('new-info-update', session.infoUpdateHandler);
+      try {
+        gep.removeListener('new-info-update', session.infoUpdateHandler);
+      } catch (error) {
+        warnFailClosed(error);
+      }
     }
 
     if (session.gameExitHandler) {
-      gep.removeListener('game-exit', session.gameExitHandler);
+      try {
+        gep.removeListener('game-exit', session.gameExitHandler);
+      } catch (error) {
+        warnFailClosed(error);
+      }
     }
 
     session.infoUpdateHandler = null;

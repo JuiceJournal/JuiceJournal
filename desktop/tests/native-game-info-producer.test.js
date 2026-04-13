@@ -500,6 +500,50 @@ test('producer rolls back subscriptions when startup emission fails after activa
   ]);
 });
 
+test('producer startup rollback stays fail-closed when cleanup throws', async () => {
+  const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
+  const warnings = [];
+  const listeners = createListenerRegistry();
+  const startupError = new Error('initial native fetch failed');
+  const cleanupError = new Error('cleanup failed');
+  let getInfoCallCount = 0;
+  const gep = {
+    async setRequiredFeatures() {},
+    async getInfo() {
+      getInfoCallCount += 1;
+
+      if (getInfoCallCount === 1) {
+        throw startupError;
+      }
+
+      return null;
+    },
+    on(eventName, handler) {
+      listeners.add(eventName, handler);
+    },
+    removeListener() {
+      throw cleanupError;
+    }
+  };
+
+  const producer = createNativeGameInfoProducer({
+    gep,
+    logger: {
+      warn(error) {
+        warnings.push(error);
+      }
+    }
+  });
+
+  const started = await producer.start({
+    poeVersion: 'poe2',
+    gameId: 24886
+  });
+
+  assert.equal(started, false);
+  assert.deepEqual(warnings, [cleanupError, cleanupError, startupError]);
+});
+
 test('producer logs post-start refresh failures without rejecting the update handler', async () => {
   const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
   const warnings = [];
