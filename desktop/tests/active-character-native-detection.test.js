@@ -204,6 +204,43 @@ test('renderer applies a high-confidence native poe2 character hint without wait
   assert.equal(overlayRefreshCalls, 1);
 });
 
+test('renderer marks a high-confidence native hint as the active-character refresh source and clears the api fallback', () => {
+  let clearedRefreshes = 0;
+  const context = loadFunctions(['applyNativeCharacterHint'], {
+    state: {
+      detectedGameVersion: 'poe2',
+      activeCharacterRefreshSource: null,
+      account: {
+        activePoeVersion: 'poe2',
+        charactersByGame: {
+          poe2: [
+            { id: 'char-kellee', name: 'KELLEE', className: 'Monk2', league: 'Standard', poeVersion: 'poe2' }
+          ]
+        },
+        summary: { status: 'ready', name: 'Unknown' }
+      }
+    },
+    renderCharacterSummaryCard() {},
+    refreshRendererOverlayState() {},
+    clearActiveCharacterRefreshTimers() {
+      clearedRefreshes += 1;
+    }
+  });
+
+  const result = context.applyNativeCharacterHint({
+    source: 'native-game-info',
+    poeVersion: 'poe2',
+    characterName: 'KELLEE',
+    className: 'Monk2',
+    league: 'Standard',
+    confidence: 'high'
+  });
+
+  assert.equal(result, true);
+  assert.equal(context.state.activeCharacterRefreshSource, 'native-high-confidence');
+  assert.equal(clearedRefreshes, 1);
+});
+
 test('renderer ignores a high-confidence native hint for a different game version', () => {
   let renderCalls = 0;
   const context = loadFunctions(['applyNativeCharacterHint'], {

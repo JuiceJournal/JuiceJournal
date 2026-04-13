@@ -10,6 +10,7 @@ window._appState = { language: 'en' };
 const state = {
   currentUser: null,
   currentSession: null,
+  activeCharacterRefreshSource: null,
   settings: {},
   detectedGameVersion: null,
   activeLeagueOptions: {},
@@ -900,11 +901,17 @@ function syncRendererGameContext(version, options = {}) {
 
 function scheduleActiveCharacterRefresh({ version } = {}) {
   if (!version) {
+    state.activeCharacterRefreshSource = null;
     clearActiveCharacterRefreshTimers();
     return;
   }
 
   if (!state.currentUser) {
+    return;
+  }
+
+  if (state.activeCharacterRefreshSource === 'native-high-confidence') {
+    state.activeCharacterRefreshSource = null;
     return;
   }
 
@@ -1135,6 +1142,10 @@ function applyNativeCharacterHint(nativeHint) {
     league: matchedCharacter.league || null,
     poeVersion: matchedCharacter.poeVersion || poeVersion
   };
+  state.activeCharacterRefreshSource = 'native-high-confidence';
+  if (typeof clearActiveCharacterRefreshTimers === 'function') {
+    clearActiveCharacterRefreshTimers();
+  }
 
   if (typeof renderCharacterSummaryCard === 'function') {
     renderCharacterSummaryCard();

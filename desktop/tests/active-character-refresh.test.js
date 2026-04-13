@@ -324,6 +324,29 @@ test('failed scheduled refresh retries once after 5 seconds', async () => {
   assert.equal(timers[1].delay, 5000);
 });
 
+test('renderer skips delayed api refresh when a high-confidence native hint already updated the character', () => {
+  const calls = [];
+  const context = loadFunctions(['scheduleActiveCharacterRefresh'], {
+    activeCharacterRefreshTimer: null,
+    activeCharacterRefreshRetryTimer: null,
+    activeCharacterRefreshRequestId: 0,
+    state: {
+      currentUser: { id: 'user-1' },
+      activeCharacterRefreshSource: 'native-high-confidence'
+    },
+    clearActiveCharacterRefreshTimers() {
+      calls.push('clearActiveCharacterRefreshTimers');
+    },
+    setTimeout() {
+      calls.push('setTimeout');
+    }
+  });
+
+  context.scheduleActiveCharacterRefresh({ version: 'poe2' });
+
+  assert.deepEqual(calls, []);
+});
+
 test('syncRendererGameContext schedules an active-character refresh for detected games', () => {
   const scheduled = [];
   const versionButtons = [
