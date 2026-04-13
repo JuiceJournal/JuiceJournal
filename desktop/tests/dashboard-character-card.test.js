@@ -7,6 +7,7 @@ const vm = require('node:vm');
 const desktopDir = path.resolve(__dirname, '..');
 const indexHtmlPath = path.join(desktopDir, 'src', 'index.html');
 const appJsPath = path.join(desktopDir, 'src', 'app.js');
+const stylesPath = path.join(desktopDir, 'src', 'styles.css');
 
 function extractFunctionSource(source, functionName) {
   const signature = `function ${functionName}`;
@@ -165,6 +166,15 @@ test('dashboard html exposes hero banner targets for the character summary card'
   assert.match(html, /id="character-class"/);
   assert.match(html, /id="character-level"/);
   assert.match(html, /id="character-league"/);
+});
+
+test('character card stylesheet defines banner art and hero layout rules', () => {
+  const css = fs.readFileSync(stylesPath, 'utf8');
+
+  assert.match(css, /\.character-banner/);
+  assert.match(css, /\.character-banner-scrim/);
+  assert.match(css, /\.character-hero/);
+  assert.match(css, /\.character-portrait-shell/);
 });
 
 test('renderer fills character summary card from normalized account state', () => {
