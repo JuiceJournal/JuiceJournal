@@ -542,6 +542,15 @@ test('producer startup rollback stays fail-closed when cleanup throws', async ()
 
   assert.equal(started, false);
   assert.deepEqual(warnings, [cleanupError, cleanupError, startupError]);
+
+  const restarted = await producer.start({
+    poeVersion: 'poe2',
+    gameId: 24886
+  });
+
+  assert.equal(restarted, false);
+  assert.equal(listeners.get('new-info-update').length, 1);
+  assert.equal(listeners.get('game-exit').length, 1);
 });
 
 test('producer logs post-start refresh failures without rejecting the update handler', async () => {
@@ -655,6 +664,49 @@ test('producer game-exit handler does not reject when logger.warn returns a reje
   await new Promise(resolve => setImmediate(resolve));
 
   assert.deepEqual(unhandledRejections, []);
+});
+
+test('producer does not register duplicate listeners after game-exit cleanup failure', async () => {
+  const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
+  const listeners = createListenerRegistry();
+  const cleanupError = new Error('native cleanup failed');
+  const gep = {
+    async setRequiredFeatures() {},
+    async getInfo() {
+      return null;
+    },
+    on(eventName, handler) {
+      listeners.add(eventName, handler);
+    },
+    removeListener() {
+      throw cleanupError;
+    }
+  };
+
+  const producer = createNativeGameInfoProducer({
+    gep,
+    logger: {}
+  });
+
+  const started = await producer.start({
+    poeVersion: 'poe2',
+    gameId: 24886
+  });
+
+  assert.equal(started, true);
+  assert.equal(listeners.get('new-info-update').length, 1);
+  assert.equal(listeners.get('game-exit').length, 1);
+
+  await assert.doesNotReject(async () => listeners.get('game-exit')[0]({}, 24886));
+
+  const restarted = await producer.start({
+    poeVersion: 'poe2',
+    gameId: 24887
+  });
+
+  assert.equal(restarted, false);
+  assert.equal(listeners.get('new-info-update').length, 1);
+  assert.equal(listeners.get('game-exit').length, 1);
 });
 
 test('producer ignores stale info updates after the active session changes', async () => {

@@ -20,32 +20,37 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
   }
 
   function hasActiveSession(session) {
-    return Boolean(session) && activeSession?.id === session.id;
+    return Boolean(session) && activeSession === session && session.closed !== true;
   }
 
   function clearSubscriptions(session = activeSession) {
     if (typeof gep?.removeListener !== 'function' || !session) {
-      return;
+      return false;
     }
+
+    let success = true;
 
     if (session.infoUpdateHandler) {
       try {
         gep.removeListener('new-info-update', session.infoUpdateHandler);
+        session.infoUpdateHandler = null;
       } catch (error) {
         warnFailClosed(error);
+        success = false;
       }
     }
 
     if (session.gameExitHandler) {
       try {
         gep.removeListener('game-exit', session.gameExitHandler);
+        session.gameExitHandler = null;
       } catch (error) {
         warnFailClosed(error);
+        success = false;
       }
     }
 
-    session.infoUpdateHandler = null;
-    session.gameExitHandler = null;
+    return success;
   }
 
   async function emitFromInfo(session, gameId) {
@@ -70,30 +75,44 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
   }
 
   async function rollbackStartupSession(session, error) {
-    clearSubscriptions(session);
+    session.closed = true;
+    const cleaned = clearSubscriptions(session);
 
-    if (hasActiveSession(session)) {
-      activeSession = null;
+    if (activeSession === session) {
+      if (cleaned) {
+        activeSession = null;
+      }
       sessionId += 1;
-      warnFailClosed(error);
     }
 
+    warnFailClosed(error);
     return false;
   }
 
   async function stop() {
     const session = activeSession;
 
-    if (session) {
-      sessionId += 1;
+    if (!session) {
+      return true;
     }
 
-    activeSession = null;
-    clearSubscriptions(session);
+    session.closed = true;
+
+    sessionId += 1;
+
+    const cleaned = clearSubscriptions(session);
+    if (cleaned) {
+      activeSession = null;
+    }
+
+    return cleaned;
   }
 
   async function start({ poeVersion, gameId } = {}) {
-    await stop();
+    const stopped = await stop();
+    if (!stopped) {
+      return false;
+    }
 
     const requiredFeatures = getRequiredFeaturesForVersion(poeVersion);
     if (
@@ -112,6 +131,7 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
       id: sessionId,
       poeVersion,
       gameId,
+      closed: false,
       infoUpdateHandler: null,
       gameExitHandler: null
     };
