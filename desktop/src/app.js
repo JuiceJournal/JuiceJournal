@@ -120,7 +120,6 @@ const ERROR_MESSAGE_KEY_MAP = {
 };
 
 let sessionClockInterval = null;
-let activeCharacterRefreshTimer = null;
 
 // DOM Elementleri
 const elements = {
@@ -138,13 +137,17 @@ const elements = {
 
   // Dashboard
   characterSummaryCard: document.getElementById('character-summary-card'),
+  characterBanner: document.getElementById('character-banner'),
+  characterBannerImage: document.getElementById('character-banner-image'),
   characterPortrait: document.getElementById('character-portrait'),
   characterPortraitImage: document.getElementById('character-portrait-image'),
   characterPortraitBadge: document.getElementById('character-portrait-badge'),
   characterName: document.getElementById('character-name'),
   characterClass: document.getElementById('character-class'),
   characterLevel: document.getElementById('character-level'),
+  characterLevelMeta: document.getElementById('character-level-meta'),
   characterLeague: document.getElementById('character-league'),
+  characterLeagueMeta: document.getElementById('character-league-meta'),
   characterAccount: document.getElementById('character-account'),
   characterStatus: document.getElementById('character-status'),
   characterGameVersion: document.getElementById('character-game-version'),
@@ -1071,9 +1074,26 @@ function renderCharacterSummaryCard() {
 
   elements.characterSummaryCard.dataset.characterState = isReady ? 'ready' : 'empty';
 
+  if (elements.characterBanner) {
+    elements.characterBanner.dataset.characterBanner = visual.bannerKey || 'unknown';
+    elements.characterBanner.dataset.characterTone = visual.tone || 'neutral';
+  }
+  if (elements.characterBannerImage) {
+    let bannerSource = visual.bannerPath || '';
+    if (bannerSource && typeof URL === 'function' && window?.location?.href) {
+      try {
+        bannerSource = new URL(bannerSource, window.location.href).toString();
+      } catch (error) {
+        bannerSource = visual.bannerPath;
+      }
+    }
+    elements.characterBannerImage.hidden = !visual.bannerPath;
+    elements.characterBannerImage.src = bannerSource;
+    elements.characterBannerImage.alt = isReady ? `${summary.name} banner` : 'Character banner';
+  }
   if (elements.characterPortrait) {
-    elements.characterPortrait.dataset.characterPortrait = visual.portraitKey;
-    elements.characterPortrait.dataset.characterTone = visual.tone;
+    elements.characterPortrait.dataset.characterPortrait = visual.portraitKey || 'unknown';
+    elements.characterPortrait.dataset.characterTone = visual.tone || 'neutral';
   }
   if (elements.characterPortraitImage) {
     let portraitSource = visual.portraitPath || '';
@@ -1103,8 +1123,18 @@ function renderCharacterSummaryCard() {
   if (elements.characterLevel) {
     elements.characterLevel.textContent = isReady && summary.level ? String(summary.level) : '—';
   }
+  if (elements.characterLevelMeta) {
+    elements.characterLevelMeta.textContent = elements.characterLevel
+      ? elements.characterLevel.textContent
+      : (isReady && summary.level ? String(summary.level) : 'â€”');
+  }
   if (elements.characterLeague) {
     elements.characterLeague.textContent = isReady ? (summary.league || 'Unknown League') : '—';
+  }
+  if (elements.characterLeagueMeta) {
+    elements.characterLeagueMeta.textContent = elements.characterLeague
+      ? elements.characterLeague.textContent
+      : (isReady ? (summary.league || 'Unknown League') : 'â€”');
   }
   if (elements.characterAccount) {
     elements.characterAccount.textContent = account?.accountName || state.currentUser?.username || '—';

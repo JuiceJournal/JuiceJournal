@@ -177,9 +177,15 @@ test('character card stylesheet defines banner art and hero layout rules', () =>
   assert.match(css, /\.character-portrait-shell/);
 });
 
-test('renderer fills character summary card from normalized account state', () => {
+test('renderer fills hero banner artwork and meta fields from normalized account state', () => {
   const elements = {
     characterSummaryCard: { dataset: {} },
+    characterBanner: { dataset: {} },
+    characterBannerImage: {
+      src: '',
+      hidden: true,
+      alt: ''
+    },
     characterPortrait: { dataset: {} },
     characterPortraitImage: {
       src: '',
@@ -190,7 +196,9 @@ test('renderer fills character summary card from normalized account state', () =
     characterName: { textContent: '' },
     characterClass: { textContent: '' },
     characterLevel: { textContent: '' },
+    characterLevelMeta: { textContent: '' },
     characterLeague: { textContent: '' },
+    characterLeagueMeta: { textContent: '' },
     characterAccount: { textContent: '' },
     characterStatus: { textContent: '' },
     characterGameVersion: { textContent: '' }
@@ -223,10 +231,12 @@ test('renderer fills character summary card from normalized account state', () =
     getCharacterVisualModel: () => ({
       deriveCharacterVisual: () => ({
         portraitKey: 'shaman',
+        bannerKey: 'druid-ritualist',
         tone: 'ember',
         badgeText: 'S',
         classLabel: 'Shaman',
-        portraitPath: 'assets/characters/poe2/druid-shaman.png'
+        portraitPath: 'assets/characters/poe2/druid-shaman.png',
+        bannerPath: 'assets/characters/banners/poe2/druid-ritualist.jpg'
       })
     })
   });
@@ -234,6 +244,13 @@ test('renderer fills character summary card from normalized account state', () =
   context.renderCharacterSummaryCard();
 
   assert.equal(elements.characterSummaryCard.dataset.characterState, 'ready');
+  assert.equal(elements.characterBanner.dataset.characterBanner, 'druid-ritualist');
+  assert.equal(elements.characterBanner.dataset.characterTone, 'ember');
+  assert.equal(elements.characterBannerImage.hidden, false);
+  assert.equal(
+    elements.characterBannerImage.src,
+    'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/assets/characters/banners/poe2/druid-ritualist.jpg'
+  );
   assert.equal(elements.characterPortrait.dataset.characterPortrait, 'shaman');
   assert.equal(elements.characterPortrait.dataset.characterTone, 'ember');
   assert.equal(elements.characterPortraitImage.hidden, false);
@@ -246,7 +263,90 @@ test('renderer fills character summary card from normalized account state', () =
   assert.equal(elements.characterName.textContent, 'KocaGyVeMasha');
   assert.equal(elements.characterClass.textContent, 'Shaman');
   assert.equal(elements.characterLevel.textContent, '96');
+  assert.equal(elements.characterLevelMeta.textContent, '96');
   assert.equal(elements.characterLeague.textContent, 'Fate of the Vaal');
+  assert.equal(elements.characterLeagueMeta.textContent, 'Fate of the Vaal');
   assert.equal(elements.characterAccount.textContent, 'KocaGyVeMasha');
   assert.equal(elements.characterGameVersion.textContent, 'PoE 2');
+});
+
+test('renderer keeps hero text current when character art is unavailable', () => {
+  const elements = {
+    characterSummaryCard: { dataset: {} },
+    characterBanner: { dataset: {} },
+    characterBannerImage: {
+      src: '',
+      hidden: true,
+      alt: ''
+    },
+    characterPortrait: { dataset: {} },
+    characterPortraitImage: {
+      src: '',
+      hidden: true,
+      alt: ''
+    },
+    characterPortraitBadge: { textContent: '', style: {} },
+    characterName: { textContent: '' },
+    characterClass: { textContent: '' },
+    characterLevel: { textContent: '' },
+    characterLevelMeta: { textContent: '' },
+    characterLeague: { textContent: '' },
+    characterLeagueMeta: { textContent: '' },
+    characterAccount: { textContent: '' },
+    characterStatus: { textContent: '' },
+    characterGameVersion: { textContent: '' }
+  };
+  const context = loadFunctions(['renderCharacterSummaryCard'], {
+    elements,
+    state: {
+      currentUser: { username: 'FallbackUser' },
+      account: {
+        accountName: 'Esquetta#4179',
+        summary: {
+          status: 'ready',
+          name: 'KELLEE',
+          level: 92,
+          className: 'Monk2',
+          league: 'Standard'
+        }
+      },
+      detectedGameVersion: 'poe2',
+      settings: { poeVersion: 'poe2' }
+    },
+    window: {
+      location: {
+        href: 'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/index.html'
+      }
+    },
+    URL,
+    normalizePoeVersion: (value) => value,
+    getCharacterVisualModel: () => ({
+      deriveCharacterVisual: () => ({
+        portraitKey: 'monk',
+        bannerKey: 'monk-invoker',
+        tone: 'azure',
+        badgeText: 'M',
+        classLabel: 'Invoker',
+        portraitPath: '',
+        bannerPath: ''
+      })
+    })
+  });
+
+  context.renderCharacterSummaryCard();
+
+  assert.equal(elements.characterSummaryCard.dataset.characterState, 'ready');
+  assert.equal(elements.characterBanner.dataset.characterBanner, 'monk-invoker');
+  assert.equal(elements.characterBanner.dataset.characterTone, 'azure');
+  assert.equal(elements.characterBannerImage.hidden, true);
+  assert.equal(elements.characterPortraitImage.hidden, true);
+  assert.equal(elements.characterPortraitBadge.textContent, 'M');
+  assert.notEqual(elements.characterPortraitBadge.style.display, 'none');
+  assert.equal(elements.characterName.textContent, 'KELLEE');
+  assert.equal(elements.characterClass.textContent, 'Invoker');
+  assert.equal(elements.characterLevel.textContent, '92');
+  assert.equal(elements.characterLevelMeta.textContent, '92');
+  assert.equal(elements.characterLeague.textContent, 'Standard');
+  assert.equal(elements.characterLeagueMeta.textContent, 'Standard');
+  assert.equal(elements.characterAccount.textContent, 'Esquetta#4179');
 });
