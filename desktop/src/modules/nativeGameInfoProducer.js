@@ -111,7 +111,11 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
         return;
       }
 
-      await emitFromInfo(currentSession, updatedGameId);
+      try {
+        await emitFromInfo(currentSession, updatedGameId);
+      } catch (error) {
+        logger?.warn?.(error);
+      }
     };
 
     const gameExitHandler = async (_event, exitedGameId) => {
@@ -133,8 +137,12 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
     currentSession.infoUpdateHandler = infoUpdateHandler;
     currentSession.gameExitHandler = gameExitHandler;
 
-    gep.on('new-info-update', infoUpdateHandler);
-    gep.on('game-exit', gameExitHandler);
+    try {
+      gep.on('new-info-update', infoUpdateHandler);
+      gep.on('game-exit', gameExitHandler);
+    } catch (error) {
+      return rollbackStartupSession(currentSession, error);
+    }
 
     if (!hasActiveSession(currentSession)) {
       clearSubscriptions(currentSession);

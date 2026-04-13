@@ -245,6 +245,52 @@ test('producer returns false and logs a warning when required feature setup fail
   assert.deepEqual(listeners.get('game-exit'), []);
 });
 
+test('producer rolls back subscriptions and returns false when listener registration throws', async () => {
+  const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
+  const warnings = [];
+  const listeners = createListenerRegistry();
+  const onCalls = [];
+  const registrationError = new Error('native listener registration failed');
+  const gep = {
+    async setRequiredFeatures() {},
+    async getInfo() {
+      return null;
+    },
+    on(eventName, handler) {
+      onCalls.push(eventName);
+
+      if (eventName === 'game-exit') {
+        throw registrationError;
+      }
+
+      listeners.add(eventName, handler);
+    },
+    removeListener(eventName, handler) {
+      listeners.remove(eventName, handler);
+    }
+  };
+
+  const producer = createNativeGameInfoProducer({
+    gep,
+    logger: {
+      warn(error) {
+        warnings.push(error);
+      }
+    }
+  });
+
+  const started = await producer.start({
+    poeVersion: 'poe2',
+    gameId: 24886
+  });
+
+  assert.equal(started, false);
+  assert.deepEqual(onCalls, ['new-info-update', 'game-exit']);
+  assert.deepEqual(warnings, [registrationError]);
+  assert.deepEqual(listeners.get('new-info-update'), []);
+  assert.deepEqual(listeners.get('game-exit'), []);
+});
+
 test('producer does not leak stale listeners when overlapping starts resolve out of order', async () => {
   const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
   const emitted = [];
@@ -393,6 +439,58 @@ test('producer rolls back subscriptions when startup emission fails after activa
       confidence: 'high'
     }
   ]);
+});
+
+test('producer logs post-start refresh failures without rejecting the update handler', async () => {
+  const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
+  const warnings = [];
+  const listeners = new Map();
+  const updateError = new Error('refresh failed');
+  let getInfoCallCount = 0;
+  const gep = {
+    async setRequiredFeatures() {},
+    async getInfo() {
+      getInfoCallCount += 1;
+
+      if (getInfoCallCount === 1) {
+        return null;
+      }
+
+      throw updateError;
+    },
+    on(eventName, handler) {
+      listeners.set(eventName, handler);
+    },
+    removeListener(eventName, handler) {
+      if (listeners.get(eventName) === handler) {
+        listeners.delete(eventName);
+      }
+    }
+  };
+
+  const producer = createNativeGameInfoProducer({
+    gep,
+    logger: {
+      warn(error) {
+        warnings.push(error);
+      }
+    }
+  });
+
+  const started = await producer.start({
+    poeVersion: 'poe2',
+    gameId: 24886
+  });
+
+  assert.equal(started, true);
+
+  const infoUpdateHandler = listeners.get('new-info-update');
+
+  await assert.doesNotReject(async () => infoUpdateHandler({}, 24886));
+
+  assert.deepEqual(warnings, [updateError]);
+  assert.equal(typeof listeners.get('new-info-update'), 'function');
+  assert.equal(typeof listeners.get('game-exit'), 'function');
 });
 
 test('producer ignores stale info updates after the active session changes', async () => {
