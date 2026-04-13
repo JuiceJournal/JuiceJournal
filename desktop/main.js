@@ -604,6 +604,14 @@ function emitPendingSyncState() {
   });
 }
 
+function emitActiveCharacterHint(payload) {
+  if (!mainWindow || !mainWindow.webContents) {
+    return;
+  }
+
+  mainWindow.webContents.send('active-character-hint', payload);
+}
+
 function annotateSyncFailure(action, error, { blocked = false } = {}) {
   return {
     ...action,

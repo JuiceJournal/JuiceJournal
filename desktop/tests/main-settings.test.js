@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const mainJsPath = path.join(__dirname, '..', 'main.js');
+const preloadJsPath = path.join(__dirname, '..', 'preload.js');
 
 function extractFunctionSource(source, functionName, filePath) {
   const signature = `function ${functionName}`;
@@ -625,6 +626,36 @@ test('main runtime log events normalize parser-shaped payloads and malformed tim
   assert.equal(messages[0].payload.runtimeSession.currentInstance.enteredAt, '1970-01-01T00:00:00.000Z');
   assert.equal(messages[1].payload.runtimeSession.instances[0].mapTier, 16);
   assert.ok(messages[1].payload.runtimeSession.instances[0].durationSeconds > 0);
+});
+
+test('desktop preload exposes native character hint listener', () => {
+  const source = fs.readFileSync(preloadJsPath, 'utf8');
+
+  assert.match(source, /onActiveCharacterHint:\s*\(callback\)\s*=>/);
+  assert.match(source, /ipcRenderer\.on\('active-character-hint'/);
+});
+
+test('main process forwards native active-character hints to the renderer', () => {
+  const payload = {
+    source: 'native'
+  };
+  const messages = [];
+  const context = loadFunctions(['emitActiveCharacterHint'], {
+    mainWindow: {
+      webContents: {
+        send(channel, data) {
+          messages.push({ channel, data });
+        }
+      }
+    }
+  });
+
+  context.emitActiveCharacterHint(payload);
+
+  assert.deepEqual(messages, [{
+    channel: 'active-character-hint',
+    data: payload
+  }]);
 });
 
 test('main game close clears active runtime session state before notifying renderer', () => {
