@@ -1055,6 +1055,94 @@ function refreshRendererOverlayState() {
   return state.overlay;
 }
 
+function applyNativeCharacterHint(nativeHint) {
+  if (!nativeHint || typeof nativeHint !== 'object' || !state.account) {
+    return false;
+  }
+
+  const normalizeText = (value) => (
+    typeof value === 'string'
+      ? value.trim().toLowerCase()
+      : ''
+  );
+  const normalizeVersion = (value) => {
+    const normalized = normalizeText(value);
+    return normalized === 'poe1' || normalized === 'poe2' ? normalized : null;
+  };
+
+  if (nativeHint.confidence !== 'high') {
+    return false;
+  }
+
+  const poeVersion = normalizeVersion(nativeHint.poeVersion);
+  const characterName = normalizeText(nativeHint.characterName);
+  if (!poeVersion || !characterName) {
+    return false;
+  }
+
+  const account = state.account;
+  const characters = Array.isArray(account.charactersByGame?.[poeVersion])
+    ? account.charactersByGame[poeVersion]
+    : (Array.isArray(account.characters)
+      ? account.characters.filter((character) => normalizeVersion(character?.poeVersion) === poeVersion)
+      : []);
+
+  if (!characters.length) {
+    return false;
+  }
+
+  let matches = characters.filter((character) => normalizeText(character?.name) === characterName);
+  if (!matches.length) {
+    return false;
+  }
+
+  const className = normalizeText(nativeHint.className);
+  if (className) {
+    const classMatches = matches.filter((character) => normalizeText(character?.className) === className);
+    if (classMatches.length) {
+      matches = classMatches;
+    }
+  }
+
+  const league = normalizeText(nativeHint.league);
+  if (league) {
+    const leagueMatches = matches.filter((character) => normalizeText(character?.league) === league);
+    if (leagueMatches.length) {
+      matches = leagueMatches;
+    }
+  }
+
+  const matchedCharacter = matches[0] || null;
+  if (!matchedCharacter) {
+    return false;
+  }
+
+  account.activePoeVersion = poeVersion;
+  account.selectedCharacter = matchedCharacter;
+  if (account.selectedCharacterByGame && typeof account.selectedCharacterByGame === 'object' && matchedCharacter.id) {
+    account.selectedCharacterByGame[poeVersion] = matchedCharacter.id;
+  }
+  account.summary = {
+    status: 'ready',
+    id: matchedCharacter.id || null,
+    name: matchedCharacter.name || null,
+    level: typeof matchedCharacter.level === 'number' ? matchedCharacter.level : 0,
+    className: matchedCharacter.className || null,
+    ascendancy: matchedCharacter.ascendancy || null,
+    league: matchedCharacter.league || null,
+    poeVersion: matchedCharacter.poeVersion || poeVersion
+  };
+
+  if (typeof renderCharacterSummaryCard === 'function') {
+    renderCharacterSummaryCard();
+  }
+  if (typeof refreshRendererOverlayState === 'function') {
+    refreshRendererOverlayState();
+  }
+
+  return true;
+}
+
 function setRuntimeSessionState(runtimeSession) {
   state.runtimeSession = runtimeSession || null;
   renderRuntimeSessionState();
@@ -1821,6 +1909,12 @@ function setupIPCListeners() {
   if (window.electronAPI.onProfitCalculated) {
     window.electronAPI.onProfitCalculated((report) => {
       renderProfitReport(report);
+    });
+  }
+
+  if (window.electronAPI.onActiveCharacterHint) {
+    window.electronAPI.onActiveCharacterHint((nativeHint) => {
+      applyNativeCharacterHint(nativeHint);
     });
   }
 
