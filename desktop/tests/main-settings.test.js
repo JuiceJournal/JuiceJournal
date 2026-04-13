@@ -433,6 +433,7 @@ test('runtime game detection keeps the selected settings version while emitting 
     runtimeSessionState,
     clearRuntimeSessionState,
     cloneRuntimeSessionState,
+    syncNativeGameInfoProducer() {},
     mainWindow: {
       webContents: {
         send(channel, payload) {
@@ -529,6 +530,7 @@ test('runtime game detection retargets pricing when the detected game matches th
     runtimeSessionState: createRuntimeSessionState(),
     clearRuntimeSessionState,
     cloneRuntimeSessionState,
+    syncNativeGameInfoProducer() {},
     mainWindow: null
   });
 
@@ -542,6 +544,155 @@ test('runtime game detection retargets pricing when the detected game matches th
   assert.equal(stopCalls, 0);
   assert.equal(setupLogParserCalls, 0);
   assert.equal(context.priceService.poeVersion, 'poe2');
+});
+
+test('runtime game detection starts the native game info producer for poe2', () => {
+  const starts = [];
+  const messages = [];
+  const capturedProducerOptions = [];
+  const gep = { name: 'gep' };
+  const storeState = {
+    lastDetectedPoeVersion: 'poe1',
+    poeVersion: 'poe1',
+    poePath: null
+  };
+  const context = loadFunctions([
+    'emitActiveCharacterHint',
+    'getNativeGameInfoGameId',
+    'getNativeGameInfoProducer',
+    'stopNativeGameInfoProducer',
+    'syncNativeGameInfoProducer',
+    'applyGameVersion'
+  ], {
+    store: {
+      get(key) {
+        return storeState[key];
+      },
+      set(key, value) {
+        storeState[key] = value;
+      }
+    },
+    GameDetector: {
+      findLogPath() {
+        return null;
+      }
+    },
+    fs: {
+      existsSync() {
+        return false;
+      }
+    },
+    priceService: null,
+    logParser: {
+      isRunning: true
+    },
+    nativeGameInfoProducer: null,
+    app: {
+      overwolf: {
+        packages: {
+          gep
+        }
+      }
+    },
+    createNativeGameInfoProducer(options) {
+      capturedProducerOptions.push(options);
+      return {
+        start: async (payload) => {
+          starts.push(payload);
+          return true;
+        },
+        stop: async () => true
+      };
+    },
+    mainWindow: {
+      webContents: {
+        send(channel, payload) {
+          messages.push({ channel, payload });
+        }
+      }
+    }
+  });
+
+  context.applyGameVersion('poe2');
+
+  assert.equal(capturedProducerOptions.length, 1);
+  assert.equal(capturedProducerOptions[0].gep, gep);
+  assert.equal(typeof capturedProducerOptions[0].emitHint, 'function');
+
+  const nativeHint = {
+    source: 'native-info',
+    characterName: 'KELLEE'
+  };
+  capturedProducerOptions[0].emitHint(nativeHint);
+
+  assert.deepEqual(JSON.parse(JSON.stringify(starts)), [{
+    poeVersion: 'poe2',
+    gameId: 24886
+  }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(messages)), [
+    {
+      channel: 'game-version-changed',
+      payload: {
+        version: 'poe2',
+        settingsVersion: 'poe1',
+        lastDetectedVersion: 'poe2',
+        logPath: null
+      }
+    },
+    {
+      channel: 'active-character-hint',
+      payload: nativeHint
+    }
+  ]);
+});
+
+test('runtime game detection stops the native game info producer when the detected game has no native mapping', () => {
+  let stopCalls = 0;
+  const storeState = {
+    lastDetectedPoeVersion: 'poe2',
+    poeVersion: 'poe1',
+    poePath: null
+  };
+  const context = loadFunctions([
+    'getNativeGameInfoGameId',
+    'stopNativeGameInfoProducer',
+    'syncNativeGameInfoProducer',
+    'applyGameVersion'
+  ], {
+    store: {
+      get(key) {
+        return storeState[key];
+      },
+      set(key, value) {
+        storeState[key] = value;
+      }
+    },
+    GameDetector: {
+      findLogPath() {
+        return null;
+      }
+    },
+    fs: {
+      existsSync() {
+        return false;
+      }
+    },
+    priceService: null,
+    logParser: {
+      isRunning: true
+    },
+    nativeGameInfoProducer: {
+      stop() {
+        stopCalls += 1;
+        return true;
+      }
+    },
+    mainWindow: null
+  });
+
+  context.applyGameVersion('poe1');
+
+  assert.equal(stopCalls, 1);
 });
 
 test('main runtime log events attach normalized runtime session state to existing map IPC payloads', () => {
@@ -710,6 +861,7 @@ test('main game close clears active runtime session state before notifying rende
     console: {
       log() { }
     },
+    stopNativeGameInfoProducer() {},
     mainWindow: {
       webContents: {
         send(channel, payload) {
@@ -744,6 +896,174 @@ test('main game close clears active runtime session state before notifying rende
       }
     }
   }]);
+});
+
+test('main game close stops the native game info producer', () => {
+  const {
+    createRuntimeSessionState,
+    clearRuntimeSessionState,
+    cloneRuntimeSessionState
+  } = require('../src/modules/runtimeSessionModel');
+  let stopCalls = 0;
+  const context = loadFunctions([
+    'getRuntimeSessionSnapshot',
+    'clearRuntimeSession',
+    'stopNativeGameInfoProducer',
+    'handleGameClosed'
+  ], {
+    runtimeSessionState: createRuntimeSessionState(),
+    clearRuntimeSessionState,
+    cloneRuntimeSessionState,
+    console: {
+      log() { }
+    },
+    nativeGameInfoProducer: {
+      stop() {
+        stopCalls += 1;
+        return true;
+      }
+    },
+    mainWindow: null
+  });
+
+  context.handleGameClosed('poe2', '2026-04-09T12:03:30.000Z');
+
+  assert.equal(stopCalls, 1);
+});
+
+test('main logout stops the native game info producer while clearing desktop auth state', () => {
+  const writes = [];
+  const auditTrail = [];
+  let stopCalls = 0;
+  let clearAllCalls = 0;
+  let clearDismissTimerCalls = 0;
+  const overlayUpdates = [];
+  let apiToken = 'token';
+  const context = loadFunctions([
+    'stopNativeGameInfoProducer',
+    'handleLogout'
+  ], {
+    appendAuditTrail(key) {
+      auditTrail.push(key);
+    },
+    store: {
+      set(key, value) {
+        writes.push([key, value]);
+      }
+    },
+    apiClient: {
+      setToken(value) {
+        apiToken = value;
+      }
+    },
+    currentSession: {
+      id: 'session-1'
+    },
+    stashAnalyzer: {
+      clearAll() {
+        clearAllCalls += 1;
+      }
+    },
+    overlayMapResultState: {
+      result: true
+    },
+    clearOverlayMapResultDismissTimer() {
+      clearDismissTimerCalls += 1;
+    },
+    updateOverlayWindow(payload) {
+      overlayUpdates.push(payload);
+    },
+    nativeGameInfoProducer: {
+      stop() {
+        stopCalls += 1;
+        return true;
+      }
+    }
+  });
+
+  const result = context.handleLogout();
+
+  assert.equal(result, true);
+  assert.equal(stopCalls, 1);
+  assert.deepEqual(auditTrail, ['auditLogout']);
+  assert.deepEqual(writes, [
+    ['authToken', null],
+    ['authTokenEncrypted', null],
+    ['currentUserId', null]
+  ]);
+  assert.equal(apiToken, null);
+  assert.equal(context.currentSession, null);
+  assert.equal(context.overlayMapResultState, null);
+  assert.equal(clearAllCalls, 1);
+  assert.equal(clearDismissTimerCalls, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(overlayUpdates)), [{ character: null }]);
+});
+
+test('main app shutdown stops the native game info producer with the rest of the main-process cleanup', () => {
+  let stopCalls = 0;
+  let unregisterAllCalls = 0;
+  let logParserStopCalls = 0;
+  let gameDetectorStopCalls = 0;
+  let trayDestroyCalls = 0;
+  let overlayDestroyCalls = 0;
+  const clearedIntervals = [];
+  const context = loadFunctions([
+    'stopNativeGameInfoProducer',
+    'handleAppWillQuit'
+  ], {
+    globalShortcut: {
+      unregisterAll() {
+        unregisterAllCalls += 1;
+      }
+    },
+    logParser: {
+      stop() {
+        logParserStopCalls += 1;
+      }
+    },
+    gameDetector: {
+      stop() {
+        gameDetectorStopCalls += 1;
+      }
+    },
+    ocrScanner: null,
+    tray: {
+      destroy() {
+        trayDestroyCalls += 1;
+      }
+    },
+    overlayWindow: {
+      isDestroyed() {
+        return false;
+      },
+      destroy() {
+        overlayDestroyCalls += 1;
+      }
+    },
+    pendingLootFlushInterval: 42,
+    clearInterval(intervalId) {
+      clearedIntervals.push(intervalId);
+    },
+    nativeGameInfoProducer: {
+      stop() {
+        stopCalls += 1;
+        return true;
+      }
+    }
+  });
+
+  context.handleAppWillQuit();
+
+  assert.equal(stopCalls, 1);
+  assert.equal(unregisterAllCalls, 1);
+  assert.equal(logParserStopCalls, 1);
+  assert.equal(gameDetectorStopCalls, 1);
+  assert.equal(trayDestroyCalls, 1);
+  assert.equal(overlayDestroyCalls, 1);
+  assert.deepEqual(clearedIntervals, [42]);
+  assert.equal(context.tray, null);
+  assert.equal(context.overlayWindow, null);
+  assert.equal(context.pendingLootFlushInterval, null);
 });
 
 test('language migration preserves an existing saved locale while marking the migration complete', () => {

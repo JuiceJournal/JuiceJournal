@@ -39,6 +39,7 @@ const {
   DEFAULT_STASH_SCAN_HOTKEY,
   validateHotkeys
 } = require('./src/modules/hotkeyModel');
+const { createNativeGameInfoProducer } = require('./src/modules/nativeGameInfoProducer');
 const DEFAULT_POE_LOG_PATH = GameDetector.DEFAULT_POE_LOG_PATH;
 
 const APP_NAME = 'Juice Journal';
@@ -268,6 +269,7 @@ let overlayRuntimeState = null;
 let overlayMapResultState = null;
 let overlayMapResultDismissTimer = null;
 let lastActiveCharacterHint = null;
+let nativeGameInfoProducer = null;
 let poeAuthServer = null;
 let trayHintShown = false;
 let pendingLootFlushInProgress = false;
@@ -613,6 +615,67 @@ function emitActiveCharacterHint(payload) {
   }
 
   mainWindow.webContents.send('active-character-hint', payload);
+}
+
+function getNativeGameInfoGameId(version) {
+  if (version === 'poe2') {
+    return 24886;
+  }
+
+  return null;
+}
+
+function getNativeGameInfoProducer() {
+  if (!nativeGameInfoProducer) {
+    const gep = app?.overwolf?.packages?.gep || null;
+    nativeGameInfoProducer = createNativeGameInfoProducer({
+      gep,
+      emitHint: emitActiveCharacterHint,
+      logger: console
+    });
+  }
+
+  return nativeGameInfoProducer;
+}
+
+function stopNativeGameInfoProducer() {
+  if (!nativeGameInfoProducer || typeof nativeGameInfoProducer.stop !== 'function') {
+    return Promise.resolve(false);
+  }
+
+  try {
+    return Promise.resolve(nativeGameInfoProducer.stop()).catch((error) => {
+      console.warn('[NativeGameInfoProducer] Failed to stop producer', error);
+      return false;
+    });
+  } catch (error) {
+    console.warn('[NativeGameInfoProducer] Failed to stop producer', error);
+    return Promise.resolve(false);
+  }
+}
+
+function syncNativeGameInfoProducer({ detectedVersion, gameId = getNativeGameInfoGameId(detectedVersion) } = {}) {
+  if (!detectedVersion || !gameId) {
+    return stopNativeGameInfoProducer();
+  }
+
+  const producer = getNativeGameInfoProducer();
+  if (!producer || typeof producer.start !== 'function') {
+    return Promise.resolve(false);
+  }
+
+  try {
+    return Promise.resolve(producer.start({
+      poeVersion: detectedVersion,
+      gameId
+    })).catch((error) => {
+      console.warn('[NativeGameInfoProducer] Failed to start producer', error);
+      return false;
+    });
+  } catch (error) {
+    console.warn('[NativeGameInfoProducer] Failed to start producer', error);
+    return Promise.resolve(false);
+  }
 }
 
 function annotateSyncFailure(action, error, { blocked = false } = {}) {
@@ -2283,6 +2346,8 @@ function handleGameClosed(version, at = new Date()) {
     runtimeSession
   };
 
+  stopNativeGameInfoProducer();
+
   console.log(`[GameDetector] ${gameLabel} closed`);
   if (mainWindow) {
     mainWindow.webContents.send('game-closed', payload);
@@ -2335,6 +2400,10 @@ function applyGameVersion(version) {
     }
     setupLogParser();
   }
+
+  syncNativeGameInfoProducer({
+    detectedVersion: version
+  });
 
   // Notify renderer to update UI (icons, labels, etc.)
   if (mainWindow) {
@@ -2425,6 +2494,23 @@ function applyDesktopSettings(settings = {}) {
     ensureOverlayWindowForSettings();
   }
 
+  return true;
+}
+
+function handleLogout() {
+  appendAuditTrail('auditLogout');
+  stopNativeGameInfoProducer();
+  store.set('authToken', null);
+  store.set('authTokenEncrypted', null);
+  store.set('currentUserId', null);
+  apiClient.setToken(null);
+  currentSession = null;
+  if (stashAnalyzer) {
+    stashAnalyzer.clearAll();
+  }
+  overlayMapResultState = null;
+  clearOverlayMapResultDismissTimer();
+  updateOverlayWindow({ character: null });
   return true;
 }
 
@@ -3162,21 +3248,7 @@ function setupIPC() {
   });
 
   // Logout
-  ipcMain.handle('logout', () => {
-    appendAuditTrail('auditLogout');
-    store.set('authToken', null);
-    store.set('authTokenEncrypted', null);
-    store.set('currentUserId', null);
-    apiClient.setToken(null);
-    currentSession = null;
-    if (stashAnalyzer) {
-      stashAnalyzer.clearAll();
-    }
-    overlayMapResultState = null;
-    clearOverlayMapResultDismissTimer();
-    updateOverlayWindow({ character: null });
-    return true;
-  });
+  ipcMain.handle('logout', handleLogout);
 }
 
 /**
@@ -3248,7 +3320,7 @@ app.on('activate', () => {
   showMainWindow();
 });
 
-app.on('will-quit', () => {
+function handleAppWillQuit() {
   // Global kisayolleri temizle
   globalShortcut.unregisterAll();
 
@@ -3261,6 +3333,8 @@ app.on('will-quit', () => {
   if (gameDetector) {
     gameDetector.stop();
   }
+
+  stopNativeGameInfoProducer();
 
   if (ocrScanner) {
     ocrScanner.terminate().catch(() => { });
@@ -3280,5 +3354,6 @@ app.on('will-quit', () => {
     clearInterval(pendingLootFlushInterval);
     pendingLootFlushInterval = null;
   }
+}
 
-});
+app.on('will-quit', handleAppWillQuit);
