@@ -98,6 +98,7 @@
 
     return {
       portraitKey: 'unknown',
+      bannerKey: 'unknown',
       classLabel: className || 'Unknown Class',
       baseClassLabel: className || 'Unknown Class',
       detailLabel: ascendancy,
