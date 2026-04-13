@@ -633,6 +633,7 @@ test('desktop preload exposes native character hint listener', () => {
 
   assert.match(source, /onActiveCharacterHint:\s*\(callback\)\s*=>/);
   assert.match(source, /ipcRenderer\.on\('active-character-hint'/);
+  assert.match(source, /getLastActiveCharacterHint:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('get-last-active-character-hint'\)/);
 });
 
 test('main process forwards native active-character hints to the renderer', () => {
@@ -656,6 +657,32 @@ test('main process forwards native active-character hints to the renderer', () =
     channel: 'active-character-hint',
     data: payload
   }]);
+});
+
+test('main process caches the last native active-character hint for later retrieval', () => {
+  const payload = {
+    source: 'native',
+    characterName: 'KELLEE'
+  };
+  const messages = [];
+  const context = loadFunctions(['emitActiveCharacterHint'], {
+    lastActiveCharacterHint: null,
+    mainWindow: {
+      webContents: {
+        send(channel, data) {
+          messages.push({ channel, data });
+        }
+      }
+    }
+  });
+
+  context.emitActiveCharacterHint(payload);
+
+  assert.deepEqual(messages, [{
+    channel: 'active-character-hint',
+    data: payload
+  }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.lastActiveCharacterHint)), payload);
 });
 
 test('main game close clears active runtime session state before notifying renderer', () => {

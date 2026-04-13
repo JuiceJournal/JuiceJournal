@@ -267,6 +267,7 @@ let overlayCharacterState = null;
 let overlayRuntimeState = null;
 let overlayMapResultState = null;
 let overlayMapResultDismissTimer = null;
+let lastActiveCharacterHint = null;
 let poeAuthServer = null;
 let trayHintShown = false;
 let pendingLootFlushInProgress = false;
@@ -605,6 +606,8 @@ function emitPendingSyncState() {
 }
 
 function emitActiveCharacterHint(payload) {
+  lastActiveCharacterHint = payload || null;
+
   if (!mainWindow || !mainWindow.webContents) {
     return;
   }
@@ -3103,6 +3106,10 @@ function setupIPC() {
       overlayWindow.setIgnoreMouseEvents(ignore !== false, { forward: true });
     }
     return true;
+  });
+
+  ipcMain.handle('get-last-active-character-hint', async () => {
+    return lastActiveCharacterHint;
   });
 
   ipcMain.handle('save-map-result', async (event, result) => {

@@ -116,6 +116,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onActiveCharacterHint: (callback) => {
     ipcRenderer.on('active-character-hint', (event, data) => callback(data));
   },
+  getLastActiveCharacterHint: () => ipcRenderer.invoke('get-last-active-character-hint'),
 
   // Dinleyicileri temizle (sadece izin verilen kanallar)
   removeAllListeners: (channel) => {
