@@ -82,6 +82,7 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
       || typeof gep?.setRequiredFeatures !== 'function'
       || typeof gep?.getInfo !== 'function'
       || typeof gep?.on !== 'function'
+      || typeof gep?.removeListener !== 'function'
     ) {
       return false;
     }
@@ -126,7 +127,7 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
       try {
         await stop();
       } catch (error) {
-        logger.warn(error);
+        logger?.warn?.(error);
       }
     };
 

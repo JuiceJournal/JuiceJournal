@@ -245,6 +245,34 @@ test('producer returns false and logs a warning when required feature setup fail
   assert.deepEqual(listeners.get('game-exit'), []);
 });
 
+test('producer returns false without subscribing when removeListener is unavailable', async () => {
+  const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
+  const onCalls = [];
+  let setRequiredFeaturesCalled = false;
+  const gep = {
+    async setRequiredFeatures() {
+      setRequiredFeaturesCalled = true;
+    },
+    async getInfo() {
+      return null;
+    },
+    on(eventName) {
+      onCalls.push(eventName);
+    }
+  };
+
+  const producer = createNativeGameInfoProducer({ gep });
+
+  const started = await producer.start({
+    poeVersion: 'poe2',
+    gameId: 24886
+  });
+
+  assert.equal(started, false);
+  assert.equal(setRequiredFeaturesCalled, false);
+  assert.deepEqual(onCalls, []);
+});
+
 test('producer rolls back subscriptions and returns false when listener registration throws', async () => {
   const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
   const warnings = [];
@@ -491,6 +519,40 @@ test('producer logs post-start refresh failures without rejecting the update han
   assert.deepEqual(warnings, [updateError]);
   assert.equal(typeof listeners.get('new-info-update'), 'function');
   assert.equal(typeof listeners.get('game-exit'), 'function');
+});
+
+test('producer game-exit handler does not reject when stop cleanup fails and logger has no warn method', async () => {
+  const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
+  const listeners = new Map();
+  const cleanupError = new Error('native cleanup failed');
+  const gep = {
+    async setRequiredFeatures() {},
+    async getInfo() {
+      return null;
+    },
+    on(eventName, handler) {
+      listeners.set(eventName, handler);
+    },
+    removeListener() {
+      throw cleanupError;
+    }
+  };
+
+  const producer = createNativeGameInfoProducer({
+    gep,
+    logger: {}
+  });
+
+  const started = await producer.start({
+    poeVersion: 'poe2',
+    gameId: 24886
+  });
+
+  assert.equal(started, true);
+
+  const gameExitHandler = listeners.get('game-exit');
+
+  await assert.doesNotReject(async () => gameExitHandler({}, 24886));
 });
 
 test('producer ignores stale info updates after the active session changes', async () => {
