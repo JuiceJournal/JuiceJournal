@@ -250,7 +250,9 @@ function loadMainWithMocks({
     messages,
     storeState: runtimeStoreState,
     async handleDetectedGameChange({ game } = {}) {
-      return context.applyGameVersion(game);
+      context.applyGameVersion(game);
+      await new Promise((resolve) => setImmediate(resolve));
+      return context;
     }
   };
 }
