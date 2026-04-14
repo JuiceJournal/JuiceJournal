@@ -1,12 +1,7 @@
 using JuiceJournal.NativeBridge.Contracts;
+using JuiceJournal.NativeBridge.Services;
 
-var startedAt = DateTimeOffset.UtcNow;
-var message = BridgeMessage.Diagnostic(
-    level: "info",
-    message: ".NET 10 native bridge started",
-    data: new Dictionary<string, object?>
-    {
-        ["startedAt"] = startedAt
-    });
+var probe = new ProcessProbe();
+var snapshot = probe.Capture();
 
-Console.WriteLine(message.ToJson());
+Console.WriteLine(BridgeMessage.Diagnostic("info", "process-probe", snapshot).ToJson());
