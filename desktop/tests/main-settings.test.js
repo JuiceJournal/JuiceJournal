@@ -921,6 +921,124 @@ test('runtime game detection fails closed when the native gep package is unavail
   }]);
 });
 
+test('native bridge lazily creates the supervisor once and starts it on demand', () => {
+  const starts = [];
+  const createdSupervisors = [];
+  const supervisor = {
+    start() {
+      starts.push(true);
+      return true;
+    },
+    stop() {
+      return true;
+    }
+  };
+  const context = loadFunctions([
+    'handleNativeBridgeSupervisorMessage',
+    'getNativeBridgeSupervisor',
+    'startNativeBridgeSupervisor'
+  ], {
+    nativeBridgeSupervisor: null,
+    createNativeBridgeSupervisor(options) {
+      createdSupervisors.push(options);
+      return supervisor;
+    },
+    deriveNativeCharacterHint(payload) {
+      return payload;
+    },
+    emitActiveCharacterHint() {},
+    path,
+    __dirname: path.join(__dirname, '..'),
+    console: {
+      log() {},
+      warn() {}
+    }
+  });
+
+  assert.equal(context.getNativeBridgeSupervisor(), supervisor);
+  assert.equal(context.getNativeBridgeSupervisor(), supervisor);
+  assert.equal(createdSupervisors.length, 1);
+  assert.equal(typeof createdSupervisors[0].spawnBridge, 'function');
+  assert.equal(typeof createdSupervisors[0].onMessage, 'function');
+  assert.equal(context.startNativeBridgeSupervisor(), true);
+  assert.deepEqual(starts, [true]);
+});
+
+test('native bridge forwards supported active-character payloads into emitActiveCharacterHint', () => {
+  const emittedHints = [];
+  const derivedHints = [];
+  const context = loadFunctions(['handleNativeBridgeSupervisorMessage'], {
+    deriveNativeCharacterHint(payload) {
+      derivedHints.push(payload);
+      return {
+        source: 'native-game-info',
+        poeVersion: 'poe2',
+        characterName: 'KELLEE',
+        className: 'Monk2',
+        confidence: 'high'
+      };
+    },
+    emitActiveCharacterHint(payload) {
+      emittedHints.push(payload);
+    }
+  });
+
+  context.handleNativeBridgeSupervisorMessage({
+    type: 'active-character-hint',
+    detectedAt: '2026-04-14T12:00:00.000Z',
+    data: {
+      gameVersion: 'poe2',
+      characterName: 'KELLEE',
+      class: 'Monk2'
+    }
+  });
+
+  assert.deepEqual(derivedHints, [{
+    gameVersion: 'poe2',
+    characterName: 'KELLEE',
+    class: 'Monk2'
+  }]);
+  assert.deepEqual(emittedHints, [{
+    source: 'native-game-info',
+    poeVersion: 'poe2',
+    characterName: 'KELLEE',
+    className: 'Monk2',
+    confidence: 'high'
+  }]);
+});
+
+test('native bridge ignores unsupported bridge payloads', () => {
+  const derivedHints = [];
+  const emittedHints = [];
+  const context = loadFunctions(['handleNativeBridgeSupervisorMessage'], {
+    deriveNativeCharacterHint(payload) {
+      derivedHints.push(payload);
+      return payload;
+    },
+    emitActiveCharacterHint(payload) {
+      emittedHints.push(payload);
+    }
+  });
+
+  context.handleNativeBridgeSupervisorMessage({
+    type: 'bridge-diagnostic',
+    message: 'bridge ready',
+    detectedAt: '2026-04-14T12:00:00.000Z'
+  });
+
+  assert.deepEqual(derivedHints, []);
+  assert.deepEqual(emittedHints, []);
+});
+
+test('native bridge startup wiring starts the supervisor from app.whenReady', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+
+  assert.match(
+    source,
+    /app\.whenReady\(\)\.then\(\(\)\s*=>\s*\{[\s\S]*?startNativeBridgeSupervisor\(\);/
+  );
+});
+
 test('main runtime log events attach normalized runtime session state to existing map IPC payloads', () => {
   const {
     createRuntimeSessionState,
@@ -1060,6 +1178,44 @@ test('main process caches the last native active-character hint for later retrie
     data: payload
   }]);
   assert.deepEqual(JSON.parse(JSON.stringify(context.lastActiveCharacterHint)), payload);
+});
+
+test('native bridge stop helper stops the lazily created supervisor', () => {
+  const stops = [];
+  const supervisor = {
+    start() {
+      return true;
+    },
+    stop() {
+      stops.push(true);
+      return true;
+    }
+  };
+  const context = loadFunctions([
+    'handleNativeBridgeSupervisorMessage',
+    'getNativeBridgeSupervisor',
+    'stopNativeBridgeSupervisor'
+  ], {
+    nativeBridgeSupervisor: null,
+    createNativeBridgeSupervisor() {
+      return supervisor;
+    },
+    deriveNativeCharacterHint(payload) {
+      return payload;
+    },
+    emitActiveCharacterHint() {},
+    path,
+    __dirname: path.join(__dirname, '..'),
+    console: {
+      log() {},
+      warn() {}
+    }
+  });
+
+  context.getNativeBridgeSupervisor();
+
+  assert.equal(context.stopNativeBridgeSupervisor(), true);
+  assert.deepEqual(stops, [true]);
 });
 
 test('main game close clears active runtime session state before notifying renderer', () => {
@@ -1306,6 +1462,7 @@ test('main app shutdown stops the native game info producer with the rest of the
         gameDetectorStopCalls += 1;
       }
     },
+    stopNativeBridgeSupervisor() {},
     ocrScanner: null,
     tray: {
       destroy() {
@@ -1349,6 +1506,34 @@ test('main app shutdown stops the native game info producer with the rest of the
   assert.equal(context.tray, null);
   assert.equal(context.overlayWindow, null);
   assert.equal(context.pendingLootFlushInterval, null);
+});
+
+test('native bridge shutdown stops the supervisor during app cleanup', () => {
+  let bridgeStopCalls = 0;
+  const context = loadFunctions(['handleAppWillQuit'], {
+    globalShortcut: {
+      unregisterAll() {}
+    },
+    logParser: {
+      stop() {}
+    },
+    gameDetector: {
+      stop() {}
+    },
+    stopNativeGameInfoProducer() {},
+    stopNativeBridgeSupervisor() {
+      bridgeStopCalls += 1;
+    },
+    ocrScanner: null,
+    tray: null,
+    overlayWindow: null,
+    pendingLootFlushInterval: null,
+    clearInterval() {}
+  });
+
+  context.handleAppWillQuit();
+
+  assert.equal(bridgeStopCalls, 1);
 });
 
 test('language migration preserves an existing saved locale while marking the migration complete', () => {

@@ -10,6 +10,7 @@
  */
 
 const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen, shell, nativeImage, safeStorage } = require('electron');
+const { spawn } = require('child_process');
 const crypto = require('crypto');
 const http = require('http');
 const fs = require('fs');
@@ -39,6 +40,8 @@ const {
   DEFAULT_STASH_SCAN_HOTKEY,
   validateHotkeys
 } = require('./src/modules/hotkeyModel');
+const { deriveNativeCharacterHint } = require('./src/modules/nativeCharacterHintModel');
+const { createNativeBridgeSupervisor } = require('./src/modules/nativeBridgeSupervisor');
 const { createNativeGameInfoProducer } = require('./src/modules/nativeGameInfoProducer');
 const DEFAULT_POE_LOG_PATH = GameDetector.DEFAULT_POE_LOG_PATH;
 
@@ -269,6 +272,7 @@ let overlayRuntimeState = null;
 let overlayMapResultState = null;
 let overlayMapResultDismissTimer = null;
 let lastActiveCharacterHint = null;
+let nativeBridgeSupervisor = null;
 let nativeGameInfoProducer = null;
 let nativeGameInfoProducerBinding = null;
 let poeAuthServer = null;
@@ -620,6 +624,68 @@ function emitActiveCharacterHint(payload) {
 
 function clearNativeActiveCharacterHint() {
   emitActiveCharacterHint(null);
+}
+
+function handleNativeBridgeSupervisorMessage(payload) {
+  if (!payload || payload.type !== 'active-character-hint') {
+    return false;
+  }
+
+  const hint = deriveNativeCharacterHint(payload.data);
+  if (!hint) {
+    return false;
+  }
+
+  emitActiveCharacterHint(hint);
+  return true;
+}
+
+function getNativeBridgeSupervisor() {
+  if (!nativeBridgeSupervisor) {
+    const projectPath = path.join(__dirname, 'native-bridge', 'JuiceJournal.NativeBridge.csproj');
+
+    nativeBridgeSupervisor = createNativeBridgeSupervisor({
+      spawnBridge() {
+        return spawn('dotnet', ['run', '--project', projectPath], {
+          cwd: __dirname,
+          windowsHide: true
+        });
+      },
+      onMessage: handleNativeBridgeSupervisorMessage,
+      onError(error) {
+        console.warn('[NativeBridgeSupervisor] Bridge failed closed', error);
+      }
+    });
+  }
+
+  return nativeBridgeSupervisor;
+}
+
+function startNativeBridgeSupervisor() {
+  const supervisor = getNativeBridgeSupervisor();
+  if (!supervisor || typeof supervisor.start !== 'function') {
+    return false;
+  }
+
+  try {
+    return supervisor.start();
+  } catch (error) {
+    console.warn('[NativeBridgeSupervisor] Failed to start bridge', error);
+    return false;
+  }
+}
+
+function stopNativeBridgeSupervisor() {
+  if (!nativeBridgeSupervisor || typeof nativeBridgeSupervisor.stop !== 'function') {
+    return false;
+  }
+
+  try {
+    return nativeBridgeSupervisor.stop();
+  } catch (error) {
+    console.warn('[NativeBridgeSupervisor] Failed to stop bridge', error);
+    return false;
+  }
 }
 
 function getNativeGameInfoGameId(version) {
@@ -3313,6 +3379,7 @@ app.whenReady().then(() => {
 
   // IPC handler'lari once kaydet (pencere acilmadan)
   setupIPC();
+  startNativeBridgeSupervisor();
 
   createMainWindow();
   mainWindow.show(); // Pencereyi goster
@@ -3368,6 +3435,7 @@ function handleAppWillQuit() {
     gameDetector.stop();
   }
 
+  stopNativeBridgeSupervisor();
   stopNativeGameInfoProducer();
 
   if (ocrScanner) {
