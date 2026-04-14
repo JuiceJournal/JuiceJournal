@@ -225,12 +225,19 @@ test('parseNativeBridgeLine returns null for malformed json', () => {
 });
 
 test('parseNativeBridgeLine returns a diagnostic payload', () => {
-  const payload = parseNativeBridgeLine('{"type":"bridge-diagnostic","level":"info","message":"ready"}');
+  const payload = parseNativeBridgeLine('{"type":"bridge-diagnostic","level":"info","message":"ready","detectedAt":"2026-04-14T12:00:00.000Z"}');
   assert.deepEqual(payload, {
     type: 'bridge-diagnostic',
     level: 'info',
-    message: 'ready'
+    message: 'ready',
+    detectedAt: '2026-04-14T12:00:00.000Z'
   });
+});
+
+test('parseNativeBridgeLine rejects arrays and contract-invalid payloads', () => {
+  assert.equal(parseNativeBridgeLine('[]'), null);
+  assert.equal(parseNativeBridgeLine('{}'), null);
+  assert.equal(parseNativeBridgeLine('{"type":"bridge-diagnostic"}'), null);
 });
 ```
 
@@ -243,6 +250,16 @@ Expected: FAIL with missing module
 - [ ] **Step 3: Implement the minimal parser**
 
 ```js
+function isBridgePayload(payload) {
+  return Boolean(payload)
+    && typeof payload === 'object'
+    && !Array.isArray(payload)
+    && typeof payload.type === 'string'
+    && payload.type.trim().length > 0
+    && typeof payload.detectedAt === 'string'
+    && payload.detectedAt.trim().length > 0;
+}
+
 function parseNativeBridgeLine(line) {
   if (typeof line !== 'string' || !line.trim()) {
     return null;
@@ -250,7 +267,7 @@ function parseNativeBridgeLine(line) {
 
   try {
     const payload = JSON.parse(line);
-    return payload && typeof payload === 'object' ? payload : null;
+    return isBridgePayload(payload) ? payload : null;
   } catch {
     return null;
   }
