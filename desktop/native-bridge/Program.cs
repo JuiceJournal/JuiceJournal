@@ -1,7 +1,11 @@
 using JuiceJournal.NativeBridge.Contracts;
 using JuiceJournal.NativeBridge.Services;
 
-var probe = new ProcessProbe();
-var snapshot = probe.Capture();
+var processProbe = new ProcessProbe();
+var windowProbe = new WindowProbe();
 
-Console.WriteLine(BridgeMessage.Diagnostic("info", "process-probe", snapshot).ToJson());
+Console.WriteLine(
+    BridgeMessage.Diagnostic("info", "process-probe", processProbe.Capture()).ToJson());
+
+Console.WriteLine(
+    BridgeMessage.Diagnostic("info", "window-probe", windowProbe.Capture()).ToJson());
