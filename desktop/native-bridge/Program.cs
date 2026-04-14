@@ -1,13 +1,13 @@
 using JuiceJournal.NativeBridge.Contracts;
 using JuiceJournal.NativeBridge.Services;
 
-var processProbe = new ProcessProbe();
 var windowProbe = new WindowProbe();
 var transitionProbe = new TransitionProbe();
+var transitionSnapshot = transitionProbe.CaptureProcessSnapshots();
 
-EmitDiagnostic("process-probe", processProbe.Capture);
+EmitDiagnostic("process-probe", () => TransitionProbe.CreateProcessProbeData(transitionSnapshot));
 EmitDiagnostic("window-probe", windowProbe.Capture);
-EmitDiagnostic("transition-probe", transitionProbe.Capture);
+EmitDiagnostic("transition-probe", () => TransitionProbe.CreateTransitionProbeData(transitionSnapshot));
 
 void EmitDiagnostic(
     string message,

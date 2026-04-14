@@ -4,7 +4,7 @@ namespace JuiceJournal.NativeBridge.Services;
 
 public sealed class TransitionProbe
 {
-    public IReadOnlyDictionary<string, object?> Capture()
+    public IReadOnlyList<IReadOnlyDictionary<string, object?>> CaptureProcessSnapshots()
     {
         var poeProcesses = new List<IReadOnlyDictionary<string, object?>>();
 
@@ -35,9 +35,39 @@ public sealed class TransitionProbe
             }
         }
 
+        return poeProcesses;
+    }
+
+    public IReadOnlyDictionary<string, object?> Capture()
+    {
+        return CreateTransitionProbeData(CaptureProcessSnapshots());
+    }
+
+    public static IReadOnlyDictionary<string, object?> CreateProcessProbeData(
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> processSnapshots)
+    {
+        var processEntries = processSnapshots
+            .Select((snapshot) => new Dictionary<string, object?>
+            {
+                ["name"] = snapshot.TryGetValue("name", out var name) ? name : null,
+                ["id"] = snapshot.TryGetValue("id", out var id) ? id : null
+            })
+            .Cast<IReadOnlyDictionary<string, object?>>()
+            .ToArray();
+
         return new Dictionary<string, object?>
         {
-            ["processes"] = poeProcesses
+            ["poeProcessCount"] = processEntries.Length,
+            ["processes"] = processEntries
+        };
+    }
+
+    public static IReadOnlyDictionary<string, object?> CreateTransitionProbeData(
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> processSnapshots)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["processes"] = processSnapshots
         };
     }
 
