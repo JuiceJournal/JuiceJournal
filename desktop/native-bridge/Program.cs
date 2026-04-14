@@ -1,13 +1,47 @@
 using JuiceJournal.NativeBridge.Contracts;
 using JuiceJournal.NativeBridge.Services;
 
-var windowProbe = new WindowProbe();
 var transitionProbe = new TransitionProbe();
-var transitionSnapshot = transitionProbe.CaptureProcessSnapshots();
+var windowProbe = new WindowProbe();
 
-EmitDiagnostic("process-probe", () => TransitionProbe.CreateProcessProbeData(transitionSnapshot));
+EmitTransitionDiagnostics(transitionProbe);
 EmitDiagnostic("window-probe", windowProbe.Capture);
-EmitDiagnostic("transition-probe", () => TransitionProbe.CreateTransitionProbeData(transitionSnapshot));
+
+void EmitTransitionDiagnostics(TransitionProbe probe)
+{
+    try
+    {
+        var detectedAt = DateTimeOffset.UtcNow;
+        var transitionSnapshot = probe.CaptureProcessSnapshots();
+
+        Console.WriteLine(
+            new BridgeMessage(
+                "bridge-diagnostic",
+                "info",
+                "process-probe",
+                detectedAt,
+                TransitionProbe.CreateProcessProbeData(transitionSnapshot)).ToJson());
+
+        Console.WriteLine(
+            new BridgeMessage(
+                "bridge-diagnostic",
+                "info",
+                "transition-probe",
+                detectedAt,
+                TransitionProbe.CreateTransitionProbeData(transitionSnapshot)).ToJson());
+    }
+    catch (Exception error)
+    {
+        Console.WriteLine(
+            BridgeMessage.Diagnostic(
+                "error",
+                "transition-probe-failed",
+                new Dictionary<string, object?>
+                {
+                    ["error"] = error.Message
+                }).ToJson());
+    }
+}
 
 void EmitDiagnostic(
     string message,
