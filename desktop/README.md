@@ -76,8 +76,8 @@ npm run dev
 # Tum desktop testleri
 npm test
 
-# Native producer odakli smoke testi
-node --test tests/main-settings.test.js --test-name-pattern "gep|native producer"
+# Missing-GEP fail-closed smoke testi
+node --test tests/main-settings.test.js --test-name-pattern "runtime game detection fails closed when the native gep package is unavailable"
 ```
 
 ## Native Active Character Validation

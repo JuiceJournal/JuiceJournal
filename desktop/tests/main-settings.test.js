@@ -868,11 +868,21 @@ test('runtime game detection stops the native game info producer when the detect
 });
 
 test('runtime game detection fails closed when the native gep package is unavailable', async () => {
+  const starts = [];
   const context = loadMainWithMocks({
     app: {
       overwolf: {
         packages: {}
       }
+    },
+    createNativeGameInfoProducer() {
+      return {
+        start: async (payload) => {
+          starts.push(payload);
+          return false;
+        },
+        stop: async () => true
+      };
     }
   });
 
@@ -881,8 +891,13 @@ test('runtime game detection fails closed when the native gep package is unavail
     gameId: 24886
   });
 
+  assert.deepEqual(JSON.parse(JSON.stringify(starts)), [{
+    poeVersion: 'poe2',
+    gameId: 24886
+  }]);
   assert.deepEqual(context.emittedActiveCharacterHints, []);
   assert.equal(context.lastActiveCharacterHint, null);
+  assert.equal(context.nativeGameInfoProducerBinding, null);
   assert.deepEqual(JSON.parse(JSON.stringify(context.messages)), [{
     channel: 'game-version-changed',
     payload: {
