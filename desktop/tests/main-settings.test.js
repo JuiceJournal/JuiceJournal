@@ -244,6 +244,13 @@ function loadMainWithMocks({
     ...contextOverrides
   });
 
+  const originalSyncNativeGameInfoProducer = context.syncNativeGameInfoProducer;
+  let pendingNativeProducerSync = Promise.resolve(false);
+  context.syncNativeGameInfoProducer = (...args) => {
+    pendingNativeProducerSync = Promise.resolve(originalSyncNativeGameInfoProducer(...args));
+    return pendingNativeProducerSync;
+  };
+
   return {
     ...context,
     emittedActiveCharacterHints,
@@ -251,7 +258,7 @@ function loadMainWithMocks({
     storeState: runtimeStoreState,
     async handleDetectedGameChange({ game } = {}) {
       context.applyGameVersion(game);
-      await new Promise((resolve) => setImmediate(resolve));
+      await pendingNativeProducerSync;
       return context;
     }
   };
