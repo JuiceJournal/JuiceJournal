@@ -99,17 +99,21 @@ function createNativeBridgeSupervisor({ spawnBridge, onMessage, onError = () => 
       detachBridge(bridge);
     };
 
+    activeBridge = bridge;
+
     try {
       child.stdout?.on('data', bridge.onStdoutData);
       child.stderr?.on('data', bridge.onStderrData);
       child.on?.('exit', bridge.onExit);
     } catch (error) {
       detachBridge(bridge);
+      if (activeBridge === bridge) {
+        activeBridge = null;
+      }
       emitError(error);
       return false;
     }
 
-    activeBridge = bridge;
     return true;
   }
 
@@ -119,7 +123,11 @@ function createNativeBridgeSupervisor({ spawnBridge, onMessage, onError = () => 
     }
 
     try {
-      activeBridge.child.kill?.();
+      const killed = activeBridge.child.kill?.();
+      if (killed === false) {
+        return false;
+      }
+
       detachBridge(activeBridge);
       activeBridge = null;
       return true;

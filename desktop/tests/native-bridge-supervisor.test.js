@@ -92,6 +92,38 @@ test('supervisor spawns the bridge once and parses complete stdout lines across 
   ]);
 });
 
+test('supervisor keeps the first stdout payload even when the child emits during listener registration', () => {
+  const createNativeBridgeSupervisor = getCreateNativeBridgeSupervisor();
+  const messages = [];
+  const child = createFakeBridgeProcess();
+  const originalOn = child.stdout.on.bind(child.stdout);
+  child.stdout.on = (eventName, handler) => {
+    const result = originalOn(eventName, handler);
+    if (eventName === 'data') {
+      handler(Buffer.from('{"type":"bridge-diagnostic","message":"immediate","detectedAt":"2026-04-14T12:00:00.000Z"}\n'));
+    }
+    return result;
+  };
+
+  const supervisor = createNativeBridgeSupervisor({
+    spawnBridge() {
+      return child;
+    },
+    onMessage(message) {
+      messages.push(message);
+    }
+  });
+
+  assert.equal(supervisor.start(), true);
+  assert.deepEqual(messages, [
+    {
+      type: 'bridge-diagnostic',
+      message: 'immediate',
+      detectedAt: '2026-04-14T12:00:00.000Z'
+    }
+  ]);
+});
+
 test('supervisor forwards stderr data to onError without parsing it', () => {
   const createNativeBridgeSupervisor = getCreateNativeBridgeSupervisor();
   const stderrLines = [];
@@ -185,6 +217,26 @@ test('supervisor stop fails closed when kill throws', () => {
   assert.equal(supervisor.stop(), false);
   assert.equal(child.killCalls, 1);
   assert.deepEqual(errors, [stopError]);
+  assert.equal(supervisor.start(), false);
+});
+
+test('supervisor stop fails closed when kill returns false', () => {
+  const createNativeBridgeSupervisor = getCreateNativeBridgeSupervisor();
+  const child = createFakeBridgeProcess();
+  child.kill = () => {
+    child.killCalls += 1;
+    return false;
+  };
+
+  const supervisor = createNativeBridgeSupervisor({
+    spawnBridge() {
+      return child;
+    }
+  });
+
+  assert.equal(supervisor.start(), true);
+  assert.equal(supervisor.stop(), false);
+  assert.equal(child.killCalls, 1);
   assert.equal(supervisor.start(), false);
 });
 
