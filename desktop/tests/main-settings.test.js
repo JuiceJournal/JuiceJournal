@@ -165,6 +165,96 @@ function loadFunctions(functionNames, contextOverrides = {}) {
   return context;
 }
 
+function loadMainWithMocks({
+  app,
+  createNativeGameInfoProducer,
+  fs: fsOverride,
+  GameDetector: gameDetectorOverride,
+  logParser,
+  lastActiveCharacterHint,
+  mainWindow,
+  nativeGameInfoProducer,
+  nativeGameInfoProducerBinding,
+  priceService,
+  store,
+  storeState,
+  ...contextOverrides
+} = {}) {
+  const nativeProducerModule = createNativeGameInfoProducer
+    ? { createNativeGameInfoProducer }
+    : require('../src/modules/nativeGameInfoProducer');
+  const messages = [];
+  const emittedActiveCharacterHints = [];
+  const runtimeStoreState = {
+    lastDetectedPoeVersion: 'poe1',
+    poeVersion: 'poe1',
+    poePath: null,
+    ...storeState
+  };
+  const context = loadFunctions([
+    'emitActiveCharacterHint',
+    'clearNativeActiveCharacterHint',
+    'getNativeGameInfoGameId',
+    'getNativeGameInfoProducer',
+    'stopNativeGameInfoProducer',
+    'syncNativeGameInfoProducer',
+    'applyGameVersion'
+  ], {
+    store: store || {
+      get(key) {
+        return runtimeStoreState[key];
+      },
+      set(key, value) {
+        runtimeStoreState[key] = value;
+      }
+    },
+    GameDetector: gameDetectorOverride || {
+      findLogPath() {
+        return null;
+      }
+    },
+    fs: fsOverride || {
+      existsSync() {
+        return false;
+      }
+    },
+    priceService: priceService ?? null,
+    logParser: logParser || {
+      isRunning: true
+    },
+    nativeGameInfoProducerBinding: nativeGameInfoProducerBinding ?? null,
+    nativeGameInfoProducer: nativeGameInfoProducer ?? null,
+    lastActiveCharacterHint: lastActiveCharacterHint ?? null,
+    app: app || {
+      overwolf: {
+        packages: {}
+      }
+    },
+    createNativeGameInfoProducer: nativeProducerModule.createNativeGameInfoProducer,
+    mainWindow: mainWindow || {
+      webContents: {
+        send(channel, payload) {
+          messages.push({ channel, payload });
+          if (channel === 'active-character-hint') {
+            emittedActiveCharacterHints.push(payload);
+          }
+        }
+      }
+    },
+    ...contextOverrides
+  });
+
+  return {
+    ...context,
+    emittedActiveCharacterHints,
+    messages,
+    storeState: runtimeStoreState,
+    async handleDetectedGameChange({ game } = {}) {
+      return context.applyGameVersion(game);
+    }
+  };
+}
+
 function getSettingsAllowlist() {
   return new Set([
     'apiUrl',
@@ -775,6 +865,33 @@ test('runtime game detection stops the native game info producer when the detect
       }
     }
   ]);
+});
+
+test('runtime game detection fails closed when the native gep package is unavailable', async () => {
+  const context = loadMainWithMocks({
+    app: {
+      overwolf: {
+        packages: {}
+      }
+    }
+  });
+
+  await context.handleDetectedGameChange({
+    game: 'poe2',
+    gameId: 24886
+  });
+
+  assert.deepEqual(context.emittedActiveCharacterHints, []);
+  assert.equal(context.lastActiveCharacterHint, null);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.messages)), [{
+    channel: 'game-version-changed',
+    payload: {
+      version: 'poe2',
+      settingsVersion: 'poe1',
+      lastDetectedVersion: 'poe2',
+      logPath: null
+    }
+  }]);
 });
 
 test('main runtime log events attach normalized runtime session state to existing map IPC payloads', () => {

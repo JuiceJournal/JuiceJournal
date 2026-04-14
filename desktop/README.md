@@ -70,6 +70,34 @@ npm run dev
 # Her degisiklikten sonra uygulamayi yeniden baslatin
 ```
 
+### Test Komutlari
+
+```bash
+# Tum desktop testleri
+npm test
+
+# Native producer odakli smoke testi
+node --test tests/main-settings.test.js --test-name-pattern "gep|native producer"
+```
+
+## Native Active Character Validation
+
+PoE2 native karakter tespiti icin manuel dogrulama matrisi:
+
+- Oyunu acin.
+- Farkli bir karakter secin.
+- `Play` basin.
+- Juice Journal karakter kartinin `1-3 saniye` icinde yeni karaktere gectigini dogrulayin.
+- Eger native hint gelmezse mevcut karakter kartinin korunup API fallback yenilemesinin devam ettigini kontrol edin.
+
+Kontrol listesi:
+
+- `PoE1/PoE2` badge dogru mu
+- karakter adi dogru mu
+- portrait ve banner dogru class ailesine gecti mi
+- stale eski karakter geri donuyor mu
+- oyun kapaninca karakter karti stale native hint tasiyor mu
+
 ## Build
 
 ```bash
