@@ -66,3 +66,16 @@ test('parseNativeBridgeLine rejects arrays and contract-invalid objects', () => 
   assert.equal(parseNativeBridgeLine('{"type":"bridge-diagnostic"}'), null);
   assert.equal(parseNativeBridgeLine('{"detectedAt":"2026-04-14T12:00:00.000Z"}'), null);
 });
+
+test('parseNativeBridgeLine trims required bridge contract fields', () => {
+  const parseNativeBridgeLine = getParseNativeBridgeLine();
+
+  const payload = parseNativeBridgeLine('{"type":" bridge-diagnostic ","level":"info","message":"ready","detectedAt":" 2026-04-14T12:00:00.000Z "}');
+
+  assert.deepEqual(payload, {
+    type: 'bridge-diagnostic',
+    level: 'info',
+    message: 'ready',
+    detectedAt: '2026-04-14T12:00:00.000Z'
+  });
+});
