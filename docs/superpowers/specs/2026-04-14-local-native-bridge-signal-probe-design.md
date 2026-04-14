@@ -175,6 +175,12 @@ Recommended split:
 
 Each should answer one question and emit diagnostics independently.
 
+Important implementation detail:
+
+- within a single bridge run, `process-probe` and `transition-probe` may share one underlying process snapshot
+- this is preferred when both diagnostics would otherwise enumerate live processes separately
+- the logical diagnostics stay separate, but the data capture can be shared to avoid transition-race drift
+
 ### Electron Main
 
 No major architectural change.

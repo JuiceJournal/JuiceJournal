@@ -149,8 +149,12 @@ Add this temporary usage in `Program.cs`:
 
 ```csharp
 var transitionProbe = new TransitionProbe();
-var transitionSnapshot = transitionProbe.Capture();
-Console.WriteLine(BridgeMessage.Diagnostic("info", "transition-probe", transitionSnapshot).ToJson());
+var transitionSnapshot = transitionProbe.CaptureProcessSnapshots();
+Console.WriteLine(
+    BridgeMessage.Diagnostic(
+        "info",
+        "transition-probe",
+        TransitionProbe.CreateTransitionProbeData(transitionSnapshot)).ToJson());
 ```
 
 Run: `dotnet build desktop/native-bridge/JuiceJournal.NativeBridge.csproj`
@@ -166,25 +170,57 @@ namespace JuiceJournal.NativeBridge.Services;
 
 public sealed class TransitionProbe
 {
-    public IReadOnlyDictionary<string, object?> Capture()
+    public IReadOnlyList<IReadOnlyDictionary<string, object?>> CaptureProcessSnapshots()
     {
-        var poeProcesses = Process
-            .GetProcesses()
-            .Where(process => process.ProcessName.Contains("PathOfExile", StringComparison.OrdinalIgnoreCase))
-            .Select(process => new Dictionary<string, object?>
-            {
-                ["name"] = process.ProcessName,
-                ["id"] = process.Id,
-                ["startTimeUtc"] = TryGetStartTime(process)
-            })
-            .Cast<IReadOnlyDictionary<string, object?>>()
-            .ToArray();
+        var poeProcesses = new List<IReadOnlyDictionary<string, object?>>();
 
-        return new Dictionary<string, object?>
+        foreach (var process in Process.GetProcesses())
         {
-            ["processes"] = poeProcesses
-        };
+            try
+            {
+                var processName = process.ProcessName;
+                if (!processName.Contains("PathOfExile", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                poeProcesses.Add(new Dictionary<string, object?>
+                {
+                    ["name"] = processName,
+                    ["id"] = process.Id,
+                    ["startTimeUtc"] = TryGetStartTime(process)
+                });
+            }
+            catch
+            {
+                // skip exited or inaccessible processes during probe capture
+            }
+        }
+
+        return poeProcesses;
     }
+
+    public static IReadOnlyDictionary<string, object?> CreateTransitionProbeData(
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> processSnapshots) =>
+        new Dictionary<string, object?>
+        {
+            ["processes"] = processSnapshots
+        };
+
+    public static IReadOnlyDictionary<string, object?> CreateProcessProbeData(
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> processSnapshots) =>
+        new Dictionary<string, object?>
+        {
+            ["poeProcessCount"] = processSnapshots.Count,
+            ["processes"] = processSnapshots
+                .Select((snapshot) => new Dictionary<string, object?>
+                {
+                    ["name"] = snapshot.TryGetValue("name", out var name) ? name : null,
+                    ["id"] = snapshot.TryGetValue("id", out var id) ? id : null
+                })
+                .Cast<IReadOnlyDictionary<string, object?>>()
+                .ToArray()
+        };
 
     private static DateTimeOffset? TryGetStartTime(Process process)
     {
@@ -204,9 +240,19 @@ public sealed class TransitionProbe
 
 ```csharp
 var transitionProbe = new TransitionProbe();
+var transitionSnapshot = transitionProbe.CaptureProcessSnapshots();
 
 Console.WriteLine(
-    BridgeMessage.Diagnostic("info", "transition-probe", transitionProbe.Capture()).ToJson());
+    BridgeMessage.Diagnostic(
+        "info",
+        "process-probe",
+        TransitionProbe.CreateProcessProbeData(transitionSnapshot)).ToJson());
+
+Console.WriteLine(
+    BridgeMessage.Diagnostic(
+        "info",
+        "transition-probe",
+        TransitionProbe.CreateTransitionProbeData(transitionSnapshot)).ToJson());
 ```
 
 - [ ] **Step 4: Run build and bridge**
