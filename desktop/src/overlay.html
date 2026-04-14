@@ -73,7 +73,8 @@
     .overlay-kicker {
       display: flex;
       align-items: center;
-      gap: 7px;
+      justify-content: space-between;
+      gap: 10px;
       color: var(--overlay-accent);
       font-family: "Trebuchet MS", Verdana, sans-serif;
       font-size: 10px;
@@ -82,13 +83,69 @@
       text-transform: uppercase;
     }
 
-    .overlay-kicker::before {
+    .overlay-kicker-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .overlay-kicker-label::before {
       content: "";
       width: 7px;
       height: 7px;
       border-radius: 50%;
       background: currentColor;
       box-shadow: 0 0 12px currentColor;
+    }
+
+    .overlay-pin {
+      border: 1px solid rgba(231, 169, 79, 0.28);
+      border-radius: 999px;
+      background: rgba(12, 14, 18, 0.72);
+      color: var(--overlay-text);
+      padding: 4px 9px;
+      font: inherit;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+    }
+
+    .overlay-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      pointer-events: auto;
+    }
+
+    .overlay-dismiss {
+      border: 1px solid rgba(242, 141, 132, 0.28);
+      border-radius: 999px;
+      background: rgba(12, 14, 18, 0.72);
+      color: var(--overlay-text);
+      padding: 4px 9px;
+      font: inherit;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+    }
+
+    .overlay-dismiss[hidden] {
+      display: none;
+    }
+
+    .overlay-pin[hidden] {
+      display: none;
+    }
+
+    .overlay-pin[aria-pressed="true"] {
+      border-color: rgba(247, 234, 210, 0.52);
+      background: rgba(231, 169, 79, 0.22);
+      color: #fff4df;
     }
 
     .overlay-primary {
@@ -133,12 +190,30 @@
       opacity: 0;
       transform: translateY(4px);
     }
+
+    [data-overlay-mode="map-result"][data-overlay-tone="positive"] {
+      --overlay-accent: #74d39d;
+      --overlay-border: rgba(116, 211, 157, 0.34);
+      --overlay-muted: #b9d6c3;
+    }
+
+    [data-overlay-mode="map-result"][data-overlay-tone="negative"] {
+      --overlay-accent: #f28d84;
+      --overlay-border: rgba(242, 141, 132, 0.34);
+      --overlay-muted: #ddbeb9;
+    }
   </style>
 </head>
 <body>
-  <main class="overlay-card" data-overlay-state="waiting" aria-live="polite">
+  <main class="overlay-card" data-overlay-state="waiting" data-overlay-mode="runtime" data-overlay-tone="neutral" aria-live="polite">
     <section class="overlay-content">
-      <div class="overlay-kicker">Juice Journal</div>
+      <div class="overlay-kicker" data-overlay-kicker>
+        <span class="overlay-kicker-label" data-overlay-kicker-label>Juice Journal</span>
+        <div class="overlay-actions">
+          <button class="overlay-pin" type="button" data-overlay-pin aria-pressed="false" hidden>Pin</button>
+          <button class="overlay-dismiss" type="button" data-overlay-dismiss hidden>Dismiss</button>
+        </div>
+      </div>
       <div class="overlay-primary" data-overlay-primary>Waiting for game</div>
       <div class="overlay-secondary-row">
         <span class="overlay-secondary" data-overlay-secondary>Waiting for runtime session</span>

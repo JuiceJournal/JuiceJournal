@@ -334,6 +334,26 @@ async function signInWithPoeOAuth(page) {
   await expect(page.locator('#username')).toHaveText(SMOKE_USER.username);
 }
 
+async function showMapResultOverlay(page, result, options = {}) {
+  await page.evaluate(async ({ result: nextResult, options: nextOptions }) => {
+    if (!window.electronAPI?.showMapResultOverlay) {
+      throw new Error('Expected window.electronAPI.showMapResultOverlay to exist');
+    }
+
+    await window.electronAPI.showMapResultOverlay(nextResult, nextOptions);
+  }, { result, options });
+}
+
+async function showRuntimeOverlayPreview(page, runtimeSession) {
+  await page.evaluate(async (nextRuntimeSession) => {
+    if (!window.electronAPI?.showRuntimeOverlayPreview) {
+      throw new Error('Expected window.electronAPI.showRuntimeOverlayPreview to exist');
+    }
+
+    await window.electronAPI.showRuntimeOverlayPreview(nextRuntimeSession);
+  }, runtimeSession);
+}
+
 async function closeServer(server) {
   if (!server?.listening) {
     return;
@@ -484,7 +504,7 @@ async function cleanupSmokeHarness(harness) {
   }
 }
 
-test('overlay smoke: launches app, signs in via poe oauth stub, and shows compact runtime summary', async ({}, testInfo) => {
+test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtime plus post-map result overlay states', async ({}, testInfo) => {
   let harness;
   let testError = null;
 
@@ -500,18 +520,61 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows compac
     await expect(page.locator('#active-session')).toBeVisible();
 
     const overlayWindow = await waitForOverlayWindow(electronApp);
-    await overlayWindow.evaluate((overlayState) => {
-      window.JuiceOverlay.renderState(overlayState);
-    }, {
-      visibility: 'visible',
-      primaryLine: `${SMOKE_USER.selectedCharacter.name} · ${SMOKE_USER.selectedCharacter.league}`,
-      secondaryLine: 'Overgrown Shrine Map',
-      metaLine: '60s · session 60s'
+    await showRuntimeOverlayPreview(page, {
+      summary: {
+        status: 'active',
+        currentAreaName: 'Overgrown Shrine Map',
+        currentInstanceSeconds: 60,
+        totalActiveSeconds: 60
+      }
     });
 
     await expect(overlayWindow.locator('[data-overlay-state="visible"]')).toBeVisible();
     await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText(SMOKE_USER.selectedCharacter.name);
     await expect(overlayWindow.locator('[data-overlay-secondary]')).toContainText('Overgrown Shrine Map');
+
+    await showMapResultOverlay(page, {
+      id: 'map-result-smoke-1',
+      farmType: 'Ritual',
+      durationSeconds: 185,
+      netProfit: 127,
+      profitState: 'positive',
+      topOutputs: [{ label: 'Divine Orb', valueDelta: 120 }],
+      createdAt: new Date().toISOString()
+    }, {
+      durationMs: 200
+    });
+
+    await expect(overlayWindow.locator('main[data-overlay-mode="map-result"]')).toBeVisible();
+    await expect(overlayWindow.locator('[data-overlay-kicker]')).toContainText('Map Result');
+    await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText('Ritual');
+    await expect(overlayWindow.locator('[data-overlay-secondary]')).toContainText('Divine Orb');
+    await expect(overlayWindow.locator('[data-overlay-pin]')).toHaveAttribute('aria-pressed', 'false');
+
+    await expect(overlayWindow.locator('main[data-overlay-mode="runtime"]')).toBeVisible({ timeout: 2000 });
+    await expect(overlayWindow.locator('[data-overlay-kicker]')).toContainText('Juice Journal');
+
+    await showMapResultOverlay(page, {
+      id: 'map-result-smoke-2',
+      farmType: 'Expedition',
+      durationSeconds: 240,
+      netProfit: -42,
+      profitState: 'negative',
+      topOutputs: [{ label: 'Ancient Orb', valueDelta: 35 }],
+      createdAt: new Date().toISOString()
+    }, {
+      durationMs: 200
+    });
+
+    await overlayWindow.locator('[data-overlay-pin]').click();
+    await expect(overlayWindow.locator('[data-overlay-pin]')).toHaveAttribute('aria-pressed', 'true');
+    await page.waitForTimeout(350);
+    await expect(overlayWindow.locator('main[data-overlay-mode="map-result"]')).toBeVisible();
+    await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText('Expedition');
+
+    await overlayWindow.locator('[data-overlay-dismiss]').click();
+    await expect(overlayWindow.locator('main[data-overlay-mode="runtime"]')).toBeVisible({ timeout: 2000 });
+    await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText(SMOKE_USER.selectedCharacter.name);
   } catch (error) {
     testError = error;
   } finally {

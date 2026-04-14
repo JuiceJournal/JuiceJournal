@@ -32,3 +32,14 @@ test('character normalizer tags realm characters with app poeVersion keys', () =
     poeVersion: 'poe1'
   }]);
 });
+
+test('character payload selects the highest-level character per game as default', () => {
+  const payload = poeApiService.buildCharacterPayload({
+    poe2: [
+      { id: 'standard-huntress', name: 'AbuserSpear', level: 92, class: 'Huntress1', league: 'Standard' },
+      { id: 'league-druid', name: 'KocaAyVeMasha', level: 96, class: 'Druid2', league: 'Fate of the Vaal' }
+    ]
+  });
+
+  assert.equal(payload.selectedCharacterByGame.poe2, 'league-druid');
+});

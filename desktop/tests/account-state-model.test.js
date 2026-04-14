@@ -272,6 +272,35 @@ test('account state model selects the active game character from poe1 and poe2 p
   assert.equal(result.charactersByGame.poe2[0].name, 'PoeTwoShaman');
 });
 
+test('refreshed poe2 payload prefers selectedCharacterByGame for the active game over stale selection fields', () => {
+  const deriveAccountState = getAccountStateModelExport('deriveAccountState');
+
+  const result = deriveAccountState({
+    accountName: 'Esquetta#4179',
+    activePoeVersion: 'poe2',
+    selectedCharacterId: 'char-koca',
+    selectedCharacterByGame: { poe2: 'char-kellee' },
+    selectedCharacter: {
+      id: 'char-koca',
+      name: 'KocaAyVeMasha',
+      level: 96,
+      class: 'Druid2',
+      league: 'Fate of the Vaal',
+      poeVersion: 'poe2'
+    },
+    cachedAccountState: {
+      selectedCharacterByGame: { poe2: 'char-koca' }
+    },
+    characters: [
+      { id: 'char-koca', name: 'KocaAyVeMasha', level: 96, class: 'Druid2', league: 'Fate of the Vaal', poeVersion: 'poe2' },
+      { id: 'char-kellee', name: 'KELLEE', level: 92, class: 'Monk2', league: 'Standard', poeVersion: 'poe2' }
+    ]
+  });
+
+  assert.equal(result.selectedCharacter.id, 'char-kellee');
+  assert.equal(result.summary.name, 'KELLEE');
+});
+
 test('account state model falls back to first character for active game when no selected id exists', () => {
   const deriveAccountState = getAccountStateModelExport('deriveAccountState');
 
@@ -382,6 +411,7 @@ test('renderer logout clears normalized account state', async () => {
     currentUser: { username: 'RangerMain' },
     currentSession: { id: 'session-1' },
     sessions: [{ id: 'session-1' }],
+    mapResults: [{ id: 'map-result-1' }],
     recentLoot: [{ id: 'loot-1' }],
     poeLink: { linked: true },
     account: {
@@ -389,8 +419,19 @@ test('renderer logout clears normalized account state', async () => {
       selectedCharacter: { id: 'char-1', name: 'MainOne' }
     }
   };
+  const stashState = {
+    beforeSnapshotId: 'before',
+    afterSnapshotId: 'after',
+    beforeSnapshot: { items: [{}] },
+    afterSnapshot: { items: [{}] },
+    mapResultContext: { farmTypeId: 'ritual' },
+    lastMapResult: { id: 'map-result-1' },
+    pricesSynced: true
+  };
   const context = loadFunctions(['handleLogout'], {
     state,
+    stashState,
+    clearActiveCharacterRefreshTimers: () => calls.push(['clearActiveCharacterRefreshTimers']),
     window: {
       electronAPI: {
         logout: async () => calls.push(['logout'])
@@ -410,7 +451,17 @@ test('renderer logout clears normalized account state', async () => {
 
   assert.equal(state.account, null);
   assert.equal(state.currentUser, null);
+  assert.equal(Array.isArray(state.mapResults), true);
+  assert.equal(state.mapResults.length, 0);
+  assert.equal(stashState.beforeSnapshotId, null);
+  assert.equal(stashState.afterSnapshotId, null);
+  assert.equal(stashState.beforeSnapshot, null);
+  assert.equal(stashState.afterSnapshot, null);
+  assert.equal(stashState.mapResultContext, null);
+  assert.equal(stashState.lastMapResult, null);
+  assert.equal(stashState.pricesSynced, false);
   assert.deepEqual(calls.map(([name]) => name), [
+    'clearActiveCharacterRefreshTimers',
     'logout',
     'closeSessionDrawer',
     'renderUserIdentity',

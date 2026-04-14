@@ -48,6 +48,48 @@ const DEFAULT_POE_LOG_PATH = 'E:\\Grinding Gear Games\\Path of Exile\\logs\\Clie
 
 const POLL_INTERVAL_MS = 5000; // check every 5 seconds
 
+function normalizeProcessValue(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeProcessSnapshot(process = {}) {
+  return {
+    name: normalizeProcessValue(process.name || process.Name),
+    executablePath: normalizeProcessValue(process.executablePath || process.ExecutablePath),
+    commandLine: normalizeProcessValue(process.commandLine || process.CommandLine)
+  };
+}
+
+function isSteamPoe2Process(process) {
+  const joined = `${process.executablePath} ${process.commandLine}`;
+  return joined.includes('path of exile 2');
+}
+
+function detectGameVersionFromProcesses(processes = []) {
+  const normalizedProcesses = processes.map((process) => normalizeProcessSnapshot(process));
+
+  const poe2Running = normalizedProcesses.some((process) => (
+    POE2_PROCESSES.includes(process.name)
+    || ((process.name === 'pathofexilesteam.exe' || process.name === 'pathofexile_x64steam.exe') && isSteamPoe2Process(process))
+  ));
+
+  if (poe2Running) {
+    return 'poe2';
+  }
+
+  const poe1Running = normalizedProcesses.some((process) => (
+    POE1_PROCESSES.includes(process.name)
+    || process.name === 'pathofexilesteam.exe'
+    || process.name === 'pathofexile_x64steam.exe'
+  ));
+
+  if (poe1Running) {
+    return 'poe1';
+  }
+
+  return null;
+}
+
 class GameDetector extends EventEmitter {
   constructor() {
     super();
@@ -99,17 +141,7 @@ class GameDetector extends EventEmitter {
     this._polling = true;
     try {
       const processes = await this._getRunningProcesses();
-      const lowerProcs = processes.map(p => p.toLowerCase());
-
-      const poe1Running = POE1_PROCESSES.some(name => lowerProcs.includes(name));
-      const poe2Running = POE2_PROCESSES.some(name => lowerProcs.includes(name));
-
-      let detected = null;
-      if (poe2Running) {
-        detected = 'poe2';
-      } else if (poe1Running) {
-        detected = 'poe1';
-      }
+      const detected = detectGameVersionFromProcesses(processes);
 
       // Detect state changes
       if (detected !== this.currentGame) {
@@ -143,27 +175,34 @@ class GameDetector extends EventEmitter {
   }
 
   /**
-   * Get list of running process names (Windows-specific)
+   * Get list of running process details (Windows-specific)
    */
   _getRunningProcesses() {
     return new Promise((resolve, reject) => {
-      // Use tasklist for Windows — fast and reliable
-      execFile('tasklist', ['/FO', 'CSV', '/NH'], { maxBuffer: 1024 * 1024 }, (error, stdout) => {
+      const command = [
+        '$ErrorActionPreference = "Stop";',
+        'Get-CimInstance Win32_Process |',
+        'Select-Object Name,ExecutablePath,CommandLine |',
+        'ConvertTo-Json -Compress'
+      ].join(' ');
+
+      execFile('powershell', ['-NoProfile', '-Command', command], { maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => {
         if (error) {
           reject(error);
           return;
         }
 
-        const names = [];
-        const lines = stdout.split('\n');
-        for (const line of lines) {
-          // CSV format: "Image Name","PID","Session Name","Session#","Mem Usage"
-          const match = line.match(/^"([^"]+)"/);
-          if (match) {
-            names.push(match[1]);
-          }
+        if (!stdout || !stdout.trim()) {
+          resolve([]);
+          return;
         }
-        resolve(names);
+
+        try {
+          const parsed = JSON.parse(stdout);
+          resolve(Array.isArray(parsed) ? parsed : [parsed]);
+        } catch (parseError) {
+          reject(parseError);
+        }
       });
     });
   }
@@ -193,3 +232,4 @@ class GameDetector extends EventEmitter {
 
 module.exports = GameDetector;
 module.exports.DEFAULT_POE_LOG_PATH = DEFAULT_POE_LOG_PATH;
+module.exports.detectGameVersionFromProcesses = detectGameVersionFromProcesses;

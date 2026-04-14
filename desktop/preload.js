@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startSession: (data) => ipcRenderer.invoke('start-session', data),
   endSession: () => ipcRenderer.invoke('end-session'),
   getCurrentSession: () => ipcRenderer.invoke('get-current-session'),
+  getActiveFarmType: () => ipcRenderer.invoke('get-active-farm-type'),
+  setActiveFarmType: (farmTypeId) => ipcRenderer.invoke('set-active-farm-type', farmTypeId),
   getSessionDetails: (sessionId) => ipcRenderer.invoke('get-session-details', sessionId),
   updateSessionDetails: (sessionId, payload) => ipcRenderer.invoke('update-session-details', sessionId, payload),
   getSessions: (params) => ipcRenderer.invoke('get-sessions', params),
@@ -50,6 +52,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPriceStatus: () => ipcRenderer.invoke('get-price-status'),
   takeStashSnapshot: (options) => ipcRenderer.invoke('take-stash-snapshot', options),
   calculateProfit: (beforeId, afterId) => ipcRenderer.invoke('calculate-profit', beforeId, afterId),
+  saveMapResult: (result) => ipcRenderer.invoke('save-map-result', result),
+  getMapResults: () => ipcRenderer.invoke('get-map-results'),
+  showMapResultOverlay: (result, options) => ipcRenderer.invoke('show-map-result-overlay', result, options),
+  showRuntimeOverlayPreview: (runtimeSession) => ipcRenderer.invoke('show-runtime-overlay-preview', runtimeSession),
+  toggleMapResultOverlayPin: () => ipcRenderer.invoke('toggle-map-result-overlay-pin'),
+  dismissMapResultOverlay: () => ipcRenderer.invoke('dismiss-map-result-overlay'),
+  getOverlayCursorPosition: () => ipcRenderer.invoke('get-overlay-cursor-position'),
+  setOverlayPointerPassthrough: (ignore) => ipcRenderer.invoke('set-overlay-pointer-passthrough', ignore),
   getDetectedGame: () => ipcRenderer.invoke('get-detected-game'),
 
   // Auth
@@ -103,6 +113,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onGameClosed: (callback) => {
     ipcRenderer.on('game-closed', (event, data) => callback(data));
   },
+  onActiveCharacterHint: (callback) => {
+    ipcRenderer.on('active-character-hint', (event, data) => callback(data));
+  },
+  getLastActiveCharacterHint: () => ipcRenderer.invoke('get-last-active-character-hint'),
 
   // Dinleyicileri temizle (sadece izin verilen kanallar)
   removeAllListeners: (channel) => {
@@ -110,7 +124,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'map-entered', 'map-exited', 'session-started', 'session-ended',
       'loot-added', 'pending-loot-updated', 'pending-sync-updated',
       'audit-trail-updated', 'navigate', 'stash-snapshot-taken',
-      'profit-calculated', 'game-version-changed', 'game-closed'
+      'profit-calculated', 'game-version-changed', 'game-closed',
+      'active-character-hint'
     ];
     if (channel && ALLOWED_CHANNELS.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);

@@ -25,6 +25,10 @@ function normalizeOptionalText(value, maxLength) {
   return trimmed.slice(0, maxLength);
 }
 
+function resolveSessionFarmTypeId(payload = {}) {
+  return normalizeOptionalText(payload.farmTypeId ?? payload.mapType, 50);
+}
+
 const MAX_CLIENT_TIMESTAMP_SKEW_MS = 5 * 60 * 1000;
 const MAX_CLIENT_BACKDATE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -238,6 +242,7 @@ router.post('/start',
       .withMessage('Lig gereklidir')
       .isLength({ max: 50 }),
     body('mapTier').optional().isInt({ min: 1, max: 21 }),
+    body('farmTypeId').optional({ nullable: true }).trim().isLength({ max: 50 }),
     body('mapType').optional().trim().isLength({ max: 50 }),
     body('strategyTag').optional({ nullable: true }).trim().isLength({ max: 50 }),
     body('notes').optional({ nullable: true }).trim().isLength({ max: 2000 }),
@@ -247,7 +252,8 @@ router.post('/start',
   ],
   async (req, res) => {
     try {
-      const { mapName, mapTier, mapType, costChaos = 0, poeVersion, league, startedAt } = req.body;
+      const { mapName, mapTier, costChaos = 0, poeVersion, league, startedAt } = req.body;
+      const farmTypeId = resolveSessionFarmTypeId(req.body);
       const normalizedStartedAt = parseAndValidateClientTimestamp(startedAt, { field: 'startedAt' });
 
       // Aktif session kontrolu - atomic with transaction to prevent race condition
@@ -275,7 +281,8 @@ router.post('/start',
             userId: req.userId,
             mapName,
             mapTier: mapTier || null,
-            mapType: mapType || null,
+            mapType: farmTypeId,
+            farmTypeId,
             strategyTag: normalizeOptionalText(req.body.strategyTag, 50),
             notes: normalizeOptionalText(req.body.notes, 2000),
             poeVersion,

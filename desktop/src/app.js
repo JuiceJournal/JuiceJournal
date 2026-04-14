@@ -10,11 +10,13 @@ window._appState = { language: 'en' };
 const state = {
   currentUser: null,
   currentSession: null,
+  activeCharacterRefreshSource: null,
   settings: {},
   detectedGameVersion: null,
   activeLeagueOptions: {},
   leagueOptionsLoaded: false,
   sessions: [],
+  mapResults: [],
   recentLoot: [],
   poeLink: null,
   account: null,
@@ -24,7 +26,10 @@ const state = {
   selectedSession: null,
   pendingLootCount: 0,
   pendingSyncEntries: [],
-  auditTrail: []
+  auditTrail: [],
+  farmType: window.farmTypeModel
+    ? window.farmTypeModel.createFarmTypeState()
+    : { selectedFarmTypeId: null }
 };
 
 const ERROR_MESSAGE_KEY_MAP = {
@@ -133,22 +138,35 @@ const elements = {
 
   // Dashboard
   characterSummaryCard: document.getElementById('character-summary-card'),
+  characterBanner: document.getElementById('character-banner'),
+  characterBannerImage: document.getElementById('character-banner-image'),
   characterPortrait: document.getElementById('character-portrait'),
+  characterPortraitImage: document.getElementById('character-portrait-image'),
   characterPortraitBadge: document.getElementById('character-portrait-badge'),
   characterName: document.getElementById('character-name'),
   characterClass: document.getElementById('character-class'),
   characterLevel: document.getElementById('character-level'),
+  characterLevelMeta: document.getElementById('character-level-meta'),
   characterLeague: document.getElementById('character-league'),
+  characterClassMeta: document.getElementById('character-class-meta'),
   characterAccount: document.getElementById('character-account'),
   characterStatus: document.getElementById('character-status'),
   characterGameVersion: document.getElementById('character-game-version'),
   activeSession: document.getElementById('active-session'),
+  sessionFarmTypeSelect: document.getElementById('session-farm-type-select'),
+  clearFarmTypeBtn: document.getElementById('clear-farm-type-btn'),
   startSessionBtn: document.getElementById('start-session-btn'),
   endSessionBtn: document.getElementById('end-session-btn'),
   scanScreenBtn: document.getElementById('scan-screen-btn'),
   todaySessions: document.getElementById('today-sessions'),
   todayProfit: document.getElementById('today-profit'),
   todayAvg: document.getElementById('today-avg'),
+  lastMapResultCard: document.getElementById('last-map-result-card'),
+  lastMapResultFarmType: document.getElementById('last-map-result-farm-type'),
+  lastMapResultDuration: document.getElementById('last-map-result-duration'),
+  lastMapResultProfit: document.getElementById('last-map-result-profit'),
+  mapResultFilter: document.getElementById('map-result-filter'),
+  mapResultHistory: document.getElementById('map-result-history'),
   recentLootList: document.getElementById('recent-loot-list'),
 
   // Sessions
@@ -241,9 +259,50 @@ const activeLeagueInputState = {
 let settingsModelPromise = null;
 let accountStateModelPromise = null;
 let runtimeSessionModelPromise = null;
+let mapResultModelPromise = null;
 let capabilityModelPromise = null;
 let overlayStateModelPromise = null;
 let characterVisualModelPromise = null;
+let activeCharacterRefreshTimer = null;
+let activeCharacterRefreshRetryTimer = null;
+let activeCharacterRefreshRequestId = 0;
+
+function clearActiveCharacterRefreshTimers() {
+  if (activeCharacterRefreshTimer) {
+    clearTimeout(activeCharacterRefreshTimer);
+    activeCharacterRefreshTimer = null;
+  }
+  if (activeCharacterRefreshRetryTimer) {
+    clearTimeout(activeCharacterRefreshRetryTimer);
+    activeCharacterRefreshRetryTimer = null;
+  }
+  activeCharacterRefreshRequestId += 1;
+}
+
+async function runActiveCharacterRefresh({ requestId } = {}) {
+  const expectedRequestId = typeof requestId === 'number'
+    ? requestId
+    : (typeof activeCharacterRefreshRequestId === 'number' ? activeCharacterRefreshRequestId : 0);
+
+  try {
+    const result = await window.electronAPI.getCurrentUser();
+    if (
+      expectedRequestId !== activeCharacterRefreshRequestId
+      || !state.currentUser
+      || !result?.user
+    ) {
+      return false;
+    }
+
+    setCurrentUser({
+      ...result.user,
+      capabilities: result.capabilities || {}
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function ensureSettingsModelLoaded() {
   if (window.settingsModel) {
@@ -327,6 +386,34 @@ function ensureRuntimeSessionModelLoaded() {
   });
 
   return runtimeSessionModelPromise;
+}
+
+function ensureMapResultModelLoaded() {
+  if (window.mapResultModel) {
+    return Promise.resolve(window.mapResultModel);
+  }
+
+  if (mapResultModelPromise) {
+    return mapResultModelPromise;
+  }
+
+  mapResultModelPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'modules/mapResultModel.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.mapResultModel) {
+        resolve(window.mapResultModel);
+        return;
+      }
+
+      reject(new Error('mapResultModel loaded without exposing window.mapResultModel'));
+    };
+    script.onerror = () => reject(new Error('Failed to load map result model script'));
+    document.head.appendChild(script);
+  });
+
+  return mapResultModelPromise;
 }
 
 function ensureCapabilityModelLoaded() {
@@ -437,6 +524,22 @@ function getRuntimeSessionModel() {
   return window.runtimeSessionModel;
 }
 
+function getMapResultModel() {
+  if (!window.mapResultModel) {
+    throw new Error('mapResultModel is not loaded');
+  }
+
+  return window.mapResultModel;
+}
+
+function getMapResultStoreModel() {
+  if (!window.mapResultStoreModel) {
+    throw new Error('mapResultStoreModel is not loaded');
+  }
+
+  return window.mapResultStoreModel;
+}
+
 function getCapabilityModel() {
   if (!window.capabilityModel) {
     throw new Error('capabilityModel is not loaded');
@@ -459,6 +562,14 @@ function getCharacterVisualModel() {
   }
 
   return window.characterVisualModel;
+}
+
+function getFarmTypeModel() {
+  if (!window.farmTypeModel) {
+    throw new Error('farmTypeModel is not loaded');
+  }
+
+  return window.farmTypeModel;
 }
 
 function getHotkeyModel() {
@@ -783,6 +894,41 @@ function syncRendererGameContext(version, options = {}) {
   if (typeof applyDashboardCapabilities === 'function') {
     applyDashboardCapabilities();
   }
+  if (typeof scheduleActiveCharacterRefresh === 'function') {
+    scheduleActiveCharacterRefresh({ version: normalizedDetectedVersion });
+  }
+}
+
+function scheduleActiveCharacterRefresh({ version } = {}) {
+  if (!version) {
+    state.activeCharacterRefreshSource = null;
+    clearActiveCharacterRefreshTimers();
+    return;
+  }
+
+  if (!state.currentUser) {
+    return;
+  }
+
+  if (state.activeCharacterRefreshSource === 'native-high-confidence') {
+    state.activeCharacterRefreshSource = null;
+    return;
+  }
+
+  clearActiveCharacterRefreshTimers();
+  const requestId = activeCharacterRefreshRequestId;
+
+  activeCharacterRefreshTimer = setTimeout(async () => {
+    activeCharacterRefreshTimer = null;
+    const refreshed = await runActiveCharacterRefresh({ requestId });
+
+    if (!refreshed && requestId === activeCharacterRefreshRequestId && state.currentUser) {
+      activeCharacterRefreshRetryTimer = setTimeout(async () => {
+        activeCharacterRefreshRetryTimer = null;
+        await runActiveCharacterRefresh({ requestId });
+      }, 5000);
+    }
+  }, 3000);
 }
 
 function getResolvedCapabilityGameVersion(preferredVersion = null) {
@@ -916,6 +1062,101 @@ function refreshRendererOverlayState() {
   return state.overlay;
 }
 
+function applyNativeCharacterHint(nativeHint) {
+  if (!nativeHint || typeof nativeHint !== 'object' || !state.account) {
+    return false;
+  }
+
+  const normalizeText = (value) => (
+    typeof value === 'string'
+      ? value.trim().toLowerCase()
+      : ''
+  );
+  const normalizeVersion = (value) => {
+    const normalized = normalizeText(value);
+    return normalized === 'poe1' || normalized === 'poe2' ? normalized : null;
+  };
+
+  if (nativeHint.confidence !== 'high') {
+    return false;
+  }
+
+  const poeVersion = normalizeVersion(nativeHint.poeVersion);
+  const activePoeVersion = normalizeVersion(state.detectedGameVersion)
+    || normalizeVersion(account.activePoeVersion)
+    || normalizeVersion(state.settings?.poeVersion);
+  const characterName = normalizeText(nativeHint.characterName);
+  if (!poeVersion || !characterName || !activePoeVersion || poeVersion !== activePoeVersion) {
+    return false;
+  }
+
+  const account = state.account;
+  const characters = Array.isArray(account.charactersByGame?.[poeVersion])
+    ? account.charactersByGame[poeVersion]
+    : (Array.isArray(account.characters)
+      ? account.characters.filter((character) => normalizeVersion(character?.poeVersion) === poeVersion)
+      : []);
+
+  if (!characters.length) {
+    return false;
+  }
+
+  let matches = characters.filter((character) => normalizeText(character?.name) === characterName);
+  if (!matches.length) {
+    return false;
+  }
+
+  const className = normalizeText(nativeHint.className);
+  if (className) {
+    const classMatches = matches.filter((character) => normalizeText(character?.className) === className);
+    if (classMatches.length) {
+      matches = classMatches;
+    }
+  }
+
+  const league = normalizeText(nativeHint.league);
+  if (league) {
+    const leagueMatches = matches.filter((character) => normalizeText(character?.league) === league);
+    if (leagueMatches.length) {
+      matches = leagueMatches;
+    }
+  }
+
+  const matchedCharacter = matches[0] || null;
+  if (!matchedCharacter) {
+    return false;
+  }
+
+  account.activePoeVersion = poeVersion;
+  account.selectedCharacter = matchedCharacter;
+  if (account.selectedCharacterByGame && typeof account.selectedCharacterByGame === 'object' && matchedCharacter.id) {
+    account.selectedCharacterByGame[poeVersion] = matchedCharacter.id;
+  }
+  account.summary = {
+    status: 'ready',
+    id: matchedCharacter.id || null,
+    name: matchedCharacter.name || null,
+    level: typeof matchedCharacter.level === 'number' ? matchedCharacter.level : 0,
+    className: matchedCharacter.className || null,
+    ascendancy: matchedCharacter.ascendancy || null,
+    league: matchedCharacter.league || null,
+    poeVersion: matchedCharacter.poeVersion || poeVersion
+  };
+  state.activeCharacterRefreshSource = 'native-high-confidence';
+  if (typeof clearActiveCharacterRefreshTimers === 'function') {
+    clearActiveCharacterRefreshTimers();
+  }
+
+  if (typeof renderCharacterSummaryCard === 'function') {
+    renderCharacterSummaryCard();
+  }
+  if (typeof refreshRendererOverlayState === 'function') {
+    refreshRendererOverlayState();
+  }
+
+  return true;
+}
+
 function setRuntimeSessionState(runtimeSession) {
   state.runtimeSession = runtimeSession || null;
   renderRuntimeSessionState();
@@ -935,12 +1176,45 @@ function renderCharacterSummaryCard() {
 
   elements.characterSummaryCard.dataset.characterState = isReady ? 'ready' : 'empty';
 
+  if (elements.characterBanner) {
+    elements.characterBanner.dataset.characterBanner = visual.bannerKey || 'unknown';
+    elements.characterBanner.dataset.characterTone = visual.tone || 'neutral';
+  }
+  if (elements.characterBannerImage) {
+    let bannerSource = visual.bannerPath || '';
+    if (bannerSource && typeof URL === 'function' && window?.location?.href) {
+      try {
+        bannerSource = new URL(bannerSource, window.location.href).toString();
+      } catch (error) {
+        bannerSource = visual.bannerPath;
+      }
+    }
+    elements.characterBannerImage.hidden = !visual.bannerPath;
+    elements.characterBannerImage.src = bannerSource;
+    elements.characterBannerImage.alt = isReady ? `${summary.name} banner` : 'Character banner';
+  }
   if (elements.characterPortrait) {
-    elements.characterPortrait.dataset.characterPortrait = visual.portraitKey;
-    elements.characterPortrait.dataset.characterTone = visual.tone;
+    elements.characterPortrait.dataset.characterPortrait = visual.portraitKey || 'unknown';
+    elements.characterPortrait.dataset.characterTone = visual.tone || 'neutral';
+  }
+  if (elements.characterPortraitImage) {
+    let portraitSource = visual.portraitPath || '';
+    if (portraitSource && typeof URL === 'function' && window?.location?.href) {
+      try {
+        portraitSource = new URL(portraitSource, window.location.href).toString();
+      } catch (error) {
+        portraitSource = visual.portraitPath;
+      }
+    }
+    elements.characterPortraitImage.hidden = !visual.portraitPath;
+    elements.characterPortraitImage.src = portraitSource;
+    elements.characterPortraitImage.alt = isReady ? `${summary.name} portrait` : 'Character portrait';
   }
   if (elements.characterPortraitBadge) {
     elements.characterPortraitBadge.textContent = visual.badgeText;
+    if (elements.characterPortraitBadge.style) {
+      elements.characterPortraitBadge.style.display = visual.portraitPath ? 'none' : '';
+    }
   }
   if (elements.characterName) {
     elements.characterName.textContent = isReady ? summary.name : 'No character selected';
@@ -951,8 +1225,18 @@ function renderCharacterSummaryCard() {
   if (elements.characterLevel) {
     elements.characterLevel.textContent = isReady && summary.level ? String(summary.level) : '—';
   }
+  if (elements.characterLevelMeta) {
+    elements.characterLevelMeta.textContent = elements.characterLevel
+      ? elements.characterLevel.textContent
+      : (isReady && summary.level ? String(summary.level) : 'â€”');
+  }
   if (elements.characterLeague) {
     elements.characterLeague.textContent = isReady ? (summary.league || 'Unknown League') : '—';
+  }
+  if (elements.characterClassMeta) {
+    elements.characterClassMeta.textContent = elements.characterClass
+      ? elements.characterClass.textContent
+      : (isReady ? visual.classLabel : 'Unknown Class');
   }
   if (elements.characterAccount) {
     elements.characterAccount.textContent = account?.accountName || state.currentUser?.username || '—';
@@ -968,6 +1252,58 @@ function renderCharacterSummaryCard() {
   }
 }
 
+function renderFarmTypeSelector() {
+  if (!elements.sessionFarmTypeSelect || !elements.clearFarmTypeBtn) {
+    return;
+  }
+
+  const { listFarmTypes } = getFarmTypeModel();
+  const selectedFarmTypeId = state.farmType?.selectedFarmTypeId || '';
+  const hasActiveSession = Boolean(state.currentSession);
+
+  elements.sessionFarmTypeSelect.innerHTML = [
+    '<option value="">No farm type</option>',
+    ...listFarmTypes().map((farmType) => `<option value="${escapeHTML(farmType.id)}">${escapeHTML(farmType.label)}</option>`)
+  ].join('');
+  elements.sessionFarmTypeSelect.value = selectedFarmTypeId;
+  elements.sessionFarmTypeSelect.disabled = hasActiveSession;
+  elements.clearFarmTypeBtn.disabled = hasActiveSession || !selectedFarmTypeId;
+}
+
+async function handleFarmTypeSelectionChange() {
+  const { selectFarmType } = getFarmTypeModel();
+  const selectedFarmTypeId = selectFarmType(state.farmType, elements.sessionFarmTypeSelect?.value || '');
+  if (window.electronAPI?.setActiveFarmType) {
+    await window.electronAPI.setActiveFarmType(selectedFarmTypeId);
+  }
+  renderFarmTypeSelector();
+}
+
+async function handleFarmTypeSelectionClear() {
+  const { clearFarmType } = getFarmTypeModel();
+  clearFarmType(state.farmType);
+  if (window.electronAPI?.setActiveFarmType) {
+    await window.electronAPI.setActiveFarmType(null);
+  }
+  renderFarmTypeSelector();
+}
+
+async function loadActiveFarmTypeSelection() {
+  if (!window.electronAPI?.getActiveFarmType) {
+    return;
+  }
+
+  const { selectFarmType, clearFarmType } = getFarmTypeModel();
+  const activeFarmTypeId = await window.electronAPI.getActiveFarmType();
+
+  if (activeFarmTypeId) {
+    selectFarmType(state.farmType, activeFarmTypeId);
+    return;
+  }
+
+  clearFarmType(state.farmType);
+}
+
 /**
  * Uygulamayi baslat
  */
@@ -975,6 +1311,7 @@ async function init() {
   await ensureSettingsModelLoaded();
   await ensureAccountStateModelLoaded();
   await ensureRuntimeSessionModelLoaded();
+  await ensureMapResultModelLoaded();
   await ensureCapabilityModelLoaded();
   await ensureOverlayStateModelLoaded();
   await ensureCharacterVisualModelLoaded();
@@ -982,6 +1319,7 @@ async function init() {
 
   // Ayarlari yukle
   await loadSettings();
+  await loadActiveFarmTypeSelection();
   populateStrategyPresets();
 
   // Set language from settings and apply translations
@@ -990,6 +1328,8 @@ async function init() {
   if (typeof renderCharacterSummaryCard === 'function') {
     renderCharacterSummaryCard();
   }
+  renderFarmTypeSelector();
+  renderMapResultHistory();
   updateActiveLeagueFieldContext();
   syncDesktopCurrencyIcons();
   applyDashboardCapabilities();
@@ -1009,12 +1349,18 @@ async function init() {
           ...me.user,
           capabilities: me.capabilities || {}
         });
+        await loadMapResultHistory();
         await loadPoeLinkStatus();
+      } else {
+        state.mapResults = [];
+        showLoginModal();
       }
     } catch (error) {
+      state.mapResults = [];
       showLoginModal();
     }
   } else {
+    state.mapResults = [];
     showLoginModal();
   }
 
@@ -1356,6 +1702,12 @@ function setupEventListeners() {
   // Session
   elements.startSessionBtn.addEventListener('click', handleStartSession);
   elements.endSessionBtn.addEventListener('click', handleEndSession);
+  if (elements.sessionFarmTypeSelect) {
+    elements.sessionFarmTypeSelect.addEventListener('change', handleFarmTypeSelectionChange);
+  }
+  if (elements.clearFarmTypeBtn) {
+    elements.clearFarmTypeBtn.addEventListener('click', handleFarmTypeSelectionClear);
+  }
 
   // Loot
   elements.scanScreenBtn.addEventListener('click', handleScanScreen);
@@ -1406,6 +1758,9 @@ function setupEventListeners() {
     elements.defaultLeagueSelect.addEventListener('change', () => {
       refreshActiveLeagueDirtyState();
     });
+  }
+  if (elements.mapResultFilter) {
+    elements.mapResultFilter.addEventListener('change', renderMapResultHistory);
   }
   setupHotkeyCaptureFields();
 
@@ -1571,6 +1926,12 @@ function setupIPCListeners() {
     });
   }
 
+  if (window.electronAPI.onActiveCharacterHint) {
+    window.electronAPI.onActiveCharacterHint((nativeHint) => {
+      applyNativeCharacterHint(nativeHint);
+    });
+  }
+
   // Game detection
   if (window.electronAPI.onGameVersionChanged) {
     window.electronAPI.onGameVersionChanged(({ version, logPath, runtimeSession }) => {
@@ -1610,6 +1971,7 @@ function setupIPCListeners() {
       if (data?.runtimeSession) {
         setRuntimeSessionState(data.runtimeSession);
       }
+      clearActiveCharacterRefreshTimers();
       syncRendererGameContext(null);
     });
   }
@@ -1789,21 +2151,36 @@ async function handleRegister(e) {
  * Cikis islemi
  */
 async function handleLogout() {
+  clearActiveCharacterRefreshTimers();
   await window.electronAPI.logout();
   state.currentUser = null;
   state.currentSession = null;
   state.sessions = [];
+  state.mapResults = [];
   state.recentLoot = [];
   state.poeLink = null;
   state.account = null;
   state.runtimeSession = null;
   state.overlay = null;
+  stashState.beforeSnapshotId = null;
+  stashState.afterSnapshotId = null;
+  stashState.beforeSnapshot = null;
+  stashState.afterSnapshot = null;
+  stashState.mapResultContext = null;
+  stashState.lastMapResult = null;
+  stashState.pricesSynced = false;
   closeSessionDrawer();
   renderUserIdentity();
   if (typeof renderCharacterSummaryCard === 'function') {
     renderCharacterSummaryCard();
   }
   resetDashboardSummary();
+  if (typeof renderLatestMapResult === 'function') {
+    renderLatestMapResult();
+  }
+  if (typeof renderMapResultHistory === 'function') {
+    renderMapResultHistory();
+  }
   updateActiveSessionUI();
   renderSessionsList();
   renderRecentLoot();
@@ -2016,12 +2393,89 @@ async function handlePoeDisconnect() {
 function getSelectedTrackerContext() {
   const poeVersion = getResolvedLeagueVersion();
   const league = getResolvedActiveLeague();
+  const farmTypeId = state.farmType?.selectedFarmTypeId || null;
 
   return {
     poeVersion,
     league,
+    farmTypeId,
     label: `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} • ${league}`
   };
+}
+
+function deriveCurrentMapResult(profitReport = null) {
+  const { deriveMapResult } = getMapResultModel();
+  const { listFarmTypes } = getFarmTypeModel();
+  const capturedContext = stashState.mapResultContext || {};
+  const hasCapturedContext = Boolean(stashState.mapResultContext);
+  const selectedFarmTypeId = capturedContext.farmTypeId
+    || state.currentSession?.farmTypeId
+    || state.currentSession?.mapType
+    || state.farmType?.selectedFarmTypeId
+    || null;
+  const farmType = listFarmTypes().find((entry) => entry.id === selectedFarmTypeId) || null;
+  const trackerContext = getSelectedTrackerContext();
+  const characterSummary = hasCapturedContext
+    ? (capturedContext.characterSummary || (capturedContext.league ? { league: capturedContext.league } : null))
+    : (state.account?.summary || null);
+  const accountName = hasCapturedContext
+    ? (capturedContext.accountName || null)
+    : (state.account?.accountName || null);
+  const poeVersion = capturedContext.poeVersion
+    || state.currentSession?.poeVersion
+    || trackerContext.poeVersion;
+  const runtimeSession = capturedContext.runtimeSession || state.runtimeSession;
+
+  return deriveMapResult({
+    farmType,
+    runtimeSession,
+    beforeSnapshot: stashState.beforeSnapshot,
+    afterSnapshot: stashState.afterSnapshot,
+    profitReport,
+    characterSummary,
+    accountName,
+    poeVersion
+  });
+}
+
+async function loadMapResultHistory() {
+  if (!state.currentUser) {
+    state.mapResults = [];
+    if (typeof renderLatestMapResult === 'function') {
+      renderLatestMapResult();
+    }
+    if (typeof renderMapResultHistory === 'function') {
+      renderMapResultHistory();
+    }
+    return state.mapResults;
+  }
+
+  try {
+    const results = await window.electronAPI.getMapResults();
+    state.mapResults = Array.isArray(results) ? results : [];
+  } catch {
+    state.mapResults = [];
+  }
+
+  if (typeof renderLatestMapResult === 'function') {
+    renderLatestMapResult();
+  }
+  if (typeof renderMapResultHistory === 'function') {
+    renderMapResultHistory();
+  }
+  return state.mapResults;
+}
+
+async function persistMapResultHistory(result) {
+  const results = await window.electronAPI.saveMapResult(result);
+  state.mapResults = Array.isArray(results) ? results : [];
+  if (typeof renderLatestMapResult === 'function') {
+    renderLatestMapResult();
+  }
+  if (typeof renderMapResultHistory === 'function') {
+    renderMapResultHistory();
+  }
+  return state.mapResults;
 }
 
 function isPageActive(page) {
@@ -2033,6 +2487,97 @@ function resetDashboardSummary() {
   elements.todaySessions.textContent = '0';
   elements.todayProfit.innerHTML = currencyHTML(0, 'chaos', 18, state.settings.poeVersion || 'poe1');
   elements.todayAvg.innerHTML = currencyHTML(0, 'chaos', 18, state.settings.poeVersion || 'poe1');
+}
+
+function renderLatestMapResult() {
+  if (
+    !elements.lastMapResultCard
+    || !elements.lastMapResultFarmType
+    || !elements.lastMapResultDuration
+    || !elements.lastMapResultProfit
+  ) {
+    return;
+  }
+
+  const latest = Array.isArray(state.mapResults)
+    ? state.mapResults.find((result) => Number(result?.durationSeconds || 0) > 0) || null
+    : null;
+  const hasCompletedResult = latest && Number(latest.durationSeconds || 0) > 0;
+
+  if (!hasCompletedResult) {
+    elements.lastMapResultCard.dataset.resultState = 'empty';
+    elements.lastMapResultFarmType.textContent = 'No completed map yet';
+    elements.lastMapResultDuration.textContent = '—';
+    elements.lastMapResultProfit.innerHTML = '—';
+    return;
+  }
+
+  elements.lastMapResultCard.dataset.resultState = 'ready';
+  elements.lastMapResultFarmType.textContent = latest.farmType || 'Unknown farm type';
+  elements.lastMapResultDuration.textContent = formatDuration(latest.durationSeconds || 0);
+  elements.lastMapResultProfit.innerHTML = currencyHTML(
+    latest.netProfit || 0,
+    'chaos',
+    16,
+    latest.poeVersion || state.settings?.poeVersion || 'poe1'
+  );
+}
+
+function renderMapResultHistory() {
+  if (!elements.mapResultFilter || !elements.mapResultHistory) {
+    return;
+  }
+
+  const results = Array.isArray(state.mapResults)
+    ? state.mapResults.filter((result) => Number(result?.durationSeconds || 0) > 0)
+    : [];
+  const availableFarmTypes = [];
+  const seenFarmTypes = new Set();
+
+  results.forEach((result) => {
+    const farmType = typeof result?.farmType === 'string' ? result.farmType.trim() : '';
+    if (!farmType || seenFarmTypes.has(farmType)) {
+      return;
+    }
+
+    seenFarmTypes.add(farmType);
+    availableFarmTypes.push(farmType);
+  });
+
+  const selectedFarmType = availableFarmTypes.includes(elements.mapResultFilter.value)
+    ? elements.mapResultFilter.value
+    : '';
+
+  elements.mapResultFilter.innerHTML = [
+    '<option value="">All farms</option>',
+    ...availableFarmTypes.map((farmType) => `<option value="${escapeHTML(farmType)}">${escapeHTML(farmType)}</option>`)
+  ].join('');
+  elements.mapResultFilter.value = selectedFarmType;
+
+  const filteredResults = getMapResultStoreModel().filterMapResults(results, { farmType: selectedFarmType });
+
+  if (!filteredResults.length) {
+    elements.mapResultHistory.innerHTML = '<p class="empty-state">No map results recorded yet.</p>';
+    return;
+  }
+
+  elements.mapResultHistory.innerHTML = filteredResults.map((result) => `
+    <article class="map-result-history-item" data-result-id="${escapeHTML(result?.id || '')}">
+      <div class="map-result-history-main">
+        <strong>${escapeHTML(result?.farmType || 'Unknown farm type')}</strong>
+        <span>${formatDuration(Number(result?.durationSeconds || 0))}</span>
+      </div>
+      <div class="map-result-history-meta">
+        <span class="map-result-history-profit">${currencyHTML(
+          result?.netProfit || 0,
+          'chaos',
+          14,
+          result?.poeVersion || state.settings?.poeVersion || 'poe1'
+        )}</span>
+        <span>${escapeHTML(result?.createdAt ? timeAgo(result.createdAt) : 'Just now')}</span>
+      </div>
+    </article>
+  `).join('');
 }
 
 let _refreshPending = null;
@@ -2051,7 +2596,10 @@ async function refreshTrackerData({ includeSessions = false, includeCurrency = f
     _refreshPending = null;
 
     if (!state.currentUser) {
+      state.mapResults = [];
       resetDashboardSummary();
+      renderLatestMapResult();
+      renderMapResultHistory();
       renderRecentLoot();
       renderSessionsList();
       updateActiveSessionUI();
@@ -2061,7 +2609,8 @@ async function refreshTrackerData({ includeSessions = false, includeCurrency = f
     const tasks = [
       loadCurrentSession(),
       loadDashboardStats(),
-      loadRecentLoot()
+      loadRecentLoot(),
+      loadMapResultHistory()
     ];
 
     if (opts.includeSessions || isPageActive('sessions')) {
@@ -2090,13 +2639,18 @@ async function handleStartSession() {
   if (!mapName) return;
 
   const trackerContext = getSelectedTrackerContext();
+  const sessionPayload = {
+    mapName,
+    poeVersion: trackerContext.poeVersion,
+    league: trackerContext.league
+  };
+
+  if (trackerContext.farmTypeId) {
+    sessionPayload.farmTypeId = trackerContext.farmTypeId;
+  }
 
   try {
-    const session = await window.electronAPI.startSession({
-      mapName,
-      poeVersion: trackerContext.poeVersion,
-      league: trackerContext.league
-    });
+    const session = await window.electronAPI.startSession(sessionPayload);
     if (session) {
       state.currentSession = session;
       updateActiveSessionUI();
@@ -2214,6 +2768,8 @@ function updateActiveSessionUI() {
       elements.sessionBadge.style.color = '';
     }
   }
+
+  renderFarmTypeSelector();
 }
 
 /**
@@ -2687,8 +3243,50 @@ async function handleExportDiagnostics() {
 const stashState = {
   beforeSnapshotId: null,
   afterSnapshotId: null,
+  beforeSnapshot: null,
+  afterSnapshot: null,
+  mapResultContext: null,
+  lastMapResult: null,
   pricesSynced: false
 };
+
+function buildCurrentMapResultContext() {
+  const trackerContext = getSelectedTrackerContext();
+  const runtimeSession = state.runtimeSession
+    ? {
+      ...JSON.parse(JSON.stringify(state.runtimeSession)),
+      sessionId: state.currentSession?.id || state.runtimeSession.sessionId || null
+    }
+    : null;
+
+  return {
+    farmTypeId: state.currentSession?.farmTypeId
+      || state.currentSession?.mapType
+      || state.farmType?.selectedFarmTypeId
+      || null,
+    poeVersion: state.currentSession?.poeVersion || trackerContext.poeVersion || null,
+    league: state.currentSession?.league || state.account?.summary?.league || null,
+    accountName: state.account?.accountName || null,
+    characterSummary: state.account?.summary || null,
+    runtimeSession
+  };
+}
+
+function mergeMapResultRuntimeSession(previousRuntimeSession, nextRuntimeSession) {
+  if (!previousRuntimeSession) {
+    return nextRuntimeSession || null;
+  }
+
+  if (!nextRuntimeSession) {
+    return previousRuntimeSession;
+  }
+
+  return {
+    ...previousRuntimeSession,
+    ...nextRuntimeSession,
+    sessionId: nextRuntimeSession.sessionId || previousRuntimeSession.sessionId || null
+  };
+}
 
 async function handleSyncPrices() {
   if (!elements.syncPricesBtn) return;
@@ -2754,8 +3352,19 @@ async function handleTakeSnapshot(type) {
 
     if (isAfter) {
       stashState.afterSnapshotId = snapshotId;
+      stashState.afterSnapshot = result;
+      const nextContext = buildCurrentMapResultContext();
+      stashState.mapResultContext = {
+        ...(stashState.mapResultContext || nextContext),
+        runtimeSession: mergeMapResultRuntimeSession(
+          stashState.mapResultContext?.runtimeSession || null,
+          nextContext.runtimeSession || null
+        )
+      };
     } else {
       stashState.beforeSnapshotId = snapshotId;
+      stashState.beforeSnapshot = result;
+      stashState.mapResultContext = buildCurrentMapResultContext();
       // Enable "after" button
       if (elements.takeAfterSnapshotBtn) {
         elements.takeAfterSnapshotBtn.disabled = false;
@@ -2810,7 +3419,23 @@ async function handleCalculateProfit() {
       return;
     }
 
+    stashState.lastMapResult = deriveCurrentMapResult(report);
     renderProfitReport(report);
+    if (stashState.lastMapResult && Number(stashState.lastMapResult.durationSeconds || 0) > 0) {
+      if (typeof window.electronAPI?.showMapResultOverlay === 'function') {
+        try {
+          await window.electronAPI.showMapResultOverlay(stashState.lastMapResult);
+        } catch (error) {
+          console.warn('Failed to show map result overlay', error);
+        }
+      }
+
+      try {
+        await persistMapResultHistory(stashState.lastMapResult);
+      } catch (error) {
+        console.warn('Failed to persist map result history', error);
+      }
+    }
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.profitFailed'), 'error');
   } finally {
@@ -2891,6 +3516,10 @@ function handleResetSnapshots() {
 
   stashState.beforeSnapshotId = null;
   stashState.afterSnapshotId = null;
+  stashState.beforeSnapshot = null;
+  stashState.afterSnapshot = null;
+  stashState.mapResultContext = null;
+  stashState.lastMapResult = null;
 
   // Reset step visuals
   if (elements.snapshotStepBefore) {

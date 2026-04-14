@@ -31,17 +31,21 @@ const {
   clearRuntimeSessionState,
   cloneRuntimeSessionState
 } = require('./src/modules/runtimeSessionModel');
+const { appendMapResult } = require('./src/modules/mapResultStoreModel');
+const { deriveMapResultOverlayState } = require('./src/modules/mapResultOverlayModel');
 const { deriveOverlayState } = require('./src/modules/overlayStateModel');
 const {
   DEFAULT_SCAN_HOTKEY,
   DEFAULT_STASH_SCAN_HOTKEY,
   validateHotkeys
 } = require('./src/modules/hotkeyModel');
+const { createNativeGameInfoProducer } = require('./src/modules/nativeGameInfoProducer');
 const DEFAULT_POE_LOG_PATH = GameDetector.DEFAULT_POE_LOG_PATH;
 
 const APP_NAME = 'Juice Journal';
 const APP_ID = 'JuiceJournal.Desktop';
 const DEFAULT_STRATEGY_PRESETS = ['Strongbox', 'Legion', 'Ritual', 'Expedition', 'Harvest', 'Boss Rush'];
+const MAP_RESULT_OVERLAY_DURATION_MS = 10_000;
 const MAX_PENDING_LOOT_ACTIONS = 100;
 const MAX_PENDING_SESSION_ACTIONS = 20;
 const MAX_AUDIT_TRAIL_ENTRIES = 200;
@@ -182,6 +186,7 @@ const store = new Store({
     currentUserId: null,
     pendingSessionActions: [],
     pendingLootActions: [],
+    activeFarmTypeId: null,
     queuedCurrentSession: null,
     auditTrail: [],
     strategyPresets: DEFAULT_STRATEGY_PRESETS,
@@ -261,6 +266,11 @@ let runtimeSessionState = createRuntimeSessionState();
 let overlayWindow = null;
 let overlayCharacterState = null;
 let overlayRuntimeState = null;
+let overlayMapResultState = null;
+let overlayMapResultDismissTimer = null;
+let lastActiveCharacterHint = null;
+let nativeGameInfoProducer = null;
+let nativeGameInfoProducerBinding = null;
 let poeAuthServer = null;
 let trayHintShown = false;
 let pendingLootFlushInProgress = false;
@@ -505,6 +515,7 @@ function createQueuedSession(input = {}) {
     mapName: input.mapName,
     mapTier: input.mapTier || null,
     mapType: input.mapType || null,
+    farmTypeId: input.farmTypeId || input.mapType || null,
     strategyTag: input.strategyTag || null,
     notes: input.notes || null,
     poeVersion: input.poeVersion,
@@ -549,12 +560,156 @@ function getPendingSyncEntriesForView() {
     .slice(0, 20);
 }
 
+function normalizeStoredFarmTypeId(farmTypeId) {
+  const normalized = typeof farmTypeId === 'string' ? farmTypeId.trim() : '';
+  return normalized || null;
+}
+
+function getActiveFarmTypeId() {
+  return normalizeStoredFarmTypeId(store.get('activeFarmTypeId'));
+}
+
+function setActiveFarmTypeId(farmTypeId) {
+  const normalized = normalizeStoredFarmTypeId(farmTypeId);
+  store.set('activeFarmTypeId', normalized);
+  return normalized;
+}
+
+function getMapResultsStoreKey(userId = getCurrentUserId()) {
+  return userId ? `mapResults:${userId}` : null;
+}
+
+function getStoredMapResults() {
+  const storeKey = getMapResultsStoreKey();
+  if (!storeKey) {
+    return [];
+  }
+
+  const results = store.get(storeKey);
+  return Array.isArray(results) ? results : [];
+}
+
+function saveMapResultHistory(result) {
+  const storeKey = getMapResultsStoreKey();
+  if (!storeKey) {
+    return [];
+  }
+
+  const nextResults = appendMapResult(getStoredMapResults(), result, { maxResults: 100 });
+  store.set(storeKey, nextResults);
+  return nextResults;
+}
+
 function emitPendingSyncState() {
   if (!mainWindow) return;
   mainWindow.webContents.send('pending-sync-updated', {
     ...getPendingSyncSnapshot(),
     entries: getPendingSyncEntriesForView()
   });
+}
+
+function emitActiveCharacterHint(payload) {
+  lastActiveCharacterHint = payload || null;
+
+  if (!mainWindow || !mainWindow.webContents) {
+    return;
+  }
+
+  mainWindow.webContents.send('active-character-hint', payload);
+}
+
+function clearNativeActiveCharacterHint() {
+  emitActiveCharacterHint(null);
+}
+
+function getNativeGameInfoGameId(version) {
+  if (version === 'poe2') {
+    return 24886;
+  }
+
+  return null;
+}
+
+function getNativeGameInfoProducer() {
+  if (!nativeGameInfoProducer) {
+    const gep = app?.overwolf?.packages?.gep || null;
+    nativeGameInfoProducer = createNativeGameInfoProducer({
+      gep,
+      emitHint: emitActiveCharacterHint,
+      logger: console
+    });
+  }
+
+  return nativeGameInfoProducer;
+}
+
+function stopNativeGameInfoProducer() {
+  nativeGameInfoProducerBinding = null;
+  clearNativeActiveCharacterHint();
+
+  if (!nativeGameInfoProducer || typeof nativeGameInfoProducer.stop !== 'function') {
+    return Promise.resolve(false);
+  }
+
+  try {
+    return Promise.resolve(nativeGameInfoProducer.stop()).catch((error) => {
+      console.warn('[NativeGameInfoProducer] Failed to stop producer', error);
+      return false;
+    });
+  } catch (error) {
+    console.warn('[NativeGameInfoProducer] Failed to stop producer', error);
+    return Promise.resolve(false);
+  }
+}
+
+function syncNativeGameInfoProducer(input = {}) {
+  const detectedVersion = input.detectedVersion;
+  const gameId = input.gameId || getNativeGameInfoGameId(detectedVersion);
+
+  if (!detectedVersion || !gameId) {
+    return stopNativeGameInfoProducer();
+  }
+
+  if (
+    nativeGameInfoProducerBinding
+    && nativeGameInfoProducerBinding.detectedVersion === detectedVersion
+    && nativeGameInfoProducerBinding.gameId === gameId
+  ) {
+    return Promise.resolve(true);
+  }
+
+  const producer = getNativeGameInfoProducer();
+  if (!producer || typeof producer.start !== 'function') {
+    return Promise.resolve(false);
+  }
+
+  try {
+    const startPromise = producer.start({
+      poeVersion: detectedVersion,
+      gameId
+    });
+
+    return Promise.resolve(startPromise).then((started) => {
+      if (started) {
+        nativeGameInfoProducerBinding = {
+          detectedVersion,
+          gameId
+        };
+      } else {
+        nativeGameInfoProducerBinding = null;
+      }
+
+      return started;
+    }).catch((error) => {
+      nativeGameInfoProducerBinding = null;
+      console.warn('[NativeGameInfoProducer] Failed to start producer', error);
+      return false;
+    });
+  } catch (error) {
+    nativeGameInfoProducerBinding = null;
+    console.warn('[NativeGameInfoProducer] Failed to start producer', error);
+    return Promise.resolve(false);
+  }
 }
 
 function annotateSyncFailure(action, error, { blocked = false } = {}) {
@@ -1240,7 +1395,7 @@ async function openPoeLoginFlow(startResponse, { redirectUrl, redirectUri, expec
           if (parsedAuthUrl.protocol !== 'https:' && parsedAuthUrl.protocol !== 'http:') {
             throw new Error('Invalid auth URL scheme — only https/http allowed');
           }
-          await shell.openExternal(startResponse.authUrl);
+          await openAuthUrlInBrowser(startResponse.authUrl);
         } catch (error) {
           clearTimeout(timeout);
           await closePoeAuthServer();
@@ -1252,6 +1407,24 @@ async function openPoeLoginFlow(startResponse, { redirectUrl, redirectUri, expec
         await closePoeAuthServer();
         reject(error);
       });
+  });
+}
+
+function openAuthUrlInBrowser(authUrl) {
+  return shell.openExternal(authUrl).catch((error) => {
+    if (process.platform !== 'win32') {
+      throw error;
+    }
+
+    return new Promise((resolve, reject) => {
+      execFile('cmd', ['/c', 'start', '', authUrl], (fallbackError) => {
+        if (fallbackError) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
   });
 }
 
@@ -1362,7 +1535,7 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
           if (parsedAuthUrl.protocol !== 'https:' && parsedAuthUrl.protocol !== 'http:') {
             throw new Error('Invalid auth URL scheme — only https/http allowed');
           }
-          await shell.openExternal(startResponse.authUrl);
+          await openAuthUrlInBrowser(startResponse.authUrl);
         } catch (error) {
           clearTimeout(timeout);
           await closePoeAuthServer();
@@ -1467,6 +1640,7 @@ function createOverlayWindow() {
     alwaysOnTop: true,
     backgroundColor: '#00000000',
     webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
@@ -1533,7 +1707,95 @@ function isOverlayEnabled() {
   return store.get('overlayEnabled') === true;
 }
 
+function clearOverlayMapResultDismissTimer() {
+  if (overlayMapResultDismissTimer) {
+    clearTimeout(overlayMapResultDismissTimer);
+    overlayMapResultDismissTimer = null;
+  }
+}
+
+function scheduleOverlayMapResultDismiss() {
+  clearOverlayMapResultDismissTimer();
+
+  if (!overlayMapResultState?.result || overlayMapResultState?.pinned || !overlayMapResultState?.dismissAt) {
+    return;
+  }
+
+  const delay = Math.max(0, overlayMapResultState.dismissAt - Date.now());
+  overlayMapResultDismissTimer = setTimeout(() => {
+    overlayMapResultDismissTimer = null;
+    overlayMapResultState = deriveMapResultOverlayState({
+      overlayEnabled: isOverlayEnabled(),
+      currentOverlayState: overlayMapResultState,
+      now: Date.now()
+    });
+
+    if (!overlayMapResultState?.visible) {
+      overlayMapResultState = null;
+    }
+
+    updateOverlayWindow();
+  }, delay);
+}
+
+function showMapResultOverlay(result, options = {}) {
+  overlayMapResultState = deriveMapResultOverlayState({
+    overlayEnabled: isOverlayEnabled(),
+    completedResult: result,
+    currentOverlayState: overlayMapResultState,
+    now: options.now ?? Date.now(),
+    durationMs: options.durationMs ?? MAP_RESULT_OVERLAY_DURATION_MS
+  });
+
+  scheduleOverlayMapResultDismiss();
+  return updateOverlayWindow();
+}
+
+function toggleMapResultOverlayPin() {
+  if (!overlayMapResultState?.result) {
+    return updateOverlayWindow();
+  }
+
+  overlayMapResultState = {
+    ...overlayMapResultState,
+    visible: true,
+    pinned: !overlayMapResultState.pinned
+  };
+
+  if (!overlayMapResultState.pinned && overlayMapResultState.dismissAt && overlayMapResultState.dismissAt <= Date.now()) {
+    overlayMapResultState = null;
+  }
+
+  scheduleOverlayMapResultDismiss();
+  return updateOverlayWindow();
+}
+
+function dismissMapResultOverlay() {
+  overlayMapResultState = null;
+  clearOverlayMapResultDismissTimer();
+  return updateOverlayWindow();
+}
+
 function buildOverlayState({ character = overlayCharacterState, runtimeSession = overlayRuntimeState } = {}) {
+  const mapResultState = deriveMapResultOverlayState({
+    overlayEnabled: isOverlayEnabled(),
+    currentOverlayState: overlayMapResultState,
+    now: Date.now()
+  });
+
+  if (mapResultState.visible && mapResultState.result) {
+    overlayMapResultState = mapResultState;
+    return {
+      visibility: 'visible',
+      mode: 'map-result',
+      mapResult: mapResultState
+    };
+  }
+
+  if (!mapResultState.visible) {
+    overlayMapResultState = null;
+  }
+
   return deriveOverlayState({
     enabled: isOverlayEnabled(),
     character,
@@ -1798,6 +2060,7 @@ async function startNewSession(input = {}) {
     }
 
     const { activeVersion: poeVersion, league } = resolveLeagueContext(input);
+    const farmTypeId = normalizeStoredFarmTypeId(input.farmTypeId || input.mapType || getActiveFarmTypeId());
 
     // Map adi al
     const mapName = input.mapName || await promptMapName();
@@ -1809,7 +2072,8 @@ async function startNewSession(input = {}) {
       session = await apiClient.startSession({
         mapName,
         mapTier: input.mapTier || null,
-        mapType: input.mapType || null,
+        mapType: farmTypeId,
+        farmTypeId,
         costChaos: input.costChaos || 0,
         poeVersion,
         league
@@ -1825,7 +2089,8 @@ async function startNewSession(input = {}) {
         localSessionId: input.localSessionId,
         mapName,
         mapTier: input.mapTier || null,
-        mapType: input.mapType || null,
+        mapType: farmTypeId,
+        farmTypeId,
         strategyTag: input.strategyTag || null,
         notes: input.notes || null,
         costChaos: input.costChaos || 0,
@@ -1841,7 +2106,8 @@ async function startNewSession(input = {}) {
         payload: {
           mapName,
           mapTier: input.mapTier || null,
-          mapType: input.mapType || null,
+          mapType: farmTypeId,
+          farmTypeId,
           strategyTag: input.strategyTag || null,
           notes: input.notes || null,
           costChaos: input.costChaos || 0,
@@ -1867,6 +2133,23 @@ async function startNewSession(input = {}) {
   } catch (error) {
     showNotification(t('notificationError'), t('sessionStartFailed'));
   }
+}
+
+async function handleMapEntered(data) {
+  if (store.get('autoStartSession') && !currentSession) {
+    const session = await startNewSession({
+      mapName: data.mapName,
+      mapTier: data.mapTier,
+      farmTypeId: getActiveFarmTypeId(),
+      ...getTrackerContextDefaults()
+    });
+    showNotification(t('notificationAutoSession'), t('autoSessionBody', { mapName: data.mapName }));
+    if (mainWindow) {
+      mainWindow.webContents.send('session-started', session);
+    }
+  }
+
+  publishRuntimeSessionEvent('area_entered', data);
 }
 
 /**
@@ -2045,23 +2328,9 @@ function setupLogParser() {
   logParser = new LogParser(poePath);
 
   logParser.on('mapEntered', (data) => {
-    if (store.get('autoStartSession') && !currentSession) {
-      // Otomatik session baslat
-      startNewSession({
-        mapName: data.mapName,
-        mapTier: data.mapTier,
-        ...getTrackerContextDefaults()
-      }).then(session => {
-        showNotification(t('notificationAutoSession'), t('autoSessionBody', { mapName: data.mapName }));
-        if (mainWindow) {
-          mainWindow.webContents.send('session-started', session);
-        }
-      }).catch(() => {
+    handleMapEntered(data).catch(() => {
         showNotification(t('notificationError'), t('sessionStartFailed'));
-      });
-    }
-
-    publishRuntimeSessionEvent('area_entered', data);
+    });
   });
 
   logParser.on('mapExited', (data) => {
@@ -2110,6 +2379,8 @@ function handleGameClosed(version, at = new Date()) {
     version,
     runtimeSession
   };
+
+  stopNativeGameInfoProducer();
 
   console.log(`[GameDetector] ${gameLabel} closed`);
   if (mainWindow) {
@@ -2163,6 +2434,10 @@ function applyGameVersion(version) {
     }
     setupLogParser();
   }
+
+  syncNativeGameInfoProducer({
+    detectedVersion: version
+  });
 
   // Notify renderer to update UI (icons, labels, etc.)
   if (mainWindow) {
@@ -2256,6 +2531,23 @@ function applyDesktopSettings(settings = {}) {
   return true;
 }
 
+function handleLogout() {
+  appendAuditTrail('auditLogout');
+  stopNativeGameInfoProducer();
+  store.set('authToken', null);
+  store.set('authTokenEncrypted', null);
+  store.set('currentUserId', null);
+  apiClient.setToken(null);
+  currentSession = null;
+  if (stashAnalyzer) {
+    stashAnalyzer.clearAll();
+  }
+  overlayMapResultState = null;
+  clearOverlayMapResultDismissTimer();
+  updateOverlayWindow({ character: null });
+  return true;
+}
+
 /**
  * IPC handler'lari tanimla
  */
@@ -2337,6 +2629,12 @@ function setupIPC() {
   // Session baslat
   ipcMain.handle('start-session', async (event, data) => {
     return await startNewSession(data || {});
+  });
+
+  ipcMain.handle('get-active-farm-type', () => getActiveFarmTypeId());
+
+  ipcMain.handle('set-active-farm-type', (event, farmTypeId) => {
+    return setActiveFarmTypeId(farmTypeId);
   });
 
   // Session bitir
@@ -2850,6 +3148,8 @@ function setupIPC() {
       if (mainWindow) {
         mainWindow.webContents.send('stash-snapshot-taken', {
           snapshotId,
+          timestamp: snapshot.timestamp,
+          league: snapshot.league,
           itemCount: snapshot.items.length,
           totalChaos: snapshot.totalChaos,
           totalDivine: snapshot.totalDivine
@@ -2858,6 +3158,8 @@ function setupIPC() {
 
       return {
         snapshotId,
+        timestamp: snapshot.timestamp,
+        league: snapshot.league,
         itemCount: snapshot.items.length,
         totalChaos: snapshot.totalChaos,
         totalDivine: snapshot.totalDivine,
@@ -2883,6 +3185,61 @@ function setupIPC() {
     } catch (error) {
       throw toRendererError(error, 'Profit calculation failed');
     }
+  });
+
+  ipcMain.handle('show-map-result-overlay', async (event, result, options = {}) => {
+    assertDesktopUserAuthenticated();
+    return showMapResultOverlay(result, options || {});
+  });
+
+  ipcMain.handle('show-runtime-overlay-preview', async (event, runtimeSession) => {
+    assertDesktopUserAuthenticated();
+    return updateOverlayWindow({ runtimeSession: runtimeSession || null });
+  });
+
+  ipcMain.handle('toggle-map-result-overlay-pin', async () => {
+    assertDesktopUserAuthenticated();
+    return toggleMapResultOverlayPin();
+  });
+
+  ipcMain.handle('dismiss-map-result-overlay', async () => {
+    assertDesktopUserAuthenticated();
+    return dismissMapResultOverlay();
+  });
+
+  ipcMain.handle('get-overlay-cursor-position', async () => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) {
+      return null;
+    }
+
+    const cursorPoint = screen.getCursorScreenPoint();
+    const bounds = overlayWindow.getBounds();
+
+    return {
+      clientX: cursorPoint.x - bounds.x,
+      clientY: cursorPoint.y - bounds.y
+    };
+  });
+
+  ipcMain.handle('set-overlay-pointer-passthrough', async (event, ignore = true) => {
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow.setIgnoreMouseEvents(ignore !== false, { forward: true });
+    }
+    return true;
+  });
+
+  ipcMain.handle('get-last-active-character-hint', async () => {
+    return lastActiveCharacterHint;
+  });
+
+  ipcMain.handle('save-map-result', async (event, result) => {
+    assertDesktopUserAuthenticated();
+    return saveMapResultHistory(result);
+  });
+
+  ipcMain.handle('get-map-results', async () => {
+    assertDesktopUserAuthenticated();
+    return getStoredMapResults();
   });
 
   // List stored snapshots
@@ -2925,16 +3282,7 @@ function setupIPC() {
   });
 
   // Logout
-  ipcMain.handle('logout', () => {
-    appendAuditTrail('auditLogout');
-    store.set('authToken', null);
-    store.set('authTokenEncrypted', null);
-    store.set('currentUserId', null);
-    apiClient.setToken(null);
-    currentSession = null;
-    updateOverlayWindow({ character: null });
-    return true;
-  });
+  ipcMain.handle('logout', handleLogout);
 }
 
 /**
@@ -3006,7 +3354,7 @@ app.on('activate', () => {
   showMainWindow();
 });
 
-app.on('will-quit', () => {
+function handleAppWillQuit() {
   // Global kisayolleri temizle
   globalShortcut.unregisterAll();
 
@@ -3019,6 +3367,8 @@ app.on('will-quit', () => {
   if (gameDetector) {
     gameDetector.stop();
   }
+
+  stopNativeGameInfoProducer();
 
   if (ocrScanner) {
     ocrScanner.terminate().catch(() => { });
@@ -3038,5 +3388,6 @@ app.on('will-quit', () => {
     clearInterval(pendingLootFlushInterval);
     pendingLootFlushInterval = null;
   }
+}
 
-});
+app.on('will-quit', handleAppWillQuit);
