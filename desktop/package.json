@@ -10,6 +10,8 @@
     "test:desktop": "node --test tests/*.test.js",
     "test:e2e": "playwright test",
     "test:smoke": "playwright test e2e/settings-smoke.spec.js e2e/overlay-smoke.spec.js",
+    "bridge:build": "dotnet build native-bridge/JuiceJournal.NativeBridge.csproj",
+    "bridge:run": "dotnet run --project native-bridge/JuiceJournal.NativeBridge.csproj",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "pack": "electron-builder --dir",

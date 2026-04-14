@@ -97,6 +97,29 @@ node --test tests/main-settings.test.js
 npm run test:smoke
 ```
 
+## Native Bridge
+
+```bash
+# .NET native bridge'i build et
+npm run bridge:build
+
+# Bridge'i tek basina calistir
+npm run bridge:run
+```
+
+Beklenen:
+
+- stdout NDJSON diagnostik satirlari uretir
+- desktop uygulamasi bridge yoksa fail-closed kalir
+
+Task 6 dogrulama komutlari:
+
+```bash
+npm run bridge:build
+node --test tests/native-bridge-model.test.js tests/native-bridge-supervisor.test.js tests/main-settings.test.js
+node --test tests/*.test.js
+```
+
 ## Native Active Character Validation
 
 PoE2 native karakter tespiti icin manuel dogrulama matrisi:
