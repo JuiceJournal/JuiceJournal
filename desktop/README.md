@@ -51,14 +51,23 @@ Uygulama ici ayarlar:
 
 - **API URL**: Backend sunucu adresi
 - **Client.txt Yolu**: PoE log dosya yolu
+- **Dil**: Arayuz dili
+- **PoE Surumu**: PoE1 / PoE2 runtime secimi
+- **Aktif Ligler**: PoE1 ve PoE2 icin ayri varsayilan lig secimi
 - **Otomatik Session**: Map girisinde otomatik baslat
 - **Bildirimler**: Masaustu bildirimleri
+- **Sesli Bildirimler**: Sesli event bildirimleri
+- **PoE Baglantisi**: Path of Exile OAuth bagla / ayir
+- **Diagnostik ve Audit Trail**: Pending sync, export ve audit goruntuleme
 
 ### PoE Log Yolu
 
 Varsayilan log konumu:
-- Steam: `C:/Program Files (x86)/Steam/steamapps/common/Path of Exile/logs/Client.txt`
-- Standalone: `C:/Path of Exile/logs/Client.txt`
+- PoE1 standalone: `C:/Program Files (x86)/Grinding Gear Games/Path of Exile/logs/Client.txt`
+- PoE1 standalone: `C:/Program Files/Grinding Gear Games/Path of Exile/logs/Client.txt`
+- PoE2 standalone: `C:/Program Files (x86)/Grinding Gear Games/Path of Exile 2/logs/Client.txt`
+- PoE2 standalone: `C:/Program Files/Grinding Gear Games/Path of Exile 2/logs/Client.txt`
+- PoE2 Steam: `C:/Program Files (x86)/Steam/steamapps/common/Path of Exile 2/logs/Client.txt`
 
 ## Gelistirme
 
@@ -78,6 +87,9 @@ npm test
 
 # Native producer main-process regression seti
 node --test tests/main-settings.test.js
+
+# Playwright smoke testleri
+npm run test:smoke
 ```
 
 ## Native Active Character Validation
