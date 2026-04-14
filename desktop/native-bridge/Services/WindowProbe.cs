@@ -17,31 +17,38 @@ public sealed class WindowProbe
         }
 
         var titleBuilder = new StringBuilder(512);
-        _ = GetWindowText(foregroundWindow, titleBuilder, titleBuilder.Capacity);
-
         var classBuilder = new StringBuilder(256);
-        _ = GetClassName(foregroundWindow, classBuilder, classBuilder.Capacity);
 
-        _ = GetWindowThreadProcessId(foregroundWindow, out var processId);
+        var titleLength = GetWindowText(foregroundWindow, titleBuilder, titleBuilder.Capacity);
+        var classLength = GetClassName(foregroundWindow, classBuilder, classBuilder.Capacity);
+        var threadId = GetWindowThreadProcessId(foregroundWindow, out var processId);
+
+        if (threadId == 0 || processId == 0)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["hasForegroundWindow"] = false
+            };
+        }
 
         return new Dictionary<string, object?>
         {
             ["hasForegroundWindow"] = true,
-            ["windowTitle"] = titleBuilder.ToString(),
-            ["windowClass"] = classBuilder.ToString(),
+            ["windowTitle"] = titleLength > 0 ? titleBuilder.ToString() : string.Empty,
+            ["windowClass"] = classLength > 0 ? classBuilder.ToString() : string.Empty,
             ["processId"] = processId
         };
     }
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr GetForegroundWindow();
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maxCount);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 }
