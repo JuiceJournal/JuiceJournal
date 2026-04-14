@@ -869,19 +869,22 @@ test('runtime game detection stops the native game info producer when the detect
 
 test('runtime game detection fails closed when the native gep package is unavailable', async () => {
   const starts = [];
+  const actualCreateNativeGameInfoProducer = require('../src/modules/nativeGameInfoProducer').createNativeGameInfoProducer;
   const context = loadMainWithMocks({
     app: {
       overwolf: {
         packages: {}
       }
     },
-    createNativeGameInfoProducer() {
+    createNativeGameInfoProducer(options) {
+      const producer = actualCreateNativeGameInfoProducer(options);
+
       return {
         start: async (payload) => {
           starts.push(payload);
-          return false;
+          return producer.start(payload);
         },
-        stop: async () => true
+        stop: async () => producer.stop()
       };
     }
   });
