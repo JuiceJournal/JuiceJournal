@@ -270,6 +270,7 @@ let overlayMapResultState = null;
 let overlayMapResultDismissTimer = null;
 let lastActiveCharacterHint = null;
 let nativeGameInfoProducer = null;
+let nativeGameInfoProducerBinding = null;
 let poeAuthServer = null;
 let trayHintShown = false;
 let pendingLootFlushInProgress = false;
@@ -617,6 +618,10 @@ function emitActiveCharacterHint(payload) {
   mainWindow.webContents.send('active-character-hint', payload);
 }
 
+function clearNativeActiveCharacterHint() {
+  emitActiveCharacterHint(null);
+}
+
 function getNativeGameInfoGameId(version) {
   if (version === 'poe2') {
     return 24886;
@@ -639,6 +644,9 @@ function getNativeGameInfoProducer() {
 }
 
 function stopNativeGameInfoProducer() {
+  nativeGameInfoProducerBinding = null;
+  clearNativeActiveCharacterHint();
+
   if (!nativeGameInfoProducer || typeof nativeGameInfoProducer.stop !== 'function') {
     return Promise.resolve(false);
   }
@@ -654,9 +662,20 @@ function stopNativeGameInfoProducer() {
   }
 }
 
-function syncNativeGameInfoProducer({ detectedVersion, gameId = getNativeGameInfoGameId(detectedVersion) } = {}) {
+function syncNativeGameInfoProducer(input = {}) {
+  const detectedVersion = input.detectedVersion;
+  const gameId = input.gameId || getNativeGameInfoGameId(detectedVersion);
+
   if (!detectedVersion || !gameId) {
     return stopNativeGameInfoProducer();
+  }
+
+  if (
+    nativeGameInfoProducerBinding
+    && nativeGameInfoProducerBinding.detectedVersion === detectedVersion
+    && nativeGameInfoProducerBinding.gameId === gameId
+  ) {
+    return Promise.resolve(true);
   }
 
   const producer = getNativeGameInfoProducer();
@@ -665,14 +684,29 @@ function syncNativeGameInfoProducer({ detectedVersion, gameId = getNativeGameInf
   }
 
   try {
-    return Promise.resolve(producer.start({
+    const startPromise = producer.start({
       poeVersion: detectedVersion,
       gameId
-    })).catch((error) => {
+    });
+
+    return Promise.resolve(startPromise).then((started) => {
+      if (started) {
+        nativeGameInfoProducerBinding = {
+          detectedVersion,
+          gameId
+        };
+      } else {
+        nativeGameInfoProducerBinding = null;
+      }
+
+      return started;
+    }).catch((error) => {
+      nativeGameInfoProducerBinding = null;
       console.warn('[NativeGameInfoProducer] Failed to start producer', error);
       return false;
     });
   } catch (error) {
+    nativeGameInfoProducerBinding = null;
     console.warn('[NativeGameInfoProducer] Failed to start producer', error);
     return Promise.resolve(false);
   }

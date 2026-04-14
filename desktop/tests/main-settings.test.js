@@ -586,6 +586,7 @@ test('runtime game detection starts the native game info producer for poe2', () 
     logParser: {
       isRunning: true
     },
+    nativeGameInfoProducerBinding: null,
     nativeGameInfoProducer: null,
     app: {
       overwolf: {
@@ -646,14 +647,62 @@ test('runtime game detection starts the native game info producer for poe2', () 
   ]);
 });
 
+test('runtime game detection does not restart the native game info producer when the mapping is unchanged', async () => {
+  const starts = [];
+  const context = loadFunctions([
+    'emitActiveCharacterHint',
+    'clearNativeActiveCharacterHint',
+    'getNativeGameInfoGameId',
+    'getNativeGameInfoProducer',
+    'stopNativeGameInfoProducer',
+    'syncNativeGameInfoProducer'
+  ], {
+    nativeGameInfoProducerBinding: {
+      detectedVersion: 'poe2',
+      gameId: 24886
+    },
+    nativeGameInfoProducer: {
+      start(payload) {
+        starts.push(payload);
+        return true;
+      },
+      stop() {
+        assert.fail('stop should not run for an unchanged mapping');
+      }
+    },
+    mainWindow: null,
+    lastActiveCharacterHint: {
+      characterName: 'KELLEE'
+    }
+  });
+
+  const result = await context.syncNativeGameInfoProducer({
+    detectedVersion: 'poe2',
+    gameId: 24886
+  });
+
+  assert.equal(result, true);
+  assert.deepEqual(starts, []);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.nativeGameInfoProducerBinding)), {
+    detectedVersion: 'poe2',
+    gameId: 24886
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(context.lastActiveCharacterHint)), {
+    characterName: 'KELLEE'
+  });
+});
+
 test('runtime game detection stops the native game info producer when the detected game has no native mapping', () => {
   let stopCalls = 0;
+  const messages = [];
   const storeState = {
     lastDetectedPoeVersion: 'poe2',
     poeVersion: 'poe1',
     poePath: null
   };
   const context = loadFunctions([
+    'emitActiveCharacterHint',
+    'clearNativeActiveCharacterHint',
     'getNativeGameInfoGameId',
     'stopNativeGameInfoProducer',
     'syncNativeGameInfoProducer',
@@ -681,18 +730,51 @@ test('runtime game detection stops the native game info producer when the detect
     logParser: {
       isRunning: true
     },
+    nativeGameInfoProducerBinding: {
+      detectedVersion: 'poe2',
+      gameId: 24886
+    },
     nativeGameInfoProducer: {
       stop() {
         stopCalls += 1;
         return true;
       }
     },
-    mainWindow: null
+    nativeGameInfoProducerBinding: {
+      detectedVersion: 'poe2',
+      gameId: 24886
+    },
+    lastActiveCharacterHint: {
+      characterName: 'KELLEE'
+    },
+    mainWindow: {
+      webContents: {
+        send(channel, payload) {
+          messages.push({ channel, payload });
+        }
+      }
+    }
   });
 
   context.applyGameVersion('poe1');
 
   assert.equal(stopCalls, 1);
+  assert.equal(context.lastActiveCharacterHint, null);
+  assert.deepEqual(JSON.parse(JSON.stringify(messages)), [
+    {
+      channel: 'active-character-hint',
+      payload: null
+    },
+    {
+      channel: 'game-version-changed',
+      payload: {
+        version: 'poe1',
+        settingsVersion: 'poe1',
+        lastDetectedVersion: 'poe1',
+        logPath: null
+      }
+    }
+  ]);
 });
 
 test('main runtime log events attach normalized runtime session state to existing map IPC payloads', () => {
@@ -905,7 +987,10 @@ test('main game close stops the native game info producer', () => {
     cloneRuntimeSessionState
   } = require('../src/modules/runtimeSessionModel');
   let stopCalls = 0;
+  const messages = [];
   const context = loadFunctions([
+    'emitActiveCharacterHint',
+    'clearNativeActiveCharacterHint',
     'getRuntimeSessionSnapshot',
     'clearRuntimeSession',
     'stopNativeGameInfoProducer',
@@ -923,12 +1008,54 @@ test('main game close stops the native game info producer', () => {
         return true;
       }
     },
-    mainWindow: null
+    nativeGameInfoProducerBinding: {
+      detectedVersion: 'poe2',
+      gameId: 24886
+    },
+    lastActiveCharacterHint: {
+      characterName: 'KELLEE'
+    },
+    mainWindow: {
+      webContents: {
+        send(channel, payload) {
+          messages.push({ channel, payload });
+        }
+      }
+    }
   });
 
   context.handleGameClosed('poe2', '2026-04-09T12:03:30.000Z');
 
   assert.equal(stopCalls, 1);
+  assert.equal(context.lastActiveCharacterHint, null);
+  assert.deepEqual(JSON.parse(JSON.stringify(messages)), [
+    {
+      channel: 'active-character-hint',
+      payload: null
+    },
+    {
+      channel: 'game-closed',
+      payload: {
+        version: 'poe2',
+        runtimeSession: {
+          currentInstance: null,
+          instances: [],
+          totalActiveSeconds: 0,
+          summary: {
+            status: 'idle',
+            currentAreaName: null,
+            currentInstanceSeconds: 0,
+            totalActiveSeconds: 0,
+            instanceCount: 0,
+            lastAreaName: null,
+            lastExitedAt: null,
+            clearReason: 'game_closed',
+            clearedAt: '2026-04-09T12:03:30.000Z'
+          }
+        }
+      }
+    }
+  ]);
 });
 
 test('main logout stops the native game info producer while clearing desktop auth state', () => {
@@ -940,6 +1067,8 @@ test('main logout stops the native game info producer while clearing desktop aut
   const overlayUpdates = [];
   let apiToken = 'token';
   const context = loadFunctions([
+    'emitActiveCharacterHint',
+    'clearNativeActiveCharacterHint',
     'stopNativeGameInfoProducer',
     'handleLogout'
   ], {
@@ -967,12 +1096,16 @@ test('main logout stops the native game info producer while clearing desktop aut
     overlayMapResultState: {
       result: true
     },
+    lastActiveCharacterHint: {
+      characterName: 'KELLEE'
+    },
     clearOverlayMapResultDismissTimer() {
       clearDismissTimerCalls += 1;
     },
     updateOverlayWindow(payload) {
       overlayUpdates.push(payload);
     },
+    mainWindow: null,
     nativeGameInfoProducer: {
       stop() {
         stopCalls += 1;
@@ -994,6 +1127,7 @@ test('main logout stops the native game info producer while clearing desktop aut
   assert.equal(apiToken, null);
   assert.equal(context.currentSession, null);
   assert.equal(context.overlayMapResultState, null);
+  assert.equal(context.lastActiveCharacterHint, null);
   assert.equal(clearAllCalls, 1);
   assert.equal(clearDismissTimerCalls, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(overlayUpdates)), [{ character: null }]);
@@ -1008,6 +1142,8 @@ test('main app shutdown stops the native game info producer with the rest of the
   let overlayDestroyCalls = 0;
   const clearedIntervals = [];
   const context = loadFunctions([
+    'emitActiveCharacterHint',
+    'clearNativeActiveCharacterHint',
     'stopNativeGameInfoProducer',
     'handleAppWillQuit'
   ], {
@@ -1040,6 +1176,10 @@ test('main app shutdown stops the native game info producer with the rest of the
         overlayDestroyCalls += 1;
       }
     },
+    lastActiveCharacterHint: {
+      characterName: 'KELLEE'
+    },
+    mainWindow: null,
     pendingLootFlushInterval: 42,
     clearInterval(intervalId) {
       clearedIntervals.push(intervalId);
@@ -1061,6 +1201,7 @@ test('main app shutdown stops the native game info producer with the rest of the
   assert.equal(trayDestroyCalls, 1);
   assert.equal(overlayDestroyCalls, 1);
   assert.deepEqual(clearedIntervals, [42]);
+  assert.equal(context.lastActiveCharacterHint, null);
   assert.equal(context.tray, null);
   assert.equal(context.overlayWindow, null);
   assert.equal(context.pendingLootFlushInterval, null);
