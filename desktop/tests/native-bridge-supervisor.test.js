@@ -185,4 +185,38 @@ test('supervisor stop fails closed when kill throws', () => {
   assert.equal(supervisor.stop(), false);
   assert.equal(child.killCalls, 1);
   assert.deepEqual(errors, [stopError]);
+  assert.equal(supervisor.start(), false);
+});
+
+test('supervisor ignores stale child output after stop and restart', () => {
+  const createNativeBridgeSupervisor = getCreateNativeBridgeSupervisor();
+  const messages = [];
+  const firstChild = createFakeBridgeProcess();
+  const secondChild = createFakeBridgeProcess();
+  let spawnCalls = 0;
+  const supervisor = createNativeBridgeSupervisor({
+    spawnBridge() {
+      const child = spawnCalls === 0 ? firstChild : secondChild;
+      spawnCalls += 1;
+      return child;
+    },
+    onMessage(message) {
+      messages.push(message);
+    }
+  });
+
+  assert.equal(supervisor.start(), true);
+  assert.equal(supervisor.stop(), true);
+  assert.equal(supervisor.start(), true);
+
+  firstChild.stdout.emit('data', Buffer.from('{"type":"bridge-diagnostic","message":"stale","detectedAt":"2026-04-14T12:00:00.000Z"}\n'));
+  secondChild.stdout.emit('data', Buffer.from('{"type":"bridge-diagnostic","message":"fresh","detectedAt":"2026-04-14T12:00:01.000Z"}\n'));
+
+  assert.deepEqual(messages, [
+    {
+      type: 'bridge-diagnostic',
+      message: 'fresh',
+      detectedAt: '2026-04-14T12:00:01.000Z'
+    }
+  ]);
 });

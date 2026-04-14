@@ -1,8 +1,7 @@
 const { parseNativeBridgeLine } = require('./nativeBridgeModel');
 
 function createNativeBridgeSupervisor({ spawnBridge, onMessage, onError = () => {} } = {}) {
-  let child = null;
-  let stdoutBuffer = '';
+  let activeBridge = null;
 
   function emitMessage(payload) {
     if (typeof onMessage === 'function') {
@@ -18,75 +17,111 @@ function createNativeBridgeSupervisor({ spawnBridge, onMessage, onError = () => 
     }
   }
 
-  function handleStdout(chunk) {
-    stdoutBuffer += String(chunk ?? '');
+  function detachBridge(bridge) {
+    if (!bridge || !bridge.child) {
+      return;
+    }
 
-    const lines = stdoutBuffer.split(/\r?\n/);
-    stdoutBuffer = lines.pop() ?? '';
+    const { child, onStdoutData, onStderrData, onExit } = bridge;
 
-    for (const line of lines) {
-      if (!line) {
-        continue;
-      }
+    if (typeof child.stdout?.removeListener === 'function' && onStdoutData) {
+      child.stdout.removeListener('data', onStdoutData);
+    }
 
-      const payload = parseNativeBridgeLine(line);
-      if (payload) {
-        emitMessage(payload);
-      }
+    if (typeof child.stderr?.removeListener === 'function' && onStderrData) {
+      child.stderr.removeListener('data', onStderrData);
+    }
+
+    if (typeof child.removeListener === 'function' && onExit) {
+      child.removeListener('exit', onExit);
     }
   }
 
   function start() {
-    if (child || typeof spawnBridge !== 'function') {
+    if (activeBridge || typeof spawnBridge !== 'function') {
       return false;
     }
 
-    let nextChild = null;
+    let child = null;
     try {
-      nextChild = spawnBridge();
+      child = spawnBridge();
     } catch (error) {
       emitError(error);
       return false;
     }
 
-    if (!nextChild) {
-      return false;
-    }
-
-    stdoutBuffer = '';
-    child = nextChild;
-
-    try {
-      nextChild.stdout?.on('data', handleStdout);
-      nextChild.stderr?.on('data', chunk => {
-        emitError(String(chunk ?? ''));
-      });
-      nextChild.on?.('exit', () => {
-        if (child === nextChild) {
-          child = null;
-          stdoutBuffer = '';
-        }
-      });
-    } catch (error) {
-      child = null;
-      stdoutBuffer = '';
-      emitError(error);
-      return false;
-    }
-
-    return true;
-  }
-
-  function stop() {
     if (!child) {
       return false;
     }
 
-    const activeChild = child;
-    child = null;
-    stdoutBuffer = '';
+    const bridge = {
+      child,
+      stdoutBuffer: '',
+      onStdoutData: null,
+      onStderrData: null,
+      onExit: null
+    };
+
+    bridge.onStdoutData = (chunk) => {
+      if (activeBridge !== bridge) {
+        return;
+      }
+
+      bridge.stdoutBuffer += String(chunk ?? '');
+      const lines = bridge.stdoutBuffer.split(/\r?\n/);
+      bridge.stdoutBuffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line) {
+          continue;
+        }
+
+        const payload = parseNativeBridgeLine(line);
+        if (payload) {
+          emitMessage(payload);
+        }
+      }
+    };
+
+    bridge.onStderrData = (chunk) => {
+      if (activeBridge !== bridge) {
+        return;
+      }
+
+      emitError(String(chunk ?? ''));
+    };
+
+    bridge.onExit = () => {
+      if (activeBridge === bridge) {
+        activeBridge = null;
+      }
+
+      detachBridge(bridge);
+    };
+
     try {
-      activeChild.kill?.();
+      child.stdout?.on('data', bridge.onStdoutData);
+      child.stderr?.on('data', bridge.onStderrData);
+      child.on?.('exit', bridge.onExit);
+    } catch (error) {
+      detachBridge(bridge);
+      emitError(error);
+      return false;
+    }
+
+    activeBridge = bridge;
+    return true;
+  }
+
+  function stop() {
+    if (!activeBridge) {
+      return false;
+    }
+
+    try {
+      activeBridge.child.kill?.();
+      detachBridge(activeBridge);
+      activeBridge = null;
       return true;
     } catch (error) {
       emitError(error);
