@@ -3,9 +3,11 @@ using JuiceJournal.NativeBridge.Services;
 
 var processProbe = new ProcessProbe();
 var windowProbe = new WindowProbe();
+var transitionProbe = new TransitionProbe();
 
 EmitDiagnostic("process-probe", processProbe.Capture);
 EmitDiagnostic("window-probe", windowProbe.Capture);
+EmitDiagnostic("transition-probe", transitionProbe.Capture);
 
 void EmitDiagnostic(
     string message,
