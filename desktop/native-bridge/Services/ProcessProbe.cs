@@ -6,20 +6,37 @@ public sealed class ProcessProbe
 {
     public IReadOnlyDictionary<string, object?> Capture()
     {
-        var poeProcesses = Process
-            .GetProcesses()
-            .Where(process => process.ProcessName.Contains("PathOfExile", StringComparison.OrdinalIgnoreCase))
-            .Select(process => new Dictionary<string, object?>
+        var poeProcesses = new List<IReadOnlyDictionary<string, object?>>();
+
+        foreach (var process in Process.GetProcesses())
+        {
+            try
             {
-                ["name"] = process.ProcessName,
-                ["id"] = process.Id
-            })
-            .Cast<IReadOnlyDictionary<string, object?>>()
-            .ToArray();
+                var processName = process.ProcessName;
+                if (!processName.Contains("PathOfExile", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                poeProcesses.Add(new Dictionary<string, object?>
+                {
+                    ["name"] = processName,
+                    ["id"] = process.Id
+                });
+            }
+            catch (InvalidOperationException)
+            {
+                // Process exited during enumeration.
+            }
+            catch (SystemException)
+            {
+                // Process metadata is not accessible in the current context.
+            }
+        }
 
         return new Dictionary<string, object?>
         {
-            ["poeProcessCount"] = poeProcesses.Length,
+            ["poeProcessCount"] = poeProcesses.Count,
             ["processes"] = poeProcesses
         };
     }
