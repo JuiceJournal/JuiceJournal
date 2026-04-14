@@ -48,11 +48,21 @@ test('parseNativeBridgeLine returns null for malformed json', () => {
 test('parseNativeBridgeLine returns a diagnostic payload', () => {
   const parseNativeBridgeLine = getParseNativeBridgeLine();
 
-  const payload = parseNativeBridgeLine('{"type":"bridge-diagnostic","level":"info","message":"ready"}');
+  const payload = parseNativeBridgeLine('{"type":"bridge-diagnostic","level":"info","message":"ready","detectedAt":"2026-04-14T12:00:00.000Z"}');
 
   assert.deepEqual(payload, {
     type: 'bridge-diagnostic',
     level: 'info',
-    message: 'ready'
+    message: 'ready',
+    detectedAt: '2026-04-14T12:00:00.000Z'
   });
+});
+
+test('parseNativeBridgeLine rejects arrays and contract-invalid objects', () => {
+  const parseNativeBridgeLine = getParseNativeBridgeLine();
+
+  assert.equal(parseNativeBridgeLine('[]'), null);
+  assert.equal(parseNativeBridgeLine('{}'), null);
+  assert.equal(parseNativeBridgeLine('{"type":"bridge-diagnostic"}'), null);
+  assert.equal(parseNativeBridgeLine('{"detectedAt":"2026-04-14T12:00:00.000Z"}'), null);
 });
