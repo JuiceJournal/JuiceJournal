@@ -3,6 +3,7 @@ using JuiceJournal.NativeBridge.Services;
 
 var transitionProbe = new TransitionProbe();
 var windowProbe = new WindowProbe();
+var hintResolver = new HintResolver();
 
 EmitTransitionDiagnostics(transitionProbe);
 EmitDiagnostic("window-probe", windowProbe.Capture);
@@ -13,6 +14,8 @@ void EmitTransitionDiagnostics(TransitionProbe probe)
     {
         var detectedAt = DateTimeOffset.UtcNow;
         var transitionSnapshot = probe.CaptureProcessSnapshots();
+        var processProbeData = TransitionProbe.CreateProcessProbeData(transitionSnapshot);
+        var transitionProbeData = TransitionProbe.CreateTransitionProbeData(transitionSnapshot);
 
         Console.WriteLine(
             new BridgeMessage(
@@ -20,7 +23,7 @@ void EmitTransitionDiagnostics(TransitionProbe probe)
                 "info",
                 "process-probe",
                 detectedAt,
-                TransitionProbe.CreateProcessProbeData(transitionSnapshot)).ToJson());
+                processProbeData).ToJson());
 
         Console.WriteLine(
             new BridgeMessage(
@@ -28,7 +31,18 @@ void EmitTransitionDiagnostics(TransitionProbe probe)
                 "info",
                 "transition-probe",
                 detectedAt,
-                TransitionProbe.CreateTransitionProbeData(transitionSnapshot)).ToJson());
+                transitionProbeData).ToJson());
+
+        var hint = hintResolver.Resolve(
+            poeVersion: "poe2",
+            processProbe: processProbeData,
+            transitionProbe: transitionProbeData,
+            accountHint: null);
+
+        if (hint is not null)
+        {
+            Console.WriteLine(hint.ToJson());
+        }
     }
     catch (Exception error)
     {
