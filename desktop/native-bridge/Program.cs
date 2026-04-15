@@ -4,6 +4,22 @@ using JuiceJournal.NativeBridge.Services;
 var transitionProbe = new TransitionProbe();
 var windowProbe = new WindowProbe();
 var hintResolver = new HintResolver();
+var characterPool = Array.Empty<BridgeCharacterPoolEntry>();
+var commandReader = new BridgeCommandReader();
+var command = await commandReader.ReadOneAsync(Console.In);
+
+if (command?.Characters is not null)
+{
+    characterPool = command.Characters.ToArray();
+    Console.WriteLine(
+        BridgeMessage.Diagnostic(
+            "info",
+            "character-pool-replaced",
+            new Dictionary<string, object?>
+            {
+                ["characterCount"] = characterPool.Length
+            }).ToJson());
+}
 
 EmitTransitionDiagnostics(transitionProbe);
 EmitDiagnostic("window-probe", windowProbe.Capture);
