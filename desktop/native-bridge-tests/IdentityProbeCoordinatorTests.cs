@@ -29,6 +29,8 @@ public sealed class IdentityProbeCoordinatorTests
                     }
                 }
             },
+            namedPipePayload: null,
+            artifactPayload: null,
             characterPool:
             [
                 new BridgeCharacterPoolEntry(
@@ -55,5 +57,55 @@ public sealed class IdentityProbeCoordinatorTests
         Assert.Equal("Monk2", result.ClassName);
         Assert.Equal(92, result.Level);
         Assert.Equal("process.commandLine", result.SourceField);
+    }
+
+    [Fact]
+    public void TryResolve_ReturnsNativeEvidence_WhenExactlyOneCharacterNameAppearsInPipeName()
+    {
+        var coordinator = new IdentityProbeCoordinator();
+
+        var result = coordinator.TryResolve(
+            poeVersion: "poe2",
+            processTreePayload: new Dictionary<string, object?>(),
+            namedPipePayload: new Dictionary<string, object?>
+            {
+                ["pipes"] = new IReadOnlyDictionary<string, object?>[]
+                {
+                    new Dictionary<string, object?> { ["name"] = @"\\.\pipe\ggg-KELLEE" }
+                }
+            },
+            artifactPayload: new Dictionary<string, object?>(),
+            characterPool:
+            [
+                new BridgeCharacterPoolEntry("poe2", "poe2-kellee", "KELLEE", "Monk2", "Invoker", 92, "Standard")
+            ]);
+
+        Assert.NotNull(result);
+        Assert.Equal("pipe.name", result!.SourceField);
+    }
+
+    [Fact]
+    public void TryResolve_ReturnsNull_WhenArtifactMatchesTwoCharacters()
+    {
+        var coordinator = new IdentityProbeCoordinator();
+
+        var result = coordinator.TryResolve(
+            poeVersion: "poe2",
+            processTreePayload: new Dictionary<string, object?>(),
+            namedPipePayload: new Dictionary<string, object?>(),
+            artifactPayload: new Dictionary<string, object?>
+            {
+                ["artifacts"] = new IReadOnlyDictionary<string, object?>[]
+                {
+                    new Dictionary<string, object?> { ["path"] = @"D:\temp\Alpha-Beta.txt" }
+                }
+            },
+            characterPool:
+            [
+                new BridgeCharacterPoolEntry("poe2", "alpha", "Alpha", null, null, null, null),
+                new BridgeCharacterPoolEntry("poe2", "beta", "Beta", null, null, null, null)
+            ]);
+
+        Assert.Null(result);
     }
 }

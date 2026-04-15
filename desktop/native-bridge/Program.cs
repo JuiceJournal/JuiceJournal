@@ -101,6 +101,8 @@ void EmitHintIfAvailable()
         var nativeIdentity = identityProbeCoordinator.TryResolve(
             poeVersion: accountHint.PoeVersion,
             processTreePayload: processTreeData,
+            namedPipePayload: null,
+            artifactPayload: null,
             characterPool: characterPool);
         var resolvedHint = hintResolver.Resolve(
             poeVersion: accountHint.PoeVersion,
