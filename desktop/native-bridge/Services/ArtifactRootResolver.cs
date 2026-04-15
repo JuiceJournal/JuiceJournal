@@ -37,7 +37,6 @@ public sealed class ArtifactRootResolver
                 continue;
             }
 
-            roots.Add(libraryRoot);
             roots.Add(Path.Combine(libraryRoot, "steamapps", "common", "Path of Exile 2"));
         }
 
