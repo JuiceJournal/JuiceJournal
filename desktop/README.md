@@ -143,23 +143,18 @@ node --test tests/native-bridge-model.test.js tests/native-bridge-supervisor.tes
 node --test tests/*.test.js
 ```
 
-## Native Active Character Validation
+## Active Hint Validation
 
-PoE2 native karakter tespiti icin manuel dogrulama matrisi:
+Current bridge phase supports:
+- diagnostics
+- high-confidence hint transport
 
-- Oyunu acin.
-- Farkli bir karakter secin.
-- `Play` basin.
-- Juice Journal karakter kartinin `1-3 saniye` icinde yeni karaktere gectigini dogrulayin.
-- Eger native hint gelmezse mevcut karakter kartinin korunup API fallback yenilemesinin devam ettigini kontrol edin.
-
-Kontrol listesi:
-
-- `PoE1/PoE2` badge dogru mu
-- karakter adi dogru mu
-- portrait ve banner dogru class ailesine gecti mi
-- stale eski karakter geri donuyor mu
-- oyun kapaninca karakter karti stale native hint tasiyor mu
+Validation flow:
+1. start desktop app
+2. start PoE1 or PoE2
+3. verify diagnostics still appear
+4. verify only supported `active-character-hint` payloads mutate the card
+5. verify unsupported diagnostics do not change the card
 
 ## Build
 
