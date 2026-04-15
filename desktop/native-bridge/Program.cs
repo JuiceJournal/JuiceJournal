@@ -5,6 +5,7 @@ var transitionProbe = new TransitionProbe();
 var windowProbe = new WindowProbe();
 var hintResolver = new HintResolver();
 var characterPool = Array.Empty<BridgeCharacterPoolEntry>();
+var accountHint = (BridgeAccountHint?)null;
 var commandReader = new BridgeCommandReader();
 
 EmitTransitionDiagnostics(transitionProbe);
@@ -31,6 +32,7 @@ async Task ProcessBridgeCommandsAsync()
         }
 
         characterPool = command.Characters.ToArray();
+        accountHint = command.AccountHint;
         Console.WriteLine(
             BridgeMessage.Diagnostic(
                 "info",
@@ -39,6 +41,8 @@ async Task ProcessBridgeCommandsAsync()
                 {
                     ["characterCount"] = characterPool.Length
                 }).ToJson());
+
+        EmitHintIfAvailable();
     }
 }
 
@@ -67,17 +71,6 @@ void EmitTransitionDiagnostics(TransitionProbe probe)
                 detectedAt,
                 transitionProbeData).ToJson());
 
-        var hint = hintResolver.Resolve(
-            poeVersion: "poe2",
-            processProbe: processProbeData,
-            transitionProbe: transitionProbeData,
-            characterPool: characterPool,
-            accountHint: null);
-
-        if (hint is not null)
-        {
-            Console.WriteLine(hint.ToJson());
-        }
     }
     catch (Exception error)
     {
@@ -85,6 +78,48 @@ void EmitTransitionDiagnostics(TransitionProbe probe)
             BridgeMessage.Diagnostic(
                 "error",
                 "transition-probe-failed",
+                new Dictionary<string, object?>
+                {
+                    ["error"] = error.Message
+                }).ToJson());
+    }
+}
+
+void EmitHintIfAvailable()
+{
+    if (accountHint is null)
+    {
+        return;
+    }
+
+    try
+    {
+        var transitionSnapshot = transitionProbe.CaptureProcessSnapshots();
+        var processProbeData = TransitionProbe.CreateProcessProbeData(transitionSnapshot);
+        var transitionProbeData = TransitionProbe.CreateTransitionProbeData(transitionSnapshot);
+        var resolvedHint = hintResolver.Resolve(
+            poeVersion: accountHint.PoeVersion,
+            processProbe: processProbeData,
+            transitionProbe: transitionProbeData,
+            characterPool: characterPool,
+            accountHint: new Dictionary<string, object?>
+            {
+                ["characterName"] = accountHint.CharacterName,
+                ["className"] = accountHint.ClassName,
+                ["level"] = accountHint.Level
+            });
+
+        if (resolvedHint is not null)
+        {
+            Console.WriteLine(resolvedHint.ToJson());
+        }
+    }
+    catch (Exception error)
+    {
+        Console.WriteLine(
+            BridgeMessage.Diagnostic(
+                "error",
+                "active-character-hint-failed",
                 new Dictionary<string, object?>
                 {
                     ["error"] = error.Message

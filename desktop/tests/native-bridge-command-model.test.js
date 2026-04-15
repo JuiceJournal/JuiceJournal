@@ -65,3 +65,28 @@ test('buildCharacterPoolCommand drops unsupported poe versions', () => {
     }
   ]);
 });
+
+test('buildCharacterPoolCommand serializes a supported account hint alongside the pool', () => {
+  const command = buildCharacterPoolCommand(
+    [
+      {
+        poeVersion: 'poe2',
+        characterId: 'poe2-kellee',
+        characterName: 'KELLEE'
+      }
+    ],
+    {
+      poeVersion: 'poe2',
+      characterName: 'KELLEE',
+      className: 'Monk2',
+      level: 92
+    }
+  );
+
+  assert.deepEqual(command.accountHint, {
+    poeVersion: 'poe2',
+    characterName: 'KELLEE',
+    className: 'Monk2',
+    level: 92
+  });
+});

@@ -13,7 +13,10 @@ public sealed class HintResolverTests
 
         var hint = resolver.Resolve(
             poeVersion: "poe2",
-            processProbe: new Dictionary<string, object?>(),
+            processProbe: new Dictionary<string, object?>
+            {
+                ["poeProcessCount"] = 1
+            },
             transitionProbe: new Dictionary<string, object?>(),
             characterPool:
             [
@@ -59,6 +62,37 @@ public sealed class HintResolverTests
                     Ascendancy: null,
                     Level: 90,
                     League: "Mercenaries")
+            ],
+            accountHint: new Dictionary<string, object?>
+            {
+                ["characterName"] = "KELLEE"
+            });
+
+        Assert.Null(hint);
+    }
+
+    [Fact]
+    public void Resolve_ReturnsNull_WhenNoActivePoeProcessIsPresent()
+    {
+        var resolver = new HintResolver();
+
+        var hint = resolver.Resolve(
+            poeVersion: "poe2",
+            processProbe: new Dictionary<string, object?>
+            {
+                ["poeProcessCount"] = 0
+            },
+            transitionProbe: new Dictionary<string, object?>(),
+            characterPool:
+            [
+                new BridgeCharacterPoolEntry(
+                    PoeVersion: "poe2",
+                    CharacterId: "poe2-kellee",
+                    CharacterName: "KELLEE",
+                    ClassName: "Monk2",
+                    Ascendancy: "Invoker",
+                    Level: 92,
+                    League: "Standard")
             ],
             accountHint: new Dictionary<string, object?>
             {

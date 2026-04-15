@@ -22,6 +22,13 @@ public sealed class HintResolver
             return null;
         }
 
+        if (!processProbe.TryGetValue("poeProcessCount", out var poeProcessCountValue)
+            || poeProcessCountValue is not int poeProcessCount
+            || poeProcessCount <= 0)
+        {
+            return null;
+        }
+
         if (accountHint.TryGetValue("characterName", out var characterName)
             && characterName is string name
             && !string.IsNullOrWhiteSpace(name))

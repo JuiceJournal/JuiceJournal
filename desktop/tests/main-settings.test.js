@@ -1066,8 +1066,10 @@ test('native bridge startup wiring starts the supervisor from app.whenReady', ()
 test('native bridge character pool helpers build normalized snapshots and skip unchanged syncs', () => {
   const commands = [];
   const builtPools = [];
+  const builtHints = [];
   const context = loadFunctions([
     'normalizePoeVersion',
+    'buildNativeBridgeAccountHint',
     'buildNativeBridgeCharacterPool',
     'syncNativeBridgeCharacterPool'
   ], {
@@ -1077,10 +1079,13 @@ test('native bridge character pool helpers build normalized snapshots and skip u
       }
     },
     buildCharacterPoolCommand(characters) {
+      const accountHint = arguments[1];
       builtPools.push(JSON.parse(JSON.stringify(characters)));
+      builtHints.push(JSON.parse(JSON.stringify(accountHint)));
       return {
         type: 'set-character-pool',
-        characters
+        characters,
+        accountHint
       };
     },
     getNativeBridgeSupervisor() {
@@ -1143,6 +1148,12 @@ test('native bridge character pool helpers build normalized snapshots and skip u
       league: 'Mercenaries'
     }
   ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.buildNativeBridgeAccountHint(payload))), {
+    poeVersion: 'poe2',
+    characterName: 'KELLEE',
+    className: 'Monk2',
+    level: 92
+  });
 
   assert.equal(context.syncNativeBridgeCharacterPool(payload), true);
   assert.equal(context.syncNativeBridgeCharacterPool(payload), false);
@@ -1166,6 +1177,12 @@ test('native bridge character pool helpers build normalized snapshots and skip u
       league: 'Mercenaries'
     }
   ]]);
+  assert.deepEqual(builtHints, [{
+    poeVersion: 'poe2',
+    characterName: 'KELLEE',
+    className: 'Monk2',
+    level: 92
+  }]);
   assert.deepEqual(commands, [{
     type: 'set-character-pool',
     characters: [
@@ -1187,8 +1204,71 @@ test('native bridge character pool helpers build normalized snapshots and skip u
         level: 95,
         league: 'Mercenaries'
       }
-    ]
+    ],
+    accountHint: {
+      poeVersion: 'poe2',
+      characterName: 'KELLEE',
+      className: 'Monk2',
+      level: 92
+    }
   }]);
+});
+
+test('native bridge character pool sync resends when accountHint changes within the same pool', () => {
+  const commands = [];
+  const context = loadFunctions([
+    'normalizePoeVersion',
+    'buildNativeBridgeAccountHint',
+    'buildNativeBridgeCharacterPool',
+    'syncNativeBridgeCharacterPool'
+  ], {
+    store: {
+      get(key) {
+        return key === 'poeVersion' ? 'poe2' : null;
+      }
+    },
+    buildCharacterPoolCommand(characters, accountHint) {
+      return {
+        type: 'set-character-pool',
+        characters,
+        accountHint
+      };
+    },
+    getNativeBridgeSupervisor() {
+      return {
+        send(command) {
+          commands.push(JSON.parse(JSON.stringify(command)));
+          return true;
+        }
+      };
+    },
+    lastNativeBridgeCharacterPoolFingerprint: null
+  });
+
+  const basePayload = {
+    user: {
+      activePoeVersion: 'poe2',
+      selectedCharacterByGame: {
+        poe2: 'poe2-a'
+      },
+      characters: [
+        { id: 'poe2-a', name: 'Alpha', class: 'Monk2', level: 92, poeVersion: 'poe2' },
+        { id: 'poe2-b', name: 'Beta', class: 'Monk2', level: 93, poeVersion: 'poe2' }
+      ]
+    }
+  };
+
+  assert.equal(context.syncNativeBridgeCharacterPool(basePayload), true);
+  assert.equal(context.syncNativeBridgeCharacterPool({
+    user: {
+      ...basePayload.user,
+      selectedCharacterByGame: {
+        poe2: 'poe2-b'
+      }
+    }
+  }), true);
+
+  assert.deepEqual(commands.map((command) => command.accountHint?.characterName), ['Alpha', 'Beta']);
 });
 
 test('native bridge character pool wiring syncs get-current-user and login flows', () => {

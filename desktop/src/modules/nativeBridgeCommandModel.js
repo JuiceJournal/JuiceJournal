@@ -41,13 +41,36 @@
     };
   }
 
-  function buildCharacterPoolCommand(characters = []) {
+  function normalizeAccountHint(accountHint) {
+    if (!accountHint || typeof accountHint !== 'object' || Array.isArray(accountHint)) {
+      return null;
+    }
+
+    if (!hasRequiredString(accountHint.poeVersion) || !hasRequiredString(accountHint.characterName)) {
+      return null;
+    }
+
+    const normalizedVersion = accountHint.poeVersion.trim().toLowerCase();
+    if (normalizedVersion !== 'poe1' && normalizedVersion !== 'poe2') {
+      return null;
+    }
+
+    return {
+      poeVersion: normalizedVersion,
+      characterName: accountHint.characterName.trim(),
+      className: normalizeOptionalString(accountHint.className),
+      level: Number.isInteger(accountHint.level) ? accountHint.level : null
+    };
+  }
+
+  function buildCharacterPoolCommand(characters = [], accountHint = null) {
     return {
       type: 'set-character-pool',
       detectedAt: new Date().toISOString(),
       characters: Array.isArray(characters)
         ? characters.map(normalizeCharacterEntry).filter(Boolean)
-        : []
+        : [],
+      accountHint: normalizeAccountHint(accountHint)
     };
   }
 

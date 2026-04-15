@@ -684,6 +684,67 @@ function buildNativeBridgeCharacterPool(currentUserPayload) {
     .filter(Boolean);
 }
 
+function buildNativeBridgeAccountHint(currentUserPayload) {
+  const user = currentUserPayload?.user || currentUserPayload || null;
+  const activeVersion = normalizePoeVersion(user?.activePoeVersion)
+    || normalizePoeVersion(store.get('poeVersion'));
+
+  if (!user || !activeVersion) {
+    return null;
+  }
+
+  const characters = buildNativeBridgeCharacterPool(currentUserPayload);
+  const selectedCharacterByGame = user?.selectedCharacterByGame && typeof user.selectedCharacterByGame === 'object'
+    ? user.selectedCharacterByGame
+    : {};
+  const selectedId = typeof selectedCharacterByGame[activeVersion] === 'string'
+    ? selectedCharacterByGame[activeVersion].trim()
+    : '';
+
+  const selectedById = selectedId
+    ? characters.find((character) => character.poeVersion === activeVersion && character.characterId === selectedId)
+    : null;
+  const candidatesForActiveVersion = characters.filter((character) => character.poeVersion === activeVersion);
+  const selectedPayload = user?.selectedCharacter && typeof user.selectedCharacter === 'object'
+    ? user.selectedCharacter
+    : null;
+  const selectedPayloadVersion = normalizePoeVersion(selectedPayload?.poeVersion);
+  const selectedFromPayload = selectedPayload
+    && (!selectedPayloadVersion || selectedPayloadVersion === activeVersion)
+    && typeof selectedPayload.name === 'string'
+    && selectedPayload.name.trim()
+    ? {
+      poeVersion: activeVersion,
+      characterName: selectedPayload.name.trim(),
+      className: typeof (selectedPayload.className ?? selectedPayload.class) === 'string'
+        && String(selectedPayload.className ?? selectedPayload.class).trim()
+        ? String(selectedPayload.className ?? selectedPayload.class).trim()
+        : null,
+      level: Number.isInteger(Number(selectedPayload.level)) ? Number(selectedPayload.level) : null
+    }
+    : null;
+
+  if (selectedById) {
+    return {
+      poeVersion: selectedById.poeVersion,
+      characterName: selectedById.characterName,
+      className: selectedById.className,
+      level: selectedById.level
+    };
+  }
+
+  if (candidatesForActiveVersion.length === 1) {
+    return {
+      poeVersion: candidatesForActiveVersion[0].poeVersion,
+      characterName: candidatesForActiveVersion[0].characterName,
+      className: candidatesForActiveVersion[0].className,
+      level: candidatesForActiveVersion[0].level
+    };
+  }
+
+  return selectedFromPayload;
+}
+
 function syncNativeBridgeCharacterPool(currentUserPayload) {
   const supervisor = getNativeBridgeSupervisor();
   if (!supervisor || typeof supervisor.send !== 'function') {
@@ -691,12 +752,16 @@ function syncNativeBridgeCharacterPool(currentUserPayload) {
   }
 
   const characters = buildNativeBridgeCharacterPool(currentUserPayload);
-  const fingerprint = JSON.stringify(characters);
+  const accountHint = buildNativeBridgeAccountHint(currentUserPayload);
+  const fingerprint = JSON.stringify({
+    characters,
+    accountHint
+  });
   if (fingerprint === lastNativeBridgeCharacterPoolFingerprint) {
     return false;
   }
 
-  const command = buildCharacterPoolCommand(characters);
+  const command = buildCharacterPoolCommand(characters, accountHint);
   const sent = supervisor.send(command);
   if (sent) {
     lastNativeBridgeCharacterPoolFingerprint = fingerprint;

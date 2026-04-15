@@ -128,9 +128,8 @@ Beklenen:
 5. Run `npm run bridge:run` again and compare the output with the previous snapshot
 
 Current expectation:
-- diagnostics only
-- no active-character-hint emission yet
 - desktop main login, `get-current-user`, ve logout akislarinda bridge'e full-snapshot `set-character-pool` gonderir
+- bridge ancak aktif PoE process sinyali varken `accountHint + characterPool` exact-match ile gerçek `active-character-hint` emit edebilir
 - bridge terminalden dogrudan calistirildiginda startup diagnostiklerini basip cikar
 - bridge desktop supervisor tarafindan `stdin` pipe ile baslatildiginda ayni process icinde birden fazla `set-character-pool` komutu kabul eder
 - `npm run bridge:run` stdout should print:
@@ -150,6 +149,19 @@ Beklenen:
 - stdout `character-pool-replaced` diagnostigi ile baslar
 - ardindan `process-probe`, `transition-probe`, `window-probe` gelir
 
+Active hint smoke:
+
+```bash
+echo {"type":"set-character-pool","characters":[{"poeVersion":"poe2","characterId":"poe2-kellee","characterName":"KELLEE","className":"Monk2","level":92}],"accountHint":{"poeVersion":"poe2","characterName":"KELLEE","className":"Monk2","level":92}} | dotnet run --project native-bridge/JuiceJournal.NativeBridge.csproj
+```
+
+Beklenen:
+
+- stdout startup diagnostiklerini basar
+- `character-pool-replaced` gelir
+- aktif PoE process yoksa hint emit etmez
+- aktif PoE process varken exact-match olursa `active-character-hint` satiri emit edilir
+
 Task 6 dogrulama komutlari:
 
 ```bash
@@ -166,17 +178,18 @@ node --test tests/*.test.js
 Current bridge phase supports:
 - diagnostics
 - high-confidence hint transport path in desktop main
-- no live `active-character-hint` emission from the bridge yet
+- aktif PoE process + synced `characterPool + accountHint` exact-match ile live `active-character-hint` emission
 
 Validation flow:
 1. run `npm run bridge:run`
-2. verify stdout prints only:
+2. verify stdout prints:
    - `process-probe`
    - `transition-probe`
    - `window-probe`
-3. start desktop app
-4. verify unsupported `bridge-diagnostic` payloads do not change the card
-5. verify the desktop app is only prepared to accept supported `active-character-hint` payloads when the bridge begins emitting them in a later phase
+3. send a supported `set-character-pool` command with matching `accountHint`
+4. verify bridge emits `active-character-hint`
+5. start desktop app
+6. verify unsupported `bridge-diagnostic` payloads do not change the card
 
 ## Build
 

@@ -139,3 +139,27 @@ test('native bridge accepts repeated character pool replace commands in one proc
   );
   assert.equal(bridge.child.exitCode, null);
 });
+
+test('native bridge does not emit active-character-hint without an active poe process even when accountHint matches', async (t) => {
+  const bridge = startBridgeProcess();
+  t.after(async () => {
+    await shutdownBridge(bridge);
+  });
+
+  await waitFor(() => bridge.lines.some((line) => line?.message === 'window-probe'), {
+    description: 'initial diagnostics'
+  });
+
+  bridge.child.stdin.write('{"type":"set-character-pool","characters":[{"poeVersion":"poe2","characterId":"poe2-kellee","characterName":"KELLEE","className":"Monk2","level":92}],"accountHint":{"poeVersion":"poe2","characterName":"KELLEE","className":"Monk2","level":92}}\n');
+
+  await waitFor(
+    () => bridge.lines.some((line) => line?.message === 'character-pool-replaced'),
+    { description: 'character-pool-replaced diagnostic' }
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  assert.equal(
+    bridge.lines.some((line) => line?.type === 'active-character-hint'),
+    false
+  );
+});

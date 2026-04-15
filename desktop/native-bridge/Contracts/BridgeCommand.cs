@@ -6,7 +6,8 @@ namespace JuiceJournal.NativeBridge.Contracts;
 public sealed record BridgeCommand(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("detectedAt")] DateTimeOffset? DetectedAt,
-    [property: JsonPropertyName("characters")] IReadOnlyList<BridgeCharacterPoolEntry>? Characters)
+    [property: JsonPropertyName("characters")] IReadOnlyList<BridgeCharacterPoolEntry>? Characters,
+    [property: JsonPropertyName("accountHint")] BridgeAccountHint? AccountHint)
 {
     public static BridgeCommand? Parse(string line)
     {
@@ -23,9 +24,17 @@ public sealed record BridgeCommand(
                 return null;
             }
 
-            return command.Characters.All(character => character is not null && character.IsValid())
-                ? command
-                : null;
+            if (!command.Characters.All(character => character is not null && character.IsValid()))
+            {
+                return null;
+            }
+
+            if (command.AccountHint is not null && !command.AccountHint.IsValid())
+            {
+                return null;
+            }
+
+            return command;
         }
         catch
         {
