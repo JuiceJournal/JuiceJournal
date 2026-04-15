@@ -8,6 +8,11 @@ Electron tabanli masaustu uygulamasi.
 npm install
 ```
 
+Native bridge spike'i icin su an:
+
+- Windows gerekli
+- `.NET 10 SDK` gerekli
+
 Tesseract.js icin ek sistem gereksinimleri olabilir. 
 Windows'ta genelde ek kurulum gerekmez.
 
@@ -93,7 +98,7 @@ npm test
 # Native producer main-process regression seti
 node --test tests/main-settings.test.js
 
-# Playwright smoke testleri
+# Playwright smoke testleri (settings + overlay subset)
 npm run test:smoke
 ```
 
@@ -111,6 +116,18 @@ Beklenen:
 
 - stdout NDJSON diagnostik satirlari uretir
 - desktop uygulamasi bridge yoksa fail-closed kalir
+- bridge komutlari icin yerel `dotnet` araci gerekli
+
+## Native Bridge Probe Workflow
+
+1. `npm run bridge:build`
+2. `npm run bridge:run`
+3. Launch PoE2
+4. Compare diagnostics for character A vs character B after pressing Play
+
+Current expectation:
+- diagnostics only
+- no active-character-hint emission yet
 
 Task 6 dogrulama komutlari:
 
@@ -152,6 +169,11 @@ npm run pack
 ```
 
 Build ciktisi `dist/` klasorunde olusur.
+
+Not:
+
+- Bu branch'teki paketleme akisi `native-bridge/` kaynaklarini build ciktisina dahil eder.
+- Bridge su an companion `.NET` proje olarak calistigi icin paketlenmis uygulama da yerel `dotnet` aracina ihtiyac duyar.
 
 ## Sorun Giderme
 
