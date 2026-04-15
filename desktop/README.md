@@ -129,11 +129,13 @@ Beklenen:
 
 Current expectation:
 - desktop main login, `get-current-user`, ve logout akislarinda bridge'e full-snapshot `set-character-pool` gonderir
-- bridge ancak aktif PoE process sinyali varken `accountHint + characterPool` exact-match ile gerçek `active-character-hint` emit edebilir
+- bridge startup'ta `process-tree-probe` dahil diagnostikleri emit eder
+- bridge production hint kararini `accountHint` ile degil native-backed process-tree evidence ile verir
 - bridge terminalden dogrudan calistirildiginda startup diagnostiklerini basip cikar
 - bridge desktop supervisor tarafindan `stdin` pipe ile baslatildiginda ayni process icinde birden fazla `set-character-pool` komutu kabul eder
 - `npm run bridge:run` stdout should print:
   - `process-probe`
+  - `process-tree-probe`
   - `window-probe`
   - `transition-probe`
 - `npm run bridge:run` is a single snapshot command, not a long-running watcher
@@ -177,17 +179,20 @@ node --test tests/*.test.js
 
 Current bridge phase supports:
 - diagnostics
+- `process-tree-probe` diagnostics
 - high-confidence hint transport path in desktop main
-- aktif PoE process + synced `characterPool + accountHint` exact-match ile live `active-character-hint` emission
+- native-backed `active-character-hint` promotion only when process-tree command-line evidence yields one exact match
+- `accountHint` can still travel with sync commands, but it is no longer the production identity source
 
 Validation flow:
 1. run `npm run bridge:run`
 2. verify stdout prints:
    - `process-probe`
+   - `process-tree-probe`
    - `transition-probe`
    - `window-probe`
 3. send a supported `set-character-pool` command with matching `accountHint`
-4. verify bridge emits `active-character-hint`
+4. without an active PoE process, verify bridge emits `hint-resolution-rejected` and does not emit `active-character-hint`
 5. start desktop app
 6. verify unsupported `bridge-diagnostic` payloads do not change the card
 
