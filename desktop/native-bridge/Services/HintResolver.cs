@@ -9,6 +9,7 @@ public sealed class HintResolver
         IReadOnlyDictionary<string, object?> processProbe,
         IReadOnlyDictionary<string, object?> transitionProbe,
         IReadOnlyList<BridgeCharacterPoolEntry>? characterPool = null,
+        NativeIdentityEvidence? nativeIdentity = null,
         IReadOnlyDictionary<string, object?>? accountHint = null)
     {
         var normalizedVersion = poeVersion?.Trim().ToLowerInvariant();
@@ -17,7 +18,7 @@ public sealed class HintResolver
             return null;
         }
 
-        if (accountHint is null || characterPool is null || characterPool.Count == 0)
+        if (nativeIdentity is null || characterPool is null || characterPool.Count == 0)
         {
             return null;
         }
@@ -29,51 +30,27 @@ public sealed class HintResolver
             return null;
         }
 
-        if (accountHint.TryGetValue("characterName", out var characterName)
-            && characterName is string name
-            && !string.IsNullOrWhiteSpace(name))
+        if (!string.Equals(nativeIdentity.PoeVersion, normalizedVersion, StringComparison.OrdinalIgnoreCase))
         {
-            var normalizedName = name.Trim();
-            var matches = characterPool
-                .Where((character) =>
-                    string.Equals(character.PoeVersion?.Trim(), normalizedVersion, StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(character.CharacterName?.Trim(), normalizedName, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-
-            if (matches.Length != 1)
-            {
-                return null;
-            }
-
-            var matchedCharacter = matches[0];
-            accountHint.TryGetValue("className", out var className);
-            accountHint.TryGetValue("level", out var level);
-
-            if (className is string expectedClassName
-                && !string.IsNullOrWhiteSpace(expectedClassName)
-                && !string.Equals(
-                    matchedCharacter.ClassName?.Trim(),
-                    expectedClassName.Trim(),
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            int? hintLevel = level is int accountLevel ? accountLevel : null;
-            if (hintLevel is not null
-                && matchedCharacter.Level is not null
-                && matchedCharacter.Level != hintLevel)
-            {
-                return null;
-            }
-
-            return ActiveCharacterHint.Create(
-                normalizedVersion,
-                matchedCharacter.CharacterName.Trim(),
-                matchedCharacter.ClassName,
-                matchedCharacter.Level ?? hintLevel);
+            return null;
         }
 
-        return null;
+        var matches = characterPool
+            .Where((character) =>
+                string.Equals(character.PoeVersion?.Trim(), normalizedVersion, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(character.CharacterName?.Trim(), nativeIdentity.CharacterName?.Trim(), StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (matches.Length != 1)
+        {
+            return null;
+        }
+
+        var matchedCharacter = matches[0];
+        return ActiveCharacterHint.Create(
+            normalizedVersion,
+            matchedCharacter.CharacterName.Trim(),
+            matchedCharacter.ClassName,
+            matchedCharacter.Level);
     }
 }
