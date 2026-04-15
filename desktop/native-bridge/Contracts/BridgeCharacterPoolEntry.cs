@@ -9,4 +9,13 @@ public sealed record BridgeCharacterPoolEntry(
     [property: JsonPropertyName("className")] string? ClassName,
     [property: JsonPropertyName("ascendancy")] string? Ascendancy,
     [property: JsonPropertyName("level")] int? Level,
-    [property: JsonPropertyName("league")] string? League);
+    [property: JsonPropertyName("league")] string? League)
+{
+    public bool IsValid()
+    {
+        var normalizedVersion = PoeVersion?.Trim().ToLowerInvariant();
+        return (normalizedVersion == "poe1" || normalizedVersion == "poe2")
+            && !string.IsNullOrWhiteSpace(CharacterId)
+            && !string.IsNullOrWhiteSpace(CharacterName);
+    }
+}

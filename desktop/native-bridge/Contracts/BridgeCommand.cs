@@ -18,7 +18,14 @@ public sealed record BridgeCommand(
         try
         {
             var command = JsonSerializer.Deserialize<BridgeCommand>(line);
-            return command?.Type == "set-character-pool" ? command : null;
+            if (command?.Type != "set-character-pool" || command.Characters is null)
+            {
+                return null;
+            }
+
+            return command.Characters.All(character => character is not null && character.IsValid())
+                ? command
+                : null;
         }
         catch
         {
