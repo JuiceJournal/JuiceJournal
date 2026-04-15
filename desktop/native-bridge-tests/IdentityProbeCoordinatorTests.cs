@@ -108,4 +108,61 @@ public sealed class IdentityProbeCoordinatorTests
 
         Assert.Null(result);
     }
+
+    [Fact]
+    public void TryResolve_ReturnsNativeEvidence_WhenExactlyOneCharacterNameAppearsInArtifactPreview()
+    {
+        var coordinator = new IdentityProbeCoordinator();
+
+        var result = coordinator.TryResolve(
+            poeVersion: "poe2",
+            processTreePayload: new Dictionary<string, object?>(),
+            namedPipePayload: new Dictionary<string, object?>(),
+            artifactPayload: new Dictionary<string, object?>
+            {
+                ["artifacts"] = new IReadOnlyDictionary<string, object?>[]
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["path"] = @"C:\Users\fb_52\Documents\My Games\Path of Exile 2\poe2_production_Config.ini",
+                        ["previewText"] = "lastCharacter=KELLEE"
+                    }
+                }
+            },
+            characterPool:
+            [
+                new BridgeCharacterPoolEntry("poe2", "poe2-kellee", "KELLEE", "Monk2", "Invoker", 92, "Standard")
+            ]);
+
+        Assert.NotNull(result);
+        Assert.Equal("artifact.previewText", result!.SourceField);
+    }
+
+    [Fact]
+    public void TryResolve_ReturnsNull_WhenArtifactPreviewMentionsTwoCharacters()
+    {
+        var coordinator = new IdentityProbeCoordinator();
+
+        var result = coordinator.TryResolve(
+            poeVersion: "poe2",
+            processTreePayload: new Dictionary<string, object?>(),
+            namedPipePayload: new Dictionary<string, object?>(),
+            artifactPayload: new Dictionary<string, object?>
+            {
+                ["artifacts"] = new IReadOnlyDictionary<string, object?>[]
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["previewText"] = "Alpha then Beta"
+                    }
+                }
+            },
+            characterPool:
+            [
+                new BridgeCharacterPoolEntry("poe2", "alpha", "Alpha", null, null, null, null),
+                new BridgeCharacterPoolEntry("poe2", "beta", "Beta", null, null, null, null)
+            ]);
+
+        Assert.Null(result);
+    }
 }

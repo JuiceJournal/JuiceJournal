@@ -45,6 +45,11 @@ public sealed class IdentityProbeCoordinator
                 "pipe.name")
             ?? TryResolveFromText(
                 normalizedVersion,
+                ReadArtifactPreviewValues(artifactPayload),
+                candidates,
+                "artifact.previewText")
+            ?? TryResolveFromText(
+                normalizedVersion,
                 ReadArtifactValues(artifactPayload),
                 candidates,
                 "artifact.path");
@@ -76,6 +81,21 @@ public sealed class IdentityProbeCoordinator
 
         return artifacts
             .Select(artifact => artifact.TryGetValue("path", out var value) ? value as string : null)
+            .Where(value => !string.IsNullOrWhiteSpace(value))!
+            .Cast<string>();
+    }
+
+    private static IEnumerable<string> ReadArtifactPreviewValues(IReadOnlyDictionary<string, object?>? artifactPayload)
+    {
+        if (artifactPayload is null
+            || !artifactPayload.TryGetValue("artifacts", out var artifactsValue)
+            || artifactsValue is not IEnumerable<IReadOnlyDictionary<string, object?>> artifacts)
+        {
+            return [];
+        }
+
+        return artifacts
+            .Select(artifact => artifact.TryGetValue("previewText", out var value) ? value as string : null)
             .Where(value => !string.IsNullOrWhiteSpace(value))!
             .Cast<string>();
     }
