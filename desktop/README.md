@@ -129,11 +129,13 @@ Beklenen:
 
 Current expectation:
 - desktop main login, `get-current-user`, ve logout akislarinda bridge'e full-snapshot `set-character-pool` gonderir
-- bridge startup'ta `process-tree-probe` dahil diagnostikleri emit eder
-- bridge production hint kararini `accountHint` ile degil native-backed process-tree evidence ile verir
+- bridge startup'ta `process-tree-probe`, `named-pipe-probe`, ve `artifact-probe` diagnostiklerini emit eder
+- bridge production hint kararini `accountHint` ile degil mevcut low-risk native evidence setiyle verir
 - bridge terminalden dogrudan calistirildiginda startup diagnostiklerini basip cikar
 - bridge desktop supervisor tarafindan `stdin` pipe ile baslatildiginda ayni process icinde birden fazla `set-character-pool` komutu kabul eder
 - `npm run bridge:run` stdout should print:
+  - `artifact-probe`
+  - `named-pipe-probe`
   - `process-probe`
   - `process-tree-probe`
   - `window-probe`
@@ -179,14 +181,18 @@ node --test tests/*.test.js
 
 Current bridge phase supports:
 - diagnostics
+- `named-pipe-probe` diagnostics
+- `artifact-probe` diagnostics
 - `process-tree-probe` diagnostics
 - high-confidence hint transport path in desktop main
-- native-backed `active-character-hint` promotion only when process-tree command-line evidence yields one exact match
+- native-backed `active-character-hint` promotion only when one low-risk native source yields one exact match
 - `accountHint` can still travel with sync commands, but it is no longer the production identity source
 
 Validation flow:
 1. run `npm run bridge:run`
 2. verify stdout prints:
+   - `artifact-probe`
+   - `named-pipe-probe`
    - `process-probe`
    - `process-tree-probe`
    - `transition-probe`
