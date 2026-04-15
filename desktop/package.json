@@ -12,9 +12,9 @@
     "test:smoke": "playwright test e2e/settings-smoke.spec.js e2e/overlay-smoke.spec.js",
     "bridge:build": "dotnet build native-bridge/JuiceJournal.NativeBridge.csproj",
     "bridge:run": "dotnet run --project native-bridge/JuiceJournal.NativeBridge.csproj",
-    "build": "electron-builder",
-    "build:win": "electron-builder --win",
-    "pack": "electron-builder --dir",
+    "build": "npm run bridge:build && electron-builder",
+    "build:win": "npm run bridge:build && electron-builder --win",
+    "pack": "npm run bridge:build && electron-builder --dir",
     "icon:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-icon-assets.ps1",
     "icon:test": "node --test tests/branding.test.js",
     "postinstall": "electron-builder install-app-deps"
@@ -41,6 +41,7 @@
       "main.js",
       "preload.js",
       "src/**/*",
+      "native-bridge/**/*",
       "node_modules/**/*"
     ],
     "win": {
