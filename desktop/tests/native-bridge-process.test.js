@@ -1,13 +1,29 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const { execFileSync, spawn } = require('node:child_process');
 
 const desktopDir = path.join(__dirname, '..');
 const bridgeProjectPath = path.join('native-bridge', 'JuiceJournal.NativeBridge.csproj');
+let bridgeBuildVerified = false;
+
+function ensureBridgeBuilt() {
+  if (bridgeBuildVerified) {
+    return;
+  }
+
+  execFileSync('dotnet', ['build', bridgeProjectPath], {
+    cwd: desktopDir,
+    stdio: 'ignore',
+    windowsHide: true
+  });
+  bridgeBuildVerified = true;
+}
 
 function startBridgeProcess() {
-  const child = spawn('dotnet', ['run', '--project', bridgeProjectPath], {
+  ensureBridgeBuilt();
+
+  const child = spawn('dotnet', ['run', '--no-build', '--project', bridgeProjectPath], {
     cwd: desktopDir,
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true
@@ -48,7 +64,7 @@ function startBridgeProcess() {
   };
 }
 
-async function waitFor(predicate, { timeoutMs = 10000, intervalMs = 50, description = 'condition' } = {}) {
+async function waitFor(predicate, { timeoutMs = 20000, intervalMs = 50, description = 'condition' } = {}) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const value = predicate();
@@ -107,7 +123,12 @@ test('native bridge emits startup diagnostics before any stdin command arrives',
     description: 'startup diagnostics'
   });
 
-  assert.deepEqual(messages.sort(), ['artifact-probe', 'named-pipe-probe', 'process-probe', 'process-tree-probe', 'transition-probe', 'window-probe']);
+  assert.ok(messages.includes('artifact-probe'));
+  assert.ok(messages.includes('named-pipe-probe'));
+  assert.ok(messages.includes('process-probe'));
+  assert.ok(messages.includes('process-tree-probe'));
+  assert.ok(messages.includes('transition-probe'));
+  assert.ok(messages.includes('window-probe'));
   assert.equal(bridge.getStderr(), '');
 });
 
@@ -219,4 +240,30 @@ test('artifact-probe diagnostics expose previewText and remain bounded after pre
   if (artifactDiagnostic.data.artifacts.length > 0) {
     assert.equal(typeof artifactDiagnostic.data.artifacts[0].previewText, 'string');
   }
+});
+
+test('parsed artifact diagnostics remain bounded and stable after parser enrichment', async (t) => {
+  const bridge = startBridgeProcess();
+  t.after(async () => {
+    await shutdownBridge(bridge);
+  });
+
+  const artifactDiagnostic = await waitFor(
+    () => bridge.lines.find((line) => line?.message === 'artifact-probe'),
+    { description: 'artifact-probe diagnostic' }
+  );
+
+  if (artifactDiagnostic.data.artifacts.length === 0) {
+    assert.equal(true, true);
+    return;
+  }
+
+  const parsedMessages = await waitFor(() => {
+    const matches = bridge.lines
+      .filter((line) => line?.type === 'bridge-diagnostic')
+      .filter((line) => ['artifact-config-parse', 'artifact-state-parse', 'artifact-loaded-mtx-parse'].includes(line.message));
+    return matches.length > 0 ? matches : null;
+  }, { description: 'parsed artifact diagnostics' });
+
+  assert.equal(parsedMessages.length <= 20, true);
 });

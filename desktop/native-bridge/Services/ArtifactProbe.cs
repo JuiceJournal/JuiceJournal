@@ -112,7 +112,38 @@ public sealed class ArtifactProbe
                 return [];
             }
 
-            return Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories)
+            var results = new List<string>();
+
+            void AddFilesFrom(string directoryPath)
+            {
+                if (!Directory.Exists(directoryPath))
+                {
+                    return;
+                }
+
+                results.AddRange(Directory.EnumerateFiles(directoryPath).Take(MaxArtifacts * 2));
+            }
+
+            AddFilesFrom(root);
+
+            foreach (var directoryName in new[] { "logs", "EShop", "Config", "Caches" })
+            {
+                var childPath = Path.Combine(root, directoryName);
+                AddFilesFrom(childPath);
+
+                if (directoryName is "EShop" or "Caches")
+                {
+                    foreach (var nestedDirectory in Directory.Exists(childPath)
+                        ? Directory.EnumerateDirectories(childPath).Take(5)
+                        : [])
+                    {
+                        AddFilesFrom(nestedDirectory);
+                    }
+                }
+            }
+
+            return results
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Take(MaxArtifacts * 5)
                 .ToArray();
         }

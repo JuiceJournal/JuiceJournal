@@ -187,6 +187,10 @@ Current bridge phase supports:
 - `artifact-probe` diagnostics with Windows-local root discovery
 - `artifact-probe` bounded recursive enumeration under discovered roots
 - per-artifact `previewText`, `lastWriteTimeUtc`, and `length` metadata for text-like files
+- parsed artifact diagnostics:
+  - `artifact-config-parse`
+  - `artifact-state-parse`
+  - `artifact-loaded-mtx-parse`
 - `process-tree-probe` diagnostics
 - high-confidence hint transport path in desktop main
 - native-backed `active-character-hint` promotion only when one low-risk native source yields one exact match

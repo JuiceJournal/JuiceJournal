@@ -7,7 +7,11 @@ var namedPipeProbe = new NamedPipeProbe();
 var artifactProbe = new ArtifactProbe();
 var windowProbe = new WindowProbe();
 var identityProbeCoordinator = new IdentityProbeCoordinator();
+var artifactCorrelationCoordinator = new ArtifactCorrelationCoordinator();
 var hintResolver = new HintResolver();
+var productionConfigParser = new ProductionConfigParser();
+var productionStateParser = new ProductionStateParser();
+var loadedMtxParser = new LoadedMtxParser();
 var characterPool = Array.Empty<BridgeCharacterPoolEntry>();
 var accountHint = (BridgeAccountHint?)null;
 var commandReader = new BridgeCommandReader();
@@ -15,7 +19,9 @@ var commandReader = new BridgeCommandReader();
 EmitTransitionDiagnostics(transitionProbe);
 EmitDiagnostic("process-tree-probe", processTreeProbe.Capture);
 EmitDiagnostic("named-pipe-probe", namedPipeProbe.Capture);
-EmitDiagnostic("artifact-probe", artifactProbe.Capture);
+var startupArtifactData = artifactProbe.Capture();
+Console.WriteLine(BridgeMessage.Diagnostic("info", "artifact-probe", startupArtifactData).ToJson());
+EmitParsedArtifactDiagnostics(startupArtifactData);
 EmitDiagnostic("window-probe", windowProbe.Capture);
 
 if (Console.IsInputRedirected)
@@ -104,11 +110,17 @@ void EmitHintIfAvailable()
         var processTreeData = processTreeProbe.Capture();
         var namedPipeData = namedPipeProbe.Capture();
         var artifactData = artifactProbe.Capture();
+        EmitParsedArtifactDiagnostics(artifactData);
+        var parsedArtifacts = ParseArtifacts(artifactData);
         var nativeIdentity = identityProbeCoordinator.TryResolve(
             poeVersion: accountHint.PoeVersion,
             processTreePayload: processTreeData,
             namedPipePayload: namedPipeData,
             artifactPayload: artifactData,
+            characterPool: characterPool);
+        nativeIdentity ??= artifactCorrelationCoordinator.TryResolve(
+            poeVersion: accountHint.PoeVersion,
+            parsedArtifacts: parsedArtifacts,
             characterPool: characterPool);
         var resolvedHint = hintResolver.Resolve(
             poeVersion: accountHint.PoeVersion,
@@ -154,6 +166,53 @@ void EmitHintIfAvailable()
                 {
                     ["error"] = error.Message
                 }).ToJson());
+    }
+}
+
+IReadOnlyList<IReadOnlyDictionary<string, object?>> ParseArtifacts(IReadOnlyDictionary<string, object?> artifactPayload)
+{
+    if (!artifactPayload.TryGetValue("artifacts", out var artifactsValue)
+        || artifactsValue is not IEnumerable<IReadOnlyDictionary<string, object?>> artifacts)
+    {
+        return [];
+    }
+
+    var parsedArtifacts = new List<IReadOnlyDictionary<string, object?>>();
+    foreach (var artifact in artifacts)
+    {
+        var parsed =
+            productionConfigParser.TryParse(artifact)
+            ?? productionStateParser.TryParse(artifact)
+            ?? loadedMtxParser.TryParse(artifact);
+
+        if (parsed is not null)
+        {
+            parsedArtifacts.Add(parsed);
+        }
+    }
+
+    return parsedArtifacts;
+}
+
+void EmitParsedArtifactDiagnostics(IReadOnlyDictionary<string, object?> artifactPayload)
+{
+    foreach (var parsed in ParseArtifacts(artifactPayload))
+    {
+        var kind = parsed.TryGetValue("kind", out var kindValue) ? kindValue as string : null;
+        var message = kind switch
+        {
+            "production-config" => "artifact-config-parse",
+            "production-state" => "artifact-state-parse",
+            "loaded-mtx" => "artifact-loaded-mtx-parse",
+            _ => null
+        };
+
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            continue;
+        }
+
+        Console.WriteLine(BridgeMessage.Diagnostic("info", message, parsed).ToJson());
     }
 }
 
