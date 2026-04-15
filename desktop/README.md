@@ -121,13 +121,19 @@ Beklenen:
 ## Native Bridge Probe Workflow
 
 1. `npm run bridge:build`
-2. `npm run bridge:run`
-3. Launch PoE2
-4. Compare diagnostics for character A vs character B after pressing Play
+2. Launch PoE2 and choose character A
+3. Run `npm run bridge:run` and capture the one-shot diagnostic output
+4. Launch or switch to character B
+5. Run `npm run bridge:run` again and compare the output with the previous snapshot
 
 Current expectation:
 - diagnostics only
 - no active-character-hint emission yet
+- `npm run bridge:run` stdout should print:
+  - `process-probe`
+  - `window-probe`
+  - `transition-probe`
+- `npm run bridge:run` is a single snapshot command, not a long-running watcher
 
 Task 6 dogrulama komutlari:
 
@@ -173,7 +179,8 @@ Build ciktisi `dist/` klasorunde olusur.
 Not:
 
 - Bu branch'teki paketleme akisi `native-bridge/` kaynaklarini build ciktisina dahil eder.
-- Bridge su an companion `.NET` proje olarak calistigi icin paketlenmis uygulama da yerel `dotnet` aracina ihtiyac duyar.
+- Bridge su an dev/spike seviyesinde `dotnet run --project ...` ile calisir.
+- Paketlenmis build icinde bridge runtime yolu henuz production-ready degil; `native-bridge` entegrasyonu packaged app icin ayrica sertlestirilmeli.
 
 ## Sorun Giderme
 
