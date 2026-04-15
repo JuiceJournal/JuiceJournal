@@ -131,6 +131,7 @@ Current expectation:
 - desktop main login, `get-current-user`, ve logout akislarinda bridge'e full-snapshot `set-character-pool` gonderir
 - bridge startup'ta `process-tree-probe`, `named-pipe-probe`, ve `artifact-probe` diagnostiklerini emit eder
 - bridge production hint kararini `accountHint` ile degil mevcut low-risk native evidence setiyle verir
+- `artifact-probe` artık Steam install path, Steam library, ve PoE2 config/log kökleri uzerinden root discovery yapar
 - bridge terminalden dogrudan calistirildiginda startup diagnostiklerini basip cikar
 - bridge desktop supervisor tarafindan `stdin` pipe ile baslatildiginda ayni process icinde birden fazla `set-character-pool` komutu kabul eder
 - `npm run bridge:run` stdout should print:
@@ -182,7 +183,7 @@ node --test tests/*.test.js
 Current bridge phase supports:
 - diagnostics
 - `named-pipe-probe` diagnostics
-- `artifact-probe` diagnostics
+- `artifact-probe` diagnostics with Windows-local root discovery
 - `process-tree-probe` diagnostics
 - high-confidence hint transport path in desktop main
 - native-backed `active-character-hint` promotion only when one low-risk native source yields one exact match
