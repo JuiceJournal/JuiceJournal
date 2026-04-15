@@ -170,3 +170,18 @@ test('native bridge does not emit active-character-hint without an active poe pr
     false
   );
 });
+
+test('native bridge startup diagnostics still include artifact-probe after root discovery wiring', async (t) => {
+  const bridge = startBridgeProcess();
+  t.after(async () => {
+    await shutdownBridge(bridge);
+  });
+
+  const artifactDiagnostic = await waitFor(
+    () => bridge.lines.find((line) => line?.message === 'artifact-probe'),
+    { description: 'artifact-probe diagnostic' }
+  );
+
+  assert.equal(artifactDiagnostic.type, 'bridge-diagnostic');
+  assert.equal(typeof artifactDiagnostic.data.rootCount, 'number');
+});
