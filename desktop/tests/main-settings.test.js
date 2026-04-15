@@ -985,18 +985,22 @@ test('native bridge forwards supported active-character payloads into emitActive
 
   context.handleNativeBridgeSupervisorMessage({
     type: 'active-character-hint',
+    poeVersion: 'poe2',
+    characterName: 'KELLEE',
+    className: 'Monk2',
+    confidence: 'high',
+    source: 'local-native-bridge',
     detectedAt: '2026-04-14T12:00:00.000Z',
-    data: {
-      gameVersion: 'poe2',
-      characterName: 'KELLEE',
-      class: 'Monk2'
-    }
   });
 
   assert.deepEqual(derivedHints, [{
-    gameVersion: 'poe2',
+    poeVersion: 'poe2',
     characterName: 'KELLEE',
-    class: 'Monk2'
+    className: 'Monk2',
+    confidence: 'high',
+    source: 'local-native-bridge',
+    detectedAt: '2026-04-14T12:00:00.000Z',
+    type: 'active-character-hint'
   }]);
   assert.deepEqual(emittedHints, [{
     source: 'native-game-info',

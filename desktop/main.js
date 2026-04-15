@@ -631,7 +631,7 @@ function handleNativeBridgeSupervisorMessage(payload) {
     return false;
   }
 
-  const hint = deriveNativeCharacterHint(payload.data);
+  const hint = deriveNativeCharacterHint(payload);
   if (!hint) {
     return false;
   }
