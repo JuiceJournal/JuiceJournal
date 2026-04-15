@@ -13,7 +13,7 @@ public sealed class IdentityProbeCoordinatorTests
 
         var result = coordinator.TryResolve(
             poeVersion: "poe2",
-            processTreeProbe: new Dictionary<string, object?>
+            processTreePayload: new Dictionary<string, object?>
             {
                 ["processes"] = new IReadOnlyDictionary<string, object?>[]
                 {
