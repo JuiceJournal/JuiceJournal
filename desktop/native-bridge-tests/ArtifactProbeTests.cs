@@ -79,4 +79,39 @@ public sealed class ArtifactProbeTests
         var artifacts = Assert.IsAssignableFrom<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(result["artifacts"]);
         Assert.True(artifacts.Count <= 20);
     }
+
+    [Fact]
+    public void Capture_IncludesModifiedTimeAndPreviewText_ForReadableArtifacts()
+    {
+        var probe = new ArtifactProbe(
+            rootsProvider: () => [@"F:\SteamLibrary\steamapps\common\Path of Exile 2"],
+            entriesProvider: _ => [@"F:\SteamLibrary\steamapps\common\Path of Exile 2\logs\Client.txt"],
+            fileMetadataProvider: path => new ArtifactProbe.ArtifactFileMetadata(
+                Exists: true,
+                LastWriteTimeUtc: new DateTimeOffset(2026, 04, 15, 18, 00, 00, TimeSpan.Zero),
+                PreviewText: "ActiveCharacter=KELLEE",
+                Length: 42));
+
+        var result = probe.Capture();
+        var artifacts = Assert.IsAssignableFrom<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(result["artifacts"]);
+
+        Assert.Equal("ActiveCharacter=KELLEE", artifacts[0]["previewText"]);
+        Assert.Equal(42L, artifacts[0]["length"]);
+        Assert.Equal("2026-04-15T18:00:00.0000000+00:00", artifacts[0]["lastWriteTimeUtc"]);
+    }
+
+    [Fact]
+    public void Capture_FailsClosedForUnreadableArtifactPreview()
+    {
+        var probe = new ArtifactProbe(
+            rootsProvider: () => [@"F:\SteamLibrary\steamapps\common\Path of Exile 2"],
+            entriesProvider: _ => [@"F:\SteamLibrary\steamapps\common\Path of Exile 2\logs\Client.txt"],
+            fileMetadataProvider: _ => throw new IOException("locked"));
+
+        var result = probe.Capture();
+        var artifacts = Assert.IsAssignableFrom<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(result["artifacts"]);
+
+        Assert.Equal(string.Empty, artifacts[0]["previewText"]);
+        Assert.Null(artifacts[0]["lastWriteTimeUtc"]);
+    }
 }
