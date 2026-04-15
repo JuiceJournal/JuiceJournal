@@ -6,23 +6,41 @@ var windowProbe = new WindowProbe();
 var hintResolver = new HintResolver();
 var characterPool = Array.Empty<BridgeCharacterPoolEntry>();
 var commandReader = new BridgeCommandReader();
-var command = await commandReader.ReadOneAsync(Console.In);
-
-if (command?.Characters is not null)
-{
-    characterPool = command.Characters.ToArray();
-    Console.WriteLine(
-        BridgeMessage.Diagnostic(
-            "info",
-            "character-pool-replaced",
-            new Dictionary<string, object?>
-            {
-                ["characterCount"] = characterPool.Length
-            }).ToJson());
-}
 
 EmitTransitionDiagnostics(transitionProbe);
 EmitDiagnostic("window-probe", windowProbe.Capture);
+
+if (Console.IsInputRedirected)
+{
+    await ProcessBridgeCommandsAsync();
+}
+
+async Task ProcessBridgeCommandsAsync()
+{
+    while (true)
+    {
+        var command = await commandReader.ReadOneAsync(Console.In);
+        if (command is null)
+        {
+            return;
+        }
+
+        if (command.Characters is null)
+        {
+            continue;
+        }
+
+        characterPool = command.Characters.ToArray();
+        Console.WriteLine(
+            BridgeMessage.Diagnostic(
+                "info",
+                "character-pool-replaced",
+                new Dictionary<string, object?>
+                {
+                    ["characterCount"] = characterPool.Length
+                }).ToJson());
+    }
+}
 
 void EmitTransitionDiagnostics(TransitionProbe probe)
 {
@@ -53,6 +71,7 @@ void EmitTransitionDiagnostics(TransitionProbe probe)
             poeVersion: "poe2",
             processProbe: processProbeData,
             transitionProbe: transitionProbeData,
+            characterPool: characterPool,
             accountHint: null);
 
         if (hint is not null)

@@ -131,6 +131,8 @@ Current expectation:
 - diagnostics only
 - no active-character-hint emission yet
 - desktop main login, `get-current-user`, ve logout akislarinda bridge'e full-snapshot `set-character-pool` gonderir
+- bridge terminalden dogrudan calistirildiginda startup diagnostiklerini basip cikar
+- bridge desktop supervisor tarafindan `stdin` pipe ile baslatildiginda ayni process icinde birden fazla `set-character-pool` komutu kabul eder
 - `npm run bridge:run` stdout should print:
   - `process-probe`
   - `window-probe`
@@ -152,6 +154,8 @@ Task 6 dogrulama komutlari:
 
 ```bash
 npm run bridge:build
+dotnet test native-bridge-tests/JuiceJournal.NativeBridge.Tests.csproj
+node --test tests/native-bridge-process.test.js
 node --test tests/native-bridge-command-model.test.js
 node --test tests/native-bridge-model.test.js tests/native-bridge-supervisor.test.js tests/main-settings.test.js
 node --test tests/*.test.js
