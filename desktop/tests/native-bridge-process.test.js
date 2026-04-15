@@ -96,6 +96,7 @@ test('native bridge emits startup diagnostics before any stdin command arrives',
     );
 
     return seen.has('process-probe')
+      && seen.has('process-tree-probe')
       && seen.has('transition-probe')
       && seen.has('window-probe')
       ? Array.from(seen)
@@ -104,7 +105,7 @@ test('native bridge emits startup diagnostics before any stdin command arrives',
     description: 'startup diagnostics'
   });
 
-  assert.deepEqual(messages.sort(), ['process-probe', 'transition-probe', 'window-probe']);
+  assert.deepEqual(messages.sort(), ['process-probe', 'process-tree-probe', 'transition-probe', 'window-probe']);
   assert.equal(bridge.getStderr(), '');
 });
 
@@ -155,6 +156,10 @@ test('native bridge does not emit active-character-hint without an active poe pr
   await waitFor(
     () => bridge.lines.some((line) => line?.message === 'character-pool-replaced'),
     { description: 'character-pool-replaced diagnostic' }
+  );
+  await waitFor(
+    () => bridge.lines.some((line) => line?.message === 'hint-resolution-rejected'),
+    { description: 'hint-resolution-rejected diagnostic' }
   );
 
   await new Promise((resolve) => setTimeout(resolve, 500));

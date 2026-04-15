@@ -2,13 +2,16 @@ using JuiceJournal.NativeBridge.Contracts;
 using JuiceJournal.NativeBridge.Services;
 
 var transitionProbe = new TransitionProbe();
+var processTreeProbe = new ProcessTreeProbe();
 var windowProbe = new WindowProbe();
+var identityProbeCoordinator = new IdentityProbeCoordinator();
 var hintResolver = new HintResolver();
 var characterPool = Array.Empty<BridgeCharacterPoolEntry>();
 var accountHint = (BridgeAccountHint?)null;
 var commandReader = new BridgeCommandReader();
 
 EmitTransitionDiagnostics(transitionProbe);
+EmitDiagnostic("process-tree-probe", processTreeProbe.Capture);
 EmitDiagnostic("window-probe", windowProbe.Capture);
 
 if (Console.IsInputRedirected)
@@ -94,25 +97,44 @@ void EmitHintIfAvailable()
 
     try
     {
-        var transitionSnapshot = transitionProbe.CaptureProcessSnapshots();
-        var processProbeData = TransitionProbe.CreateProcessProbeData(transitionSnapshot);
-        var transitionProbeData = TransitionProbe.CreateTransitionProbeData(transitionSnapshot);
+        var processTreeData = processTreeProbe.Capture();
+        var nativeIdentity = identityProbeCoordinator.TryResolve(
+            poeVersion: accountHint.PoeVersion,
+            processTreePayload: processTreeData,
+            characterPool: characterPool);
         var resolvedHint = hintResolver.Resolve(
             poeVersion: accountHint.PoeVersion,
-            processProbe: processProbeData,
-            transitionProbe: transitionProbeData,
+            processProbe: processTreeData,
+            transitionProbe: new Dictionary<string, object?>(),
             characterPool: characterPool,
-            accountHint: new Dictionary<string, object?>
-            {
-                ["characterName"] = accountHint.CharacterName,
-                ["className"] = accountHint.ClassName,
-                ["level"] = accountHint.Level
-            });
+            nativeIdentity: nativeIdentity,
+            accountHint: null);
 
         if (resolvedHint is not null)
         {
+            Console.WriteLine(
+                BridgeMessage.Diagnostic(
+                    "info",
+                    "hint-resolution-promoted",
+                    new Dictionary<string, object?>
+                    {
+                        ["characterName"] = resolvedHint.CharacterName,
+                        ["source"] = nativeIdentity?.SourceField
+                    }).ToJson());
             Console.WriteLine(resolvedHint.ToJson());
+            return;
         }
+
+        Console.WriteLine(
+            BridgeMessage.Diagnostic(
+                "info",
+                "hint-resolution-rejected",
+                new Dictionary<string, object?>
+                {
+                    ["hasAccountHint"] = true,
+                    ["hasNativeIdentity"] = nativeIdentity is not null,
+                    ["characterPoolCount"] = characterPool.Length
+                }).ToJson());
     }
     catch (Exception error)
     {
