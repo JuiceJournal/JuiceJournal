@@ -20,22 +20,52 @@ public sealed class ProcessTreeProbe
 
     public IReadOnlyDictionary<string, object?> Capture()
     {
-        var processes = snapshotProvider()
+        var snapshot = snapshotProvider();
+        var recordsById = snapshot.ToDictionary(record => record.ProcessId);
+        var poeProcessIds = snapshot
             .Where(record => record.Name?.Contains("PathOfExile", StringComparison.OrdinalIgnoreCase) == true)
+            .Select(record => record.ProcessId)
+            .ToHashSet();
+        var relatedProcessIds = new HashSet<int>(poeProcessIds);
+
+        foreach (var record in snapshot)
+        {
+            if (!poeProcessIds.Contains(record.ProcessId))
+            {
+                continue;
+            }
+
+            if (record.ParentProcessId is int parentId && recordsById.ContainsKey(parentId))
+            {
+                relatedProcessIds.Add(parentId);
+            }
+        }
+
+        foreach (var record in snapshot)
+        {
+            if (record.ParentProcessId is int parentId && poeProcessIds.Contains(parentId))
+            {
+                relatedProcessIds.Add(record.ProcessId);
+            }
+        }
+
+        var processes = snapshot
+            .Where(record => relatedProcessIds.Contains(record.ProcessId))
             .Select(record => new Dictionary<string, object?>
             {
                 ["id"] = record.ProcessId,
                 ["parentId"] = record.ParentProcessId,
                 ["name"] = record.Name,
                 ["executablePath"] = record.ExecutablePath,
-                ["commandLine"] = record.CommandLine
+                ["commandLine"] = record.CommandLine,
+                ["isPoeProcess"] = poeProcessIds.Contains(record.ProcessId)
             })
             .Cast<IReadOnlyDictionary<string, object?>>()
             .ToArray();
 
         return new Dictionary<string, object?>
         {
-            ["poeProcessCount"] = processes.Length,
+            ["poeProcessCount"] = poeProcessIds.Count,
             ["processes"] = processes
         };
     }
@@ -45,7 +75,9 @@ public sealed class ProcessTreeProbe
         using var searcher = new ManagementObjectSearcher(
             "SELECT ProcessId, ParentProcessId, Name, ExecutablePath, CommandLine FROM Win32_Process");
 
-        return searcher.Get()
+        using var results = searcher.Get();
+
+        return results
             .Cast<ManagementBaseObject>()
             .Select(process => new ProcessRecord(
                 ProcessId: Convert.ToInt32(process["ProcessId"]),
