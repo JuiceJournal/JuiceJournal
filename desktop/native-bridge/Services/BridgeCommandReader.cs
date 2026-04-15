@@ -6,7 +6,19 @@ public sealed class BridgeCommandReader
 {
     public async Task<BridgeCommand?> ReadOneAsync(TextReader input, CancellationToken cancellationToken = default)
     {
-        var line = await input.ReadLineAsync(cancellationToken);
-        return line is null ? null : BridgeCommand.Parse(line.TrimStart('\uFEFF'));
+        while (true)
+        {
+            var line = await input.ReadLineAsync(cancellationToken);
+            if (line is null)
+            {
+                return null;
+            }
+
+            var command = BridgeCommand.Parse(line.TrimStart('\uFEFF'));
+            if (command is not null)
+            {
+                return command;
+            }
+        }
     }
 }
