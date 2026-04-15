@@ -3,6 +3,8 @@ using JuiceJournal.NativeBridge.Services;
 
 var transitionProbe = new TransitionProbe();
 var processTreeProbe = new ProcessTreeProbe();
+var namedPipeProbe = new NamedPipeProbe();
+var artifactProbe = new ArtifactProbe();
 var windowProbe = new WindowProbe();
 var identityProbeCoordinator = new IdentityProbeCoordinator();
 var hintResolver = new HintResolver();
@@ -12,6 +14,8 @@ var commandReader = new BridgeCommandReader();
 
 EmitTransitionDiagnostics(transitionProbe);
 EmitDiagnostic("process-tree-probe", processTreeProbe.Capture);
+EmitDiagnostic("named-pipe-probe", namedPipeProbe.Capture);
+EmitDiagnostic("artifact-probe", artifactProbe.Capture);
 EmitDiagnostic("window-probe", windowProbe.Capture);
 
 if (Console.IsInputRedirected)
@@ -98,11 +102,13 @@ void EmitHintIfAvailable()
     try
     {
         var processTreeData = processTreeProbe.Capture();
+        var namedPipeData = namedPipeProbe.Capture();
+        var artifactData = artifactProbe.Capture();
         var nativeIdentity = identityProbeCoordinator.TryResolve(
             poeVersion: accountHint.PoeVersion,
             processTreePayload: processTreeData,
-            namedPipePayload: null,
-            artifactPayload: null,
+            namedPipePayload: namedPipeData,
+            artifactPayload: artifactData,
             characterPool: characterPool);
         var resolvedHint = hintResolver.Resolve(
             poeVersion: accountHint.PoeVersion,

@@ -97,6 +97,8 @@ test('native bridge emits startup diagnostics before any stdin command arrives',
 
     return seen.has('process-probe')
       && seen.has('process-tree-probe')
+      && seen.has('named-pipe-probe')
+      && seen.has('artifact-probe')
       && seen.has('transition-probe')
       && seen.has('window-probe')
       ? Array.from(seen)
@@ -105,7 +107,7 @@ test('native bridge emits startup diagnostics before any stdin command arrives',
     description: 'startup diagnostics'
   });
 
-  assert.deepEqual(messages.sort(), ['process-probe', 'process-tree-probe', 'transition-probe', 'window-probe']);
+  assert.deepEqual(messages.sort(), ['artifact-probe', 'named-pipe-probe', 'process-probe', 'process-tree-probe', 'transition-probe', 'window-probe']);
   assert.equal(bridge.getStderr(), '');
 });
 
