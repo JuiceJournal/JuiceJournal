@@ -41,4 +41,42 @@ public sealed class ArtifactProbeTests
         var artifacts = Assert.IsAssignableFrom<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(result["artifacts"]);
         Assert.Single(artifacts);
     }
+
+    [Fact]
+    public void Capture_RecursivelyKeepsOnlyRelevantArtifactCandidates()
+    {
+        var probe = new ArtifactProbe(
+            rootsProvider: () => [@"F:\SteamLibrary\steamapps\common\Path of Exile 2"],
+            entriesProvider: root =>
+            [
+                Path.Combine(root, "logs", "Client.txt"),
+                Path.Combine(root, "Config", "production_Config.ini"),
+                Path.Combine(root, "Caches", "ShaderCacheD3D12", "state.cache"),
+                Path.Combine(root, "Temp", "unrelated.tmp")
+            ]);
+
+        var result = probe.Capture();
+
+        var artifacts = Assert.IsAssignableFrom<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(result["artifacts"]);
+        Assert.Contains(artifacts, entry => (string)entry["path"]! == @"F:\SteamLibrary\steamapps\common\Path of Exile 2\logs\Client.txt");
+        Assert.Contains(artifacts, entry => (string)entry["path"]! == @"F:\SteamLibrary\steamapps\common\Path of Exile 2\Config\production_Config.ini");
+        Assert.DoesNotContain(artifacts, entry => (string)entry["path"]! == @"F:\SteamLibrary\steamapps\common\Path of Exile 2\Temp\unrelated.tmp");
+    }
+
+    [Fact]
+    public void Capture_BoundsTheArtifactListToAvoidProbeNoise()
+    {
+        var entries = Enumerable.Range(0, 50)
+            .Select(index => $@"F:\SteamLibrary\steamapps\common\Path of Exile 2\logs\Client-{index}.txt")
+            .ToArray();
+
+        var probe = new ArtifactProbe(
+            rootsProvider: () => [@"F:\SteamLibrary\steamapps\common\Path of Exile 2"],
+            entriesProvider: _ => entries);
+
+        var result = probe.Capture();
+
+        var artifacts = Assert.IsAssignableFrom<IReadOnlyList<IReadOnlyDictionary<string, object?>>>(result["artifacts"]);
+        Assert.True(artifacts.Count <= 20);
+    }
 }

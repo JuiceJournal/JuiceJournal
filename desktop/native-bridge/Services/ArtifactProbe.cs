@@ -2,12 +2,17 @@ namespace JuiceJournal.NativeBridge.Services;
 
 public sealed class ArtifactProbe
 {
-    private static readonly string[] CandidateRelativePaths =
+    private const int MaxArtifacts = 20;
+
+    private static readonly string[] CandidateNameFragments =
     [
-        Path.Combine("logs", "Client.txt"),
-        "production_Config.ini",
-        "appmanifest_2694490.acf",
-        "appmanifest_238960.acf"
+        "client",
+        "config",
+        "production",
+        "cache",
+        "appmanifest",
+        "path of exile",
+        "poe"
     ];
 
     private readonly Func<IReadOnlyList<string>> rootsProvider;
@@ -28,16 +33,16 @@ public sealed class ArtifactProbe
         var roots = rootsProvider();
         var artifacts = roots
             .SelectMany(root => entriesProvider(root)
-                .Where(path =>
-                    path.Contains("Path of Exile", StringComparison.OrdinalIgnoreCase)
-                    || path.Contains("Grinding", StringComparison.OrdinalIgnoreCase)
-                    || path.Contains("ggg", StringComparison.OrdinalIgnoreCase)
-                    || path.EndsWith("Client.txt", StringComparison.OrdinalIgnoreCase))
+                .Where(IsCandidateArtifact)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(MaxArtifacts)
                 .Select(path => new Dictionary<string, object?>
                 {
                     ["root"] = root,
                     ["path"] = path
                 }))
+            .DistinctBy(entry => (string)entry["path"]!, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxArtifacts)
             .Cast<IReadOnlyDictionary<string, object?>>()
             .ToArray();
 
@@ -48,11 +53,39 @@ public sealed class ArtifactProbe
         };
     }
 
+    private static bool IsCandidateArtifact(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        var candidateName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(candidateName))
+        {
+            return false;
+        }
+
+        return CandidateNameFragments.Any(fragment =>
+            candidateName.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+    }
+
     private static IReadOnlyList<string> DefaultEntriesProvider(string root)
     {
-        return CandidateRelativePaths
-            .Select(relativePath => Path.Combine(root, relativePath))
-            .Where(File.Exists)
-            .ToArray();
+        try
+        {
+            if (!Directory.Exists(root))
+            {
+                return [];
+            }
+
+            return Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories)
+                .Take(MaxArtifacts * 5)
+                .ToArray();
+        }
+        catch
+        {
+            return [];
+        }
     }
 }
