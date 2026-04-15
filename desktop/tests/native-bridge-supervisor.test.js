@@ -272,3 +272,58 @@ test('supervisor ignores stale child output after stop and restart', () => {
     }
   ]);
 });
+
+test('supervisor writes set-character-pool commands to stdin', () => {
+  const createNativeBridgeSupervisor = getCreateNativeBridgeSupervisor();
+  const writes = [];
+  const child = createFakeBridgeProcess();
+  child.stdin = {
+    write(value) {
+      writes.push(value);
+      return true;
+    }
+  };
+
+  const supervisor = createNativeBridgeSupervisor({
+    spawnBridge() {
+      return child;
+    }
+  });
+
+  assert.equal(supervisor.start(), true);
+  assert.equal(
+    supervisor.send({
+      type: 'set-character-pool',
+      detectedAt: '2026-04-15T14:00:00.000Z',
+      characters: []
+    }),
+    true
+  );
+  assert.deepEqual(writes, [
+    '{"type":"set-character-pool","detectedAt":"2026-04-15T14:00:00.000Z","characters":[]}\n'
+  ]);
+});
+
+test('supervisor rejects unsupported stdin commands', () => {
+  const createNativeBridgeSupervisor = getCreateNativeBridgeSupervisor();
+  const child = createFakeBridgeProcess();
+  child.stdin = {
+    write() {
+      assert.fail('unsupported command should not reach stdin');
+    }
+  };
+
+  const supervisor = createNativeBridgeSupervisor({
+    spawnBridge() {
+      return child;
+    }
+  });
+
+  assert.equal(supervisor.start(), true);
+  assert.equal(
+    supervisor.send({
+      type: 'unknown-command'
+    }),
+    false
+  );
+});

@@ -3,6 +3,14 @@ const { parseNativeBridgeLine } = require('./nativeBridgeModel');
 function createNativeBridgeSupervisor({ spawnBridge, onMessage, onError = () => {} } = {}) {
   let activeBridge = null;
 
+  function isSupportedCommand(command) {
+    return Boolean(command)
+      && typeof command === 'object'
+      && !Array.isArray(command)
+      && command.type === 'set-character-pool'
+      && Array.isArray(command.characters);
+  }
+
   function emitMessage(payload) {
     if (typeof onMessage === 'function') {
       onMessage(payload);
@@ -137,9 +145,23 @@ function createNativeBridgeSupervisor({ spawnBridge, onMessage, onError = () => 
     }
   }
 
+  function send(command) {
+    if (!activeBridge || !activeBridge.child?.stdin || !isSupportedCommand(command)) {
+      return false;
+    }
+
+    try {
+      return activeBridge.child.stdin.write(`${JSON.stringify(command)}\n`) !== false;
+    } catch (error) {
+      emitError(error);
+      return false;
+    }
+  }
+
   return {
     start,
-    stop
+    stop,
+    send
   };
 }
 
