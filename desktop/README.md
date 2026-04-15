@@ -147,14 +147,18 @@ node --test tests/*.test.js
 
 Current bridge phase supports:
 - diagnostics
-- high-confidence hint transport
+- high-confidence hint transport path in desktop main
+- no live `active-character-hint` emission from the bridge yet
 
 Validation flow:
-1. start desktop app
-2. start PoE1 or PoE2
-3. verify diagnostics still appear
-4. verify only supported `active-character-hint` payloads mutate the card
-5. verify unsupported diagnostics do not change the card
+1. run `npm run bridge:run`
+2. verify stdout prints only:
+   - `process-probe`
+   - `transition-probe`
+   - `window-probe`
+3. start desktop app
+4. verify unsupported `bridge-diagnostic` payloads do not change the card
+5. verify the desktop app is only prepared to accept supported `active-character-hint` payloads when the bridge begins emitting them in a later phase
 
 ## Build
 
