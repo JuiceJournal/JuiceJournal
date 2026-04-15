@@ -42,6 +42,7 @@ const {
 } = require('./src/modules/hotkeyModel');
 const { deriveNativeCharacterHint } = require('./src/modules/nativeCharacterHintModel');
 const { normalizeNativeBridgeDiagnostic } = require('./src/modules/nativeBridgeDiagnosticModel');
+const { buildCharacterPoolCommand } = require('./src/modules/nativeBridgeCommandModel');
 const { createNativeBridgeSupervisor } = require('./src/modules/nativeBridgeSupervisor');
 const { createNativeGameInfoProducer } = require('./src/modules/nativeGameInfoProducer');
 const DEFAULT_POE_LOG_PATH = GameDetector.DEFAULT_POE_LOG_PATH;
@@ -274,6 +275,7 @@ let overlayMapResultState = null;
 let overlayMapResultDismissTimer = null;
 let lastActiveCharacterHint = null;
 let nativeBridgeSupervisor = null;
+let lastNativeBridgeCharacterPoolFingerprint = null;
 let nativeGameInfoProducer = null;
 let nativeGameInfoProducerBinding = null;
 let poeAuthServer = null;
@@ -625,6 +627,82 @@ function emitActiveCharacterHint(payload) {
 
 function clearNativeActiveCharacterHint() {
   emitActiveCharacterHint(null);
+}
+
+function buildNativeBridgeCharacterPool(currentUserPayload) {
+  const user = currentUserPayload?.user || currentUserPayload || null;
+  const fallbackVersion = normalizePoeVersion(user?.activePoeVersion)
+    || normalizePoeVersion(store.get('poeVersion'));
+  const characters = Array.isArray(user?.characters) ? user.characters : [];
+
+  return characters
+    .map((character) => {
+      if (!character || typeof character !== 'object') {
+        return null;
+      }
+
+      const poeVersion = normalizePoeVersion(character.poeVersion) || fallbackVersion;
+      const characterId = typeof character.id === 'string'
+        ? character.id.trim()
+        : typeof character.characterId === 'string'
+          ? character.characterId.trim()
+          : '';
+      const characterName = typeof character.name === 'string'
+        ? character.name.trim()
+        : typeof character.characterName === 'string'
+          ? character.characterName.trim()
+          : '';
+      const classNameSource = typeof character.class === 'string'
+        ? character.class
+        : character.className;
+      const className = typeof classNameSource === 'string' && classNameSource.trim()
+        ? classNameSource.trim()
+        : null;
+      const ascendancy = typeof character.ascendancy === 'string' && character.ascendancy.trim()
+        ? character.ascendancy.trim()
+        : null;
+      const league = typeof character.league === 'string' && character.league.trim()
+        ? character.league.trim()
+        : null;
+      const parsedLevel = Number(character.level);
+      const level = Number.isInteger(parsedLevel) ? parsedLevel : null;
+
+      if (!poeVersion || !characterId || !characterName) {
+        return null;
+      }
+
+      return {
+        poeVersion,
+        characterId,
+        characterName,
+        className,
+        ascendancy,
+        level,
+        league
+      };
+    })
+    .filter(Boolean);
+}
+
+function syncNativeBridgeCharacterPool(currentUserPayload) {
+  const supervisor = getNativeBridgeSupervisor();
+  if (!supervisor || typeof supervisor.send !== 'function') {
+    return false;
+  }
+
+  const characters = buildNativeBridgeCharacterPool(currentUserPayload);
+  const fingerprint = JSON.stringify(characters);
+  if (fingerprint === lastNativeBridgeCharacterPoolFingerprint) {
+    return false;
+  }
+
+  const command = buildCharacterPoolCommand(characters);
+  const sent = supervisor.send(command);
+  if (sent) {
+    lastNativeBridgeCharacterPoolFingerprint = fingerprint;
+  }
+
+  return sent;
 }
 
 function handleNativeBridgeSupervisorMessage(payload) {
@@ -2607,6 +2685,8 @@ function applyDesktopSettings(settings = {}) {
 function handleLogout() {
   appendAuditTrail('auditLogout');
   stopNativeGameInfoProducer();
+  lastNativeBridgeCharacterPoolFingerprint = null;
+  syncNativeBridgeCharacterPool(null);
   store.set('authToken', null);
   store.set('authTokenEncrypted', null);
   store.set('currentUserId', null);
@@ -2933,6 +3013,7 @@ function setupIPC() {
         apiClient.setToken(token);
         store.set('currentUserId', result?.data?.user?.id || null);
         updateOverlayWindow({ character: extractOverlayCharacterFromUser(result?.data?.user) });
+        syncNativeBridgeCharacterPool(result?.data);
         await flushPendingActions();
         appendAuditTrail('auditLogin');
       }
@@ -2960,6 +3041,7 @@ function setupIPC() {
         apiClient.setToken(token);
         store.set('currentUserId', result?.user?.id || null);
         updateOverlayWindow({ character: extractOverlayCharacterFromUser(result?.user) });
+        syncNativeBridgeCharacterPool(result);
         await flushPendingActions();
         appendAuditTrail('auditLogin');
       }
@@ -2982,6 +3064,7 @@ function setupIPC() {
       const me = await apiClient.getMe();
       store.set('currentUserId', me?.user?.id || null);
       updateOverlayWindow({ character: extractOverlayCharacterFromUser(me?.user) });
+      syncNativeBridgeCharacterPool(me);
       await flushPendingActions();
       return me;
     } catch (error) {
@@ -3022,6 +3105,7 @@ function setupIPC() {
           apiClient.setToken(result.data.token);
           store.set('currentUserId', result.data.user?.id || null);
           updateOverlayWindow({ character: extractOverlayCharacterFromUser(result.data.user) });
+          syncNativeBridgeCharacterPool(result.data);
           await flushPendingActions();
           appendAuditTrail('auditLogin');
         }
@@ -3049,6 +3133,7 @@ function setupIPC() {
         apiClient.setToken(result.data.token);
         store.set('currentUserId', result.data.user?.id || null);
         updateOverlayWindow({ character: extractOverlayCharacterFromUser(result.data.user) });
+        syncNativeBridgeCharacterPool(result.data);
         await flushPendingActions();
         appendAuditTrail('auditLogin');
       }

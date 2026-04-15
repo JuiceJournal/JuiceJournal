@@ -1063,6 +1063,144 @@ test('native bridge startup wiring starts the supervisor from app.whenReady', ()
   );
 });
 
+test('native bridge character pool helpers build normalized snapshots and skip unchanged syncs', () => {
+  const commands = [];
+  const builtPools = [];
+  const context = loadFunctions([
+    'normalizePoeVersion',
+    'buildNativeBridgeCharacterPool',
+    'syncNativeBridgeCharacterPool'
+  ], {
+    store: {
+      get(key) {
+        return key === 'poeVersion' ? 'poe2' : null;
+      }
+    },
+    buildCharacterPoolCommand(characters) {
+      builtPools.push(JSON.parse(JSON.stringify(characters)));
+      return {
+        type: 'set-character-pool',
+        characters
+      };
+    },
+    getNativeBridgeSupervisor() {
+      return {
+        send(command) {
+          commands.push(JSON.parse(JSON.stringify(command)));
+          return true;
+        }
+      };
+    },
+    lastNativeBridgeCharacterPoolFingerprint: null
+  });
+
+  const payload = {
+    user: {
+      activePoeVersion: 'poe2',
+      characters: [
+        {
+          id: 'poe2-kellee',
+          name: ' KELLEE ',
+          class: 'Monk2',
+          ascendancy: 'Invoker',
+          level: 92,
+          league: 'Standard'
+        },
+        {
+          id: 'poe1-ranger',
+          name: ' Ranger ',
+          class: 'Ranger',
+          level: 95,
+          league: 'Mercenaries',
+          poeVersion: 'poe1'
+        },
+        {
+          id: 'broken',
+          name: '   ',
+          poeVersion: 'poe2'
+        }
+      ]
+    }
+  };
+
+  assert.deepEqual(JSON.parse(JSON.stringify(context.buildNativeBridgeCharacterPool(payload))), [
+    {
+      poeVersion: 'poe2',
+      characterId: 'poe2-kellee',
+      characterName: 'KELLEE',
+      className: 'Monk2',
+      ascendancy: 'Invoker',
+      level: 92,
+      league: 'Standard'
+    },
+    {
+      poeVersion: 'poe1',
+      characterId: 'poe1-ranger',
+      characterName: 'Ranger',
+      className: 'Ranger',
+      ascendancy: null,
+      level: 95,
+      league: 'Mercenaries'
+    }
+  ]);
+
+  assert.equal(context.syncNativeBridgeCharacterPool(payload), true);
+  assert.equal(context.syncNativeBridgeCharacterPool(payload), false);
+  assert.deepEqual(builtPools, [[
+    {
+      poeVersion: 'poe2',
+      characterId: 'poe2-kellee',
+      characterName: 'KELLEE',
+      className: 'Monk2',
+      ascendancy: 'Invoker',
+      level: 92,
+      league: 'Standard'
+    },
+    {
+      poeVersion: 'poe1',
+      characterId: 'poe1-ranger',
+      characterName: 'Ranger',
+      className: 'Ranger',
+      ascendancy: null,
+      level: 95,
+      league: 'Mercenaries'
+    }
+  ]]);
+  assert.deepEqual(commands, [{
+    type: 'set-character-pool',
+    characters: [
+      {
+        poeVersion: 'poe2',
+        characterId: 'poe2-kellee',
+        characterName: 'KELLEE',
+        className: 'Monk2',
+        ascendancy: 'Invoker',
+        level: 92,
+        league: 'Standard'
+      },
+      {
+        poeVersion: 'poe1',
+        characterId: 'poe1-ranger',
+        characterName: 'Ranger',
+        className: 'Ranger',
+        ascendancy: null,
+        level: 95,
+        league: 'Mercenaries'
+      }
+    ]
+  }]);
+});
+
+test('native bridge character pool wiring syncs get-current-user and login flows', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+
+  assert.match(source, /ipcMain\.handle\('get-current-user'[\s\S]*?syncNativeBridgeCharacterPool\(me\);/);
+  assert.match(source, /ipcMain\.handle\('login'[\s\S]*?syncNativeBridgeCharacterPool\(result\?\.data\);/);
+  assert.match(source, /ipcMain\.handle\('register'[\s\S]*?syncNativeBridgeCharacterPool\(result\);/);
+  assert.match(source, /startResponse\?\.mode === 'mock'[\s\S]*?syncNativeBridgeCharacterPool\(result\.data\);/);
+  assert.match(source, /openPoeLoginFlow\([\s\S]*?syncNativeBridgeCharacterPool\(result\.data\);/);
+});
+
 test('main runtime log events attach normalized runtime session state to existing map IPC payloads', () => {
   const {
     createRuntimeSessionState,
@@ -1385,6 +1523,7 @@ test('main game close stops the native game info producer', () => {
 test('main logout stops the native game info producer while clearing desktop auth state', () => {
   const writes = [];
   const auditTrail = [];
+  const syncedPools = [];
   let stopCalls = 0;
   let clearAllCalls = 0;
   let clearDismissTimerCalls = 0;
@@ -1429,6 +1568,10 @@ test('main logout stops the native game info producer while clearing desktop aut
     updateOverlayWindow(payload) {
       overlayUpdates.push(payload);
     },
+    syncNativeBridgeCharacterPool(payload) {
+      syncedPools.push(payload);
+      return true;
+    },
     mainWindow: null,
     nativeGameInfoProducer: {
       stop() {
@@ -1454,6 +1597,7 @@ test('main logout stops the native game info producer while clearing desktop aut
   assert.equal(context.lastActiveCharacterHint, null);
   assert.equal(clearAllCalls, 1);
   assert.equal(clearDismissTimerCalls, 1);
+  assert.deepEqual(syncedPools, [null]);
   assert.deepEqual(JSON.parse(JSON.stringify(overlayUpdates)), [{ character: null }]);
 });
 

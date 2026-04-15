@@ -116,6 +116,7 @@ Beklenen:
 
 - stdout NDJSON diagnostik satirlari uretir
 - desktop uygulamasi bridge yoksa fail-closed kalir
+- stdin NDJSON `set-character-pool` komutlarini kabul eder
 - bridge komutlari icin yerel `dotnet` araci gerekli
 
 ## Native Bridge Probe Workflow
@@ -129,16 +130,29 @@ Beklenen:
 Current expectation:
 - diagnostics only
 - no active-character-hint emission yet
+- desktop main login, `get-current-user`, ve logout akislarinda bridge'e full-snapshot `set-character-pool` gonderir
 - `npm run bridge:run` stdout should print:
   - `process-probe`
   - `window-probe`
   - `transition-probe`
 - `npm run bridge:run` is a single snapshot command, not a long-running watcher
 
+Character pool sync smoke:
+
+```bash
+echo {"type":"set-character-pool","characters":[]} | dotnet run --project native-bridge/JuiceJournal.NativeBridge.csproj
+```
+
+Beklenen:
+
+- stdout `character-pool-replaced` diagnostigi ile baslar
+- ardindan `process-probe`, `transition-probe`, `window-probe` gelir
+
 Task 6 dogrulama komutlari:
 
 ```bash
 npm run bridge:build
+node --test tests/native-bridge-command-model.test.js
 node --test tests/native-bridge-model.test.js tests/native-bridge-supervisor.test.js tests/main-settings.test.js
 node --test tests/*.test.js
 ```
