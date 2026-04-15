@@ -33,7 +33,7 @@
   function isHintPayload(payload) {
     return isObjectPayload(payload)
       && payload.type?.trim() === 'active-character-hint'
-      && hasRequiredString(payload.poeVersion)
+      && (payload.poeVersion?.trim() === 'poe1' || payload.poeVersion?.trim() === 'poe2')
       && hasRequiredString(payload.characterName)
       && payload.confidence === 'high'
       && hasRequiredString(payload.source)

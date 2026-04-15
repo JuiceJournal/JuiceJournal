@@ -75,6 +75,35 @@ test('parseNativeBridgeLine returns a supported active-character-hint payload', 
   });
 });
 
+test('parseNativeBridgeLine rejects malformed active-character-hint payloads', () => {
+  const parseNativeBridgeLine = getParseNativeBridgeLine();
+
+  assert.equal(
+    parseNativeBridgeLine('{"type":"active-character-hint","characterName":"KELLEE","confidence":"high","source":"local-native-bridge","detectedAt":"2026-04-15T12:00:00.000Z"}'),
+    null
+  );
+  assert.equal(
+    parseNativeBridgeLine('{"type":"active-character-hint","poeVersion":"poe2","confidence":"high","source":"local-native-bridge","detectedAt":"2026-04-15T12:00:00.000Z"}'),
+    null
+  );
+  assert.equal(
+    parseNativeBridgeLine('{"type":"active-character-hint","poeVersion":"poe2","characterName":"KELLEE","confidence":"medium","source":"local-native-bridge","detectedAt":"2026-04-15T12:00:00.000Z"}'),
+    null
+  );
+  assert.equal(
+    parseNativeBridgeLine('{"type":"active-character-hint","poeVersion":"sandbox","characterName":"KELLEE","confidence":"high","source":"local-native-bridge","detectedAt":"2026-04-15T12:00:00.000Z"}'),
+    null
+  );
+  assert.equal(
+    parseNativeBridgeLine('{"type":"active-character-hint","poeVersion":"poe2","characterName":"KELLEE","confidence":"high","detectedAt":"2026-04-15T12:00:00.000Z"}'),
+    null
+  );
+  assert.equal(
+    parseNativeBridgeLine('{"type":"active-character-hint","poeVersion":"poe2","characterName":"KELLEE","confidence":"high","source":"local-native-bridge"}'),
+    null
+  );
+});
+
 test('parseNativeBridgeLine rejects arrays and contract-invalid objects', () => {
   const parseNativeBridgeLine = getParseNativeBridgeLine();
 
