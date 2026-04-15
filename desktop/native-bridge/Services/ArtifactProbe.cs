@@ -6,6 +6,7 @@ public sealed class ArtifactProbe
 {
     private const int MaxArtifacts = 20;
     private const int MaxPreviewCharacters = 512;
+    private static readonly ArtifactFileMetadata EmptyFileMetadata = new(false, null, string.Empty, null);
 
     private static readonly string[] CandidateNameFragments =
     [
@@ -31,13 +32,13 @@ public sealed class ArtifactProbe
     public ArtifactProbe(
         Func<IReadOnlyList<string>>? rootsProvider = null,
         Func<string, IReadOnlyList<string>>? entriesProvider = null,
-        ArtifactRootResolver? rootResolver = null,
-        Func<string, ArtifactFileMetadata>? fileMetadataProvider = null)
+        Func<string, ArtifactFileMetadata>? fileMetadataProvider = null,
+        ArtifactRootResolver? rootResolver = null)
     {
         var resolvedRootResolver = rootResolver ?? new ArtifactRootResolver();
         this.rootsProvider = rootsProvider ?? resolvedRootResolver.Resolve;
         this.entriesProvider = entriesProvider ?? DefaultEntriesProvider;
-        this.fileMetadataProvider = fileMetadataProvider ?? ReadArtifactFileMetadata;
+        this.fileMetadataProvider = fileMetadataProvider ?? DefaultFileMetadataProvider;
     }
 
     public IReadOnlyDictionary<string, object?> Capture()
@@ -50,19 +51,7 @@ public sealed class ArtifactProbe
                 .Take(MaxArtifacts)
                 .Select(path =>
                 {
-                    ArtifactFileMetadata metadata;
-                    try
-                    {
-                        metadata = this.fileMetadataProvider(path);
-                    }
-                    catch
-                    {
-                        metadata = new ArtifactFileMetadata(
-                            Exists: false,
-                            LastWriteTimeUtc: null,
-                            PreviewText: string.Empty,
-                            Length: null);
-                    }
+                    var metadata = CaptureFileMetadata(path);
 
                     return new Dictionary<string, object?>
                     {
@@ -102,6 +91,18 @@ public sealed class ArtifactProbe
             candidateName.Contains(fragment, StringComparison.OrdinalIgnoreCase));
     }
 
+    private ArtifactFileMetadata CaptureFileMetadata(string path)
+    {
+        try
+        {
+            return fileMetadataProvider(path);
+        }
+        catch
+        {
+            return EmptyFileMetadata;
+        }
+    }
+
     private static IReadOnlyList<string> DefaultEntriesProvider(string root)
     {
         try
@@ -121,13 +122,13 @@ public sealed class ArtifactProbe
         }
     }
 
-    private static ArtifactFileMetadata ReadArtifactFileMetadata(string path)
+    private static ArtifactFileMetadata DefaultFileMetadataProvider(string path)
     {
         try
         {
             if (!File.Exists(path))
             {
-                return new ArtifactFileMetadata(false, null, string.Empty, null);
+                return EmptyFileMetadata;
             }
 
             var info = new FileInfo(path);
@@ -143,7 +144,7 @@ public sealed class ArtifactProbe
         }
         catch
         {
-            return new ArtifactFileMetadata(false, null, string.Empty, null);
+            return EmptyFileMetadata;
         }
     }
 
@@ -160,7 +161,10 @@ public sealed class ArtifactProbe
     private static string ReadPreviewText(string path)
     {
         using var stream = File.OpenRead(path);
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        using var reader = new StreamReader(
+            stream,
+            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true),
+            detectEncodingFromByteOrderMarks: true);
         var buffer = new char[MaxPreviewCharacters];
         var readCount = reader.ReadBlock(buffer, 0, buffer.Length);
         return new string(buffer, 0, readCount);

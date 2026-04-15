@@ -201,3 +201,22 @@ test('native bridge artifact-probe diagnostics remain bounded after enumeration 
   assert.equal(Array.isArray(artifactDiagnostic.data.artifacts), true);
   assert.equal(artifactDiagnostic.data.artifacts.length <= 20, true);
 });
+
+test('artifact-probe diagnostics expose previewText and remain bounded after preview enrichment', async (t) => {
+  const bridge = startBridgeProcess();
+  t.after(async () => {
+    await shutdownBridge(bridge);
+  });
+
+  const artifactDiagnostic = await waitFor(
+    () => bridge.lines.find((line) => line?.message === 'artifact-probe'),
+    { description: 'artifact-probe diagnostic' }
+  );
+
+  assert.equal(Array.isArray(artifactDiagnostic.data.artifacts), true);
+  assert.equal(artifactDiagnostic.data.artifacts.length <= 20, true);
+
+  if (artifactDiagnostic.data.artifacts.length > 0) {
+    assert.equal(typeof artifactDiagnostic.data.artifacts[0].previewText, 'string');
+  }
+});
