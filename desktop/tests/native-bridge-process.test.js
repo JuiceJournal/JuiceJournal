@@ -185,3 +185,19 @@ test('native bridge startup diagnostics still include artifact-probe after root 
   assert.equal(artifactDiagnostic.type, 'bridge-diagnostic');
   assert.equal(typeof artifactDiagnostic.data.rootCount, 'number');
 });
+
+test('native bridge artifact-probe diagnostics remain bounded after enumeration expansion', async (t) => {
+  const bridge = startBridgeProcess();
+  t.after(async () => {
+    await shutdownBridge(bridge);
+  });
+
+  const artifactDiagnostic = await waitFor(
+    () => bridge.lines.find((line) => line?.message === 'artifact-probe'),
+    { description: 'artifact-probe diagnostic' }
+  );
+
+  assert.equal(artifactDiagnostic.type, 'bridge-diagnostic');
+  assert.equal(Array.isArray(artifactDiagnostic.data.artifacts), true);
+  assert.equal(artifactDiagnostic.data.artifacts.length <= 20, true);
+});
