@@ -58,6 +58,23 @@ test('parseNativeBridgeLine returns a diagnostic payload', () => {
   });
 });
 
+test('parseNativeBridgeLine returns a supported active-character-hint payload', () => {
+  const parseNativeBridgeLine = getParseNativeBridgeLine();
+
+  const payload = parseNativeBridgeLine(
+    '{"type":" active-character-hint ","poeVersion":" poe2 ","characterName":" KELLEE ","confidence":"high","source":" local-native-bridge ","detectedAt":" 2026-04-15T12:00:00.000Z "}'
+  );
+
+  assert.deepEqual(payload, {
+    type: 'active-character-hint',
+    poeVersion: 'poe2',
+    characterName: 'KELLEE',
+    confidence: 'high',
+    source: 'local-native-bridge',
+    detectedAt: '2026-04-15T12:00:00.000Z'
+  });
+});
+
 test('parseNativeBridgeLine rejects arrays and contract-invalid objects', () => {
   const parseNativeBridgeLine = getParseNativeBridgeLine();
 

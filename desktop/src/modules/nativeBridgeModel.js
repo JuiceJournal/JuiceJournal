@@ -6,20 +6,47 @@
 
   root.nativeBridgeModel = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createNativeBridgeModel() {
-function isBridgePayload(payload) {
-  return Boolean(payload)
-    && typeof payload === 'object'
-    && !Array.isArray(payload)
-      && typeof payload.type === 'string'
-      && payload.type.trim().length > 0
-      && typeof payload.detectedAt === 'string'
-      && payload.detectedAt.trim().length > 0;
+  function isObjectPayload(payload) {
+    return Boolean(payload)
+      && typeof payload === 'object'
+      && !Array.isArray(payload);
+  }
+
+  function hasRequiredString(value) {
+    return typeof value === 'string' && value.trim().length > 0;
+  }
+
+  function isBridgePayload(payload) {
+    return isObjectPayload(payload)
+      && payload.type?.trim() === 'bridge-diagnostic'
+      && hasRequiredString(payload.detectedAt);
   }
 
   function normalizeBridgePayload(payload) {
     return {
       ...payload,
       type: payload.type.trim(),
+      detectedAt: payload.detectedAt.trim()
+    };
+  }
+
+  function isHintPayload(payload) {
+    return isObjectPayload(payload)
+      && payload.type?.trim() === 'active-character-hint'
+      && hasRequiredString(payload.poeVersion)
+      && hasRequiredString(payload.characterName)
+      && payload.confidence === 'high'
+      && hasRequiredString(payload.source)
+      && hasRequiredString(payload.detectedAt);
+  }
+
+  function normalizeHintPayload(payload) {
+    return {
+      ...payload,
+      type: payload.type.trim(),
+      poeVersion: payload.poeVersion.trim(),
+      characterName: payload.characterName.trim(),
+      source: payload.source.trim(),
       detectedAt: payload.detectedAt.trim()
     };
   }
@@ -31,6 +58,10 @@ function isBridgePayload(payload) {
 
     try {
       const payload = JSON.parse(line);
+      if (isHintPayload(payload)) {
+        return normalizeHintPayload(payload);
+      }
+
       return isBridgePayload(payload) ? normalizeBridgePayload(payload) : null;
     } catch {
       return null;
