@@ -3,6 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const {
+  normalizeNativeBridgeDiagnostic
+} = require('../src/modules/nativeBridgeDiagnosticModel');
 
 const mainJsPath = path.join(__dirname, '..', 'main.js');
 const preloadJsPath = path.join(__dirname, '..', 'preload.js');
@@ -968,6 +971,9 @@ test('native bridge forwards supported active-character payloads into emitActive
   const emittedHints = [];
   const derivedHints = [];
   const context = loadFunctions(['handleNativeBridgeSupervisorMessage'], {
+    normalizeNativeBridgeDiagnostic() {
+      return null;
+    },
     deriveNativeCharacterHint(payload) {
       derivedHints.push(payload);
       return {
@@ -1011,27 +1017,41 @@ test('native bridge forwards supported active-character payloads into emitActive
   }]);
 });
 
-test('native bridge ignores unsupported bridge payloads', () => {
+test('native bridge logs bridge-diagnostic payloads without mutating active character state', () => {
   const derivedHints = [];
   const emittedHints = [];
+  const diagnostics = [];
   const context = loadFunctions(['handleNativeBridgeSupervisorMessage'], {
+    normalizeNativeBridgeDiagnostic,
     deriveNativeCharacterHint(payload) {
       derivedHints.push(payload);
       return payload;
     },
     emitActiveCharacterHint(payload) {
       emittedHints.push(payload);
+    },
+    console: {
+      log(...args) {
+        diagnostics.push(args.join(' '));
+      }
     }
   });
 
   context.handleNativeBridgeSupervisorMessage({
     type: 'bridge-diagnostic',
-    message: 'bridge ready',
-    detectedAt: '2026-04-14T12:00:00.000Z'
+    level: 'info',
+    message: 'window-probe',
+    detectedAt: '2026-04-14T12:00:00.000Z',
+    data: {
+      processId: 1234
+    }
   });
 
   assert.deepEqual(derivedHints, []);
   assert.deepEqual(emittedHints, []);
+  assert.equal(diagnostics.length, 1);
+  assert.match(diagnostics[0], /\[NativeBridgeDiagnostic\]/);
+  assert.match(diagnostics[0], /window-probe/);
 });
 
 test('native bridge startup wiring starts the supervisor from app.whenReady', () => {

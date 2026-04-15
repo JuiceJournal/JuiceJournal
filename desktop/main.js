@@ -41,6 +41,7 @@ const {
   validateHotkeys
 } = require('./src/modules/hotkeyModel');
 const { deriveNativeCharacterHint } = require('./src/modules/nativeCharacterHintModel');
+const { normalizeNativeBridgeDiagnostic } = require('./src/modules/nativeBridgeDiagnosticModel');
 const { createNativeBridgeSupervisor } = require('./src/modules/nativeBridgeSupervisor');
 const { createNativeGameInfoProducer } = require('./src/modules/nativeGameInfoProducer');
 const DEFAULT_POE_LOG_PATH = GameDetector.DEFAULT_POE_LOG_PATH;
@@ -627,6 +628,12 @@ function clearNativeActiveCharacterHint() {
 }
 
 function handleNativeBridgeSupervisorMessage(payload) {
+  const diagnostic = normalizeNativeBridgeDiagnostic(payload);
+  if (diagnostic) {
+    console.log('[NativeBridgeDiagnostic]', JSON.stringify(diagnostic));
+    return false;
+  }
+
   if (!payload || payload.type !== 'active-character-hint') {
     return false;
   }
