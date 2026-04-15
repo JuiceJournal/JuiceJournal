@@ -2,15 +2,25 @@ namespace JuiceJournal.NativeBridge.Services;
 
 public sealed class ArtifactProbe
 {
+    private static readonly string[] CandidateRelativePaths =
+    [
+        Path.Combine("logs", "Client.txt"),
+        "production_Config.ini",
+        "appmanifest_2694490.acf",
+        "appmanifest_238960.acf"
+    ];
+
     private readonly Func<IReadOnlyList<string>> rootsProvider;
     private readonly Func<string, IReadOnlyList<string>> entriesProvider;
 
     public ArtifactProbe(
         Func<IReadOnlyList<string>>? rootsProvider = null,
-        Func<string, IReadOnlyList<string>>? entriesProvider = null)
+        Func<string, IReadOnlyList<string>>? entriesProvider = null,
+        ArtifactRootResolver? rootResolver = null)
     {
-        this.rootsProvider = rootsProvider ?? (() => []);
-        this.entriesProvider = entriesProvider ?? (_ => []);
+        var resolvedRootResolver = rootResolver ?? new ArtifactRootResolver();
+        this.rootsProvider = rootsProvider ?? resolvedRootResolver.Resolve;
+        this.entriesProvider = entriesProvider ?? DefaultEntriesProvider;
     }
 
     public IReadOnlyDictionary<string, object?> Capture()
@@ -36,5 +46,13 @@ public sealed class ArtifactProbe
             ["rootCount"] = roots.Count,
             ["artifacts"] = artifacts
         };
+    }
+
+    private static IReadOnlyList<string> DefaultEntriesProvider(string root)
+    {
+        return CandidateRelativePaths
+            .Select(relativePath => Path.Combine(root, relativePath))
+            .Where(File.Exists)
+            .ToArray();
     }
 }
