@@ -72,6 +72,30 @@ test('normalizeNativeInfoPayload returns a high-confidence hint', () => {
   });
 });
 
+test('normalizeNativeInfoPayload preserves className when the Overwolf info exposes it', () => {
+  const normalizeNativeInfoPayload = getNativeGameInfoProducerModelExport('normalizeNativeInfoPayload');
+
+  const hint = normalizeNativeInfoPayload({
+    poeVersion: 'poe2',
+    info: {
+      me: {
+        character_name: 'KELLEE',
+        character_class: 'Invoker'
+      }
+    }
+  });
+
+  assert.deepEqual(hint, {
+    source: 'native-info',
+    poeVersion: 'poe2',
+    characterName: 'KELLEE',
+    className: 'Invoker',
+    level: null,
+    experience: null,
+    confidence: 'high'
+  });
+});
+
 test('normalizeNativeInfoPayload returns null without character_name', () => {
   const normalizeNativeInfoPayload = getNativeGameInfoProducerModelExport('normalizeNativeInfoPayload');
 
