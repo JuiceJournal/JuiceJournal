@@ -6,6 +6,9 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "start:overwolf": "ow-electron .",
+    "dev:overwolf": "ow-electron . --dev",
+    "dev:overwolf:qa": "ow-electron . --dev --owepm-packages-url=https://electronapi-qa.overwolf.com/packages",
     "test": "node --test tests/*.test.js",
     "test:desktop": "node --test tests/*.test.js",
     "test:e2e": "playwright test",
@@ -14,6 +17,8 @@
     "bridge:run": "dotnet run --project native-bridge/JuiceJournal.NativeBridge.csproj",
     "build": "npm run bridge:build && electron-builder",
     "build:win": "npm run bridge:build && electron-builder --win",
+    "build:overwolf": "npm run bridge:build && ow-electron-builder --win",
+    "pack:overwolf": "npm run bridge:build && ow-electron-builder --dir",
     "pack": "npm run bridge:build && electron-builder --dir",
     "icon:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-icon-assets.ps1",
     "icon:test": "node --test tests/branding.test.js",
@@ -27,6 +32,9 @@
     "tesseract.js": "^5.0.3"
   },
   "devDependencies": {
+    "@overwolf/electron-is-overwolf": "^0.0.2",
+    "@overwolf/ow-electron": "^39.6.1",
+    "@overwolf/ow-electron-builder": "^26.8.4",
     "electron": "^35.7.5",
     "electron-builder": "^26.8.2",
     "playwright": "^1.59.1"
@@ -58,6 +66,13 @@
     "poe",
     "path-of-exile"
   ],
-  "author": "",
+  "author": {
+    "name": "Furkan Taşçı"
+  },
+  "overwolf": {
+    "packages": [
+      "gep"
+    ]
+  },
   "license": "MIT"
 }

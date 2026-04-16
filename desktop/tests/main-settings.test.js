@@ -935,6 +935,64 @@ test('runtime game detection fails closed when the native gep package is unavail
   }]);
 });
 
+test('main startup logs the overwolf runtime state with configured packages and gep availability', () => {
+  const logs = [];
+  const context = loadFunctions(['logOverwolfRuntimeState'], {
+    app: {
+      overwolf: {
+        packages: {
+          gep: {
+            setRequiredFeatures() {},
+            getInfo() {},
+            on() {},
+            removeListener() {}
+          }
+        }
+      }
+    },
+    process: {
+      argv: ['ow-electron', '.', '--owepm-packages-url=https://electronapi-qa.overwolf.com/packages']
+    },
+    DESKTOP_PACKAGE: {
+      overwolf: {
+        packages: ['gep']
+      }
+    },
+    getOverwolfRuntimeState({ app, argv, configuredPackages }) {
+      return {
+        runtime: 'ow-electron',
+        appUid: 'ow-juice-journal',
+        packageFeedUrl: argv[2].split('=')[1],
+        usingQaFeed: true,
+        packagesConfigured: configuredPackages,
+        gepConfigured: true,
+        gepAvailable: Boolean(app?.overwolf?.packages?.gep),
+        missingGepMethods: []
+      };
+    },
+    console: {
+      log(...args) {
+        logs.push(args);
+      }
+    }
+  });
+
+  const state = context.logOverwolfRuntimeState();
+
+  assert.deepEqual(JSON.parse(JSON.stringify(state)), {
+    runtime: 'ow-electron',
+    appUid: 'ow-juice-journal',
+    packageFeedUrl: 'https://electronapi-qa.overwolf.com/packages',
+    usingQaFeed: true,
+    packagesConfigured: ['gep'],
+    gepConfigured: true,
+    gepAvailable: true,
+    missingGepMethods: []
+  });
+  assert.match(JSON.stringify(logs), /OverwolfRuntime/);
+  assert.match(JSON.stringify(logs), /ow-juice-journal/);
+});
+
 test('native bridge lazily creates the supervisor once and starts it on demand', () => {
   const starts = [];
   const createdSupervisors = [];

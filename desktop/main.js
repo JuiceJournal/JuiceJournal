@@ -17,6 +17,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const Store = require('electron-store');
+const DESKTOP_PACKAGE = require('./package.json');
 
 // Modul importlari
 const LogParser = require('./src/modules/logParser');
@@ -45,6 +46,7 @@ const { normalizeNativeBridgeDiagnostic } = require('./src/modules/nativeBridgeD
 const { buildCharacterPoolCommand } = require('./src/modules/nativeBridgeCommandModel');
 const { createNativeBridgeSupervisor } = require('./src/modules/nativeBridgeSupervisor');
 const { createOverwolfGepProducer } = require('./src/modules/overwolfGepProducer');
+const { getOverwolfRuntimeState } = require('./src/modules/overwolfRuntimeModel');
 const DEFAULT_POE_LOG_PATH = GameDetector.DEFAULT_POE_LOG_PATH;
 
 const APP_NAME = 'Juice Journal';
@@ -860,6 +862,17 @@ function getNativeGameInfoProducer() {
   }
 
   return nativeGameInfoProducer;
+}
+
+function logOverwolfRuntimeState() {
+  const runtimeState = getOverwolfRuntimeState({
+    app,
+    argv: process.argv,
+    configuredPackages: DESKTOP_PACKAGE.overwolf?.packages
+  });
+
+  console.log('[OverwolfRuntime]', JSON.stringify(runtimeState));
+  return runtimeState;
 }
 
 function stopNativeGameInfoProducer() {
@@ -3517,6 +3530,7 @@ function setupIPC() {
 app.whenReady().then(() => {
   app.setAppUserModelId(APP_ID);
   app.setName(APP_NAME);
+  logOverwolfRuntimeState();
 
   // API client'i baslat
   const resolvedToken = getDecryptedAuthToken();

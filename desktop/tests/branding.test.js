@@ -53,6 +53,23 @@ test('desktop package and main process point to the branded window metadata', ()
   assert.match(mainProcess, /title:\s*APP_NAME/);
 });
 
+test('desktop package exposes Overwolf runtime scripts and package config', () => {
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+
+  assert.equal(packageJson.scripts['start:overwolf'], 'ow-electron .');
+  assert.equal(packageJson.scripts['dev:overwolf'], 'ow-electron . --dev');
+  assert.equal(
+    packageJson.scripts['dev:overwolf:qa'],
+    'ow-electron . --dev --owepm-packages-url=https://electronapi-qa.overwolf.com/packages'
+  );
+  assert.equal(packageJson.scripts['build:overwolf'], 'npm run bridge:build && ow-electron-builder --win');
+  assert.equal(packageJson.scripts['pack:overwolf'], 'npm run bridge:build && ow-electron-builder --dir');
+  assert.deepEqual(packageJson.overwolf, {
+    packages: ['gep']
+  });
+  assert.equal(packageJson.author.name, 'Furkan Taşçı');
+});
+
 test('desktop window opens large enough to avoid default dashboard scrolling', () => {
   const mainProcess = fs.readFileSync(mainProcessPath, 'utf8');
 
