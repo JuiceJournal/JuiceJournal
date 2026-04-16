@@ -170,7 +170,7 @@ function loadFunctions(functionNames, contextOverrides = {}) {
 
 function loadMainWithMocks({
   app,
-  createNativeGameInfoProducer,
+  createOverwolfGepProducer,
   fs: fsOverride,
   GameDetector: gameDetectorOverride,
   logParser,
@@ -183,9 +183,9 @@ function loadMainWithMocks({
   storeState,
   ...contextOverrides
 } = {}) {
-  const nativeProducerModule = createNativeGameInfoProducer
-    ? { createNativeGameInfoProducer }
-    : require('../src/modules/nativeGameInfoProducer');
+  const overwolfProducerModule = createOverwolfGepProducer
+    ? { createOverwolfGepProducer }
+    : require('../src/modules/overwolfGepProducer');
   const messages = [];
   const emittedActiveCharacterHints = [];
   const runtimeStoreState = {
@@ -233,7 +233,7 @@ function loadMainWithMocks({
         packages: {}
       }
     },
-    createNativeGameInfoProducer: nativeProducerModule.createNativeGameInfoProducer,
+    createOverwolfGepProducer: overwolfProducerModule.createOverwolfGepProducer,
     mainWindow: mainWindow || {
       webContents: {
         send(channel, payload) {
@@ -651,6 +651,7 @@ test('runtime game detection retargets pricing when the detected game matches th
 test('runtime game detection starts the native game info producer for poe2', () => {
   const starts = [];
   const messages = [];
+  const logs = [];
   const capturedProducerOptions = [];
   const gep = { name: 'gep' };
   const storeState = {
@@ -697,7 +698,7 @@ test('runtime game detection starts the native game info producer for poe2', () 
         }
       }
     },
-    createNativeGameInfoProducer(options) {
+    createOverwolfGepProducer(options) {
       capturedProducerOptions.push(options);
       return {
         start: async (payload) => {
@@ -713,6 +714,11 @@ test('runtime game detection starts the native game info producer for poe2', () 
           messages.push({ channel, payload });
         }
       }
+    },
+    console: {
+      log(...args) {
+        logs.push(args);
+      }
     }
   });
 
@@ -727,6 +733,9 @@ test('runtime game detection starts the native game info producer for poe2', () 
     characterName: 'KELLEE'
   };
   capturedProducerOptions[0].emitHint(nativeHint);
+  capturedProducerOptions[0].emitDiagnostic({
+    code: 'overwolf-gep-available'
+  });
 
   assert.deepEqual(JSON.parse(JSON.stringify(starts)), [{
     poeVersion: 'poe2',
@@ -747,6 +756,8 @@ test('runtime game detection starts the native game info producer for poe2', () 
       payload: nativeHint
     }
   ]);
+  assert.match(JSON.stringify(logs), /OverwolfGepDiagnostic/);
+  assert.match(JSON.stringify(logs), /overwolf-gep-available/);
 });
 
 test('runtime game detection does not restart the native game info producer when the mapping is unchanged', async () => {
@@ -881,15 +892,15 @@ test('runtime game detection stops the native game info producer when the detect
 
 test('runtime game detection fails closed when the native gep package is unavailable', async () => {
   const starts = [];
-  const actualCreateNativeGameInfoProducer = require('../src/modules/nativeGameInfoProducer').createNativeGameInfoProducer;
+  const actualCreateOverwolfGepProducer = require('../src/modules/overwolfGepProducer').createOverwolfGepProducer;
   const context = loadMainWithMocks({
     app: {
       overwolf: {
         packages: {}
       }
     },
-    createNativeGameInfoProducer(options) {
-      const producer = actualCreateNativeGameInfoProducer(options);
+    createOverwolfGepProducer(options) {
+      const producer = actualCreateOverwolfGepProducer(options);
 
       return {
         start: async (payload) => {

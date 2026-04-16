@@ -44,7 +44,7 @@ const { deriveNativeCharacterHint } = require('./src/modules/nativeCharacterHint
 const { normalizeNativeBridgeDiagnostic } = require('./src/modules/nativeBridgeDiagnosticModel');
 const { buildCharacterPoolCommand } = require('./src/modules/nativeBridgeCommandModel');
 const { createNativeBridgeSupervisor } = require('./src/modules/nativeBridgeSupervisor');
-const { createNativeGameInfoProducer } = require('./src/modules/nativeGameInfoProducer');
+const { createOverwolfGepProducer } = require('./src/modules/overwolfGepProducer');
 const DEFAULT_POE_LOG_PATH = GameDetector.DEFAULT_POE_LOG_PATH;
 
 const APP_NAME = 'Juice Journal';
@@ -849,9 +849,12 @@ function getNativeGameInfoGameId(version) {
 function getNativeGameInfoProducer() {
   if (!nativeGameInfoProducer) {
     const gep = app?.overwolf?.packages?.gep || null;
-    nativeGameInfoProducer = createNativeGameInfoProducer({
+    nativeGameInfoProducer = createOverwolfGepProducer({
       gep,
       emitHint: emitActiveCharacterHint,
+      emitDiagnostic(payload) {
+        console.log('[OverwolfGepDiagnostic]', JSON.stringify(payload));
+      },
       logger: console
     });
   }
