@@ -43,3 +43,38 @@ test('character payload selects the highest-level character per game as default'
 
   assert.equal(payload.selectedCharacterByGame.poe2, 'league-druid');
 });
+
+test('cached character payload dedupes concurrent loads and reuses warm values until invalidated', async () => {
+  let loadCalls = 0;
+  const user = {
+    id: 'user-1',
+    poeSub: 'poe-sub-1'
+  };
+
+  const loader = async () => {
+    loadCalls += 1;
+    return {
+      characters: [{ id: 'a', name: 'One' }],
+      charactersByGame: { poe1: [], poe2: [] },
+      selectedCharacterByGame: {},
+      syncedAt: '2026-04-16T00:00:00.000Z'
+    };
+  };
+
+  const [first, second] = await Promise.all([
+    poeApiService.getCachedAccountCharacters(user, { loader, ttlMs: 60_000 }),
+    poeApiService.getCachedAccountCharacters(user, { loader, ttlMs: 60_000 })
+  ]);
+
+  assert.equal(loadCalls, 1);
+  assert.deepEqual(first, second);
+
+  const third = await poeApiService.getCachedAccountCharacters(user, { loader, ttlMs: 60_000 });
+  assert.equal(loadCalls, 1);
+  assert.deepEqual(third, first);
+
+  poeApiService.invalidateAccountCharactersCache(user);
+
+  await poeApiService.getCachedAccountCharacters(user, { loader, ttlMs: 60_000 });
+  assert.equal(loadCalls, 2);
+});

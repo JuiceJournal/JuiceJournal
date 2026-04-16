@@ -99,4 +99,4 @@ export default memo(function StrategyTable({ strategies, t }) {
       </div>
     </div>
   );
-}
+});

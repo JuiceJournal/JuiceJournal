@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { priceAPI } from '@/lib/api';
 import { getStorage, setStorage } from '@/lib/utils';
 

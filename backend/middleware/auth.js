@@ -140,6 +140,18 @@ const generateRealtimeToken = (userId) => {
   );
 };
 
+const verifyRealtimeToken = (token) => {
+  const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+
+  if (decoded?.kind !== 'realtime') {
+    const error = new Error('Expected a realtime token');
+    error.code = 'REALTIME_TOKEN_REQUIRED';
+    throw error;
+  }
+
+  return decoded;
+};
+
 const requireRole = (...roles) => (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({
@@ -167,5 +179,6 @@ module.exports = {
   optionalAuth,
   requireRole,
   generateToken,
-  generateRealtimeToken
+  generateRealtimeToken,
+  verifyRealtimeToken
 };

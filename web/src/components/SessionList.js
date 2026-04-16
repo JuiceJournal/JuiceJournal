@@ -100,4 +100,4 @@ export default memo(function SessionList({ sessions, showActions = false, onEndS
       </div>
     </div>
   );
-}
+});

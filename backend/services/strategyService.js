@@ -232,7 +232,7 @@ function buildStrategyAggregate(strategy, options = {}) {
 }
 
 function serializeStrategy(strategy, options = {}) {
-  const aggregate = buildStrategyAggregate(strategy, options);
+  const aggregate = options.aggregateOverride || buildStrategyAggregate(strategy, options);
 
   return {
     id: strategy.id,
@@ -391,31 +391,95 @@ async function loadPublicStrategies(filters = {}) {
       {
         model: StrategyTag,
         as: 'tags',
-      },
-      {
-        model: Session,
-        as: 'sessions',
-        through: { attributes: [] },
-        attributes: [
-          'id',
-          'mapName',
-          'mapTier',
-          'poeVersion',
-          'league',
-          'status',
-          'startedAt',
-          'endedAt',
-          'durationSec',
-          'costChaos',
-          'totalLootChaos',
-          'profitChaos'
-        ],
       }
     ],
     order: [['publishedAt', 'DESC'], ['updatedAt', 'DESC']],
     limit,
     offset
   });
+}
+
+async function loadPublicStrategyMetrics(strategyIds = [], options = {}) {
+  const ids = Array.from(new Set((strategyIds || []).filter(Boolean)));
+  const emptyAggregate = {
+    runCount: 0,
+    totalProfitChaos: 0,
+    totalCostChaos: 0,
+    totalLootChaos: 0,
+    totalDurationSec: 0,
+    avgProfitChaos: 0,
+    avgCostChaos: 0,
+    avgProfitPerHour: 0,
+    lastRunAt: null,
+    trend: [],
+    topLootCategories: [],
+    runHistory: []
+  };
+
+  const metricsMap = new Map(ids.map((id) => [id, { ...emptyAggregate }]));
+  if (ids.length === 0) {
+    return metricsMap;
+  }
+
+  const sessionWhere = {
+    status: 'completed'
+  };
+
+  const year = options.year ? parseInt(options.year, 10) : null;
+  if (year) {
+    sessionWhere.startedAt = {
+      [Op.gte]: new Date(Date.UTC(year, 0, 1)),
+      [Op.lt]: new Date(Date.UTC(year + 1, 0, 1))
+    };
+  }
+
+  const rows = await StrategySession.findAll({
+    where: {
+      strategyId: ids
+    },
+    attributes: [
+      'strategyId',
+      [sequelize.fn('COUNT', sequelize.col('session.id')), 'runCount'],
+      [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('session.profit_chaos')), 0), 'totalProfitChaos'],
+      [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('session.cost_chaos')), 0), 'totalCostChaos'],
+      [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('session.total_loot_chaos')), 0), 'totalLootChaos'],
+      [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('session.duration_sec')), 0), 'totalDurationSec'],
+      [sequelize.fn('COALESCE', sequelize.fn('AVG', sequelize.col('session.profit_chaos')), 0), 'avgProfitChaos'],
+      [sequelize.fn('COALESCE', sequelize.fn('AVG', sequelize.col('session.cost_chaos')), 0), 'avgCostChaos'],
+      [sequelize.fn('MAX', sequelize.col('session.started_at')), 'lastRunAt']
+    ],
+    include: [{
+      model: Session,
+      as: 'session',
+      attributes: [],
+      where: sessionWhere,
+      required: true
+    }],
+    group: ['strategyId'],
+    raw: true
+  });
+
+  for (const row of rows) {
+    const strategyId = row.strategyId;
+    const totalDurationSec = toInteger(row.totalDurationSec);
+    const totalProfitChaos = toNumber(row.totalProfitChaos);
+    metricsMap.set(strategyId, {
+      runCount: toInteger(row.runCount),
+      totalProfitChaos,
+      totalCostChaos: toNumber(row.totalCostChaos),
+      totalLootChaos: toNumber(row.totalLootChaos),
+      totalDurationSec,
+      avgProfitChaos: toNumber(row.avgProfitChaos),
+      avgCostChaos: toNumber(row.avgCostChaos),
+      avgProfitPerHour: totalDurationSec > 0 ? totalProfitChaos / (totalDurationSec / 3600) : 0,
+      lastRunAt: row.lastRunAt || null,
+      trend: [],
+      topLootCategories: [],
+      runHistory: []
+    });
+  }
+
+  return metricsMap;
 }
 
 async function loadPublicStrategyBySlug(slug) {
@@ -575,6 +639,7 @@ module.exports = {
   loadStrategiesForUser,
   loadStrategyByIdForUser,
   loadPublicStrategies,
+  loadPublicStrategyMetrics,
   loadPublicStrategyBySlug,
   normalizeTags,
   normalizeText,

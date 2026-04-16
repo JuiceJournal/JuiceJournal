@@ -2548,6 +2548,23 @@ function handleLogout() {
   return true;
 }
 
+function persistDesktopAuthSession(authCookie) {
+  if (!authCookie) {
+    return false;
+  }
+
+  const encrypted = encryptAuthToken(authCookie);
+  if (encrypted) {
+    store.set('authTokenEncrypted', encrypted);
+    store.set('authToken', null);
+  } else {
+    store.set('authToken', authCookie);
+  }
+
+  apiClient.setToken(authCookie);
+  return true;
+}
+
 /**
  * IPC handler'lari tanimla
  */
@@ -2848,16 +2865,8 @@ function setupIPC() {
   ipcMain.handle('login', async (event, credentials) => {
     try {
       const result = await apiClient.login(credentials);
-      // API yanıt formatı: { success: true, data: { user, token }, error: null }
-      const token = result?.data?.token;
-      if (token) {
-        const encrypted = encryptAuthToken(token);
-        if (encrypted) {
-          store.set('authTokenEncrypted', encrypted);
-        } else {
-          store.set('authToken', token);
-        }
-        apiClient.setToken(token);
+      const authCookie = apiClient.getToken();
+      if (result?.success && persistDesktopAuthSession(authCookie)) {
         store.set('currentUserId', result?.data?.user?.id || null);
         updateOverlayWindow({ character: extractOverlayCharacterFromUser(result?.data?.user) });
         await flushPendingActions();
@@ -2876,15 +2885,8 @@ function setupIPC() {
   ipcMain.handle('register', async (event, payload) => {
     try {
       const result = await apiClient.register(payload);
-      const token = result?.token;
-      if (token) {
-        const encrypted = encryptAuthToken(token);
-        if (encrypted) {
-          store.set('authTokenEncrypted', encrypted);
-        } else {
-          store.set('authToken', token);
-        }
-        apiClient.setToken(token);
+      const authCookie = apiClient.getToken();
+      if (persistDesktopAuthSession(authCookie)) {
         store.set('currentUserId', result?.user?.id || null);
         updateOverlayWindow({ character: extractOverlayCharacterFromUser(result?.user) });
         await flushPendingActions();
@@ -2939,14 +2941,8 @@ function setupIPC() {
           redirectUri,
           state,
         });
-        if (result?.success && result?.data?.token) {
-          const encrypted = encryptAuthToken(result.data.token);
-          if (encrypted) {
-            store.set('authTokenEncrypted', encrypted);
-          } else {
-            store.set('authToken', result.data.token);
-          }
-          apiClient.setToken(result.data.token);
+        const authCookie = apiClient.getToken();
+        if (result?.success && persistDesktopAuthSession(authCookie)) {
           store.set('currentUserId', result.data.user?.id || null);
           updateOverlayWindow({ character: extractOverlayCharacterFromUser(result.data.user) });
           await flushPendingActions();
@@ -2966,14 +2962,8 @@ function setupIPC() {
         codeVerifier,
       });
 
-      if (result?.success && result?.data?.token) {
-        const encrypted = encryptAuthToken(result.data.token);
-        if (encrypted) {
-          store.set('authTokenEncrypted', encrypted);
-        } else {
-          store.set('authToken', result.data.token);
-        }
-        apiClient.setToken(result.data.token);
+      const authCookie = apiClient.getToken();
+      if (result?.success && persistDesktopAuthSession(authCookie)) {
         store.set('currentUserId', result.data.user?.id || null);
         updateOverlayWindow({ character: extractOverlayCharacterFromUser(result.data.user) });
         await flushPendingActions();

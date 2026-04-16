@@ -18,7 +18,7 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
-    "axios": "1.13.6",
+    "axios": "1.15.0",
     "chokidar": "^3.5.3",
     "electron-store": "^8.1.0",
     "node-global-key-listener": "^0.1.1",
@@ -56,5 +56,8 @@
     "path-of-exile"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "overrides": {
+    "follow-redirects": "1.16.0"
+  }
 }
