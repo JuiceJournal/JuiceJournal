@@ -267,3 +267,25 @@ test('parsed artifact diagnostics remain bounded and stable after parser enrichm
 
   assert.equal(parsedMessages.length <= 20, true);
 });
+
+test('native bridge emits memory feasibility diagnostics when explicitly commanded', async (t) => {
+  const bridge = startBridgeProcess();
+  t.after(async () => {
+    await shutdownBridge(bridge);
+  });
+
+  await waitFor(() => bridge.lines.some((line) => line?.message === 'window-probe'), {
+    description: 'initial diagnostics'
+  });
+
+  bridge.child.stdin.write('{"type":"run-memory-feasibility","poeVersion":"poe2","targets":["KELLEE"]}\n');
+
+  const memoryDiagnostic = await waitFor(
+    () => bridge.lines.find((line) => line?.message === 'memory-feasibility-probe'),
+    { description: 'memory-feasibility-probe diagnostic' }
+  );
+
+  assert.equal(memoryDiagnostic.type, 'bridge-diagnostic');
+  assert.equal(memoryDiagnostic.data.poeVersion, 'poe2');
+  assert.equal(memoryDiagnostic.data.targetCount, 1);
+});

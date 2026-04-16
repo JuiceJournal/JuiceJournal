@@ -191,6 +191,7 @@ Current bridge phase supports:
   - `artifact-config-parse`
   - `artifact-state-parse`
   - `artifact-loaded-mtx-parse`
+- explicit diagnostics-only `run-memory-feasibility` spike command
 - `process-tree-probe` diagnostics
 - high-confidence hint transport path in desktop main
 - native-backed `active-character-hint` promotion only when one low-risk native source yields one exact match

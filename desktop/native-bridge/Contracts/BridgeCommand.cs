@@ -7,7 +7,9 @@ public sealed record BridgeCommand(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("detectedAt")] DateTimeOffset? DetectedAt,
     [property: JsonPropertyName("characters")] IReadOnlyList<BridgeCharacterPoolEntry>? Characters,
-    [property: JsonPropertyName("accountHint")] BridgeAccountHint? AccountHint)
+    [property: JsonPropertyName("accountHint")] BridgeAccountHint? AccountHint,
+    [property: JsonPropertyName("poeVersion")] string? PoeVersion,
+    [property: JsonPropertyName("targets")] IReadOnlyList<string>? Targets)
 {
     public static BridgeCommand? Parse(string line)
     {
@@ -19,22 +21,45 @@ public sealed record BridgeCommand(
         try
         {
             var command = JsonSerializer.Deserialize<BridgeCommand>(line);
-            if (command?.Type != "set-character-pool" || command.Characters is null)
+            if (command is null)
             {
                 return null;
             }
 
-            if (!command.Characters.All(character => character is not null && character.IsValid()))
+            if (command.Type == "set-character-pool")
             {
-                return null;
+                if (command.Characters is null || !command.Characters.All(character => character is not null && character.IsValid()))
+                {
+                    return null;
+                }
+
+                if (command.AccountHint is not null && !command.AccountHint.IsValid())
+                {
+                    return null;
+                }
+
+                return command;
             }
 
-            if (command.AccountHint is not null && !command.AccountHint.IsValid())
+            if (command.Type == "run-memory-feasibility")
             {
-                return null;
+                var normalizedVersion = command.PoeVersion?.Trim().ToLowerInvariant();
+                if (normalizedVersion is not ("poe1" or "poe2") || command.Targets is null)
+                {
+                    return null;
+                }
+
+                return command with
+                {
+                    PoeVersion = normalizedVersion,
+                    Targets = command.Targets
+                        .Where(target => !string.IsNullOrWhiteSpace(target))
+                        .Select(target => target.Trim())
+                        .ToArray()
+                };
             }
 
-            return command;
+            return null;
         }
         catch
         {

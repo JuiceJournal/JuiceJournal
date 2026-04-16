@@ -2,7 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  buildCharacterPoolCommand
+  buildCharacterPoolCommand,
+  buildMemoryFeasibilityCommand
 } = require('../src/modules/nativeBridgeCommandModel');
 
 test('buildCharacterPoolCommand serializes a full snapshot replace command', () => {
@@ -89,4 +90,14 @@ test('buildCharacterPoolCommand serializes a supported account hint alongside th
     className: 'Monk2',
     level: 92
   });
+});
+
+test('buildMemoryFeasibilityCommand serializes a read-only spike command', () => {
+  const command = buildMemoryFeasibilityCommand({
+    poeVersion: 'poe2',
+    targets: ['KELLEE']
+  });
+
+  assert.equal(command.type, 'run-memory-feasibility');
+  assert.deepEqual(command.targets, ['KELLEE']);
 });

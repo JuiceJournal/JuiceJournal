@@ -39,6 +39,20 @@ async Task ProcessBridgeCommandsAsync()
             return;
         }
 
+        if (command.Type == "run-memory-feasibility")
+        {
+            Console.WriteLine(
+                BridgeMessage.Diagnostic(
+                    "info",
+                    "memory-feasibility-probe",
+                    new Dictionary<string, object?>
+                    {
+                        ["poeVersion"] = command.PoeVersion,
+                        ["targetCount"] = command.Targets?.Count ?? 0
+                    }).ToJson());
+            continue;
+        }
+
         if (command.Characters is null)
         {
             continue;

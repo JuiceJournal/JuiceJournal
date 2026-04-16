@@ -74,7 +74,19 @@
     };
   }
 
+  function buildMemoryFeasibilityCommand({ poeVersion, targets = [] } = {}) {
+    return {
+      type: 'run-memory-feasibility',
+      detectedAt: new Date().toISOString(),
+      poeVersion: hasRequiredString(poeVersion) ? poeVersion.trim().toLowerCase() : null,
+      targets: Array.isArray(targets)
+        ? targets.filter((value) => typeof value === 'string' && value.trim()).map((value) => value.trim())
+        : []
+    };
+  }
+
   return {
-    buildCharacterPoolCommand
+    buildCharacterPoolCommand,
+    buildMemoryFeasibilityCommand
   };
 });
