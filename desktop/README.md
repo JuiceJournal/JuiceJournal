@@ -22,11 +22,20 @@ Windows'ta genelde ek kurulum gerekmez.
 # Gelistirme modu
 npm run dev
 
+# Overwolf Electron ile calistir
+npm run dev:overwolf
+
+# Overwolf DEV-QA package feed ile calistir
+npm run dev:overwolf:qa
+
 # Build
 npm run build
 
 # Windows icin build
 npm run build:win
+
+# Overwolf Electron build
+npm run build:overwolf
 ```
 
 ## Ozellikler
@@ -136,6 +145,65 @@ Current scope:
 - Overwolf spike fail-closed
 - GEP yoksa mevcut davranis bozulmamali
 - PoE1 migration bu fazin parcasi degil
+
+## Overwolf Runtime Notes
+
+Repo artik iki runtime tasir:
+
+- plain Electron
+- Overwolf Electron
+
+Plain Electron varsayilan local path olmaya devam eder.
+Overwolf path submission ve local Overwolf validation icin ayridir.
+
+Package-level Overwolf config:
+
+- `package.json > overwolf.packages = ["gep"]`
+- stable app metadata icin `author.name` tanimli
+
+Runtime startup'ta main process su diagnostigi loglar:
+
+- `[OverwolfRuntime]`
+
+Bu payload sunlari gosterir:
+
+- `runtime`
+- `appUid`
+- `packageFeedUrl`
+- `usingQaFeed`
+- `packagesConfigured`
+- `gepConfigured`
+- `gepAvailable`
+- `missingGepMethods`
+
+Beklenen local validation:
+
+1. `npm run dev:overwolf`
+2. log icinde `[OverwolfRuntime]` gor
+3. `runtime` alaninin `ow-electron` oldugunu dogrula
+4. `packagesConfigured` icinde `gep` oldugunu dogrula
+5. PoE2 ortaminda producer loglarinda `[OverwolfGepDiagnostic]` satirlarini kontrol et
+
+QA feed validation:
+
+1. `npm run dev:overwolf:qa`
+2. `[OverwolfRuntime]` logunda:
+   - `usingQaFeed: true`
+   - `packageFeedUrl: "https://electronapi-qa.overwolf.com/packages"`
+
+Overwolf release oncesi kritik notlar:
+
+- Electron FAQ'ya gore bu app Overwolf tarafinda ayri bir developer-console app olacak
+- Electron FAQ'ya gore code-signing certificate gerekli
+- GEP docs'a gore PoE2 PROD rollout oncesi DevRel bilgilendirilmeli
+
+Submission oncesi senden istenecek bilgiler buyuk olasilikla bunlar olacak:
+
+1. Overwolf developer console access
+2. app registration visibility / app id
+3. test channel veya DEV package feed kullanimi icin dogrulama
+4. code-signing certificate plani
+5. website / support / privacy / app listing kopyalari
 
 ## Native Bridge
 
