@@ -1,7 +1,7 @@
 # Overwolf GEP Feasibility Design
 
 Date: 2026-04-16
-Status: Draft for review
+Status: Approved for spike implementation
 Scope: Feasibility and integration direction for using Overwolf GEP as the active-character identity source
 
 ## Goal
@@ -169,6 +169,20 @@ Not yet, but likely soon:
 We should not ask for all of that up front.
 
 We only ask when the implementation actually reaches those steps.
+
+## Immediate User Action Policy
+
+During the spike we only ask the user for Overwolf-side actions when the code path actually reaches them.
+
+Current order:
+
+1. local capability spike in code
+2. verify whether `app.overwolf.packages.gep` is present at runtime
+3. only then ask for:
+   - developer console access
+   - app registration visibility
+   - DEV package feed confirmation
+4. only near rollout ask for DevRel / PROD movement
 
 ## Risks
 

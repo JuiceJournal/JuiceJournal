@@ -102,6 +102,41 @@ node --test tests/main-settings.test.js
 npm run test:smoke
 ```
 
+## Overwolf GEP Feasibility
+
+Bu spike sadece `PoE2` icin Overwolf GEP feasibility'yi dogrular.
+
+Beklenen runtime:
+
+- `app.overwolf.packages.gep` mevcut olmali
+- paket su metotlari saglamali:
+  - `setRequiredFeatures`
+  - `getInfo`
+  - `on`
+  - `removeListener`
+- producer baslangicinda main process stdout'a `[OverwolfGepDiagnostic]` satirlari dusmeli
+- ilk hedef `me.character_name` bilgisini mevcut `active-character-hint` yoluna map etmek
+
+DEV ortam notu:
+
+- Overwolf Electron docs'a gore DEV-only game package feed'i icin uygulama su argumanla acilmali:
+  - `--owepm-packages-url=https://electronapi-qa.overwolf.com/packages`
+- PoE2 PROD'a alininca bu arguman kaldirilmali
+
+Kullanicidan daha sonra istenecek olasi adimlar:
+
+1. Overwolf developer account / console erisimi
+2. app registration veya mevcut app visibility dogrulamasi
+3. DEV package feed ile local run dogrulamasi
+4. PROD rollout oncesi DevRel koordinasyonu
+
+Current scope:
+
+- mevcut native bridge korunuyor
+- Overwolf spike fail-closed
+- GEP yoksa mevcut davranis bozulmamali
+- PoE1 migration bu fazin parcasi degil
+
 ## Native Bridge
 
 ```bash
