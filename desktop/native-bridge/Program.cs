@@ -15,6 +15,9 @@ var loadedMtxParser = new LoadedMtxParser();
 var memoryProbe = new MemoryProbe();
 var memoryStringScanner = new MemoryStringScanner();
 var memoryFeasibilityCoordinator = new MemoryFeasibilityCoordinator();
+var memoryRegionFingerprintProbe = new MemoryRegionFingerprintProbe();
+var memoryTextIslandExtractor = new MemoryTextIslandExtractor();
+var memoryNeighborhoodProfiler = new MemoryNeighborhoodProfiler();
 var characterPool = Array.Empty<BridgeCharacterPoolEntry>();
 var accountHint = (BridgeAccountHint?)null;
 var commandReader = new BridgeCommandReader();
@@ -97,7 +100,16 @@ void RunMemoryFeasibility(BridgeCommand command)
                 {
                     ["status"] = "invalid-version",
                     ["poeVersion"] = command.PoeVersion,
-                    ["targetCount"] = targets.Length
+                    ["targetCount"] = targets.Length,
+                    ["regionCount"] = 0,
+                    ["scannedBytes"] = 0UL,
+                    ["hitCount"] = 0,
+                    ["classification"] = null,
+                    ["characterName"] = null,
+                    ["source"] = null,
+                    ["fingerprints"] = Array.Empty<IReadOnlyDictionary<string, object?>>(),
+                    ["hits"] = Array.Empty<IReadOnlyDictionary<string, object?>>(),
+                    ["neighborhoods"] = Array.Empty<IReadOnlyDictionary<string, object?>>()
                 }).ToJson());
         return;
     }
@@ -113,13 +125,24 @@ void RunMemoryFeasibility(BridgeCommand command)
                 {
                     ["status"] = "no-process",
                     ["poeVersion"] = poeVersion,
-                    ["targetCount"] = targets.Length
+                    ["targetCount"] = targets.Length,
+                    ["regionCount"] = 0,
+                    ["scannedBytes"] = 0UL,
+                    ["hitCount"] = 0,
+                    ["classification"] = null,
+                    ["characterName"] = null,
+                    ["source"] = null,
+                    ["fingerprints"] = Array.Empty<IReadOnlyDictionary<string, object?>>(),
+                    ["hits"] = Array.Empty<IReadOnlyDictionary<string, object?>>(),
+                    ["neighborhoods"] = Array.Empty<IReadOnlyDictionary<string, object?>>()
                 }).ToJson());
         return;
     }
 
     var regions = memoryProbe.CaptureReadableRegions(processId.Value);
     var hits = new List<MemoryFeasibilityHit>();
+    var fingerprints = new List<IReadOnlyDictionary<string, object?>>();
+    var neighborhoods = new List<IReadOnlyDictionary<string, object?>>();
     ulong scannedBytes = 0;
 
     foreach (var region in regions.Take(64))
@@ -127,8 +150,11 @@ void RunMemoryFeasibility(BridgeCommand command)
         var buffer = memoryProbe.ReadRegion(processId.Value, region);
         scannedBytes += (ulong)buffer.Length;
         hits.AddRange(memoryStringScanner.Scan(region.BaseAddress, buffer, targets));
+        fingerprints.Add(memoryRegionFingerprintProbe.Summarize(region.BaseAddress, buffer));
+        var islands = memoryTextIslandExtractor.Extract(buffer);
+        neighborhoods.AddRange(memoryNeighborhoodProfiler.BuildProfiles(region.BaseAddress, islands));
 
-        if (hits.Count >= 20)
+        if (hits.Count >= 20 || neighborhoods.Count >= 8 || fingerprints.Count >= 8)
         {
             break;
         }
@@ -164,6 +190,7 @@ void RunMemoryFeasibility(BridgeCommand command)
                 ["classification"] = classificationType,
                 ["characterName"] = classificationCharacterName,
                 ["source"] = classificationSource,
+                ["fingerprints"] = fingerprints.Take(8).ToArray(),
                 ["hits"] = hits
                     .Take(10)
                     .Select(hit => new Dictionary<string, object?>
@@ -174,7 +201,8 @@ void RunMemoryFeasibility(BridgeCommand command)
                         ["encoding"] = hit.Encoding,
                         ["snippet"] = hit.Snippet
                     })
-                    .ToArray()
+                    .ToArray(),
+                ["neighborhoods"] = neighborhoods.Take(8).ToArray()
             }).ToJson());
 }
 

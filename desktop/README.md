@@ -196,6 +196,8 @@ Current bridge phase supports:
   - safe readable region filtering
   - bounded region reads
   - target string hit counting
+  - region fingerprints
+  - neighborhood summaries around extracted text islands
 - `process-tree-probe` diagnostics
 - high-confidence hint transport path in desktop main
 - native-backed `active-character-hint` promotion only when one low-risk native source yields one exact match

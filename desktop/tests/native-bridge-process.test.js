@@ -288,4 +288,7 @@ test('native bridge emits memory feasibility diagnostics when explicitly command
   assert.equal(memoryDiagnostic.type, 'bridge-diagnostic');
   assert.equal(memoryDiagnostic.data.poeVersion, 'poe2');
   assert.equal(memoryDiagnostic.data.targetCount, 1);
+  assert.equal(Array.isArray(memoryDiagnostic.data.hits), true);
+  assert.equal(Array.isArray(memoryDiagnostic.data.neighborhoods), true);
+  assert.equal(typeof memoryDiagnostic.data.regionCount, 'number');
 });
