@@ -12,6 +12,9 @@ var hintResolver = new HintResolver();
 var productionConfigParser = new ProductionConfigParser();
 var productionStateParser = new ProductionStateParser();
 var loadedMtxParser = new LoadedMtxParser();
+var memoryProbe = new MemoryProbe();
+var memoryStringScanner = new MemoryStringScanner();
+var memoryFeasibilityCoordinator = new MemoryFeasibilityCoordinator();
 var characterPool = Array.Empty<BridgeCharacterPoolEntry>();
 var accountHint = (BridgeAccountHint?)null;
 var commandReader = new BridgeCommandReader();
@@ -41,15 +44,7 @@ async Task ProcessBridgeCommandsAsync()
 
         if (command.Type == "run-memory-feasibility")
         {
-            Console.WriteLine(
-                BridgeMessage.Diagnostic(
-                    "info",
-                    "memory-feasibility-probe",
-                    new Dictionary<string, object?>
-                    {
-                        ["poeVersion"] = command.PoeVersion,
-                        ["targetCount"] = command.Targets?.Count ?? 0
-                    }).ToJson());
+            RunMemoryFeasibility(command);
             continue;
         }
 
@@ -71,6 +66,150 @@ async Task ProcessBridgeCommandsAsync()
 
         EmitHintIfAvailable();
     }
+}
+
+void RunMemoryFeasibility(BridgeCommand command)
+{
+    var poeVersion = command.PoeVersion?.Trim().ToLowerInvariant();
+    var targets = (command.Targets ?? [])
+        .Where(target => !string.IsNullOrWhiteSpace(target))
+        .Select(target => target.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    if ((targets.Length == 0) && !string.IsNullOrWhiteSpace(poeVersion))
+    {
+        targets = characterPool
+            .Where(character => string.Equals(character.PoeVersion, poeVersion, StringComparison.OrdinalIgnoreCase))
+            .Select(character => character.CharacterName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    if (poeVersion is not ("poe1" or "poe2"))
+    {
+        Console.WriteLine(
+            BridgeMessage.Diagnostic(
+                "info",
+                "memory-feasibility-probe",
+                new Dictionary<string, object?>
+                {
+                    ["status"] = "invalid-version",
+                    ["poeVersion"] = command.PoeVersion,
+                    ["targetCount"] = targets.Length
+                }).ToJson());
+        return;
+    }
+
+    var processId = FindPoeProcessId(poeVersion);
+    if (processId is null)
+    {
+        Console.WriteLine(
+            BridgeMessage.Diagnostic(
+                "info",
+                "memory-feasibility-probe",
+                new Dictionary<string, object?>
+                {
+                    ["status"] = "no-process",
+                    ["poeVersion"] = poeVersion,
+                    ["targetCount"] = targets.Length
+                }).ToJson());
+        return;
+    }
+
+    var regions = memoryProbe.CaptureReadableRegions(processId.Value);
+    var hits = new List<MemoryFeasibilityHit>();
+    nuint scannedBytes = 0;
+
+    foreach (var region in regions.Take(64))
+    {
+        var buffer = memoryProbe.ReadRegion(processId.Value, region);
+        scannedBytes += (nuint)buffer.Length;
+        hits.AddRange(memoryStringScanner.Scan(region.BaseAddress, buffer, targets));
+
+        if (hits.Count >= 20)
+        {
+            break;
+        }
+    }
+
+    var classification = memoryFeasibilityCoordinator.Classify(
+        poeVersion,
+        hits,
+        characterPool);
+
+    Console.WriteLine(
+        BridgeMessage.Diagnostic(
+            "info",
+            "memory-feasibility-probe",
+            new Dictionary<string, object?>
+            {
+                ["status"] = "completed",
+                ["poeVersion"] = poeVersion,
+                ["processId"] = processId.Value,
+                ["targetCount"] = targets.Length,
+                ["regionCount"] = regions.Count,
+                ["scannedBytes"] = scannedBytes,
+                ["hitCount"] = hits.Count,
+                ["classification"] = classification,
+                ["hits"] = hits
+                    .Take(10)
+                    .Select(hit => new Dictionary<string, object?>
+                    {
+                        ["target"] = hit.Target,
+                        ["baseAddress"] = $"0x{hit.BaseAddress:X}",
+                        ["offset"] = hit.Offset,
+                        ["encoding"] = hit.Encoding,
+                        ["snippet"] = hit.Snippet
+                    })
+                    .ToArray()
+            }).ToJson());
+}
+
+int? FindPoeProcessId(string poeVersion)
+{
+    var processTreeData = processTreeProbe.Capture();
+    if (!processTreeData.TryGetValue("processes", out var processesValue)
+        || processesValue is not IEnumerable<IReadOnlyDictionary<string, object?>> processes)
+    {
+        return null;
+    }
+
+    foreach (var process in processes)
+    {
+        if (!process.TryGetValue("isPoeProcess", out var isPoeProcessValue)
+            || isPoeProcessValue is not true)
+        {
+            continue;
+        }
+
+        var executablePath = process.TryGetValue("executablePath", out var executablePathValue)
+            ? executablePathValue as string
+            : null;
+
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            continue;
+        }
+
+        var isRequestedVersion = poeVersion == "poe2"
+            ? executablePath.Contains("Path of Exile 2", StringComparison.OrdinalIgnoreCase)
+            : executablePath.Contains("Path of Exile", StringComparison.OrdinalIgnoreCase)
+                && !executablePath.Contains("Path of Exile 2", StringComparison.OrdinalIgnoreCase);
+
+        if (!isRequestedVersion)
+        {
+            continue;
+        }
+
+        if (process.TryGetValue("id", out var idValue) && idValue is int processId)
+        {
+            return processId;
+        }
+    }
+
+    return null;
 }
 
 void EmitTransitionDiagnostics(TransitionProbe probe)

@@ -34,4 +34,18 @@ public sealed class MemoryStringScannerTests
 
         Assert.Empty(hits);
     }
+
+    [Fact]
+    public void Scan_ReturnsUtf16HitsForTargetNames()
+    {
+        var scanner = new MemoryStringScanner();
+        var buffer = System.Text.Encoding.Unicode.GetBytes("xxxxKELLEEyyyy");
+
+        var hits = scanner.Scan(
+            baseAddress: (nuint)0x1000,
+            buffer: buffer,
+            targets: ["KELLEE"]);
+
+        Assert.Contains(hits, hit => hit.Target == "KELLEE" && hit.Encoding == "utf16le");
+    }
 }

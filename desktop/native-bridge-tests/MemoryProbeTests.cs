@@ -15,7 +15,7 @@ public sealed class MemoryProbeTests
                 new MemoryProbe.MemoryRegion(0x2000, 4096, "MEM_RESERVE", "PAGE_READWRITE", "MEM_PRIVATE"),
                 new MemoryProbe.MemoryRegion(0x3000, 4096, "MEM_COMMIT", "PAGE_NOACCESS", "MEM_PRIVATE")
             ],
-            readProvider: (_, _) => Array.Empty<byte>());
+            readProvider: (_, _, _) => Array.Empty<byte>());
 
         var regions = probe.CaptureReadableRegions(processId: 1234);
 
@@ -33,7 +33,7 @@ public sealed class MemoryProbeTests
                 new MemoryProbe.MemoryRegion(0x1000, 65536, "MEM_COMMIT", "PAGE_READWRITE", "MEM_PRIVATE"),
                 new MemoryProbe.MemoryRegion(0x2000, 65536, "MEM_COMMIT", "PAGE_READWRITE", "MEM_PRIVATE")
             ],
-            readProvider: (_, _) => Array.Empty<byte>());
+            readProvider: (_, _, _) => Array.Empty<byte>());
 
         var regions = probe.CaptureReadableRegions(processId: 1234, maxTotalBytes: 65536);
 

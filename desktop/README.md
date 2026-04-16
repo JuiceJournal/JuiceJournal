@@ -192,6 +192,10 @@ Current bridge phase supports:
   - `artifact-state-parse`
   - `artifact-loaded-mtx-parse`
 - explicit diagnostics-only `run-memory-feasibility` spike command
+- read-only memory feasibility diagnostics:
+  - safe readable region filtering
+  - bounded region reads
+  - target string hit counting
 - `process-tree-probe` diagnostics
 - high-confidence hint transport path in desktop main
 - native-backed `active-character-hint` promotion only when one low-risk native source yields one exact match
