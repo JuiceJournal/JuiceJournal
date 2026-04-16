@@ -39,7 +39,8 @@ public sealed class MemoryProbe
         {
             if (!string.Equals(region.State, "MEM_COMMIT", StringComparison.Ordinal)
                 || !string.Equals(region.Type, "MEM_PRIVATE", StringComparison.Ordinal)
-                || region.Protect.Contains("NOACCESS", StringComparison.OrdinalIgnoreCase))
+                || region.Protect.Contains("NOACCESS", StringComparison.OrdinalIgnoreCase)
+                || region.Protect.Contains("PAGE_GUARD", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -83,16 +84,12 @@ public sealed class MemoryProbe
 
             while (VirtualQueryEx(handle, address, out var info, infoSize) != 0)
             {
-                var state = info.State;
-                var protect = info.Protect;
-                var type = info.Type;
-
                 regions.Add(new MemoryRegion(
                     BaseAddress: (nuint)info.BaseAddress,
                     Size: (nuint)info.RegionSize,
-                    State: state == MemCommit ? "MEM_COMMIT" : state.ToString("X"),
-                    Protect: FormatProtect(protect),
-                    Type: type == MemPrivate ? "MEM_PRIVATE" : type.ToString("X")));
+                    State: info.State == MemCommit ? "MEM_COMMIT" : $"0x{info.State:X}",
+                    Protect: FormatProtect(info.Protect),
+                    Type: info.Type == MemPrivate ? "MEM_PRIVATE" : $"0x{info.Type:X}"));
 
                 var nextAddress = info.BaseAddress + info.RegionSize;
                 if (nextAddress <= address)
@@ -128,12 +125,10 @@ public sealed class MemoryProbe
                 return [];
             }
 
-            if ((int)bytesRead == buffer.Length)
-            {
-                return buffer;
-            }
-
-            return buffer.Take((int)bytesRead).ToArray();
+            var actualBytesRead = (int)Math.Min((nuint)buffer.Length, bytesRead);
+            return actualBytesRead == buffer.Length
+                ? buffer
+                : buffer.Take(actualBytesRead).ToArray();
         }
         finally
         {

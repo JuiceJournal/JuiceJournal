@@ -120,12 +120,12 @@ void RunMemoryFeasibility(BridgeCommand command)
 
     var regions = memoryProbe.CaptureReadableRegions(processId.Value);
     var hits = new List<MemoryFeasibilityHit>();
-    nuint scannedBytes = 0;
+    ulong scannedBytes = 0;
 
     foreach (var region in regions.Take(64))
     {
         var buffer = memoryProbe.ReadRegion(processId.Value, region);
-        scannedBytes += (nuint)buffer.Length;
+        scannedBytes += (ulong)buffer.Length;
         hits.AddRange(memoryStringScanner.Scan(region.BaseAddress, buffer, targets));
 
         if (hits.Count >= 20)
@@ -138,6 +138,15 @@ void RunMemoryFeasibility(BridgeCommand command)
         poeVersion,
         hits,
         characterPool);
+    var classificationType = classification is not null && classification.TryGetValue("classification", out var classificationValue)
+        ? classificationValue as string
+        : null;
+    var classificationCharacterName = classification is not null && classification.TryGetValue("characterName", out var classificationCharacterValue)
+        ? classificationCharacterValue as string
+        : null;
+    var classificationSource = classification is not null && classification.TryGetValue("source", out var classificationSourceValue)
+        ? classificationSourceValue as string
+        : null;
 
     Console.WriteLine(
         BridgeMessage.Diagnostic(
@@ -152,7 +161,9 @@ void RunMemoryFeasibility(BridgeCommand command)
                 ["regionCount"] = regions.Count,
                 ["scannedBytes"] = scannedBytes,
                 ["hitCount"] = hits.Count,
-                ["classification"] = classification,
+                ["classification"] = classificationType,
+                ["characterName"] = classificationCharacterName,
+                ["source"] = classificationSource,
                 ["hits"] = hits
                     .Take(10)
                     .Select(hit => new Dictionary<string, object?>
