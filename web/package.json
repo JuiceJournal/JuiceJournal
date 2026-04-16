@@ -9,10 +9,10 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "next": "15.5.14",
+    "next": "15.5.15",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "axios": "1.13.6",
+    "axios": "1.15.0",
     "recharts": "^2.10.3",
     "ws": "^8.14.2",
     "date-fns": "^3.0.0",
@@ -26,9 +26,12 @@
   },
   "devDependencies": {
     "eslint": "^8.56.0",
-    "eslint-config-next": "15.5.14",
+    "eslint-config-next": "15.5.15",
     "@types/node": "^20.10.5",
     "@types/react": "^18.2.45",
     "typescript": "^5.3.3"
+  },
+  "overrides": {
+    "follow-redirects": "1.16.0"
   }
 }

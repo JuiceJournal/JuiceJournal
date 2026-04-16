@@ -18,6 +18,8 @@ const POE_API_BASE = 'https://api.pathofexile.com';
 const RATE_LIMIT_SAFETY_MS = 250;
 
 let lastRequestAt = 0;
+const CHARACTER_CACHE_TTL_MS = 30_000;
+const characterPayloadCache = new Map();
 
 async function throttle() {
   const elapsed = Date.now() - lastRequestAt;
@@ -204,6 +206,66 @@ async function getAccountCharacters(user) {
   });
 }
 
+function getCharacterCacheKey(user) {
+  if (!user?.id) {
+    return null;
+  }
+
+  return [
+    user.id,
+    user.poeSub || 'no-poe-sub',
+    user.poeMock ? 'mock' : 'live'
+  ].join(':');
+}
+
+function invalidateAccountCharactersCache(user) {
+  const key = getCharacterCacheKey(user);
+  if (!key) {
+    return false;
+  }
+
+  return characterPayloadCache.delete(key);
+}
+
+async function getCachedAccountCharacters(user, { loader = getAccountCharacters, ttlMs = CHARACTER_CACHE_TTL_MS } = {}) {
+  const key = getCharacterCacheKey(user);
+  if (!key) {
+    return loader(user);
+  }
+
+  const now = Date.now();
+  const existing = characterPayloadCache.get(key);
+  if (existing?.value && (now - existing.cachedAt) < ttlMs) {
+    return existing.value;
+  }
+
+  if (existing?.promise) {
+    return existing.promise;
+  }
+
+  const pending = Promise.resolve(loader(user))
+    .then((value) => {
+      characterPayloadCache.set(key, {
+        value,
+        cachedAt: Date.now(),
+        promise: null
+      });
+      return value;
+    })
+    .catch((error) => {
+      characterPayloadCache.delete(key);
+      throw error;
+    });
+
+  characterPayloadCache.set(key, {
+    value: null,
+    cachedAt: 0,
+    promise: pending
+  });
+
+  return pending;
+}
+
 function buildMockStashTab(stashId) {
   const base = MOCK_STASHES.find((s) => s.id === stashId) || {
     id: stashId,
@@ -295,10 +357,12 @@ async function getStashTabsBatch(user, league, stashIds = []) {
 module.exports = {
   authenticatedRequest,
   buildCharacterPayload,
+  getCachedAccountCharacters,
   getAccountCharacters,
   listStashTabs,
   listCharacters,
   getStashTab,
   getStashTabsBatch,
+  invalidateAccountCharactersCache,
   normalizeCharacters,
 };

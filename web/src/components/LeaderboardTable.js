@@ -86,4 +86,4 @@ export default memo(function LeaderboardTable({ data, currentUserId }) {
       </div>
     </div>
   );
-}
+});

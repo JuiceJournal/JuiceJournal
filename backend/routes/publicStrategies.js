@@ -2,6 +2,7 @@ const express = require('express');
 const { param, query, validationResult } = require('express-validator');
 const {
   loadPublicStrategies,
+  loadPublicStrategyMetrics,
   loadPublicStrategyBySlug,
   serializeStrategy,
 } = require('../services/strategyService');
@@ -65,6 +66,10 @@ router.get('/',
     try {
       const strategies = await loadPublicStrategies(req.query);
       const year = req.query.year ? parseInt(req.query.year, 10) : null;
+      const metricsByStrategyId = await loadPublicStrategyMetrics(
+        strategies.map((strategy) => strategy.id),
+        { year }
+      );
       const search = req.query.search ? req.query.search.trim().toLowerCase() : null;
       const author = req.query.author ? req.query.author.trim().toLowerCase() : null;
       const tagFilters = req.query.tag
@@ -72,7 +77,10 @@ router.get('/',
         : [];
 
       const filtered = strategies
-        .map((strategy) => serializeStrategy(strategy, { year }))
+        .map((strategy) => serializeStrategy(strategy, {
+          year,
+          aggregateOverride: metricsByStrategyId.get(strategy.id)
+        }))
         .filter((strategy) => strategy.metrics.runCount > 0)
         .filter((strategy) => {
           if (tagFilters.length > 0) {

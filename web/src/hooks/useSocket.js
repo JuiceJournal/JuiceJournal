@@ -12,16 +12,14 @@ function resolveWsUrl() {
       );
     }
     if (!envUrl.startsWith('wss://')) {
-      console.error(
-        `[useSocket] NEXT_PUBLIC_WS_URL must use wss:// in production, got: ${envUrl}`
+      throw new Error(
+        `NEXT_PUBLIC_WS_URL must use wss:// in production, got: ${envUrl}`
       );
     }
     return envUrl;
   }
   return envUrl || 'wss://localhost:3001';
 }
-
-const WS_URL = resolveWsUrl();
 
 export function useSocket() {
   const [connected, setConnected] = useState(false);
@@ -38,6 +36,7 @@ export function useSocket() {
     // Establish WebSocket connection
     const connect = async () => {
       try {
+        const wsUrl = resolveWsUrl();
         const tokenResponse = await authAPI.getRealtimeToken();
         const token = tokenResponse?.data?.token;
         if (!token) {
@@ -45,7 +44,7 @@ export function useSocket() {
           return;
         }
 
-        const ws = new WebSocket(WS_URL);
+        const ws = new WebSocket(wsUrl);
         socketRef.current = ws;
 
         ws.onopen = () => {

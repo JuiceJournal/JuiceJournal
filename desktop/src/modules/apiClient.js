@@ -74,7 +74,7 @@ class APIClient {
     this.client.interceptors.request.use(
       (config) => {
         if (this.token) {
-          config.headers.Authorization = `Bearer ${this.token}`;
+          config.headers.Cookie = this.token;
         }
         return config;
       },
@@ -108,6 +108,10 @@ class APIClient {
     this.token = token;
   }
 
+  getToken() {
+    return this.token;
+  }
+
   /**
    * Base URL ayarla
    */
@@ -129,21 +133,22 @@ class APIClient {
    * Giris yap
    */
   async login(credentials) {
-    const response = await this.client.post('/api/auth/login', credentials);
-    if (response.success && response.data.token) {
-      this.setToken(response.data.token);
-    }
-    return response;
+    return this.requestWithSessionCookie({
+      method: 'POST',
+      url: '/api/auth/login',
+      data: credentials
+    });
   }
 
   /**
    * Kayit ol
    */
   async register(userData) {
-    const response = await this.client.post('/api/auth/register', userData);
-    if (response.success && response.data.token) {
-      this.setToken(response.data.token);
-    }
+    const response = await this.requestWithSessionCookie({
+      method: 'POST',
+      url: '/api/auth/register',
+      data: userData
+    });
     return response.data;
   }
 
@@ -185,11 +190,11 @@ class APIClient {
    * so the caller can persist the JWT — mirrors login()/register() behaviour.
    */
   async completePoeLogin(data = {}) {
-    const response = await this.client.post('/api/auth/poe/login/complete', data);
-    if (response.success && response.data?.token) {
-      this.setToken(response.data.token);
-    }
-    return response;
+    return this.requestWithSessionCookie({
+      method: 'POST',
+      url: '/api/auth/poe/login/complete',
+      data
+    });
   }
 
   /**
@@ -205,6 +210,39 @@ class APIClient {
    */
   async disconnectPoeAccount() {
     const response = await this.client.delete('/api/auth/poe/disconnect');
+    return response.data;
+  }
+
+  extractAuthCookie(response) {
+    const cookies = response?.headers?.['set-cookie'];
+    if (!Array.isArray(cookies)) {
+      return null;
+    }
+
+    const match = cookies.find((value) => typeof value === 'string' && value.startsWith('juice_journal_auth='));
+    if (!match) {
+      return null;
+    }
+
+    return match.split(';')[0] || null;
+  }
+
+  async requestWithSessionCookie(config) {
+    const response = await axios.request({
+      baseURL: this.baseURL,
+      timeout: 10000,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(this.token ? { Cookie: this.token } : {})
+      },
+      ...config
+    });
+
+    const sessionCookie = this.extractAuthCookie(response);
+    if (sessionCookie) {
+      this.setToken(sessionCookie);
+    }
+
     return response.data;
   }
 

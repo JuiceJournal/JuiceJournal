@@ -57,7 +57,7 @@ async function buildCurrentUserPayload(user) {
 
   try {
     if (user?.poeSub || user?.poeMock || poeAuthService.isMockMode()) {
-      characterPayload = await poeApiService.getAccountCharacters(user);
+      characterPayload = await poeApiService.getCachedAccountCharacters(user);
     }
   } catch (error) {
     logger.warn('poe character sync failed', {
@@ -202,7 +202,6 @@ router.post('/register',
         success: true,
         data: {
           user,
-          token,
           capabilities: getCapabilities(user)
         },
         error: null
@@ -273,7 +272,6 @@ router.post('/login',
         success: true,
         data: {
           user,
-          token,
           capabilities: getCapabilities(user)
         },
         error: null
@@ -432,7 +430,6 @@ router.post('/poe/login/complete',
           data: {
             mode: 'mock',
             ...payload,
-            token,
             poe: user.getPoeStatus()
           },
           error: null
@@ -476,7 +473,6 @@ router.post('/poe/login/complete',
         data: {
           mode: 'live',
           ...payload,
-          token,
           poe: user.getPoeStatus()
         },
         error: null
@@ -578,6 +574,7 @@ router.post('/poe/connect/complete',
           req.user,
           poeAuthService.createMockLinkPayload(req.user)
         );
+        poeApiService.invalidateAccountCharactersCache(linkedUser);
 
         return res.json({
           success: true,
@@ -623,6 +620,7 @@ router.post('/poe/connect/complete',
         linkedAt: new Date(),
         mock: false,
       });
+      poeApiService.invalidateAccountCharactersCache(linkedUser);
 
       res.json({
         success: true,
@@ -667,6 +665,7 @@ router.get('/poe/status', authenticate, async (req, res) => {
 router.delete('/poe/disconnect', authenticate, async (req, res) => {
   try {
     const updatedUser = await poeAuthService.clearPoeLink(req.user);
+    poeApiService.invalidateAccountCharactersCache(updatedUser);
 
     res.json({
       success: true,

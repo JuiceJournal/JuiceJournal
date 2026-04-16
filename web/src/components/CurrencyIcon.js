@@ -37,7 +37,7 @@ export const CurrencyIcon = memo(function CurrencyIcon({ type = 'chaos', size = 
       draggable={false}
     />
   );
-}
+});
 
 export default CurrencyIcon;
 

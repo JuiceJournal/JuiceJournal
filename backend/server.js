@@ -10,13 +10,13 @@ const rateLimit = require('express-rate-limit');
 const WebSocket = require('ws');
 const http = require('http');
 const { Op } = require('sequelize');
-const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const { sequelize, Session } = require('./models');
 const cronService = require('./services/cronService');
 const env = require('./config/env');
 const logger = require('./services/logger');
+const { verifyRealtimeToken } = require('./middleware/auth');
 
 // Route importları
 const authRoutes = require('./routes/auth');
@@ -57,7 +57,7 @@ wss.on('connection', (ws) => {
           return;
         }
 
-        const decoded = jwt.verify(data.token, env.auth.jwtSecret, { algorithms: ['HS256'] });
+        const decoded = verifyRealtimeToken(data.token);
         clients.set(ws, { userId: decoded.userId });
         clearTimeout(authTimeout);
       }
