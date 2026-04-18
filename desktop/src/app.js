@@ -1339,30 +1339,7 @@ async function init() {
   setupCurrencyListeners();
   setupIPCListeners();
 
-  // Mevcut kullaniciyi kontrol et
-  const hasToken = await window.electronAPI.hasAuthToken();
-  if (hasToken) {
-    try {
-      const me = await window.electronAPI.getCurrentUser();
-      if (me?.user) {
-        setCurrentUser({
-          ...me.user,
-          capabilities: me.capabilities || {}
-        });
-        await loadMapResultHistory();
-        await loadPoeLinkStatus();
-      } else {
-        state.mapResults = [];
-        showLoginModal();
-      }
-    } catch (error) {
-      state.mapResults = [];
-      showLoginModal();
-    }
-  } else {
-    state.mapResults = [];
-    showLoginModal();
-  }
+  await bootstrapCurrentUserSession();
 
   // Aktif session ve dashboard verilerini senkronize et
   await refreshTrackerData();
@@ -2020,6 +1997,72 @@ function showLoginModal() {
 
   if (elements.registerModal) {
     elements.registerModal.classList.add('hidden');
+  }
+}
+
+function hideLoginModal() {
+  if (elements.loginModal) {
+    elements.loginModal.classList.add('hidden');
+  }
+
+  if (elements.registerModal) {
+    elements.registerModal.classList.add('hidden');
+  }
+}
+
+function isServerUnavailableError(error) {
+  const rawMessage = typeof error === 'string'
+    ? error
+    : (typeof error?.message === 'string' ? error.message : (typeof error?.error === 'string' ? error.error : ''));
+
+  return /unable to reach the server|sunucuya ulasilamadi|request timed out|yanit vermekte gecikti|econnrefused|network/i.test(rawMessage);
+}
+
+async function bootstrapCurrentUserSession() {
+  const runtimeMode = typeof window.electronAPI.getRuntimeMode === 'function'
+    ? await window.electronAPI.getRuntimeMode()
+    : { isPackaged: true, isDev: false };
+  const requiresLiveAuth = Boolean(runtimeMode?.isPackaged);
+  const hasToken = await window.electronAPI.hasAuthToken();
+
+  if (!hasToken) {
+    state.mapResults = [];
+    if (requiresLiveAuth) {
+      showLoginModal();
+      return { mode: 'login-required' };
+    }
+
+    hideLoginModal();
+    return { mode: 'guest' };
+  }
+
+  try {
+    const me = await window.electronAPI.getCurrentUser();
+    if (me?.user) {
+      setCurrentUser({
+        ...me.user,
+        capabilities: me.capabilities || {}
+      });
+      hideLoginModal();
+      await loadMapResultHistory();
+      await loadPoeLinkStatus();
+      return { mode: 'authenticated' };
+    }
+
+    state.mapResults = [];
+    showLoginModal();
+    return { mode: 'login-required' };
+  } catch (error) {
+    state.mapResults = [];
+
+    if (isServerUnavailableError(error) && !requiresLiveAuth) {
+      hideLoginModal();
+      showToast(window.t('settings.api'), window.t('toast.serverUnavailable'), 'warning');
+      return { mode: 'guest-offline' };
+    }
+
+    showLoginModal();
+    return { mode: 'login-required' };
   }
 }
 

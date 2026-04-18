@@ -2605,6 +2605,11 @@ function setupIPC() {
     return !!getDecryptedAuthToken();
   });
 
+  ipcMain.handle('get-runtime-mode', () => ({
+    isPackaged: app.isPackaged,
+    isDev
+  }));
+
   // Currency price sync (backend API uzerinden, token guvenli)
   ipcMain.handle('sync-currency-prices', async (event, { league, poeVersion } = {}) => {
     try {

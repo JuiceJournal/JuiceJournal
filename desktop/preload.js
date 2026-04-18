@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Auth
   hasAuthToken: () => ipcRenderer.invoke('has-auth-token'),
+  getRuntimeMode: () => ipcRenderer.invoke('get-runtime-mode'),
 
   // Dosya secici
   browsePoePath: () => ipcRenderer.invoke('browse-poe-path'),

@@ -227,3 +227,129 @@ test('successful poe oauth login initializes a local session and dashboard boots
     ]
   );
 });
+
+test('bootstrapCurrentUserSession continues in guest mode when no auth token exists', async () => {
+  const calls = [];
+  const state = { mapResults: [{ id: 'map-1' }] };
+  const context = loadFunctions(['hideLoginModal', 'isServerUnavailableError', 'bootstrapCurrentUserSession'], {
+    state,
+    elements: {
+      loginModal: {
+        classList: {
+          add: (className) => calls.push(['hideLoginModal', className])
+        }
+      },
+      registerModal: {
+        classList: {
+          add: (className) => calls.push(['hideRegisterModal', className])
+        }
+      }
+    },
+    window: {
+      electronAPI: {
+        hasAuthToken: async () => false,
+        getRuntimeMode: async () => ({ isPackaged: false, isDev: true })
+      },
+      t: (key) => key
+    },
+    showLoginModal: () => calls.push(['showLoginModal']),
+    showToast: (...args) => calls.push(['showToast', ...args]),
+    setCurrentUser: () => calls.push(['setCurrentUser']),
+    loadMapResultHistory: async () => calls.push(['loadMapResultHistory']),
+    loadPoeLinkStatus: async () => calls.push(['loadPoeLinkStatus'])
+  });
+
+  const result = await context.bootstrapCurrentUserSession();
+
+  assert.equal(result.mode, 'guest');
+  assert.equal(state.mapResults.length, 0);
+  assert.deepEqual(calls, [
+    ['hideLoginModal', 'hidden'],
+    ['hideRegisterModal', 'hidden']
+  ]);
+});
+
+test('bootstrapCurrentUserSession falls back to offline guest mode when backend is unavailable', async () => {
+  const calls = [];
+  const state = { mapResults: [{ id: 'map-1' }] };
+  const context = loadFunctions(['hideLoginModal', 'isServerUnavailableError', 'bootstrapCurrentUserSession'], {
+    state,
+    elements: {
+      loginModal: {
+        classList: {
+          add: (className) => calls.push(['hideLoginModal', className])
+        }
+      },
+      registerModal: {
+        classList: {
+          add: (className) => calls.push(['hideRegisterModal', className])
+        }
+      }
+    },
+    window: {
+      electronAPI: {
+        hasAuthToken: async () => true,
+        getRuntimeMode: async () => ({ isPackaged: false, isDev: true }),
+        getCurrentUser: async () => {
+          throw new Error('Unable to reach the server');
+        }
+      },
+      t: (key) => key
+    },
+    showLoginModal: () => calls.push(['showLoginModal']),
+    showToast: (...args) => calls.push(['showToast', ...args]),
+    setCurrentUser: () => calls.push(['setCurrentUser']),
+    loadMapResultHistory: async () => calls.push(['loadMapResultHistory']),
+    loadPoeLinkStatus: async () => calls.push(['loadPoeLinkStatus'])
+  });
+
+  const result = await context.bootstrapCurrentUserSession();
+
+  assert.equal(result.mode, 'guest-offline');
+  assert.equal(state.mapResults.length, 0);
+  assert.deepEqual(calls, [
+    ['hideLoginModal', 'hidden'],
+    ['hideRegisterModal', 'hidden'],
+    ['showToast', 'settings.api', 'toast.serverUnavailable', 'warning']
+  ]);
+});
+
+test('bootstrapCurrentUserSession keeps the login modal for packaged live mode without a token', async () => {
+  const calls = [];
+  const state = { mapResults: [{ id: 'map-1' }] };
+  const context = loadFunctions(['hideLoginModal', 'isServerUnavailableError', 'bootstrapCurrentUserSession'], {
+    state,
+    elements: {
+      loginModal: {
+        classList: {
+          add: (className) => calls.push(['hideLoginModal', className])
+        }
+      },
+      registerModal: {
+        classList: {
+          add: (className) => calls.push(['hideRegisterModal', className])
+        }
+      }
+    },
+    window: {
+      electronAPI: {
+        hasAuthToken: async () => false,
+        getRuntimeMode: async () => ({ isPackaged: true, isDev: false })
+      },
+      t: (key) => key
+    },
+    showLoginModal: () => calls.push(['showLoginModal']),
+    showToast: (...args) => calls.push(['showToast', ...args]),
+    setCurrentUser: () => calls.push(['setCurrentUser']),
+    loadMapResultHistory: async () => calls.push(['loadMapResultHistory']),
+    loadPoeLinkStatus: async () => calls.push(['loadPoeLinkStatus'])
+  });
+
+  const result = await context.bootstrapCurrentUserSession();
+
+  assert.equal(result.mode, 'login-required');
+  assert.equal(state.mapResults.length, 0);
+  assert.deepEqual(calls, [
+    ['showLoginModal']
+  ]);
+});
