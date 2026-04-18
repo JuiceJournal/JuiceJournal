@@ -100,6 +100,114 @@
   .input::placeholder {
     @apply text-gray-500;
   }
+
+  .showroom-strip-item {
+    @apply inline-flex items-center gap-3 rounded-2xl border border-poe-border bg-[rgba(19,15,13,0.88)] px-5 py-4 text-[0.76rem] font-semibold uppercase tracking-[0.16em] text-stone-200 shadow-[0_10px_30px_rgba(0,0,0,0.2)];
+  }
+
+  .showroom-stage {
+    @apply relative min-h-[22rem];
+  }
+
+  .showroom-stage-ring {
+    position: absolute;
+    inset: 10% 12%;
+    border-radius: 9999px;
+    background:
+      radial-gradient(circle, rgba(198,161,91,0.2), transparent 58%),
+      radial-gradient(circle at 60% 40%, rgba(102,140,178,0.12), transparent 24%);
+    filter: blur(12px);
+  }
+
+  .showroom-stage-panel {
+    @apply relative z-[1] rounded-[2rem] border border-poe-border bg-[linear-gradient(180deg,rgba(24,20,17,0.95),rgba(13,11,9,0.98))] p-6 shadow-[0_30px_100px_rgba(0,0,0,0.36)];
+  }
+
+  .showroom-stage-label {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .showroom-character-card {
+    @apply rounded-2xl border border-poe-border/70 bg-[rgba(10,8,7,0.72)] p-5;
+  }
+
+  .showroom-character-title,
+  .showroom-world-title {
+    @apply mt-4 font-display text-xl uppercase tracking-[0.1em] text-stone-100;
+  }
+
+  .showroom-character-body,
+  .showroom-world-body {
+    @apply mt-3 text-sm leading-6 text-poe-mist;
+  }
+
+  .showroom-mock-window {
+    @apply overflow-hidden rounded-[2rem] border border-poe-border bg-[rgba(10,8,7,0.84)] shadow-[0_30px_120px_rgba(0,0,0,0.42)];
+  }
+
+  .showroom-mock-topbar {
+    @apply flex gap-2 border-b border-poe-border/70 bg-[rgba(255,255,255,0.03)] px-5 py-4;
+  }
+
+  .showroom-mock-topbar span {
+    @apply h-2.5 w-2.5 rounded-full bg-poe-border;
+  }
+
+  .showroom-mock-body {
+    @apply p-6;
+  }
+
+  .showroom-mock-hero {
+    @apply rounded-2xl border border-poe-border/70 bg-[radial-gradient(circle_at_top,rgba(198,161,91,0.16),rgba(14,11,9,0.92))] p-5;
+  }
+
+  .showroom-mock-title {
+    @apply mt-3 font-display text-2xl uppercase tracking-[0.1em] text-stone-100;
+  }
+
+  .showroom-mock-grid {
+    @apply mt-4 grid gap-4 sm:grid-cols-2;
+  }
+
+  .showroom-mock-card {
+    @apply rounded-2xl border border-poe-border/70 bg-[rgba(18,14,12,0.86)] p-4;
+  }
+
+  .showroom-mock-card-wide {
+    @apply sm:col-span-2;
+  }
+
+  .showroom-mock-metric-label {
+    @apply text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-poe-mist;
+  }
+
+  .showroom-mock-metric-value {
+    @apply mt-3 block font-display text-3xl uppercase tracking-[0.08em] text-poe-gold;
+  }
+
+  .showroom-mock-bars {
+    @apply mt-4 grid grid-cols-4 gap-2;
+  }
+
+  .showroom-mock-bars span {
+    @apply h-16 rounded-full bg-[linear-gradient(180deg,rgba(198,161,91,0.8),rgba(78,57,31,0.5))];
+  }
+
+  .showroom-feature-row {
+    @apply flex gap-4 rounded-2xl border border-poe-border bg-[rgba(14,11,9,0.75)] p-4;
+  }
+
+  .showroom-feature-icon {
+    @apply flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-poe-border bg-[rgba(198,161,91,0.08)];
+  }
+
+  .showroom-world-card {
+    @apply rounded-[1.75rem] border border-poe-border bg-[linear-gradient(180deg,rgba(28,23,20,0.92),rgba(14,11,9,0.96))] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.28)];
+  }
+
+  .showroom-insight-chip {
+    @apply inline-flex items-center gap-3 rounded-full border border-poe-border bg-[rgba(13,11,9,0.76)] px-4 py-3 text-sm text-stone-200;
+  }
 }
 
 /* Scrollbar */
@@ -131,4 +239,15 @@
 :focus-visible {
   outline: 2px solid #c6a15b;
   outline-offset: 2px;
+}
+
+.showroom-embers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 30%, rgba(182, 92, 44, 0.22), transparent 16%),
+    radial-gradient(circle at 82% 24%, rgba(214, 180, 110, 0.14), transparent 18%),
+    radial-gradient(circle at 62% 78%, rgba(117, 79, 46, 0.18), transparent 18%);
+  opacity: 0.9;
 }
