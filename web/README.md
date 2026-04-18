@@ -1,6 +1,19 @@
-# Juice Journal - Web Dashboard
+# Juice Journal - Web Showroom
 
-Next.js 14 ile gelistirilmis web arayuzu.
+Next.js ile gelistirilmis public-facing showroom ve gizli/internal dashboard yuzeyi.
+
+Public web artik:
+
+- desktop uygulama vitrini
+- urun showcase sayfasi
+- brand / feature anlatimi
+
+Internal route'lar repo icinde kalir:
+
+- `/login`
+- `/dashboard/*`
+
+Ama public entry artik `/` showroom sayfasidir.
 
 ## Kurulum
 
@@ -45,9 +58,9 @@ npm start
 src/
 ├── app/                    # Next.js app router
 │   ├── layout.js          # Root layout
-│   ├── page.js            # Anasayfa (redirect)
-│   ├── login/             # Login sayfasi
-│   └── dashboard/         # Dashboard sayfalari
+│   ├── page.js            # Public showroom landing
+│   ├── login/             # Internal login surface
+│   └── dashboard/         # Internal dashboard sayfalari
 │       ├── page.js        # Ana dashboard
 │       ├── sessions/      # Session listesi
 │       └── leaderboard/   # Leaderboard
@@ -65,7 +78,14 @@ src/
     └── utils.js
 ```
 
-## Ozellikler
+## Public Surface
+
+### Showroom Landing
+- Sinematik hero + desktop-first CTA
+- Juice Journal urun degerini anlatan showcase bloklari
+- PoE1 ve PoE2 hissini birlikte veren public vitrin
+
+## Internal Surface
 
 ### Dashboard
 - Aktif session gostergesi
@@ -86,12 +106,12 @@ src/
 - Siralama tablosu
 - Istatistik ozeti
 
-## Auth Flow
+## Internal Auth Flow
 
 1. Kullanici login/register yapar
-2. JWT token localStorage'a kaydedilir
-3. Her request'te Authorization header eklenir
-4. Token gecersizse login sayfasina yonlendirilir
+2. Auth state internal route'larda yenilenir
+3. Realtime websocket token'i ayrik endpoint ile alinir
+4. Public showroom route'lari login probe'u olmadan acilabilir
 
 ## WebSocket
 

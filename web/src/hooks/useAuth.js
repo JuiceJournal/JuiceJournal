@@ -1,18 +1,34 @@
 'use client';
 
 import { useState, useEffect, createContext, useContext } from 'react';
+import { usePathname } from 'next/navigation';
 import { authAPI, clearLegacyAuthStorage } from '@/lib/api';
 
 const AuthContext = createContext(null);
 
+function isPublicPath(pathname) {
+  if (!pathname) {
+    return false;
+  }
+
+  return pathname === '/'
+    || pathname.startsWith('/strategies/public');
+}
+
 export function AuthProvider({ children }) {
+  const pathname = usePathname();
   const [user, setUser] = useState(null);
   const [capabilities, setCapabilities] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (isPublicPath(pathname)) {
+      setLoading(false);
+      return;
+    }
+
     checkAuth();
-  }, []);
+  }, [pathname]);
 
   const checkAuth = async () => {
     try {
@@ -72,3 +88,5 @@ export function useAuth() {
   }
   return context;
 }
+
+export { isPublicPath };

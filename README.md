@@ -78,14 +78,14 @@ It is not the main product direction.
 | **System Tray** | Background operation with full tray menu (sessions, navigation, quick actions) |
 | **Game Detection** | Auto-detect running PoE process |
 
-### Web Dashboard (Next.js 14)
+### Web Showroom + Internal Dashboard (Next.js)
 
 | Feature | Description |
 |---------|-------------|
-| **Personal Stats** | Detailed farming statistics with charts and trends |
+| **Public Showroom** | Desktop-first landing page that explains Juice Journal without requiring sign-in |
+| **Internal Dashboard** | Hidden auth-backed dashboard routes remain in the repo for internal/product flows |
 | **Leaderboard** | Compare farming efficiency with other players |
-| **Map Comparison** | Side-by-side map profitability analysis |
-| **Real-time Updates** | WebSocket-powered live data |
+| **Real-time Updates** | WebSocket-powered live data on internal surfaces |
 
 ### Backend API (Node.js + Express)
 
