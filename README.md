@@ -527,13 +527,9 @@ npm run db:seed         # Re-create admin user after reset
 
 ## Contributing
 
-We are a two-person team building this as a passion project for the PoE community. Contributions, bug reports, and feature suggestions are welcome.
+We are a two-person team building this as a passion project for the PoE community.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Commit your changes
-4. Push to the branch (`git push origin feature/your-feature`)
-5. Open a Pull Request
+For setup, testing, branch, PR, and secret-handling expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
