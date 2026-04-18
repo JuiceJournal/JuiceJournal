@@ -2022,7 +2022,7 @@ async function bootstrapCurrentUserSession() {
   const runtimeMode = typeof window.electronAPI.getRuntimeMode === 'function'
     ? await window.electronAPI.getRuntimeMode()
     : { isPackaged: true, isDev: false };
-  const requiresLiveAuth = Boolean(runtimeMode?.isPackaged);
+  const requiresLiveAuth = Boolean(runtimeMode?.isPackaged || runtimeMode?.forceLiveAuth);
   const hasToken = await window.electronAPI.hasAuthToken();
 
   if (!hasToken) {

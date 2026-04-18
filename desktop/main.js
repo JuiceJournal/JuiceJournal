@@ -1552,6 +1552,8 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
 
 // Development mod kontrolu
 const isDev = !app.isPackaged;
+const forceLiveAuth = process.env.JUICE_JOURNAL_FORCE_LIVE_AUTH === '1'
+  || process.argv.includes('--force-live-auth');
 
 /**
  * Ana pencereyi olustur
@@ -2607,7 +2609,8 @@ function setupIPC() {
 
   ipcMain.handle('get-runtime-mode', () => ({
     isPackaged: app.isPackaged,
-    isDev
+    isDev,
+    forceLiveAuth
   }));
 
   // Currency price sync (backend API uzerinden, token guvenli)
