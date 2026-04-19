@@ -8,6 +8,7 @@ const indexHtmlPath = path.join(desktopDir, 'src', 'index.html');
 const mainProcessPath = path.join(desktopDir, 'main.js');
 const packageJsonPath = path.join(desktopDir, 'package.json');
 const windowsIconPath = path.join(desktopDir, 'src', 'assets', 'icon.ico');
+const desktopIconPngPath = path.join(desktopDir, 'src', 'assets', 'icon.png');
 
 function parseIcoEntries(buffer) {
   assert.equal(buffer.readUInt16LE(0), 0, 'ICO reserved header must be 0');
@@ -37,6 +38,13 @@ test('desktop shell uses Juice Journal branding in the title bar', () => {
   assert.match(html, /<h1>\s*Juice Journal\s*<\/h1>/i);
   assert.doesNotMatch(html, /PoE\s*<span>\s*Farm\s*<\/span>/i);
   assert.doesNotMatch(html, />\s*POE FARM\s*</i);
+});
+
+test('desktop shell reuses the packaged app icon in visible brand surfaces', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+
+  assert.ok(fs.existsSync(desktopIconPngPath), 'Expected desktop icon.png to exist');
+  assert.match(html, /<img[^>]+src="assets\/icon\.png"[^>]+class="brand-logo-image"/i);
 });
 
 test('desktop package and main process point to the branded window metadata', () => {
