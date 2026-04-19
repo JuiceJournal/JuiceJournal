@@ -21,6 +21,17 @@ const bodyFont = Source_Sans_3({
 export const metadata = {
   title: 'Juice Journal',
   description: 'Path of Exile farming journal and tracker',
+  icons: {
+    icon: [
+      { url: '/brand/logo-mark.png', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/brand/logo-mark.png', type: 'image/png' },
+    ],
+    shortcut: [
+      { url: '/brand/logo-mark.png', type: 'image/png' },
+    ],
+  },
 };
 
 export default function RootLayout({ children }) {

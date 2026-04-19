@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import PoeChromeIcon from '@/components/PoeChromeIcon';
+import BrandLogo from '@/components/BrandLogo';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage } from '@/lib/api';
 
@@ -91,9 +92,13 @@ export default function LoginPage() {
 
         <section className="card mx-auto w-full max-w-lg">
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-poe-border bg-[radial-gradient(circle_at_30%_30%,rgba(214,180,110,0.22),rgba(22,18,15,0.94))] shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
-              <PoeChromeIcon type="gate" size={30} className="text-poe-gold drop-shadow-[0_0_12px_rgba(198,161,91,0.22)]" />
-            </div>
+            <BrandLogo
+              alt="Juice Journal logo"
+              width={56}
+              height={56}
+              priority
+              className="h-14 w-14 shrink-0 drop-shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+            />
             <div>
               <p className="section-kicker">{isLogin ? t('auth.signInKicker') : t('auth.createKicker')}</p>
               <h2 className="mt-1 font-display text-3xl uppercase tracking-[0.12em] text-stone-100">

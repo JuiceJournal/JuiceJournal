@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { useTrackerContext } from '@/hooks/useTrackerContext';
 import PoeChromeIcon from '@/components/PoeChromeIcon';
+import BrandLogo from '@/components/BrandLogo';
 import { getPoeVersionLabel } from '@/lib/utils';
 
 export default function Navbar() {
@@ -40,9 +41,13 @@ export default function Navbar() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <Link href="/dashboard" className="group flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-poe-border bg-[radial-gradient(circle_at_30%_30%,rgba(214,180,110,0.22),rgba(22,18,15,0.94))] shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition-transform duration-200 group-hover:scale-[1.03]">
-                  <PoeChromeIcon type="sigil" size={28} className="text-poe-gold drop-shadow-[0_0_12px_rgba(198,161,91,0.22)]" />
-                </div>
+                <BrandLogo
+                  alt="Juice Journal logo"
+                  width={48}
+                  height={48}
+                  priority
+                  className="h-12 w-12 shrink-0 drop-shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition-transform duration-200 group-hover:scale-[1.03]"
+                />
                 <div>
                   <p className="section-kicker">{t('brand.kicker')}</p>
                   <p className="font-display text-2xl uppercase tracking-[0.18em] text-poe-gold">
