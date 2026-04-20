@@ -276,7 +276,7 @@ test('renderer history loader keeps startup alive when map-result history is una
     window: {
       electronAPI: {
         async getMapResults() {
-          throw new Error('Yerel uygulama girisi gerekli');
+          throw new Error('Local desktop sign-in is required');
         }
       }
     }

@@ -1,8 +1,8 @@
 /**
  * Log Parser Module
- * PoE Client.txt dosyasini izleyerek map giris/cikisini tespit eder
- * 
- * Kullanim:
+ * Watches PoE Client.txt and detects map enter/exit events.
+ *
+ * Usage:
  * const parser = new LogParser('C:/PoE/logs/Client.txt');
  * parser.on('mapEntered', (data) => data);
  * parser.start();
@@ -23,13 +23,13 @@ class LogParser extends EventEmitter {
     this.lastPosition = 0;
     this.watchInterval = null;
     
-    // Map durumu
+    // Map state
     this.currentMap = null;
     this.mapStartTime = null;
   }
 
   /**
-   * Log dosyasini izlemeye basla
+   * Start watching the log file
    */
   start() {
     if (this.isRunning) {
@@ -37,28 +37,28 @@ class LogParser extends EventEmitter {
     }
 
     if (!fs.existsSync(this.logPath)) {
-      console.error('Log dosyasi bulunamadi:', this.logPath);
-      this.emit('error', new Error('Log dosyasi bulunamadi'));
+      console.error('Log file not found:', this.logPath);
+      this.emit('error', new Error('Log file not found'));
       return;
     }
 
     this.isRunning = true;
     this._reading = false;
 
-    // Dosya boyutunu al ve son pozisyondan basla
+    // Read the file size and start from the last position.
     const stats = fs.statSync(this.logPath);
     this.lastPosition = stats.size;
 
-    // Dosyayi izle
+    // Watch the file.
     this.watchInterval = setInterval(() => {
       this.readNewLines();
-    }, 500); // Her 500ms kontrol et
+    }, 500); // Poll every 500ms.
 
     this.emit('started');
   }
 
   /**
-   * Log dosyasini izlemeyi durdur
+   * Stop watching the log file
    */
   stop() {
     this.isRunning = false;
@@ -72,7 +72,7 @@ class LogParser extends EventEmitter {
   }
 
   /**
-   * Yeni satirlari oku
+   * Read new lines
    */
   async readNewLines() {
     if (this._reading) return; // Prevent overlapping reads
@@ -81,17 +81,17 @@ class LogParser extends EventEmitter {
     try {
       const stats = await fsp.stat(this.logPath);
 
-      // Dosya kuculmusse (log rotation) bastan basla
+      // Restart from the beginning if the file shrank during log rotation.
       if (stats.size < this.lastPosition) {
         this.lastPosition = 0;
       }
 
-      // Yeni veri yoksa cik
+      // Exit early when there is no new data.
       if (stats.size === this.lastPosition) {
         return;
       }
 
-      // Yeni veriyi oku (async file handle)
+      // Read the new data through an async file handle.
       fh = await fsp.open(this.logPath, 'r');
       const buffer = Buffer.alloc(stats.size - this.lastPosition);
       await fh.read(buffer, 0, buffer.length, this.lastPosition);
@@ -100,7 +100,7 @@ class LogParser extends EventEmitter {
 
       this.lastPosition = stats.size;
 
-      // Buffer'i satirlara ayir
+      // Split the buffer into lines.
       const lines = buffer.toString().split('\n');
 
       for (const line of lines) {
@@ -110,7 +110,7 @@ class LogParser extends EventEmitter {
       }
     } catch (error) {
       if (fh) { try { await fh.close(); } catch {} }
-      console.error('Log okuma hatasi:', error);
+      console.error('Log read error:', error);
       this.emit('error', error);
     } finally {
       this._reading = false;
@@ -118,12 +118,12 @@ class LogParser extends EventEmitter {
   }
 
   /**
-   * Tek bir satiri parse et
+   * Parse a single line
    */
   parseLine(line) {
-    // Map giris tespiti
-    // Ornek: 2023/12/25 15:30:45 ***** MAP LOADING : Maps/Dunes_01.tbw
-    // Ornek: 2023/12/25 15:30:45 Generating level 16 area "MapDunes"
+    // Detect map entry.
+    // Example: 2023/12/25 15:30:45 ***** MAP LOADING : Maps/Dunes_01.tbw
+    // Example: 2023/12/25 15:30:45 Generating level 16 area "MapDunes"
     
     const mapEnterPatterns = [
       // Generating level X area "Map..."
@@ -142,7 +142,7 @@ class LogParser extends EventEmitter {
         regex: /You have entered ([^\.]+)\./i,
         handler: (match) => {
           const areaName = match[1].trim();
-          // Sadece map alanlarini yakala
+          // Only match map areas.
           if (areaName.toLowerCase().includes('map')) {
             return {
               type: 'map_entered',
@@ -157,9 +157,9 @@ class LogParser extends EventEmitter {
       }
     ];
 
-    // Map cikis tespiti
-    // Ornek: 2023/12/25 15:45:12 ] You have entered Hideout.
-    // Ornek: 2023/12/25 15:45:12 ] Connecting to instance server...
+    // Detect map exit.
+    // Example: 2023/12/25 15:45:12 ] You have entered Hideout.
+    // Example: 2023/12/25 15:45:12 ] Connecting to instance server...
     
     const mapExitPatterns = [
       {
@@ -175,7 +175,7 @@ class LogParser extends EventEmitter {
       {
         regex: /Connecting to instance server/i,
         handler: (match) => {
-          // Map'ten cikis, yeni bir instance'a baglanma
+          // Leaving a map and connecting to a new instance.
           if (this.currentMap) {
             return {
               type: 'map_exited',
@@ -190,7 +190,7 @@ class LogParser extends EventEmitter {
       }
     ];
 
-    // Map girisini kontrol et
+    // Check for map entry.
     for (const pattern of mapEnterPatterns) {
       const match = line.match(pattern.regex);
       if (match) {
@@ -202,7 +202,7 @@ class LogParser extends EventEmitter {
       }
     }
 
-    // Map cikisini kontrol et
+    // Check for map exit.
     for (const pattern of mapExitPatterns) {
       const match = line.match(pattern.regex);
       if (match) {
@@ -216,7 +216,7 @@ class LogParser extends EventEmitter {
   }
 
   /**
-   * Map girisini isle
+   * Handle map entry
    */
   handleMapEnter(data) {
     this.currentMap = data.mapName;
@@ -230,35 +230,35 @@ class LogParser extends EventEmitter {
   }
 
   /**
-   * Map cikisini isle
+   * Handle map exit
    */
   handleMapExit(data) {
     if (!this.currentMap) {
-      return; // Aktif map yoksa islem yapma
+      return; // Do nothing when there is no active map.
     }
 
     const exitData = {
       mapName: this.currentMap,
       location: data.location,
       timestamp: data.timestamp,
-      duration: data.duration ? Math.floor(data.duration / 1000) : null // saniye cinsinden
+      duration: data.duration ? Math.floor(data.duration / 1000) : null // in seconds
     };
 
     this.emit('mapExited', exitData);
 
-    // Map durumunu sifirla
+    // Reset the map state.
     this.currentMap = null;
     this.mapStartTime = null;
   }
 
   /**
-   * Map adini formatla
+   * Format the map name
    */
   formatMapName(rawName) {
     // "Dunes" -> "Dunes Map"
     // "MapDunes" -> "Dunes Map"
     let name = rawName.replace(/^Map/, '');
-    name = name.replace(/([A-Z])/g, ' $1').trim(); // CamelCase'i ayir
+    name = name.replace(/([A-Z])/g, ' $1').trim(); // Split CamelCase.
     
     if (!name.toLowerCase().endsWith('map')) {
       name += ' Map';
@@ -268,10 +268,10 @@ class LogParser extends EventEmitter {
   }
 
   /**
-   * Satirdan timestamp cikar
+   * Extract a timestamp from the line
    */
   extractTimestamp(line) {
-    // YYYY/MM/DD HH:MM:SS formati
+    // YYYY/MM/DD HH:MM:SS format
     const match = line.match(/^(\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2})/);
     if (match) {
       return new Date(match[1].replace(/\//g, '-'));

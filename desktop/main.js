@@ -1,12 +1,12 @@
 /**
  * Juice Journal - Desktop App
  * Electron main process
- * 
- * Ozellikler:
- * - System tray entegrasyonu
- * - Global hotkey destegi (F9)
- * - PoE Client.txt log izleme
- * - OCR ile stash tarama
+ *
+ * Features:
+ * - System tray integration
+ * - Global hotkey support (F9)
+ * - PoE Client.txt log monitoring
+ * - OCR-based stash scanning
  */
 
 const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen, shell, nativeImage, safeStorage } = require('electron');
@@ -17,7 +17,7 @@ const os = require('os');
 const path = require('path');
 const Store = require('electron-store');
 
-// Modul importlari
+// Module imports
 const LogParser = require('./src/modules/logParser');
 const OCRScanner = require('./src/modules/ocrScanner');
 const APIClient = require('./src/modules/apiClient');
@@ -168,7 +168,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
   }
 };
 
-// Store yapilandirmasi
+// Store configuration
 const store = new Store({
   defaults: {
     apiUrl: 'http://localhost:3001',
@@ -251,7 +251,7 @@ function migrateLegacyDefaultLeagueSetting() {
 
 migrateLegacyDefaultLeagueSetting();
 
-// Global degiskenler
+// Global state
 let mainWindow = null;
 let tray = null;
 let logParser = null;
@@ -473,7 +473,7 @@ function getCurrentUserId() {
 
 function assertDesktopUserAuthenticated() {
   if (!getDecryptedAuthToken() || !getCurrentUserId()) {
-    throw new Error('Yerel uygulama girisi gerekli');
+    throw new Error('Local desktop sign-in is required');
   }
 }
 
@@ -2052,11 +2052,11 @@ async function captureAndScan() {
 }
 
 /**
- * Yeni map session baslat
+ * Start a new map session
  */
 async function startNewSession(input = {}) {
   try {
-    // Aktif session varsa bitir
+    // End the current session first when one is active.
     if (currentSession) {
       await endCurrentSession();
     }
@@ -2064,7 +2064,7 @@ async function startNewSession(input = {}) {
     const { activeVersion: poeVersion, league } = resolveLeagueContext(input);
     const farmTypeId = normalizeStoredFarmTypeId(input.farmTypeId || input.mapType || getActiveFarmTypeId());
 
-    // Map adi al
+    // Resolve the map name.
     const mapName = input.mapName || await promptMapName();
     if (!mapName) return;
 
@@ -2651,7 +2651,7 @@ function setupIPC() {
     return filePaths[0];
   });
 
-  // Session baslat
+  // Start a session.
   ipcMain.handle('start-session', async (event, data) => {
     return await startNewSession(data || {});
   });
@@ -2662,12 +2662,12 @@ function setupIPC() {
     return setActiveFarmTypeId(farmTypeId);
   });
 
-  // Session bitir
+  // End a session.
   ipcMain.handle('end-session', async () => {
     return await endCurrentSession();
   });
 
-  // Aktif session'i getir
+  // Get the active session.
   ipcMain.handle('get-current-session', () => {
     return getCurrentSessionFromBackend();
   });
@@ -2676,7 +2676,7 @@ function setupIPC() {
     try {
       return await apiClient.getSession(sessionId);
     } catch (error) {
-      throw toRendererError(error, 'Session detaylari alinamadi');
+      throw toRendererError(error, 'Failed to load session details');
     }
   });
 
@@ -2684,7 +2684,7 @@ function setupIPC() {
     try {
       return await apiClient.updateSession(sessionId, payload);
     } catch (error) {
-      throw toRendererError(error, 'Session detaylari guncellenemedi');
+      throw toRendererError(error, 'Failed to update session details');
     }
   });
 
@@ -2810,7 +2810,7 @@ function setupIPC() {
   // Manuel loot ekle
   ipcMain.handle('add-loot', async (event, data) => {
     if (!currentSession) {
-      throw new Error('Aktif session yok');
+      throw new Error('No active session');
     }
     try {
       if (currentSession.localOnly) {
@@ -2922,7 +2922,7 @@ function setupIPC() {
       await flushPendingActions();
       return me;
     } catch (error) {
-      throw toRendererError(error, 'Kullanici bilgileri alinamadi');
+      throw toRendererError(error, 'Failed to load current user details');
     }
   });
 
@@ -3027,7 +3027,7 @@ function setupIPC() {
     try {
       return await apiClient.completePoeConnect(data || {});
     } catch (error) {
-      throw toRendererError(error, 'Path of Exile baglantisi tamamlanamadi');
+      throw toRendererError(error, 'Failed to complete Path of Exile linking');
     }
   });
 
@@ -3035,7 +3035,7 @@ function setupIPC() {
     try {
       return await apiClient.getPoeLinkStatus();
     } catch (error) {
-      throw toRendererError(error, 'Path of Exile baglanti durumu alinamadi');
+      throw toRendererError(error, 'Failed to get Path of Exile link status');
     }
   });
 
@@ -3056,7 +3056,7 @@ function setupIPC() {
       if (poeApiClient) {
         poeApiClient.clearTokens();
       }
-      throw toRendererError(error, 'Path of Exile baglantisi kaldirilamadi');
+      throw toRendererError(error, 'Failed to disconnect the Path of Exile account');
     }
   });
 
@@ -3284,13 +3284,13 @@ function setupIPC() {
 }
 
 /**
- * Uygulama hazir
+ * App ready
  */
 app.whenReady().then(() => {
   app.setAppUserModelId(APP_ID);
   app.setName(APP_NAME);
 
-  // API client'i baslat
+  // Initialize the API client.
   const resolvedToken = getDecryptedAuthToken();
   apiClient = new APIClient(store.get('apiUrl'), resolvedToken);
   ocrScanner = new OCRScanner();
@@ -3309,11 +3309,11 @@ app.whenReady().then(() => {
     persistPoeTokens(securePoeTokens);
   }
 
-  // IPC handler'lari once kaydet (pencere acilmadan)
+  // Register IPC handlers before opening the window.
   setupIPC();
 
   createMainWindow();
-  mainWindow.show(); // Pencereyi goster
+  mainWindow.show(); // Show the window.
   mainWindow.focus();
   emitPendingSyncState();
   ensureOverlayWindowForSettings();
@@ -3335,12 +3335,12 @@ app.whenReady().then(() => {
 });
 
 /**
- * Uygulama kapaniyor
+ * App shutdown
  */
 app.on('window-all-closed', () => {
-  // macOS'ta tum pencereler kapandiginda uygulama kapanmaz
+  // On macOS the app stays open after all windows are closed.
   if (process.platform !== 'darwin') {
-    // Tray aktif oldugu icin kapatma
+    // Keep the app running while the tray icon is active.
   }
 });
 
@@ -3353,15 +3353,15 @@ app.on('activate', () => {
 });
 
 function handleAppWillQuit() {
-  // Global kisayolleri temizle
+  // Clear global shortcuts.
   globalShortcut.unregisterAll();
 
-  // Log parser'i durdur
+  // Stop the log parser.
   if (logParser) {
     logParser.stop();
   }
 
-  // Game detector'i durdur
+  // Stop the game detector.
   if (gameDetector) {
     gameDetector.stop();
   }

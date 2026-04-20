@@ -1,6 +1,6 @@
 /**
  * API Client Module
- * Backend API ile iletisim
+ * Backend API communication
  */
 
 const axios = require('axios');
@@ -70,7 +70,7 @@ class APIClient {
       }
     });
 
-    // Request interceptor - token ekle
+    // Request interceptor - attach the token.
     this.client.interceptors.request.use(
       (config) => {
         if (this.token) {
@@ -81,7 +81,7 @@ class APIClient {
       (error) => Promise.reject(error)
     );
 
-    // Response interceptor - hata yonetimi
+    // Response interceptor - normalize errors.
     // Note: this unwraps response.data, so this.client.get() returns the HTTP body directly
     // All methods that do `response.data` are accessing the `.data` field of the API response body
     this.client.interceptors.response.use(
@@ -91,7 +91,7 @@ class APIClient {
           const { status, data } = error.response;
           
           if (status === 401) {
-            // Token gecersiz
+            // The token is no longer valid.
             this.setToken(null);
           }
         }
@@ -102,7 +102,7 @@ class APIClient {
   }
 
   /**
-   * Token ayarla
+   * Set the token
    */
   setToken(token) {
     this.token = token;
@@ -113,7 +113,7 @@ class APIClient {
   }
 
   /**
-   * Base URL ayarla
+   * Set the base URL
    */
   setBaseURL(baseURL) {
     this.baseURL = baseURL;
@@ -121,7 +121,7 @@ class APIClient {
   }
 
   /**
-   * Saglik kontrolu
+   * Health check
    */
   async healthCheck() {
     return this.client.get('/health');
@@ -130,7 +130,7 @@ class APIClient {
   // ==================== AUTH ====================
 
   /**
-   * Giris yap
+   * Sign in
    */
   async login(credentials) {
     return this.requestWithSessionCookie({
@@ -141,7 +141,7 @@ class APIClient {
   }
 
   /**
-   * Kayit ol
+   * Register
    */
   async register(userData) {
     const response = await this.requestWithSessionCookie({
@@ -153,7 +153,7 @@ class APIClient {
   }
 
   /**
-   * Mevcut kullanici bilgilerini getir
+   * Get the current user details
    */
   async getMe() {
     const response = await this.client.get('/api/auth/me');
@@ -249,7 +249,7 @@ class APIClient {
   // ==================== SESSIONS ====================
 
   /**
-   * Tum session'lari getir
+   * Get all sessions
    */
   async getSessions(params = {}) {
     const response = await this.client.get('/api/sessions', { params });
@@ -257,7 +257,7 @@ class APIClient {
   }
 
   /**
-   * Aktif session'i getir
+   * Get the active session
    */
   async getActiveSession() {
     const response = await this.client.get('/api/sessions/active');
@@ -265,7 +265,7 @@ class APIClient {
   }
 
   /**
-   * Session detayini getir
+   * Get session details
    */
   async getSession(sessionId) {
     const response = await this.client.get(`/api/sessions/${sessionId}`);
@@ -273,7 +273,7 @@ class APIClient {
   }
 
   /**
-   * Session metadata guncelle
+   * Update session metadata
    */
   async updateSession(sessionId, data) {
     const response = await this.client.put(`/api/sessions/${sessionId}`, data);
@@ -281,7 +281,7 @@ class APIClient {
   }
 
   /**
-   * Yeni session baslat
+   * Start a new session
    */
   async startSession(data) {
     const response = await this.client.post('/api/sessions/start', data);
@@ -289,7 +289,7 @@ class APIClient {
   }
 
   /**
-   * Session'i bitir
+   * End a session
    */
   async endSession(sessionId, data = {}) {
     const response = await this.client.put(`/api/sessions/${sessionId}/end`, data);
@@ -297,7 +297,7 @@ class APIClient {
   }
 
   /**
-   * Session'i iptal et
+   * Abandon a session
    */
   async abandonSession(sessionId, data = {}) {
     const response = await this.client.put(`/api/sessions/${sessionId}/abandon`, data);
@@ -305,7 +305,7 @@ class APIClient {
   }
 
   /**
-   * Session'i sil
+   * Delete a session
    */
   async deleteSession(sessionId) {
     const response = await this.client.delete(`/api/sessions/${sessionId}`);
@@ -315,7 +315,7 @@ class APIClient {
   // ==================== LOOT ====================
 
   /**
-   * Loot entry ekle
+   * Add a loot entry
    */
   async addLoot(sessionId, data) {
     const response = await this.client.post('/api/loot', {
@@ -326,7 +326,7 @@ class APIClient {
   }
 
   /**
-   * Toplu loot ekle
+   * Add loot in bulk
    */
   async addLootBulk(sessionId, items) {
     const response = await this.client.post('/api/loot/bulk', {
@@ -337,7 +337,7 @@ class APIClient {
   }
 
   /**
-   * Son loot entry'lerini getir
+   * Get recent loot entries
    */
   async getRecentLoot(params = {}) {
     const response = await this.client.get('/api/loot/recent', { params });
@@ -345,7 +345,7 @@ class APIClient {
   }
 
   /**
-   * Session'in loot entry'lerini getir
+   * Get the loot entries for a session
    */
   async getLootBySession(sessionId, params = {}) {
     const response = await this.client.get(`/api/loot/session/${sessionId}`, { params });
@@ -353,7 +353,7 @@ class APIClient {
   }
 
   /**
-   * Loot entry guncelle
+   * Update a loot entry
    */
   async updateLoot(lootId, data) {
     const response = await this.client.put(`/api/loot/${lootId}`, data);
@@ -361,7 +361,7 @@ class APIClient {
   }
 
   /**
-   * Loot entry sil
+   * Delete a loot entry
    */
   async deleteLoot(lootId) {
     const response = await this.client.delete(`/api/loot/${lootId}`);
@@ -371,7 +371,7 @@ class APIClient {
   // ==================== PRICES ====================
 
   /**
-   * Guncel fiyatlari getir
+   * Get current prices
    */
   async getPrices(params = {}) {
     const response = await this.client.get('/api/prices/current', { params });
@@ -379,7 +379,7 @@ class APIClient {
   }
 
   /**
-   * Belirli item'in fiyatini getir
+   * Get the price for a specific item
    */
   async getItemPrice(itemName, params = {}) {
     const response = await this.client.get(`/api/prices/item/${encodeURIComponent(itemName)}`, {
@@ -389,7 +389,7 @@ class APIClient {
   }
 
   /**
-   * Fiyatlari senkronize et
+   * Sync prices
    */
   async syncPrices(data = {}) {
     const response = await this.client.post('/api/prices/sync', data, {
@@ -399,7 +399,7 @@ class APIClient {
   }
 
   /**
-   * Mevcut ligleri getir
+   * Get the current leagues
    */
   async getLeagues(params = {}) {
     const response = await this.client.get('/api/prices/leagues', { params });
@@ -407,7 +407,7 @@ class APIClient {
   }
 
   /**
-   * Mevcut item tiplerini getir
+   * Get the current item types
    */
   async getTypes(params = {}) {
     const response = await this.client.get('/api/prices/types', { params });
@@ -417,7 +417,7 @@ class APIClient {
   // ==================== STATS ====================
 
   /**
-   * Kisisel istatistikleri getir
+   * Get personal statistics
    */
   async getPersonalStats(period = 'weekly', context = {}) {
     const response = await this.client.get('/api/stats/personal', {

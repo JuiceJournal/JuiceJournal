@@ -1,7 +1,7 @@
 /**
  * OCR Scanner Module
- * Tesseract.js kullanarak ekran goruntulerinden metin okur
- * ve PoE itemlerini tespit eder
+ * Uses Tesseract.js to read text from screenshots
+ * and detect PoE items.
  */
 
 const Tesseract = require('tesseract.js');
@@ -38,7 +38,7 @@ class OCRScanner {
       'mortal hope': { type: 'fragment', keywords: ['mortal hope'] },
       'mortal ignorance': { type: 'fragment', keywords: ['mortal ignorance'] },
       
-      // Scarabs (genel tanimlamalar)
+      // Scarabs (generic definitions)
       'scarab': { type: 'scarab', keywords: ['scarab'] },
       
       // Maps
@@ -50,7 +50,7 @@ class OCRScanner {
   }
 
   /**
-   * Tesseract worker'i baslat
+   * Start the Tesseract worker
    */
   async initialize() {
     if (this.isInitialized) return;
@@ -59,13 +59,13 @@ class OCRScanner {
       this.worker = await Tesseract.createWorker('eng');
       this.isInitialized = true;
     } catch (error) {
-      console.error('Tesseract baslatma hatasi:', error);
+      console.error('Failed to start Tesseract:', error);
       throw error;
     }
   }
 
   /**
-   * Tesseract worker'i kapat
+   * Stop the Tesseract worker
    */
   async terminate() {
     if (this.worker) {
@@ -76,9 +76,9 @@ class OCRScanner {
   }
 
   /**
-   * Goruntuyu tara ve itemleri tespit et
+   * Scan the image and detect items
    * @param {Buffer} imageBuffer - PNG/JPG buffer
-   * @returns {Array} - Tespit edilen itemler
+   * @returns {Array} - Detected items
    */
   async scanImage(imageBuffer) {
     if (!this.isInitialized) {
@@ -86,21 +86,21 @@ class OCRScanner {
     }
 
     try {
-      // Tesseract ile metni oku
+      // Read the text through Tesseract.
       const { data: { text } } = await this.worker.recognize(imageBuffer);
 
-      // Metinden itemleri parse et
+      // Parse items from the OCR text.
       const items = this.parseItemsFromText(text);
 
       return items;
     } catch (error) {
-      console.error('OCR tarama hatasi:', error);
+      console.error('OCR scan failed:', error);
       return [];
     }
   }
 
   /**
-   * Metinden PoE itemlerini parse et
+   * Parse PoE items from OCR text
    */
   parseItemsFromText(text) {
     const items = [];
@@ -110,20 +110,20 @@ class OCRScanner {
       const line = lines[i].trim();
       if (!line) continue;
 
-      // Sayi + Item adi pattern'i ara
-      // Ornek: "x45 Chaos Orb" veya "45x Chaos Orb" veya "Chaos Orb x45"
+      // Look for quantity + item name patterns.
+      // Example: "x45 Chaos Orb" or "45x Chaos Orb" or "Chaos Orb x45"
       
       const patterns = [
-        // x45 Chaos Orb veya 45x Chaos Orb
+        // x45 Chaos Orb or 45x Chaos Orb
         /^(?:x?(\d+)x?)\s*(.+?)$/i,
-        // Chaos Orb x45 veya Chaos Orb (45)
+        // Chaos Orb x45 or Chaos Orb (45)
         /^(.+?)\s*(?:x?(\d+)x?|\((\d+)\))$/i
       ];
 
       let quantity = 1;
       let itemName = line;
 
-      // Stack sayisi var mi kontrol et
+      // Check whether the line includes a stack size.
       for (const pattern of patterns) {
         const match = line.match(pattern);
         if (match) {
@@ -147,10 +147,10 @@ class OCRScanner {
         }
       }
 
-      // Item tipini tespit et
+      // Detect the item type.
       const itemType = this.detectItemType(itemName);
       
-      // Gecerli bir item mi kontrol et
+      // Check whether the OCR match looks valid.
       if (itemType && this.isValidItem(itemName)) {
         items.push({
           itemName: this.cleanItemName(itemName),
@@ -161,12 +161,12 @@ class OCRScanner {
       }
     }
 
-    // Ayni itemleri birlestir
+    // Merge duplicate items.
     return this.mergeDuplicateItems(items);
   }
 
   /**
-   * Item tipini tespit et
+   * Detect the item type
    */
   detectItemType(itemName) {
     const lowerName = itemName.toLowerCase();
@@ -179,7 +179,7 @@ class OCRScanner {
       }
     }
 
-    // Default olarak currency varsay
+    // Default to currency when the text looks close enough.
     if (this.looksLikeCurrency(lowerName)) {
       return 'currency';
     }
@@ -188,7 +188,7 @@ class OCRScanner {
   }
 
   /**
-   * Metin currency gibi mi gorunuyor?
+   * Check whether the text looks like currency
    */
   looksLikeCurrency(text) {
     const currencyPatterns = [
@@ -205,16 +205,16 @@ class OCRScanner {
   }
 
   /**
-   * Gecerli item mi kontrol et
+   * Validate the detected item
    */
   isValidItem(itemName) {
-    // En az 3 karakter olmali
+    // Require at least 3 characters.
     if (itemName.length < 3) return false;
 
-    // Sadece rakam olmamali
+    // Reject plain numbers.
     if (/^\d+$/.test(itemName)) return false;
 
-    // Yaygin yanlis tespitleri filtrele
+    // Filter common OCR false positives.
     const invalidPatterns = [
       /^stash$/i,
       /^inventory$/i,
@@ -231,17 +231,17 @@ class OCRScanner {
   }
 
   /**
-   * Item adini temizle
+   * Clean the item name
    */
   cleanItemName(name) {
     return name
-      .replace(/[^\w\s-']/gi, '') // Ozel karakterleri temizle
-      .replace(/\s+/g, ' ') // Coklu bosluklari tek bosluga cevir
+      .replace(/[^\w\s-']/gi, '') // Remove special characters.
+      .replace(/\s+/g, ' ') // Collapse repeated spaces.
       .trim();
   }
 
   /**
-   * Ayni itemleri birlestir
+   * Merge identical items
    */
   mergeDuplicateItems(items) {
     const merged = {};
@@ -260,12 +260,12 @@ class OCRScanner {
   }
 
   /**
-   * Belirli bir bolgeyi tara (koordinat bazli)
-   * Not: Electron'un desktopCapturer'i zaten belirli bir bolgeyi yakalayabilir
+   * Scan a specific region (coordinate based)
+   * Note: Electron's desktopCapturer can already capture a specific region.
    */
   async scanRegion(imageBuffer, region) {
-    // Gelecekte implementasyon icin yer tutucu
-    // Su an tam ekran taraniyor, gerekirse crop islemi eklenebilir
+    // Placeholder for future implementation.
+    // The current flow scans the whole image; cropping can be added later if needed.
     return this.scanImage(imageBuffer);
   }
 }
