@@ -1,6 +1,6 @@
 /**
  * Loot Routes
- * Loot entry islemleri
+ * Manages loot entry operations
  */
 
 const express = require('express');
@@ -38,13 +38,13 @@ const handleValidationErrors = (req, res, next) => {
 
 /**
  * POST /api/loot
- * Yeni loot entry ekle
+ * Add a new loot entry
  */
 router.post('/',
   authenticate,
   [
-    body('sessionId').isUUID().withMessage('Gecerli bir session ID giriniz'),
-    body('itemName').trim().notEmpty().withMessage('Item adi gereklidir'),
+    body('sessionId').isUUID().withMessage('Enter a valid session ID'),
+    body('itemName').trim().notEmpty().withMessage('Item name is required'),
     body('itemType').optional().isIn([
       'currency', 'fragment', 'scarab', 'map',
       'divination_card', 'gem', 'unique', 'other'
@@ -75,7 +75,7 @@ router.post('/',
         screenshotPath
       } = req.body;
 
-      // Session kontrolu
+      // Check the session.
       const session = await Session.findOne({
         where: {
           id: sessionId,
@@ -84,10 +84,10 @@ router.post('/',
       });
 
       if (!session) {
-        return errorResponse(res, 404, 'Session bulunamadi', 'SESSION_NOT_FOUND');
+        return errorResponse(res, 404, 'Session not found', 'SESSION_NOT_FOUND');
       }
 
-      // Chaos degeri verilmemisse fiyat tablosundan bul
+      // Look up the price if no chaos value was provided.
       let finalChaosValue = chaosValue;
       let finalDivineValue = divineValue;
 
@@ -112,7 +112,7 @@ router.post('/',
         }
       }
 
-      // Loot entry olustur
+      // Create the loot entry.
       const lootEntry = await LootEntry.create({
         sessionId,
         itemName,
@@ -124,10 +124,10 @@ router.post('/',
         screenshotPath
       });
 
-      // Session karini guncelle
+      // Refresh the session profit.
       await session.calculateProfit();
 
-      // WebSocket uzerinden broadcast
+      // Broadcast via WebSocket.
       if (req.app.broadcast) {
         req.app.broadcast({
           type: 'LOOT_ADDED',
@@ -144,19 +144,19 @@ router.post('/',
       });
     } catch (error) {
       logger.error('loot add failed', { message: error.message });
-      errorResponse(res, 500, 'Loot eklenirken hata olustu', 'LOOT_ADD_FAILED');
+      errorResponse(res, 500, 'Unable to add loot right now', 'LOOT_ADD_FAILED');
     }
   }
 );
 
 /**
  * GET /api/loot/session/:sessionId
- * Session'a ait tum loot entry'lerini getir
+ * List every loot entry for a session
  */
 router.get('/session/:sessionId',
   authenticate,
   [
-    param('sessionId').isUUID().withMessage('Gecerli bir session ID giriniz'),
+    param('sessionId').isUUID().withMessage('Enter a valid session ID'),
     query('limit').optional().isInt({ min: 1, max: 500 }),
     query('offset').optional().isInt({ min: 0 }),
     handleValidationErrors
@@ -166,7 +166,7 @@ router.get('/session/:sessionId',
       const { sessionId } = req.params;
       const { limit = 100, offset = 0 } = req.query;
 
-      // Session kontrolu
+      // Check the session.
       const session = await Session.findOne({
         where: {
           id: sessionId,
@@ -175,7 +175,7 @@ router.get('/session/:sessionId',
       });
 
       if (!session) {
-        return errorResponse(res, 404, 'Session bulunamadi', 'SESSION_NOT_FOUND');
+        return errorResponse(res, 404, 'Session not found', 'SESSION_NOT_FOUND');
       }
 
       const { count, rows: lootEntries } = await LootEntry.findAndCountAll({
@@ -185,7 +185,7 @@ router.get('/session/:sessionId',
         offset: parseInt(offset)
       });
 
-      // Toplam degerleri hesapla
+      // Calculate total values.
       const totalChaosValue = lootEntries.reduce((sum, loot) => {
         return sum + (parseFloat(loot.chaosValue) * loot.quantity);
       }, 0);
@@ -203,14 +203,14 @@ router.get('/session/:sessionId',
       });
     } catch (error) {
       logger.error('loot list failed', { message: error.message });
-      errorResponse(res, 500, 'Loot entry\'ler alinirken hata olustu', 'LOOT_LIST_LOAD_FAILED');
+      errorResponse(res, 500, 'Unable to load loot entries right now', 'LOOT_LIST_LOAD_FAILED');
     }
   }
 );
 
 /**
  * GET /api/loot/recent
- * Kullaniciya ait son loot entry'lerini getir
+ * List the user's recent loot entries
  */
 router.get('/recent',
   authenticate,
@@ -269,19 +269,19 @@ router.get('/recent',
       });
     } catch (error) {
       logger.error('recent loot list failed', { message: error.message });
-      errorResponse(res, 500, 'Son loot entry\'ler alinirken hata olustu', 'RECENT_LOOT_LOAD_FAILED');
+      errorResponse(res, 500, 'Unable to load recent loot right now', 'RECENT_LOOT_LOAD_FAILED');
     }
   }
 );
 
 /**
  * GET /api/loot/:id
- * Loot entry detayini getir
+ * Get loot entry details
  */
 router.get('/:id',
   authenticate,
   [
-    param('id').isUUID().withMessage('Gecerli bir loot ID giriniz'),
+    param('id').isUUID().withMessage('Enter a valid loot ID'),
     handleValidationErrors
   ],
   async (req, res) => {
@@ -296,7 +296,7 @@ router.get('/:id',
       });
 
       if (!lootEntry) {
-        return errorResponse(res, 404, 'Loot entry bulunamadi', 'LOOT_NOT_FOUND');
+        return errorResponse(res, 404, 'Loot entry not found', 'LOOT_NOT_FOUND');
       }
 
       res.json({
@@ -306,19 +306,19 @@ router.get('/:id',
       });
     } catch (error) {
       logger.error('loot load failed', { message: error.message });
-      errorResponse(res, 500, 'Loot entry alinirken hata olustu', 'LOOT_LOAD_FAILED');
+      errorResponse(res, 500, 'Unable to load the loot entry right now', 'LOOT_LOAD_FAILED');
     }
   }
 );
 
 /**
  * PUT /api/loot/:id
- * Loot entry guncelle
+ * Update a loot entry
  */
 router.put('/:id',
   authenticate,
   [
-    param('id').isUUID().withMessage('Gecerli bir loot ID giriniz'),
+    param('id').isUUID().withMessage('Enter a valid loot ID'),
     body('quantity').optional().isInt({ min: 1 }),
     body('chaosValue').optional().isFloat({ min: 0 }),
     handleValidationErrors
@@ -337,7 +337,7 @@ router.put('/:id',
       });
 
       if (!lootEntry) {
-        return errorResponse(res, 404, 'Loot entry bulunamadi', 'LOOT_NOT_FOUND');
+        return errorResponse(res, 404, 'Loot entry not found', 'LOOT_NOT_FOUND');
       }
 
       await lootEntry.update({
@@ -346,7 +346,7 @@ router.put('/:id',
         divineValue: divineValue !== undefined ? parseFloat(divineValue) : lootEntry.divineValue
       });
 
-      // Session karini guncelle
+      // Refresh the session profit.
       await lootEntry.session.calculateProfit();
 
       res.json({
@@ -356,19 +356,19 @@ router.put('/:id',
       });
     } catch (error) {
       logger.error('loot update failed', { message: error.message });
-      errorResponse(res, 500, 'Loot entry guncellenirken hata olustu', 'LOOT_UPDATE_FAILED');
+      errorResponse(res, 500, 'Unable to update the loot entry right now', 'LOOT_UPDATE_FAILED');
     }
   }
 );
 
 /**
  * DELETE /api/loot/:id
- * Loot entry sil
+ * Delete a loot entry
  */
 router.delete('/:id',
   authenticate,
   [
-    param('id').isUUID().withMessage('Gecerli bir loot ID giriniz'),
+    param('id').isUUID().withMessage('Enter a valid loot ID'),
     handleValidationErrors
   ],
   async (req, res) => {
@@ -383,36 +383,36 @@ router.delete('/:id',
       });
 
       if (!lootEntry) {
-        return errorResponse(res, 404, 'Loot entry bulunamadi', 'LOOT_NOT_FOUND');
+        return errorResponse(res, 404, 'Loot entry not found', 'LOOT_NOT_FOUND');
       }
 
       const session = lootEntry.session;
       await lootEntry.destroy();
 
-      // Session karini guncelle
+      // Refresh the session profit.
       await session.calculateProfit();
 
       res.json({
         success: true,
-        data: { message: 'Loot entry basariyla silindi' },
+        data: { message: 'Loot entry deleted successfully' },
         error: null
       });
     } catch (error) {
       logger.error('loot delete failed', { message: error.message });
-      errorResponse(res, 500, 'Loot entry silinirken hata olustu', 'LOOT_DELETE_FAILED');
+      errorResponse(res, 500, 'Unable to delete the loot entry right now', 'LOOT_DELETE_FAILED');
     }
   }
 );
 
 /**
  * POST /api/loot/bulk
- * Toplu loot ekle (OCR veya desktop app icin)
+ * Add loot entries in bulk (for OCR or the desktop app)
  */
 router.post('/bulk',
   authenticate,
   [
-    body('sessionId').isUUID().withMessage('Gecerli bir session ID giriniz'),
-    body('items').isArray({ min: 1, max: 200 }).withMessage('En az 1, en fazla 200 item gereklidir'),
+    body('sessionId').isUUID().withMessage('Enter a valid session ID'),
+    body('items').isArray({ min: 1, max: 200 }).withMessage('At least 1 item and at most 200 items are required'),
     body('items.*.itemName').trim().notEmpty().isLength({ max: 200 }),
     body('items.*.itemType').optional().isIn([
       'currency', 'fragment', 'scarab', 'map',
@@ -435,7 +435,7 @@ router.post('/bulk',
     try {
       const { sessionId, items } = req.body;
 
-      // Session kontrolu
+      // Check the session.
       const session = await Session.findOne({
         where: {
           id: sessionId,
@@ -444,7 +444,7 @@ router.post('/bulk',
       });
 
       if (!session) {
-        return errorResponse(res, 404, 'Session bulunamadi', 'SESSION_NOT_FOUND');
+        return errorResponse(res, 404, 'Session not found', 'SESSION_NOT_FOUND');
       }
 
       // Batch price lookup — single query instead of N+1
@@ -470,7 +470,7 @@ router.post('/bulk',
         }
       }
 
-      // Bulk create all loot entries
+      // Bulk-create all loot entries.
       const lootData = items.map(item => {
         let chaosValue = item.chaosValue;
         let divineValue = item.divineValue;
@@ -497,10 +497,10 @@ router.post('/bulk',
 
       const createdItems = await LootEntry.bulkCreate(lootData);
 
-      // Session karini guncelle
+      // Refresh the session profit.
       await session.calculateProfit();
 
-      // WebSocket uzerinden broadcast
+      // Broadcast via WebSocket.
       if (req.app.broadcast) {
         req.app.broadcast({
           type: 'LOOT_BULK_ADDED',
@@ -521,7 +521,7 @@ router.post('/bulk',
       });
     } catch (error) {
       logger.error('bulk loot add failed', { message: error.message });
-      errorResponse(res, 500, 'Loot eklenirken hata olustu', 'LOOT_BULK_ADD_FAILED');
+      errorResponse(res, 500, 'Unable to add loot right now', 'LOOT_BULK_ADD_FAILED');
     }
   }
 );

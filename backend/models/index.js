@@ -1,12 +1,12 @@
 /**
- * Modellerin merkezi export noktasi
- * Tum modeller ve iliskiler burada tanimlanir
+ * Central model export point
+ * Defines all models and associations
  */
 
 const sequelize = require('../config/database');
 const { DataTypes } = require('sequelize');
 
-// Modelleri import et
+// Import models
 const User = require('./User')(sequelize, DataTypes);
 const Session = require('./Session')(sequelize, DataTypes);
 const LootEntry = require('./LootEntry')(sequelize, DataTypes);
@@ -16,9 +16,9 @@ const StrategySession = require('./StrategySession')(sequelize, DataTypes);
 const StrategyTag = require('./StrategyTag')(sequelize, DataTypes);
 const StashSnapshot = require('./StashSnapshot')(sequelize, DataTypes);
 
-// Iliskileri tanimla
+// Define associations
 
-// User -> Session (Bir kullanicinin birden fazla session'i olabilir)
+// User -> Session (A user can own multiple sessions)
 User.hasMany(Session, {
   foreignKey: 'userId',
   as: 'sessions',
@@ -39,7 +39,7 @@ Strategy.belongsTo(User, {
   as: 'user'
 });
 
-// Session -> LootEntry (Bir session'in birden fazla loot entry'si olabilir)
+// Session -> LootEntry (A session can contain multiple loot entries)
 Session.hasMany(LootEntry, {
   foreignKey: 'sessionId',
   as: 'lootEntries',
@@ -115,7 +115,7 @@ StashSnapshot.belongsTo(Session, {
   as: 'session'
 });
 
-// Export
+// Export models
 module.exports = {
   sequelize,
   User,

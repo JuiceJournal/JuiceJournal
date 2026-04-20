@@ -1,6 +1,6 @@
 /**
  * Cron Service
- * Periyodik gorevlerin yonetimi
+ * Periodic job management
  */
 
 const cron = require('node-cron');
@@ -11,15 +11,15 @@ const logger = require('./logger');
 let priceSyncJob = null;
 
 /**
- * Fiyat senkronizasyon cron job'unu baslat
+ * Start the price sync cron job
  */
 const startPriceSync = (app, intervalHours = env.priceSync.intervalHours) => {
-  // Varsa onceki job'u durdur
+  // Stop the previous job if one already exists.
   if (priceSyncJob) {
     priceSyncJob.stop();
   }
 
-  // Her saat basi calistir
+  // Run on the hour.
   priceSyncJob = cron.schedule(`0 */${intervalHours} * * *`, async () => {
     logger.info('automatic price sync started');
 
@@ -34,7 +34,7 @@ const startPriceSync = (app, intervalHours = env.priceSync.intervalHours) => {
             duration: new Date() - results.startedAt
           });
 
-          // WebSocket uzerinden bildirim gonder
+          // Send a WebSocket notification.
           if (app && app.broadcast) {
             try {
               app.broadcast({
@@ -60,7 +60,7 @@ const startPriceSync = (app, intervalHours = env.priceSync.intervalHours) => {
 
   logger.info('price sync schedule configured', { intervalHours });
 
-  // Hemen bir senkronizasyon yap
+  // Run an initial sync immediately.
   setTimeout(async () => {
     try {
       for (const poeVersion of ['poe1', 'poe2']) {
@@ -76,13 +76,13 @@ const startPriceSync = (app, intervalHours = env.priceSync.intervalHours) => {
     } catch (error) {
       logger.error('initial price sync failed', { message: error.message });
     }
-  }, 5000); // 5 saniye bekle (veritabani hazir olsun)
+  }, 5000); // Wait 5 seconds so the database is ready.
 
   return priceSyncJob;
 };
 
 /**
- * Fiyat senkronizasyon cron job'unu durdur
+ * Stop the price sync cron job
  */
 const stopPriceSync = () => {
   if (priceSyncJob) {
@@ -93,7 +93,7 @@ const stopPriceSync = () => {
 };
 
 /**
- * Cron job durumunu kontrol et
+ * Check the cron job status
  */
 const getStatus = () => {
   return {

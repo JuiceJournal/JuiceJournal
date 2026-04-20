@@ -1,6 +1,6 @@
 /**
  * Session Model
- * PoE map oturumlarini temsil eder
+ * Represents tracked PoE map sessions
  */
 
 const { Op } = require('sequelize');
@@ -27,7 +27,7 @@ module.exports = (sequelize, DataTypes) => {
       field: 'map_name',
       validate: {
         notEmpty: {
-          msg: 'Map adi bos olamaz'
+          msg: 'Map name cannot be empty'
         }
       }
     },

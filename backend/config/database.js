@@ -1,6 +1,6 @@
 /**
- * Veritabani yapilandirmasi
- * Sequelize ile PostgreSQL baglantisi
+ * Database configuration
+ * Sequelize PostgreSQL connection
  */
 
 const { Sequelize } = require('sequelize');

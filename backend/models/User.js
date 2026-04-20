@@ -1,6 +1,6 @@
 /**
  * User Model
- * Kullanici bilgilerini ve auth islemlerini yonetir
+ * Manages user details and auth operations
  */
 
 const bcrypt = require('bcryptjs');
@@ -19,10 +19,10 @@ module.exports = (sequelize, DataTypes) => {
       validate: {
         len: {
           args: [3, 50],
-          msg: 'Kullanici adi 3-50 karakter arasinda olmalidir'
+          msg: 'Username must be between 3 and 50 characters'
         },
         isAlphanumeric: {
-          msg: 'Kullanici adi sadece harf ve rakam icerebilir'
+          msg: 'Username may only contain letters and numbers'
         }
       }
     },
@@ -32,7 +32,7 @@ module.exports = (sequelize, DataTypes) => {
       unique: true,
       validate: {
         isEmail: {
-          msg: 'Gecerli bir e-posta adresi giriniz'
+          msg: 'Enter a valid email address'
         }
       }
     },
@@ -43,7 +43,7 @@ module.exports = (sequelize, DataTypes) => {
       validate: {
         isIn: {
           args: [['user', 'admin']],
-          msg: 'Gecersiz kullanici rolu'
+          msg: 'Invalid user role'
         }
       }
     },
@@ -104,16 +104,16 @@ module.exports = (sequelize, DataTypes) => {
     timestamps: true,
     underscored: true,
     hooks: {
-      // Password hashleme - sequelize hook kullanmak yerinde instance method kullanacagiz
+      // Password hashing is handled by the explicit instance/static methods below.
     }
   });
 
-  // Instance metodlari
+  // Instance methods
   User.prototype.comparePassword = async function(password) {
     return await bcrypt.compare(password, this.passwordHash);
   };
 
-  // Statik metodlar
+  // Static methods
   User.hashPassword = async function(password) {
     const salt = await bcrypt.genSalt(12);
     return await bcrypt.hash(password, salt);

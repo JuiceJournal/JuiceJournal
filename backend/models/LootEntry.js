@@ -1,6 +1,6 @@
 /**
  * LootEntry Model
- * Her map oturumunda toplanan item kayitlarini tutar
+ * Stores item records collected during each map session
  */
 
 module.exports = (sequelize, DataTypes) => {
@@ -25,7 +25,7 @@ module.exports = (sequelize, DataTypes) => {
       field: 'item_name',
       validate: {
         notEmpty: {
-          msg: 'Item adi bos olamaz'
+          msg: 'Item name cannot be empty'
         }
       }
     },

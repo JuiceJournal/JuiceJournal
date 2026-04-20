@@ -320,7 +320,7 @@ router.get('/leagues',
 router.get('/sync-status', authenticate, async (req, res) => {
   try {
     if (!canAccessSyncControls(req.user)) {
-      return errorResponse(res, 403, 'Bu islem icin yetkiniz yok', 'FORBIDDEN');
+      return errorResponse(res, 403, 'You do not have permission to perform this action', 'FORBIDDEN');
     }
 
     res.json({
@@ -349,7 +349,7 @@ router.post('/sync',
   async (req, res) => {
     try {
       if (!canAccessSyncControls(req.user)) {
-        return errorResponse(res, 403, 'Bu islem icin yetkiniz yok', 'FORBIDDEN');
+        return errorResponse(res, 403, 'You do not have permission to perform this action', 'FORBIDDEN');
       }
 
       const { league, types, poeVersion = 'poe1' } = req.body;

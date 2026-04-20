@@ -1,6 +1,6 @@
 /**
  * Auth Routes
- * Kullanici kayit, giris ve profil islemleri
+ * Handles user registration, sign-in, and profile operations
  */
 
 const express = require('express');
@@ -37,7 +37,7 @@ const authLimiter = rateLimit({
   message: {
     success: false,
     data: null,
-    error: 'Cok fazla giris denemesi yapildi, lutfen daha sonra tekrar deneyin'
+    error: 'Too many sign-in attempts. Please try again later.'
   }
 });
 
@@ -138,7 +138,7 @@ const handleValidationErrors = (req, res, next) => {
 
 /**
  * POST /api/auth/register
- * Yeni kullanici kaydi
+ * Register a new user
  */
 router.post('/register',
   authLimiter,
@@ -146,24 +146,24 @@ router.post('/register',
     body('username')
       .trim()
       .isLength({ min: 3, max: 50 })
-      .withMessage('Kullanici adi 3-50 karakter arasinda olmalidir')
+      .withMessage('Username must be between 3 and 50 characters')
       .isAlphanumeric()
-      .withMessage('Kullanici adi sadece harf ve rakam icerebilir'),
+      .withMessage('Username may only contain letters and numbers'),
     body('email')
       .trim()
       .isEmail()
-      .withMessage('Gecerli bir e-posta adresi giriniz')
+      .withMessage('Enter a valid email address')
       .normalizeEmail(),
     body('password')
       .isLength({ min: 6 })
-      .withMessage('Sifre en az 6 karakter olmalidir'),
+      .withMessage('Password must be at least 6 characters'),
     handleValidationErrors
   ],
   async (req, res) => {
     try {
       const { username, email, password } = req.body;
 
-      // Kullanici adi veya email kontrolu
+      // Check for an existing username or email.
       const existingUser = await User.findOne({
         where: {
           [Op.or]: [
@@ -178,23 +178,23 @@ router.post('/register',
           success: false,
           data: null,
           error: existingUser.username === username
-            ? 'Bu kullanici adi zaten kullaniliyor'
-            : 'Bu e-posta adresi zaten kullaniliyor',
+            ? 'That username is already in use'
+            : 'That email address is already in use',
           errorCode: existingUser.username === username ? 'USERNAME_TAKEN' : 'EMAIL_TAKEN'
         });
       }
 
-      // Sifreyi hashle
+      // Hash the password.
       const passwordHash = await User.hashPassword(password);
 
-      // Kullanici olustur
+      // Create the user.
       const user = await User.create({
         username,
         email,
         passwordHash
       });
 
-      // Token olustur
+      // Create the token.
       const token = generateToken(user.id);
       setAuthCookie(res, token);
 
@@ -208,14 +208,14 @@ router.post('/register',
       });
     } catch (error) {
       logger.error('registration failed', { message: error.message });
-      errorResponse(res, 500, 'Kayit sirasinda bir hata olustu', 'REGISTER_FAILED');
+      errorResponse(res, 500, 'An error occurred during registration', 'REGISTER_FAILED');
     }
   }
 );
 
 /**
  * POST /api/auth/login
- * Kullanici girisi
+ * Sign in a user
  */
 router.post('/login',
   authLimiter,
@@ -223,17 +223,17 @@ router.post('/login',
     body('username')
       .trim()
       .notEmpty()
-      .withMessage('Kullanici adi veya e-posta gereklidir'),
+      .withMessage('Username or email is required'),
     body('password')
       .notEmpty()
-      .withMessage('Sifre gereklidir'),
+      .withMessage('Password is required'),
     handleValidationErrors
   ],
   async (req, res) => {
     try {
       const { username, password } = req.body;
 
-      // Kullaniciyi bul (username veya email ile)
+      // Find the user by username or email.
       const user = await User.findOne({
         where: {
           [Op.or]: [
@@ -247,24 +247,24 @@ router.post('/login',
         return res.status(401).json({
           success: false,
           data: null,
-          error: 'Kullanici adi veya sifre hatali',
+          error: 'Invalid username or password',
           errorCode: 'INVALID_CREDENTIALS'
         });
       }
 
-      // Sifreyi dogrula
+      // Verify the password.
       const isValidPassword = await user.comparePassword(password);
 
       if (!isValidPassword) {
         return res.status(401).json({
           success: false,
           data: null,
-          error: 'Kullanici adi veya sifre hatali',
+          error: 'Invalid username or password',
           errorCode: 'INVALID_CREDENTIALS'
         });
       }
 
-      // Token olustur
+      // Create the token.
       const token = generateToken(user.id);
       setAuthCookie(res, token);
 
@@ -278,14 +278,14 @@ router.post('/login',
       });
     } catch (error) {
       logger.error('login failed', { message: error.message });
-      errorResponse(res, 500, 'Giris sirasinda bir hata olustu', 'LOGIN_FAILED');
+      errorResponse(res, 500, 'An error occurred during sign in', 'LOGIN_FAILED');
     }
   }
 );
 
 /**
  * GET /api/auth/me
- * Mevcut kullanici bilgilerini getir
+ * Get the current user
  */
 router.get('/me', authenticate, async (req, res) => {
   try {
@@ -298,7 +298,7 @@ router.get('/me', authenticate, async (req, res) => {
     });
   } catch (error) {
     logger.error('profile load failed', { message: error.message });
-    errorResponse(res, 500, 'Profil bilgileri alinirken hata olustu', 'PROFILE_LOAD_FAILED');
+    errorResponse(res, 500, 'Failed to load profile details', 'PROFILE_LOAD_FAILED');
   }
 });
 
@@ -321,7 +321,7 @@ router.get('/realtime-token', authenticate, async (req, res) => {
     });
   } catch (error) {
     logger.error('realtime token failed', { message: error.message });
-    errorResponse(res, 500, 'Realtime token olusturulamadi', 'REALTIME_TOKEN_FAILED');
+    errorResponse(res, 500, 'Failed to create realtime token', 'REALTIME_TOKEN_FAILED');
   }
 });
 
@@ -682,7 +682,7 @@ router.delete('/poe/disconnect', authenticate, async (req, res) => {
 
 /**
  * PUT /api/auth/me
- * Kullanici profilini guncelle
+ * Update the user profile
  */
 router.put('/me',
   authenticate,
@@ -690,7 +690,7 @@ router.put('/me',
     body('email')
       .optional()
       .isEmail()
-      .withMessage('Gecerli bir e-posta adresi giriniz')
+      .withMessage('Enter a valid email address')
       .normalizeEmail(),
     handleValidationErrors
   ],
@@ -698,14 +698,14 @@ router.put('/me',
     try {
       const { email } = req.body;
 
-      // Email degisikligi varsa kontrol et
+      // Check for an email change.
       if (email && email !== req.user.email) {
         const existingUser = await User.findOne({ where: { email } });
         if (existingUser) {
           return res.status(400).json({
             success: false,
             data: null,
-            error: 'Bu e-posta adresi zaten kullaniliyor'
+            error: 'That email address is already in use'
           });
         }
       }
@@ -724,7 +724,7 @@ router.put('/me',
       res.status(500).json({
         success: false,
         data: null,
-        error: 'Profil guncellenirken hata olustu'
+        error: 'Failed to update profile'
       });
     }
   }

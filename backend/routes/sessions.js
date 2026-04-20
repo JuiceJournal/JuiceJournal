@@ -1,6 +1,6 @@
 /**
  * Session Routes
- * Map oturumlarinin yonetimi
+ * Manages map sessions
  */
 
 const express = require('express');
@@ -101,7 +101,7 @@ function errorResponse(res, status, error, errorCode) {
 
 /**
  * GET /api/sessions
- * Tum session'lari listele
+ * List all sessions
  */
 router.get('/',
   authenticate,
@@ -147,14 +147,14 @@ router.get('/',
       });
     } catch (error) {
       logger.error('session list error', { message: error.message });
-      errorResponse(res, 500, 'Session\'lar alinirken hata olustu', 'SESSION_LIST_LOAD_FAILED');
+      errorResponse(res, 500, 'Unable to load sessions right now', 'SESSION_LIST_LOAD_FAILED');
     }
   }
 );
 
 /**
  * GET /api/sessions/active
- * Aktif session'lari getir
+ * Get the active session
  */
 router.get('/active', authenticate, async (req, res) => {
   try {
@@ -177,18 +177,18 @@ router.get('/active', authenticate, async (req, res) => {
     });
   } catch (error) {
     logger.error('active session load failed', { message: error.message });
-    errorResponse(res, 500, 'Aktif session alinirken hata olustu', 'ACTIVE_SESSION_LOAD_FAILED');
+    errorResponse(res, 500, 'Unable to load the active session right now', 'ACTIVE_SESSION_LOAD_FAILED');
   }
 });
 
 /**
  * GET /api/sessions/:id
- * Session detaylarini getir
+ * Get session details
  */
 router.get('/:id',
   authenticate,
   [
-    param('id').isUUID().withMessage('Gecerli bir session ID giriniz'),
+    param('id').isUUID().withMessage('Enter a valid session ID'),
     handleValidationErrors
   ],
   async (req, res) => {
@@ -206,7 +206,7 @@ router.get('/:id',
       });
 
       if (!session) {
-        return errorResponse(res, 404, 'Session bulunamadi', 'SESSION_NOT_FOUND');
+        return errorResponse(res, 404, 'Session not found', 'SESSION_NOT_FOUND');
       }
 
       res.json({
@@ -216,14 +216,14 @@ router.get('/:id',
       });
     } catch (error) {
       logger.error('session load failed', { message: error.message });
-      errorResponse(res, 500, 'Session alinirken hata olustu', 'SESSION_LOAD_FAILED');
+      errorResponse(res, 500, 'Unable to load the session right now', 'SESSION_LOAD_FAILED');
     }
   }
 );
 
 /**
  * POST /api/sessions/start
- * Yeni session baslat
+ * Start a new session
  */
 router.post('/start',
   authenticate,
@@ -231,15 +231,15 @@ router.post('/start',
     body('mapName')
       .trim()
       .notEmpty()
-      .withMessage('Map adi gereklidir')
+      .withMessage('Map name is required')
       .isLength({ max: 100 }),
     body('poeVersion')
       .isIn(['poe1', 'poe2'])
-      .withMessage('PoE versiyonu gereklidir'),
+      .withMessage('Path of Exile version is required'),
     body('league')
       .trim()
       .notEmpty()
-      .withMessage('Lig gereklidir')
+      .withMessage('League is required')
       .isLength({ max: 50 }),
     body('mapTier').optional().isInt({ min: 1, max: 21 }),
     body('farmTypeId').optional({ nullable: true }).trim().isLength({ max: 50 }),
@@ -247,7 +247,7 @@ router.post('/start',
     body('strategyTag').optional({ nullable: true }).trim().isLength({ max: 50 }),
     body('notes').optional({ nullable: true }).trim().isLength({ max: 2000 }),
     body('costChaos').optional().isFloat({ min: 0 }),
-    body('startedAt').optional().isISO8601().withMessage('Gecerli bir baslangic zamani giriniz'),
+    body('startedAt').optional().isISO8601().withMessage('Enter a valid start time'),
     handleValidationErrors
   ],
   async (req, res) => {
@@ -256,7 +256,7 @@ router.post('/start',
       const farmTypeId = resolveSessionFarmTypeId(req.body);
       const normalizedStartedAt = parseAndValidateClientTimestamp(startedAt, { field: 'startedAt' });
 
-      // Aktif session kontrolu - atomic with transaction to prevent race condition
+      // Check for an active session atomically to prevent race conditions.
       const session = await sequelize.transaction(
         { isolationLevel: sequelize.Transaction.ISOLATION_LEVELS.SERIALIZABLE },
         async (t) => {
@@ -270,13 +270,13 @@ router.post('/start',
           });
 
           if (activeSession) {
-            throw Object.assign(new Error('Zaten aktif bir session var. Once mevcut session\'i tamamlayin.'), {
+            throw Object.assign(new Error('An active session already exists. Complete the current session first.'), {
               status: 400,
               errorCode: 'SESSION_ALREADY_ACTIVE'
             });
           }
 
-          // Yeni session olustur
+          // Create the new session.
           return Session.create({
             userId: req.userId,
             mapName,
@@ -294,7 +294,7 @@ router.post('/start',
         }
       );
 
-      // WebSocket uzerinden broadcast
+      // Broadcast via WebSocket.
       if (req.app.broadcast) {
         req.app.broadcast({
           type: 'SESSION_STARTED',
@@ -311,7 +311,7 @@ router.post('/start',
       });
     } catch (error) {
       logger.error('session start failed', { message: error.message });
-      const errorMessage = error.message || 'Session baslatilirken hata olustu';
+      const errorMessage = error.message || 'Unable to start the session';
       errorResponse(res, error.status || 500, errorMessage, error.errorCode || 'SESSION_START_FAILED');
     }
   }
@@ -319,12 +319,12 @@ router.post('/start',
 
 /**
  * PUT /api/sessions/:id
- * Session metadata guncelle
+ * Update session metadata
  */
 router.put('/:id',
   authenticate,
   [
-    param('id').isUUID().withMessage('Gecerli bir session ID giriniz'),
+    param('id').isUUID().withMessage('Enter a valid session ID'),
     body('strategyTag').optional({ nullable: true }).trim().isLength({ max: 50 }),
     body('notes').optional({ nullable: true }).trim().isLength({ max: 2000 }),
     handleValidationErrors
@@ -339,7 +339,7 @@ router.put('/:id',
       });
 
       if (!session) {
-        return errorResponse(res, 404, 'Session bulunamadi', 'SESSION_NOT_FOUND');
+        return errorResponse(res, 404, 'Session not found', 'SESSION_NOT_FOUND');
       }
 
       const updates = {};
@@ -371,20 +371,20 @@ router.put('/:id',
       });
     } catch (error) {
       logger.error('session update failed', { message: error.message });
-      errorResponse(res, 500, 'Session guncellenirken hata olustu', 'SESSION_UPDATE_FAILED');
+      errorResponse(res, 500, 'Unable to update the session right now', 'SESSION_UPDATE_FAILED');
     }
   }
 );
 
 /**
  * PUT /api/sessions/:id/end
- * Session'i tamamla
+ * Complete a session
  */
 router.put('/:id/end',
   authenticate,
   [
-    param('id').isUUID().withMessage('Gecerli bir session ID giriniz'),
-    body('endedAt').optional().isISO8601().withMessage('Gecerli bir bitis zamani giriniz'),
+    param('id').isUUID().withMessage('Enter a valid session ID'),
+    body('endedAt').optional().isISO8601().withMessage('Enter a valid end time'),
     handleValidationErrors
   ],
   async (req, res) => {
@@ -399,7 +399,7 @@ router.put('/:id/end',
       });
 
       if (!session) {
-        return errorResponse(res, 404, 'Aktif session bulunamadi', 'ACTIVE_SESSION_NOT_FOUND');
+        return errorResponse(res, 404, 'No active session was found', 'ACTIVE_SESSION_NOT_FOUND');
       }
 
       const finalEndedAt = parseAndValidateClientTimestamp(endedAt, {
@@ -409,7 +409,7 @@ router.put('/:id/end',
 
       await session.complete(finalEndedAt || null);
 
-      // WebSocket uzerinden broadcast
+      // Broadcast via WebSocket.
       if (req.app.broadcast) {
         req.app.broadcast({
           type: 'SESSION_COMPLETED',
@@ -426,7 +426,7 @@ router.put('/:id/end',
       });
     } catch (error) {
       logger.error('session complete failed', { message: error.message });
-      const errorMessage = error.errorCode ? 'Session zamani gecersiz' : (error.message || 'Session tamamlanirken hata olustu');
+      const errorMessage = error.errorCode ? 'Session time is invalid' : (error.message || 'Unable to end the session');
       errorResponse(res, error.status || 500, errorMessage, error.errorCode || 'SESSION_END_FAILED');
     }
   }
@@ -434,13 +434,13 @@ router.put('/:id/end',
 
 /**
  * PUT /api/sessions/:id/abandon
- * Session'i iptal et
+ * Abandon a session
  */
 router.put('/:id/abandon',
   authenticate,
   [
-    param('id').isUUID().withMessage('Gecerli bir session ID giriniz'),
-    body('endedAt').optional().isISO8601().withMessage('Gecerli bir bitis zamani giriniz'),
+    param('id').isUUID().withMessage('Enter a valid session ID'),
+    body('endedAt').optional().isISO8601().withMessage('Enter a valid end time'),
     handleValidationErrors
   ],
   async (req, res) => {
@@ -455,7 +455,7 @@ router.put('/:id/abandon',
       });
 
       if (!session) {
-        return errorResponse(res, 404, 'Aktif session bulunamadi', 'ACTIVE_SESSION_NOT_FOUND');
+        return errorResponse(res, 404, 'No active session was found', 'ACTIVE_SESSION_NOT_FOUND');
       }
 
       const finalEndedAt = parseAndValidateClientTimestamp(endedAt, {
@@ -472,7 +472,7 @@ router.put('/:id/abandon',
       });
     } catch (error) {
       logger.error('session abandon failed', { message: error.message });
-      const errorMessage = error.errorCode ? 'Session zamani gecersiz' : (error.message || 'Session iptal edilirken hata olustu');
+      const errorMessage = error.errorCode ? 'Session time is invalid' : (error.message || 'Unable to abandon the session');
       errorResponse(res, error.status || 500, errorMessage, error.errorCode || 'SESSION_ABANDON_FAILED');
     }
   }
@@ -480,12 +480,12 @@ router.put('/:id/abandon',
 
 /**
  * DELETE /api/sessions/:id
- * Session'i sil
+ * Delete a session
  */
 router.delete('/:id',
   authenticate,
   [
-    param('id').isUUID().withMessage('Gecerli bir session ID giriniz'),
+    param('id').isUUID().withMessage('Enter a valid session ID'),
     handleValidationErrors
   ],
   async (req, res) => {
@@ -498,19 +498,19 @@ router.delete('/:id',
       });
 
       if (!session) {
-        return errorResponse(res, 404, 'Session bulunamadi', 'SESSION_NOT_FOUND');
+        return errorResponse(res, 404, 'Session not found', 'SESSION_NOT_FOUND');
       }
 
       await session.destroy();
 
       res.json({
         success: true,
-        data: { message: 'Session basariyla silindi' },
+        data: { message: 'Session deleted successfully' },
         error: null
       });
     } catch (error) {
       logger.error('session delete failed', { message: error.message });
-      errorResponse(res, 500, 'Session silinirken hata olustu', 'SESSION_DELETE_FAILED');
+      errorResponse(res, 500, 'Unable to delete the session right now', 'SESSION_DELETE_FAILED');
     }
   }
 );

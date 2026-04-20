@@ -1,6 +1,6 @@
 /**
  * Authentication Middleware
- * JWT token dogrulama ve yetkilendirme
+ * JWT token verification and authorization
  */
 
 const jwt = require('jsonwebtoken');
@@ -33,7 +33,7 @@ function getTokenFromRequest(req) {
 }
 
 /**
- * JWT token dogrulama middleware
+ * JWT token verification middleware
  */
 const authenticate = async (req, res, next) => {
   try {
@@ -43,27 +43,27 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         data: null,
-        error: 'Yetkilendirme tokeni gerekli',
+        error: 'Authorization token is required',
         errorCode: 'AUTH_TOKEN_REQUIRED'
       });
     }
 
-    // Token'i dogrula
+    // Verify the token.
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
 
-    // Kullaniciyi bul
+    // Find the user.
     const user = await User.findByPk(decoded.userId);
 
     if (!user) {
       return res.status(401).json({
         success: false,
         data: null,
-        error: 'Kullanici bulunamadi',
+        error: 'User not found',
         errorCode: 'AUTH_USER_NOT_FOUND'
       });
     }
 
-    // Request'e kullanici bilgisini ekle
+    // Attach user information to the request.
     req.user = user;
     req.userId = user.id;
 
@@ -73,7 +73,7 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         data: null,
-        error: 'Token suresi doldu, lutfen tekrar giris yapin',
+        error: 'Token expired. Please sign in again',
         errorCode: 'AUTH_TOKEN_EXPIRED'
       });
     }
@@ -82,23 +82,23 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         data: null,
-        error: 'Gecersiz token',
+        error: 'Invalid token',
         errorCode: 'AUTH_TOKEN_INVALID'
       });
     }
 
-    console.error('Auth middleware hatasi:', error);
+    console.error('Auth middleware error:', error);
     return res.status(500).json({
       success: false,
       data: null,
-      error: 'Yetkilendirme hatasi',
+      error: 'Authorization failed',
       errorCode: 'AUTH_MIDDLEWARE_FAILED'
     });
   }
 };
 
 /**
- * Opsiyonel auth - token varsa kullaniciyi set et, yoksa devam et
+ * Optional auth - attach the user when a token is present, otherwise continue
  */
 const optionalAuth = async (req, res, next) => {
   try {
@@ -116,13 +116,13 @@ const optionalAuth = async (req, res, next) => {
 
     next();
   } catch (error) {
-    // Hata durumunda devam et, kullanici yokmus gibi
+    // Continue on error as if no user is present.
     next();
   }
 };
 
 /**
- * JWT token olusturma yardimci fonksiyonu
+ * JWT token helper
  */
 const generateToken = (userId) => {
   return jwt.sign(
@@ -157,7 +157,7 @@ const requireRole = (...roles) => (req, res, next) => {
     return res.status(401).json({
       success: false,
       data: null,
-      error: 'Yetkilendirme tokeni gerekli',
+      error: 'Authorization token is required',
       errorCode: 'AUTH_TOKEN_REQUIRED'
     });
   }
@@ -166,7 +166,7 @@ const requireRole = (...roles) => (req, res, next) => {
     return res.status(403).json({
       success: false,
       data: null,
-      error: 'Bu islem icin yetkiniz yok',
+      error: 'You do not have permission to perform this action',
       errorCode: 'FORBIDDEN'
     });
   }

@@ -1,6 +1,6 @@
 /**
  * Juice Journal - Backend Server
- * Express + PostgreSQL + WebSocket + poe.ninja entegrasyonu
+ * Express + PostgreSQL + WebSocket + poe.ninja integration
  */
 
 const express = require('express');
@@ -18,7 +18,7 @@ const env = require('./config/env');
 const logger = require('./services/logger');
 const { verifyRealtimeToken } = require('./middleware/auth');
 
-// Route importları
+// Route imports
 const authRoutes = require('./routes/auth');
 const sessionRoutes = require('./routes/sessions');
 const lootRoutes = require('./routes/loot');
@@ -31,10 +31,10 @@ const poeRoutes = require('./routes/poe');
 const app = express();
 const server = http.createServer(app);
 
-// WebSocket sunucusu
+// WebSocket server
 const wss = new WebSocket.Server({ server });
 
-// WebSocket bağlantılarını sakla
+// Keep active WebSocket connections
 const clients = new Map();
 
 wss.on('connection', (ws) => {
@@ -77,7 +77,7 @@ wss.on('connection', (ws) => {
   });
 });
 
-// İstemcilere broadcast yap
+// Broadcast to connected clients
 const broadcast = (data, options = {}) => {
   const { targetUserId = null } = options;
   const message = JSON.stringify(data);
@@ -92,7 +92,7 @@ const broadcast = (data, options = {}) => {
   });
 };
 
-// Global broadcast fonksiyonunu app'e ekle
+// Attach the broadcast helper to the app
 app.broadcast = broadcast;
 
 // Rate limiting
@@ -101,7 +101,7 @@ const limiter = rateLimit({
   max: 100,
   message: {
     success: false,
-    error: 'Cok fazla istek gonderildi, lutfen daha sonra tekrar deneyin'
+    error: 'Too many requests were sent. Please try again later.'
   }
 });
 
@@ -172,7 +172,7 @@ app.use((req, res) => {
   res.status(404).json({
     success: false,
     data: null,
-    error: 'Endpoint bulunamadi'
+    error: 'Endpoint not found'
   });
 });
 
@@ -185,14 +185,14 @@ app.use((err, req, res, next) => {
     data: null,
     error: process.env.NODE_ENV === 'development'
       ? err.message
-      : 'Bir hata olustu, lutfen daha sonra tekrar deneyin'
+      : 'An error occurred. Please try again later.'
   });
 });
 
-// Port ayarı
+// Port configuration
 const PORT = env.port;
 
-// Sunucuyu başlat
+// Start the server
 const startServer = async () => {
   try {
     await sequelize.authenticate();

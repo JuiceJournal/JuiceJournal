@@ -1,28 +1,28 @@
 # Juice Journal - Makefile
-# Docker ve diger yaygin komutlari kolaylastirir
+# Docker and common development commands
 
 .PHONY: help up down logs psql pgadmin db-reset install dev test build
 
-# Varsayilan hedef
+# Default target
 help:
-	@echo "Juice Journal - Kullanilabilir Komutlar:"
+	@echo "Juice Journal - Available Commands:"
 	@echo ""
-	@echo "  make up          - Docker container'lari baslat (PostgreSQL, pgAdmin, Redis)"
-	@echo "  make down        - Docker container'lari durdur"
-	@echo "  make logs        - Container loglarini goster"
-	@echo "  make psql        - PostgreSQL shell'e baglan"
-	@echo "  make pgadmin     - pgAdmin ac (tarayici)"
-	@echo "  make db-reset    - Veritabanini sifirla (TUM VERILER SILINIR!)"
-	@echo "  make install     - Node.js bagimliliklarini yukle"
-	@echo "  make dev         - Gelistirme sunucusunu baslat"
-	@echo "  make test        - Testleri calistir"
-	@echo "  make build       - Uretim build'i al"
+	@echo "  make up          - Start Docker containers (PostgreSQL, pgAdmin, Redis)"
+	@echo "  make down        - Stop Docker containers"
+	@echo "  make logs        - Show container logs"
+	@echo "  make psql        - Open the PostgreSQL shell"
+	@echo "  make pgadmin     - Open pgAdmin in the browser"
+	@echo "  make db-reset    - Reset the database (ALL DATA WILL BE DELETED!)"
+	@echo "  make install     - Install Node.js dependencies"
+	@echo "  make dev         - Start the development server"
+	@echo "  make test        - Run tests"
+	@echo "  make build       - Create a production build"
 	@echo ""
 
-# Docker Komutlari
+# Docker commands
 up:
 	docker-compose up -d
-	@echo "Container'lar baslatildi:"
+	@echo "Containers started:"
 	@echo "  - PostgreSQL: localhost:5432"
 	@echo "  - pgAdmin:    http://localhost:5050"
 	@echo "  - Redis:      localhost:6379"
@@ -37,23 +37,23 @@ psql:
 	docker exec -it juice-journal-db psql -U postgres -d juicejournal
 
 pgadmin:
-	@echo "pgAdmin aciliyor: http://localhost:5050"
+	@echo "Opening pgAdmin: http://localhost:5050"
 	@echo "Email: admin@juicejournal.local"
-	@echo "Sifre: admin123"
+	@echo "Password: admin123"
 	@start http://localhost:5050 || open http://localhost:5050 || xdg-open http://localhost:5050
 
 db-reset:
-	@echo "UYARI: Bu islem TUM verileri silecek!"
-	@read -p "Devam etmek istiyor musunuz? (y/N) " confirm; \
+	@echo "WARNING: This will delete ALL data!"
+	@read -p "Do you want to continue? (y/N) " confirm; \
 	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
 		docker-compose down -v; \
 		docker-compose up -d; \
-		echo "Veritabani sifirlandi"; \
+		echo "Database reset complete"; \
 	else \
-		echo "Islem iptal edildi"; \
+		echo "Operation canceled"; \
 	fi
 
-# Node.js Komutlari
+# Node.js commands
 install:
 	npm install
 
@@ -66,19 +66,19 @@ test:
 build:
 	npm run build
 
-# Veritabani migration
+# Database migrations
 migrate:
 	npm run db:migrate
 
 seed:
 	npm run db:seed
 
-# Temizlik
+# Cleanup
 clean:
 	docker-compose down -v
 	rm -rf node_modules
 	rm -rf dist
-	@echo "Temizlik tamamlandi"
+	@echo "Cleanup complete"
 
-# Tum sistemi baslat (Docker + Node.js)
+# Start the full stack (Docker + Node.js)
 start-all: up install dev
