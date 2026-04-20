@@ -9,12 +9,13 @@ const desktopDir = path.resolve(__dirname, '..');
 test('character visual model maps PoE2 Shaman to a dedicated portrait treatment', () => {
   const visual = deriveCharacterVisual({
     name: 'KocaGyVeMasha',
-    className: 'Shaman',
-    ascendancy: 'Ritualist'
+    className: 'Druid',
+    ascendancy: 'Shaman'
   });
 
   assert.equal(visual.portraitKey, 'shaman');
   assert.equal(visual.classLabel, 'Shaman');
+  assert.equal(visual.baseClassLabel, 'Druid');
   assert.equal(visual.badgeText, 'S');
   assert.equal(visual.tone, 'ember');
   assert.equal(visual.bannerKey, 'druid-shaman');
@@ -30,6 +31,7 @@ test('character visual model maps PoE2 Druid2 to the Shaman portrait treatment',
 
   assert.equal(visual.portraitKey, 'shaman');
   assert.equal(visual.classLabel, 'Shaman');
+  assert.equal(visual.baseClassLabel, 'Druid');
   assert.equal(visual.badgeText, 'S');
   assert.equal(visual.tone, 'ember');
   assert.equal(visual.bannerKey, 'druid-shaman');
@@ -46,6 +48,7 @@ test('character visual model maps PoE2 Monk2 to Invoker while keeping the monk p
   assert.equal(visual.portraitKey, 'monk');
   assert.equal(visual.bannerKey, 'monk-invoker');
   assert.equal(visual.classLabel, 'Invoker');
+  assert.equal(visual.baseClassLabel, 'Monk');
   assert.equal(visual.badgeText, 'M');
   assert.equal(visual.tone, 'azure');
   assert.equal(visual.portraitPath, 'assets/characters/poe2/monk.png');
@@ -61,6 +64,7 @@ test('character visual model maps PoE1 Templar to portrait and banner artwork', 
   assert.equal(visual.portraitKey, 'templar');
   assert.equal(visual.bannerKey, 'templar');
   assert.equal(visual.classLabel, 'Templar');
+  assert.equal(visual.baseClassLabel, 'Templar');
   assert.equal(visual.badgeText, 'T');
   assert.equal(visual.tone, 'gold');
   assert.equal(visual.portraitPath, 'assets/characters/poe1/templar.jpg');
@@ -75,6 +79,7 @@ test('character visual model maps PoE2 Mercenary3 to Gemling Legionnaire', () =>
 
   assert.equal(visual.portraitKey, 'mercenary');
   assert.equal(visual.classLabel, 'Gemling Legionnaire');
+  assert.equal(visual.baseClassLabel, 'Mercenary');
   assert.equal(visual.badgeText, 'M');
   assert.equal(visual.tone, 'brass');
   assert.equal(visual.bannerKey, 'mercenary-gemling');
@@ -90,6 +95,7 @@ test('character visual model maps PoE2 Huntress1 to Amazon', () => {
 
   assert.equal(visual.portraitKey, 'huntress');
   assert.equal(visual.classLabel, 'Amazon');
+  assert.equal(visual.baseClassLabel, 'Huntress');
   assert.equal(visual.badgeText, 'H');
   assert.equal(visual.tone, 'jade');
   assert.equal(visual.bannerKey, 'huntress-amazon');
@@ -105,6 +111,7 @@ test('character visual model falls back to initials for unknown classes', () => 
 
   assert.equal(visual.portraitKey, 'unknown');
   assert.equal(visual.classLabel, 'UnreleasedClass');
+  assert.equal(visual.baseClassLabel, 'UnreleasedClass');
   assert.equal(visual.badgeText, 'ME');
   assert.equal(visual.tone, 'neutral');
   assert.equal(visual.bannerKey, 'unknown');

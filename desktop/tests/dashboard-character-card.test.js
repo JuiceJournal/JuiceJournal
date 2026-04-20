@@ -213,8 +213,8 @@ test('renderer fills hero banner artwork and meta fields from normalized account
           status: 'ready',
           name: 'KocaGyVeMasha',
           level: 96,
-          className: 'Shaman',
-          ascendancy: 'Ritualist',
+          className: 'Druid',
+          ascendancy: 'Shaman',
           league: 'Fate of the Vaal'
         }
       },
@@ -231,12 +231,13 @@ test('renderer fills hero banner artwork and meta fields from normalized account
     getCharacterVisualModel: () => ({
       deriveCharacterVisual: () => ({
         portraitKey: 'shaman',
-        bannerKey: 'druid-ritualist',
+        bannerKey: 'druid-shaman',
         tone: 'ember',
         badgeText: 'S',
         classLabel: 'Shaman',
+        baseClassLabel: 'Druid',
         portraitPath: 'assets/characters/poe2/druid-shaman.png',
-        bannerPath: 'assets/characters/banners/poe2/druid-ritualist.jpg'
+        bannerPath: 'assets/characters/banners/poe2/druid-shaman.webp'
       })
     })
   });
@@ -244,12 +245,12 @@ test('renderer fills hero banner artwork and meta fields from normalized account
   context.renderCharacterSummaryCard();
 
   assert.equal(elements.characterSummaryCard.dataset.characterState, 'ready');
-  assert.equal(elements.characterBanner.dataset.characterBanner, 'druid-ritualist');
+  assert.equal(elements.characterBanner.dataset.characterBanner, 'druid-shaman');
   assert.equal(elements.characterBanner.dataset.characterTone, 'ember');
   assert.equal(elements.characterBannerImage.hidden, false);
   assert.equal(
     elements.characterBannerImage.src,
-    'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/assets/characters/banners/poe2/druid-ritualist.jpg'
+    'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/assets/characters/banners/poe2/druid-shaman.webp'
   );
   assert.equal(elements.characterPortrait.dataset.characterPortrait, 'shaman');
   assert.equal(elements.characterPortrait.dataset.characterTone, 'ember');
@@ -265,7 +266,7 @@ test('renderer fills hero banner artwork and meta fields from normalized account
   assert.equal(elements.characterLevel.textContent, '96');
   assert.equal(elements.characterLevelMeta.textContent, '96');
   assert.equal(elements.characterLeague.textContent, 'Fate of the Vaal');
-  assert.equal(elements.characterClassMeta.textContent, 'Shaman');
+  assert.equal(elements.characterClassMeta.textContent, 'Druid');
   assert.equal(elements.characterAccount.textContent, 'KocaGyVeMasha');
   assert.equal(elements.characterGameVersion.textContent, 'PoE 2');
 });
@@ -327,6 +328,7 @@ test('renderer keeps hero text current when character art is unavailable', () =>
         tone: 'azure',
         badgeText: 'M',
         classLabel: 'Invoker',
+        baseClassLabel: 'Monk',
         portraitPath: '',
         bannerPath: ''
       })
@@ -347,6 +349,6 @@ test('renderer keeps hero text current when character art is unavailable', () =>
   assert.equal(elements.characterLevel.textContent, '92');
   assert.equal(elements.characterLevelMeta.textContent, '92');
   assert.equal(elements.characterLeague.textContent, 'Standard');
-  assert.equal(elements.characterClassMeta.textContent, 'Invoker');
+  assert.equal(elements.characterClassMeta.textContent, 'Monk');
   assert.equal(elements.characterAccount.textContent, 'Esquetta#4179');
 });

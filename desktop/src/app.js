@@ -449,19 +449,33 @@ function ensureCharacterVisualModelLoaded() {
   }
 
   characterVisualModelPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'modules/characterVisualModel.js';
-    script.async = true;
-    script.onload = () => {
-      if (window.characterVisualModel) {
-        resolve(window.characterVisualModel);
-        return;
-      }
+    const loadCharacterVisualScript = () => {
+      const script = document.createElement('script');
+      script.src = 'modules/characterVisualModel.js';
+      script.async = true;
+      script.onload = () => {
+        if (window.characterVisualModel) {
+          resolve(window.characterVisualModel);
+          return;
+        }
 
-      reject(new Error('characterVisualModel loaded without exposing window.characterVisualModel'));
+        reject(new Error('characterVisualModel loaded without exposing window.characterVisualModel'));
+      };
+      script.onerror = () => reject(new Error('Failed to load character visual model script'));
+      document.head.appendChild(script);
     };
-    script.onerror = () => reject(new Error('Failed to load character visual model script'));
-    document.head.appendChild(script);
+
+    if (window.characterSupportMatrix) {
+      loadCharacterVisualScript();
+      return;
+    }
+
+    const dependency = document.createElement('script');
+    dependency.src = 'modules/characterSupportMatrix.js';
+    dependency.async = true;
+    dependency.onload = loadCharacterVisualScript;
+    dependency.onerror = () => reject(new Error('Failed to load character support matrix script'));
+    document.head.appendChild(dependency);
   });
 
   return characterVisualModelPromise;
@@ -1201,9 +1215,9 @@ function renderCharacterSummaryCard() {
     elements.characterLeague.textContent = isReady ? (summary.league || 'Unknown League') : '—';
   }
   if (elements.characterClassMeta) {
-    elements.characterClassMeta.textContent = elements.characterClass
-      ? elements.characterClass.textContent
-      : (isReady ? visual.classLabel : 'Unknown Class');
+    elements.characterClassMeta.textContent = isReady
+      ? (visual.baseClassLabel || visual.classLabel)
+      : 'Unknown Class';
   }
   if (elements.characterAccount) {
     elements.characterAccount.textContent = account?.accountName || state.currentUser?.username || '—';
