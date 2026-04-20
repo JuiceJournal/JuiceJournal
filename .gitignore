@@ -48,3 +48,4 @@ redis_data/
 .cache/
 .temp/
 .worktrees/
+.superpowers/
