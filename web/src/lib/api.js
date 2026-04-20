@@ -37,18 +37,16 @@ const API_ERROR_MESSAGE_MAP = {
   STATS_PERSONAL_LOAD_FAILED: 'Unable to load statistics right now.',
   STATS_LEADERBOARD_LOAD_FAILED: 'Unable to load the leaderboard right now.',
   STATS_SUMMARY_LOAD_FAILED: 'Unable to load summary statistics right now.',
-  'Kullanici adi veya sifre hatali': 'Invalid username or password.',
   'Invalid username or password': 'Invalid username or password.',
-  'Kullanici adi veya e-posta gereklidir': 'Enter your username or email.',
   'Username or email is required': 'Enter your username or email.',
-  'Sifre gereklidir': 'Enter your password.',
   'Password is required': 'Enter your password.',
-  'Bu kullanici adi zaten kullaniliyor': 'That username is already in use.',
   'That username is already in use': 'That username is already in use.',
-  'Bu e-posta adresi zaten kullaniliyor': 'That email address is already in use.',
   'That email address is already in use': 'That email address is already in use.',
+  'Username must be between 3 and 50 characters': 'Username must be between 3 and 50 characters.',
+  'Username may only contain letters and numbers': 'Username may only contain letters and numbers.',
+  'Enter a valid email address': 'Enter a valid email address.',
+  'Password must be at least 6 characters': 'Password must be at least 6 characters.',
   'Path of Exile OAuth is not configured': 'Path of Exile linking is not configured yet.',
-  'Path of Exile OAuth yapilandirilmamis': 'Path of Exile linking is not configured yet.',
 };
 
 export function normalizeApiError(error, fallbackMessage = 'Something went wrong. Please try again.') {

@@ -6,7 +6,7 @@
 // Global app state for i18n
 window._appState = { language: 'en' };
 
-// Durum yonetimi
+// State management
 const state = {
   currentUser: null,
   currentSession: null,
@@ -51,78 +51,45 @@ const ERROR_MESSAGE_KEY_MAP = {
   STATS_PERSONAL_LOAD_FAILED: 'errors.unexpected',
   STATS_LEADERBOARD_LOAD_FAILED: 'errors.unexpected',
   STATS_SUMMARY_LOAD_FAILED: 'errors.unexpected',
-  'Kullanici adi veya sifre hatali': 'errors.invalidCredentials',
   'Invalid username or password': 'errors.invalidCredentials',
-  'Kullanici adi veya e-posta gereklidir': 'errors.usernameOrEmailRequired',
   'Username or email is required': 'errors.usernameOrEmailRequired',
-  'Sifre gereklidir': 'errors.passwordRequired',
   'Password is required': 'errors.passwordRequired',
-  'Kullanici adi 3-50 karakter arasinda olmalidir': 'errors.usernameLength',
   'Username must be between 3 and 50 characters': 'errors.usernameLength',
-  'Kullanici adi sadece harf ve rakam icerebilir': 'errors.usernameAlphanumeric',
   'Username may only contain letters and numbers': 'errors.usernameAlphanumeric',
-  'Gecerli bir e-posta adresi giriniz': 'errors.emailInvalid',
   'Enter a valid email address': 'errors.emailInvalid',
-  'Sifre en az 6 karakter olmalidir': 'errors.passwordMinLength',
   'Password must be at least 6 characters': 'errors.passwordMinLength',
-  'Bu kullanici adi zaten kullaniliyor': 'errors.usernameTaken',
   'That username is already in use': 'errors.usernameTaken',
-  'Bu e-posta adresi zaten kullaniliyor': 'errors.emailTaken',
   'That email address is already in use': 'errors.emailTaken',
-  'Kayit sirasinda bir hata olustu': 'errors.registerFailed',
   'An error occurred during registration': 'errors.registerFailed',
-  'Giris sirasinda bir hata olustu': 'errors.loginFailed',
   'An error occurred during sign in': 'errors.loginFailed',
-  'Profil bilgileri alinirken hata olustu': 'errors.profileLoad',
   'Failed to load profile details': 'errors.profileLoad',
-  'Profil guncellenirken hata olustu': 'errors.profileUpdate',
   'Failed to update profile': 'errors.profileUpdate',
-  'Session bulunamadi': 'errors.sessionNotFound',
   'Session not found': 'errors.sessionNotFound',
-  'Aktif session bulunamadi': 'errors.activeSessionNotFound',
   'Active session not found': 'errors.activeSessionNotFound',
-  'Session detaylari alinamadi': 'errors.sessionLoad',
   'Failed to load session details': 'errors.sessionLoad',
-  'Session listesi yuklenemedi': 'errors.sessionListLoad',
   'Failed to load sessions': 'errors.sessionListLoad',
-  'Session detaylari guncellenemedi': 'errors.sessionUpdate',
   'Failed to update session details': 'errors.sessionUpdate',
-  'Session baslatilamadi': 'errors.sessionStart',
   'Failed to start the session': 'errors.sessionStart',
-  'Session bitirilemedi': 'errors.sessionEnd',
   'Failed to end the session': 'errors.sessionEnd',
-  'Aktif session yok': 'errors.noActiveSession',
   'No active session': 'errors.noActiveSession',
-  'Loot eklenemedi': 'errors.lootAdd',
   'Failed to add loot': 'errors.lootAdd',
-  'Son loot verileri alinamadi': 'errors.lootRecent',
   'Failed to load recent loot': 'errors.lootRecent',
   'Path of Exile OAuth is not configured': 'errors.poeOAuthNotConfigured',
-  'Path of Exile OAuth yapilandirilmamis': 'errors.poeOAuthNotConfigured',
   'Invalid redirect URI': 'errors.invalidRedirectUri',
-  'Gecersiz yonlendirme adresi': 'errors.invalidRedirectUri',
   'Authorization code and PKCE verifier are required': 'errors.authorizationCodeRequired',
-  'Yetkilendirme kodu ve PKCE verifier gereklidir': 'errors.authorizationCodeRequired',
   'Failed to start Path of Exile linking': 'errors.poeStart',
-  'Path of Exile baglantisi baslatilamadi': 'errors.poeStart',
   'Failed to complete Path of Exile linking': 'errors.poeComplete',
-  'Path of Exile baglantisi tamamlanamadi': 'errors.poeComplete',
   'Failed to get Path of Exile link status': 'errors.poeStatus',
-  'Path of Exile baglanti durumu alinamadi': 'errors.poeStatus',
   'Failed to disconnect Path of Exile account': 'errors.poeDisconnect',
-  'Path of Exile baglantisi kaldirilamadi': 'errors.poeDisconnect',
   'Unable to reach the server': 'errors.serverUnavailable',
-  'Sunucuya ulasilamadi': 'errors.serverUnavailable',
   'The request timed out': 'errors.requestTimeout',
-  'Sunucu yanit vermekte gecikti': 'errors.requestTimeout',
   'An unexpected error occurred': 'errors.unexpected',
-  'Beklenmeyen bir hata olustu': 'errors.unexpected',
   'Unauthorized request': 'errors.loginFailed'
 };
 
 let sessionClockInterval = null;
 
-// DOM Elementleri
+// DOM elements
 const elements = {
   // Modals
   loginModal: document.getElementById('login-modal'),
@@ -1305,7 +1272,7 @@ async function loadActiveFarmTypeSelection() {
 }
 
 /**
- * Uygulamayi baslat
+ * Start the application
  */
 async function init() {
   await ensureSettingsModelLoaded();
@@ -1967,12 +1934,12 @@ function navigateTo(page) {
     closeSessionDrawer();
   }
 
-  // Nav butonlarini guncelle
+  // Update the navigation buttons.
   elements.navButtons.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.page === page);
   });
 
-  // Sayfalari guncelle
+  // Update the pages.
   elements.pages.forEach(p => {
     p.classList.toggle('active', p.id === `${page}-page`);
   });
@@ -2232,7 +2199,7 @@ async function handleLogout() {
 }
 
 /**
- * Kullanici kimligini guncel duruma gore goster
+ * Show the current user identity state
  */
 function renderUserIdentity() {
   if (!elements.username) {
@@ -2264,7 +2231,7 @@ function applyLocalizedChrome() {
 }
 
 /**
- * Mevcut kullaniciyi ayarla
+ * Set the current user
  */
 function setCurrentUser(user) {
   state.currentUser = user;
@@ -2675,7 +2642,7 @@ async function refreshTrackerData({ includeSessions = false, includeCurrency = f
 }
 
 /**
- * Session baslat
+ * Start a session
  */
 async function handleStartSession() {
   const mapName = prompt(window.t('misc.mapPrompt'), 'Dunes Map');
@@ -2732,7 +2699,7 @@ async function handleEndSession() {
 }
 
 /**
- * Aktif session UI'ini guncelle
+ * Update the active session UI
  */
 async function loadCurrentSession() {
   try {
@@ -3106,7 +3073,7 @@ async function handleResetSettings() {
 }
 
 /**
- * API baglantisini test et
+ * Test the API connection
  */
 async function handleTestConnection() {
   const btn = elements.testConnection;
@@ -4231,7 +4198,7 @@ function getLiveDuration(session) {
   return Math.max(0, Math.floor((endTime - startTime) / 1000));
 }
 
-// Uygulamayi baslat
+// Start the application
 document.addEventListener('DOMContentLoaded', () => {
   ensureSessionClock();
   init();
