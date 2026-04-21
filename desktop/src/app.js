@@ -22,6 +22,7 @@ const state = {
   account: null,
   runtimeSession: null,
   overlay: null,
+  appUpdate: null,
   capabilities: null,
   selectedSession: null,
   pendingLootCount: 0,
@@ -186,6 +187,11 @@ const elements = {
   poeLinkMode: document.getElementById('poe-link-mode'),
   poeConnectBtn: document.getElementById('poe-connect-btn'),
   poeDisconnectBtn: document.getElementById('poe-disconnect-btn'),
+  appVersionValue: document.getElementById('app-version-value'),
+  appUpdateStatus: document.getElementById('app-update-status'),
+  appUpdateDetail: document.getElementById('app-update-detail'),
+  checkUpdatesBtn: document.getElementById('check-updates-btn'),
+  installUpdateBtn: document.getElementById('install-update-btn'),
 
   // User
   username: document.getElementById('username'),
@@ -233,6 +239,97 @@ let characterVisualModelPromise = null;
 let activeCharacterRefreshTimer = null;
 let activeCharacterRefreshRetryTimer = null;
 let activeCharacterRefreshRequestId = 0;
+
+function renderAppUpdateState() {
+  const update = state.appUpdate;
+  if (!elements.appVersionValue || !update) {
+    return;
+  }
+
+  elements.appVersionValue.textContent = update.currentVersion || '—';
+
+  if (!update.enabled) {
+    if (elements.appUpdateStatus) {
+      elements.appUpdateStatus.textContent = window.t('settings.updateDisabled');
+    }
+    if (elements.appUpdateDetail) {
+      elements.appUpdateDetail.textContent = '';
+    }
+    if (elements.checkUpdatesBtn) {
+      elements.checkUpdatesBtn.disabled = true;
+      elements.checkUpdatesBtn.textContent = window.t('settings.checkForUpdates');
+    }
+    if (elements.installUpdateBtn) {
+      elements.installUpdateBtn.hidden = true;
+      elements.installUpdateBtn.disabled = true;
+      elements.installUpdateBtn.textContent = window.t('settings.installUpdate');
+      elements.installUpdateBtn.classList?.add('hidden');
+    }
+    return;
+  }
+
+  if (update.error) {
+    if (elements.appUpdateStatus) {
+      elements.appUpdateStatus.textContent = window.t('settings.updateError');
+    }
+    if (elements.appUpdateDetail) {
+      elements.appUpdateDetail.textContent = update.error;
+    }
+  } else if (update.downloaded) {
+    if (elements.appUpdateStatus) {
+      elements.appUpdateStatus.textContent = window.t('settings.updateReady');
+    }
+    if (elements.appUpdateDetail) {
+      elements.appUpdateDetail.textContent = update.nextVersion || '';
+    }
+  } else if (update.downloading) {
+    if (elements.appUpdateStatus) {
+      elements.appUpdateStatus.textContent = window.t('settings.updateDownloading', {
+        percent: update.progressPercent || 0
+      });
+    }
+    if (elements.appUpdateDetail) {
+      elements.appUpdateDetail.textContent = update.nextVersion || '';
+    }
+  } else if (update.checking) {
+    if (elements.appUpdateStatus) {
+      elements.appUpdateStatus.textContent = window.t('settings.checkingForUpdates');
+    }
+    if (elements.appUpdateDetail) {
+      elements.appUpdateDetail.textContent = '';
+    }
+  } else if (update.available) {
+    if (elements.appUpdateStatus) {
+      elements.appUpdateStatus.textContent = window.t('settings.updateAvailable', {
+        version: update.nextVersion || '?'
+      });
+    }
+    if (elements.appUpdateDetail) {
+      elements.appUpdateDetail.textContent = '';
+    }
+  } else {
+    if (elements.appUpdateStatus) {
+      elements.appUpdateStatus.textContent = window.t('settings.updateUpToDate');
+    }
+    if (elements.appUpdateDetail) {
+      elements.appUpdateDetail.textContent = '';
+    }
+  }
+
+  if (elements.checkUpdatesBtn) {
+    elements.checkUpdatesBtn.disabled = Boolean(update.checking || update.downloading);
+    elements.checkUpdatesBtn.textContent = update.checking
+      ? window.t('settings.checkingForUpdates')
+      : window.t('settings.checkForUpdates');
+  }
+
+  if (elements.installUpdateBtn) {
+    elements.installUpdateBtn.hidden = !update.downloaded;
+    elements.installUpdateBtn.disabled = !update.downloaded;
+    elements.installUpdateBtn.textContent = window.t('settings.installUpdate');
+    elements.installUpdateBtn.classList?.toggle('hidden', !update.downloaded);
+  }
+}
 
 function clearActiveCharacterRefreshTimers() {
   if (activeCharacterRefreshTimer) {
@@ -1314,6 +1411,10 @@ async function init() {
   updateActiveLeagueFieldContext();
   syncDesktopCurrencyIcons();
   applyDashboardCapabilities();
+  if (window.electronAPI?.getAppUpdateState) {
+    state.appUpdate = await window.electronAPI.getAppUpdateState();
+    renderAppUpdateState();
+  }
 
   // Event listener'lari kur
   setupEventListeners();
@@ -1756,6 +1857,12 @@ function setupEventListeners() {
   if (elements.exportDiagnosticsBtn) {
     elements.exportDiagnosticsBtn.addEventListener('click', handleExportDiagnostics);
   }
+  if (elements.checkUpdatesBtn) {
+    elements.checkUpdatesBtn.addEventListener('click', handleCheckForAppUpdate);
+  }
+  if (elements.installUpdateBtn) {
+    elements.installUpdateBtn.addEventListener('click', handleInstallAppUpdate);
+  }
 
   // Stash Profit Tracker
   if (elements.syncPricesBtn) {
@@ -1887,6 +1994,17 @@ function setupIPCListeners() {
   if (window.electronAPI.onActiveCharacterHint) {
     window.electronAPI.onActiveCharacterHint((nativeHint) => {
       applyNativeCharacterHint(nativeHint);
+    });
+  }
+
+  if (window.electronAPI.onAppUpdateStateChanged) {
+    window.electronAPI.onAppUpdateStateChanged((data) => {
+      const wasDownloaded = Boolean(state.appUpdate?.downloaded);
+      state.appUpdate = data || null;
+      renderAppUpdateState();
+      if (!wasDownloaded && data?.downloaded) {
+        showToast(window.t('toast.updateReadyTitle'), window.t('toast.updateReadyBody'), 'success');
+      }
     });
   }
 
@@ -3132,6 +3250,23 @@ function showToast(title, message, type = 'info') {
     toast.style.animation = 'fadeOut 0.3s ease';
     setTimeout(() => toast.remove(), 300);
   }, 5000);
+}
+
+async function handleCheckForAppUpdate() {
+  try {
+    state.appUpdate = await window.electronAPI.checkForAppUpdate();
+    renderAppUpdateState();
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'settings.updateError'), 'error');
+  }
+}
+
+async function handleInstallAppUpdate() {
+  try {
+    await window.electronAPI.installAppUpdate();
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'settings.updateError'), 'error');
+  }
 }
 
 function extractRawErrorMessage(error) {

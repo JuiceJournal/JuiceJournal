@@ -207,6 +207,16 @@ window.Translations = {
     'settings.github': 'GitHub',
     'settings.reportBug': 'Hata Bildir',
     'settings.license': 'Lisans',
+    'settings.updates': 'Uygulama Guncellemeleri',
+    'settings.checkForUpdates': 'Guncelleme Kontrol Et',
+    'settings.checkingForUpdates': 'Guncellemeler kontrol ediliyor...',
+    'settings.installUpdate': 'Yuklemek Icin Yeniden Baslat',
+    'settings.updateUpToDate': 'Uygulama guncel.',
+    'settings.updateAvailable': 'Guncelleme mevcut: {version}',
+    'settings.updateDownloading': 'Guncelleme indiriliyor... {percent}%',
+    'settings.updateReady': 'Guncelleme yuklemeye hazir.',
+    'settings.updateDisabled': 'Otomatik guncellemeler yalnizca paketlenmis Windows surumlerinde calisir.',
+    'settings.updateError': 'Guncelleme kontrolu basarisiz.',
 
     // Settings - Actions
     'settings.save': 'Kaydet',
@@ -259,6 +269,8 @@ window.Translations = {
     'toast.sessionUpdated': 'Session notlari kaydedildi',
     'toast.sessionUpdateError': 'Session notlari kaydedilemedi',
     'toast.serverUnavailable': 'Sunucuya ulasilamadi',
+    'toast.updateReadyTitle': 'Guncelleme Hazir',
+    'toast.updateReadyBody': 'Yeni surum indirildi. Yuklemek icin uygulamayi yeniden baslatin.',
 
     // Error messages
     'errors.invalidCredentials': 'Kullanici adi veya sifre hatali',
@@ -898,6 +910,16 @@ window.Translations = {
     'settings.github': 'GitHub',
     'settings.reportBug': 'Report Bug',
     'settings.license': 'License',
+    'settings.updates': 'App Updates',
+    'settings.checkForUpdates': 'Check for Updates',
+    'settings.checkingForUpdates': 'Checking for updates...',
+    'settings.installUpdate': 'Restart to Install',
+    'settings.updateUpToDate': 'This app is up to date.',
+    'settings.updateAvailable': 'Update available: {version}',
+    'settings.updateDownloading': 'Downloading update... {percent}%',
+    'settings.updateReady': 'Update ready to install.',
+    'settings.updateDisabled': 'Automatic updates are available only in packaged Windows builds.',
+    'settings.updateError': 'Update check failed.',
 
     // Settings - Actions
     'settings.save': 'Save',
@@ -950,6 +972,8 @@ window.Translations = {
     'toast.sessionUpdated': 'Session notes saved',
     'toast.sessionUpdateError': 'Failed to save session notes',
     'toast.serverUnavailable': 'Unable to reach the server',
+    'toast.updateReadyTitle': 'Update Ready',
+    'toast.updateReadyBody': 'A new version has been downloaded. Restart the app to install it.',
 
     // Error messages
     'errors.invalidCredentials': 'Invalid username or password',

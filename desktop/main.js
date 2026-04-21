@@ -10,6 +10,7 @@
  */
 
 const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen, shell, nativeImage, safeStorage } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const crypto = require('crypto');
 const http = require('http');
 const fs = require('fs');
@@ -40,6 +41,11 @@ const {
   validateHotkeys
 } = require('./src/modules/hotkeyModel');
 const { createNativeGameInfoProducer } = require('./src/modules/nativeGameInfoProducer');
+const {
+  getAppUpdateSupportState,
+  createAppUpdateState,
+  applyAppUpdatePatch
+} = require('./src/modules/appUpdateModel');
 const DEFAULT_POE_LOG_PATH = GameDetector.DEFAULT_POE_LOG_PATH;
 
 const APP_NAME = 'Juice Journal';
@@ -276,6 +282,8 @@ let trayHintShown = false;
 let pendingLootFlushInProgress = false;
 let pendingLootFlushInterval = null;
 let pendingSessionFlushInProgress = false;
+let appUpdateState = null;
+let appUpdateInitialized = false;
 
 function getLanguage() {
   const lang = store.get('language');
@@ -309,6 +317,112 @@ function normalizeErrorMessage(error, fallback = 'Unexpected error') {
 
 function toRendererError(error, fallback) {
   return new Error(normalizeErrorMessage(error, fallback));
+}
+
+function broadcastAppUpdateState() {
+  if (!mainWindow?.webContents || !appUpdateState) {
+    return;
+  }
+
+  mainWindow.webContents.send('app-update-state-changed', { ...appUpdateState });
+}
+
+function initializeAppUpdater() {
+  if (appUpdateInitialized) {
+    return appUpdateState;
+  }
+
+  appUpdateState = createAppUpdateState({
+    currentVersion: app.getVersion(),
+    isPackaged: app.isPackaged,
+    platform: process.platform
+  });
+
+  if (!appUpdateState.enabled) {
+    appUpdateInitialized = true;
+    return appUpdateState;
+  }
+
+  // IMPORTANT: runtime update checks only work after the release pipeline
+  // publishes installer artifacts together with latest.yml metadata to
+  // GitHub Releases. Keep this in sync with the release workflow.
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = false;
+
+  autoUpdater.on('checking-for-update', () => {
+    applyAppUpdatePatch(appUpdateState, {
+      checking: true,
+      error: null,
+      lastCheckedAt: new Date().toISOString()
+    });
+    broadcastAppUpdateState();
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    applyAppUpdatePatch(appUpdateState, {
+      checking: false,
+      available: true,
+      downloading: true,
+      downloaded: false,
+      nextVersion: info?.version || null,
+      releaseName: info?.releaseName || null,
+      releaseNotes: info?.releaseNotes || null,
+      error: null
+    });
+    broadcastAppUpdateState();
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    applyAppUpdatePatch(appUpdateState, {
+      checking: false,
+      downloading: true,
+      progressPercent: Math.round(progress?.percent || 0)
+    });
+    broadcastAppUpdateState();
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    applyAppUpdatePatch(appUpdateState, {
+      checking: false,
+      available: true,
+      downloading: false,
+      downloaded: true,
+      progressPercent: 100,
+      nextVersion: info?.version || appUpdateState.nextVersion || null,
+      releaseName: info?.releaseName || appUpdateState.releaseName || null,
+      releaseNotes: info?.releaseNotes || appUpdateState.releaseNotes || null,
+      error: null
+    });
+    broadcastAppUpdateState();
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    applyAppUpdatePatch(appUpdateState, {
+      checking: false,
+      available: false,
+      downloading: false,
+      downloaded: false,
+      progressPercent: 0,
+      nextVersion: null,
+      releaseName: null,
+      releaseNotes: null,
+      error: null,
+      lastCheckedAt: new Date().toISOString()
+    });
+    broadcastAppUpdateState();
+  });
+
+  autoUpdater.on('error', (error) => {
+    applyAppUpdatePatch(appUpdateState, {
+      checking: false,
+      downloading: false,
+      error: normalizeErrorMessage(error, 'Failed to check for updates')
+    });
+    broadcastAppUpdateState();
+  });
+
+  appUpdateInitialized = true;
+  return appUpdateState;
 }
 
 // ─── URL validation for SSRF prevention ───────────────────────────────
@@ -2613,6 +2727,30 @@ function setupIPC() {
     forceLiveAuth
   }));
 
+  ipcMain.handle('get-app-update-state', () => {
+    return { ...(initializeAppUpdater() || {}) };
+  });
+
+  ipcMain.handle('check-for-app-update', async () => {
+    const state = initializeAppUpdater();
+    if (!state?.enabled) {
+      return { ...state };
+    }
+
+    await autoUpdater.checkForUpdates();
+    return { ...appUpdateState };
+  });
+
+  ipcMain.handle('install-app-update', async () => {
+    const state = initializeAppUpdater();
+    if (!state?.downloaded) {
+      throw new Error('No downloaded update is ready to install');
+    }
+
+    setImmediate(() => autoUpdater.quitAndInstall());
+    return { accepted: true };
+  });
+
   // Currency price sync (backend API uzerinden, token guvenli)
   ipcMain.handle('sync-currency-prices', async (event, { league, poeVersion } = {}) => {
     try {
@@ -3313,10 +3451,15 @@ app.whenReady().then(() => {
   setupIPC();
 
   createMainWindow();
+  initializeAppUpdater();
   mainWindow.show(); // Show the window.
   mainWindow.focus();
   emitPendingSyncState();
   ensureOverlayWindowForSettings();
+
+  if (appUpdateState?.enabled) {
+    autoUpdater.checkForUpdates().catch(() => {});
+  }
 
   createTray();
   registerGlobalShortcuts();

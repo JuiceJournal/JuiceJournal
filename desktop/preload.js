@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Auth
   hasAuthToken: () => ipcRenderer.invoke('has-auth-token'),
   getRuntimeMode: () => ipcRenderer.invoke('get-runtime-mode'),
+  getAppUpdateState: () => ipcRenderer.invoke('get-app-update-state'),
+  checkForAppUpdate: () => ipcRenderer.invoke('check-for-app-update'),
+  installAppUpdate: () => ipcRenderer.invoke('install-app-update'),
 
   // Dosya secici
   browsePoePath: () => ipcRenderer.invoke('browse-poe-path'),
@@ -117,6 +120,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onActiveCharacterHint: (callback) => {
     ipcRenderer.on('active-character-hint', (event, data) => callback(data));
   },
+  onAppUpdateStateChanged: (callback) => {
+    ipcRenderer.on('app-update-state-changed', (event, data) => callback(data));
+  },
   getLastActiveCharacterHint: () => ipcRenderer.invoke('get-last-active-character-hint'),
 
   // Dinleyicileri temizle (sadece izin verilen kanallar)
@@ -126,7 +132,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'loot-added', 'pending-loot-updated', 'pending-sync-updated',
       'audit-trail-updated', 'navigate', 'stash-snapshot-taken',
       'profit-calculated', 'game-version-changed', 'game-closed',
-      'active-character-hint'
+      'active-character-hint', 'app-update-state-changed'
     ];
     if (channel && ALLOWED_CHANNELS.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);

@@ -21,6 +21,7 @@
     "axios": "1.15.0",
     "chokidar": "^3.5.3",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.8.3",
     "node-global-key-listener": "^0.1.1",
     "tesseract.js": "^5.0.3"
   },
@@ -48,7 +49,14 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "JuiceJournal",
+        "repo": "JuiceJournal"
+      }
+    ]
   },
   "keywords": [
     "juice-journal",
