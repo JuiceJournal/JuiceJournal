@@ -18,9 +18,27 @@ test('character visual model maps PoE2 Shaman to a dedicated portrait treatment'
   assert.equal(visual.baseClassLabel, 'Druid');
   assert.equal(visual.badgeText, 'S');
   assert.equal(visual.tone, 'ember');
-  assert.equal(visual.bannerKey, 'druid-shaman');
-  assert.equal(visual.portraitPath, 'assets/characters/poe2/druid-shaman.png');
-  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/druid-shaman.webp');
+  assert.equal(visual.bannerKey, 'shaman');
+  assert.equal(visual.portraitPath, 'assets/characters/poe2/shaman.png');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/shaman.jpg');
+});
+
+test('character visual model maps PoE1 Necromancer to a unique witch ascendancy treatment', () => {
+  const visual = deriveCharacterVisual({
+    name: 'HexArchivist',
+    poeVersion: 'poe1',
+    className: 'Witch',
+    ascendancy: 'Necromancer'
+  });
+
+  assert.equal(visual.classLabel, 'Necromancer');
+  assert.equal(visual.baseClassLabel, 'Witch');
+  assert.equal(visual.portraitKey, 'necromancer');
+  assert.equal(visual.bannerKey, 'necromancer');
+  assert.equal(visual.badgeText, 'N');
+  assert.equal(visual.tone, 'violet');
+  assert.equal(visual.portraitPath, 'assets/characters/poe1/necromancer.jpg');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe1/necromancer.jpg');
 });
 
 test('character visual model maps PoE2 Druid2 to the Shaman portrait treatment', () => {
@@ -34,25 +52,43 @@ test('character visual model maps PoE2 Druid2 to the Shaman portrait treatment',
   assert.equal(visual.baseClassLabel, 'Druid');
   assert.equal(visual.badgeText, 'S');
   assert.equal(visual.tone, 'ember');
-  assert.equal(visual.bannerKey, 'druid-shaman');
-  assert.equal(visual.portraitPath, 'assets/characters/poe2/druid-shaman.png');
-  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/druid-shaman.webp');
+  assert.equal(visual.bannerKey, 'shaman');
+  assert.equal(visual.portraitPath, 'assets/characters/poe2/shaman.png');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/shaman.jpg');
 });
 
-test('character visual model maps PoE2 Monk2 to Invoker while keeping the monk portrait family', () => {
+test('character visual model maps PoE2 Monk2 to Invoker with unique ascendancy artwork', () => {
   const visual = deriveCharacterVisual({
     name: 'KELLEE',
     className: 'Monk2'
   });
 
-  assert.equal(visual.portraitKey, 'monk');
-  assert.equal(visual.bannerKey, 'monk-invoker');
+  assert.equal(visual.portraitKey, 'invoker');
+  assert.equal(visual.bannerKey, 'invoker');
   assert.equal(visual.classLabel, 'Invoker');
   assert.equal(visual.baseClassLabel, 'Monk');
-  assert.equal(visual.badgeText, 'M');
+  assert.equal(visual.badgeText, 'I');
   assert.equal(visual.tone, 'azure');
-  assert.equal(visual.portraitPath, 'assets/characters/poe2/monk.png');
-  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/monk-invoker.webp');
+  assert.equal(visual.portraitPath, 'assets/characters/poe2/invoker.png');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/invoker.jpg');
+});
+
+test('character visual model maps PoE2 Invoker to a unique monk ascendancy portrait and banner', () => {
+  const visual = deriveCharacterVisual({
+    name: 'KELLEE',
+    poeVersion: 'poe2',
+    className: 'Monk',
+    ascendancy: 'Invoker'
+  });
+
+  assert.equal(visual.classLabel, 'Invoker');
+  assert.equal(visual.baseClassLabel, 'Monk');
+  assert.equal(visual.portraitKey, 'invoker');
+  assert.equal(visual.bannerKey, 'invoker');
+  assert.equal(visual.badgeText, 'I');
+  assert.equal(visual.tone, 'azure');
+  assert.equal(visual.portraitPath, 'assets/characters/poe2/invoker.png');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/invoker.jpg');
 });
 
 test('character visual model maps PoE1 Templar to portrait and banner artwork', () => {
@@ -77,14 +113,14 @@ test('character visual model maps PoE2 Mercenary3 to Gemling Legionnaire', () =>
     className: 'Mercenary3'
   });
 
-  assert.equal(visual.portraitKey, 'mercenary');
   assert.equal(visual.classLabel, 'Gemling Legionnaire');
   assert.equal(visual.baseClassLabel, 'Mercenary');
-  assert.equal(visual.badgeText, 'M');
+  assert.equal(visual.badgeText, 'GL');
   assert.equal(visual.tone, 'brass');
-  assert.equal(visual.bannerKey, 'mercenary-gemling');
-  assert.equal(visual.portraitPath, 'assets/characters/poe2/mercenary.png');
-  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/mercenary-gemling.webp');
+  assert.equal(visual.portraitKey, 'gemling-legionnaire');
+  assert.equal(visual.bannerKey, 'gemling-legionnaire');
+  assert.equal(visual.portraitPath, 'assets/characters/poe2/gemling-legionnaire.png');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/gemling-legionnaire.jpg');
 });
 
 test('character visual model maps PoE2 Huntress1 to Amazon', () => {
@@ -93,14 +129,42 @@ test('character visual model maps PoE2 Huntress1 to Amazon', () => {
     className: 'Huntress1'
   });
 
-  assert.equal(visual.portraitKey, 'huntress');
+  assert.equal(visual.portraitKey, 'amazon');
   assert.equal(visual.classLabel, 'Amazon');
   assert.equal(visual.baseClassLabel, 'Huntress');
-  assert.equal(visual.badgeText, 'H');
+  assert.equal(visual.badgeText, 'A');
   assert.equal(visual.tone, 'jade');
-  assert.equal(visual.bannerKey, 'huntress-amazon');
-  assert.equal(visual.portraitPath, 'assets/characters/poe2/huntress.png');
-  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/huntress-amazon.webp');
+  assert.equal(visual.bannerKey, 'amazon');
+  assert.equal(visual.portraitPath, 'assets/characters/poe2/amazon.png');
+  assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/amazon.jpg');
+});
+
+test('character visual model prefers significant-word initials for stop-word ascendancies', () => {
+  const acolyte = deriveCharacterVisual({
+    name: 'Void Monk',
+    poeVersion: 'poe2',
+    className: 'Monk',
+    ascendancy: 'Acolyte of Chayula'
+  });
+
+  const smith = deriveCharacterVisual({
+    name: 'Forge King',
+    poeVersion: 'poe2',
+    className: 'Warrior',
+    ascendancy: 'Smith of Kitava'
+  });
+
+  assert.equal(acolyte.badgeText, 'AC');
+  assert.equal(acolyte.portraitKey, 'acolyte-of-chayula');
+  assert.equal(acolyte.bannerKey, 'acolyte-of-chayula');
+  assert.equal(acolyte.portraitPath, 'assets/characters/poe2/acolyte-of-chayula.png');
+  assert.equal(acolyte.bannerPath, 'assets/characters/banners/poe2/acolyte-of-chayula.jpg');
+
+  assert.equal(smith.badgeText, 'SK');
+  assert.equal(smith.portraitKey, 'smith-of-kitava');
+  assert.equal(smith.bannerKey, 'smith-of-kitava');
+  assert.equal(smith.portraitPath, 'assets/characters/poe2/smith-of-kitava.png');
+  assert.equal(smith.bannerPath, 'assets/characters/banners/poe2/smith-of-kitava.jpg');
 });
 
 test('character visual model falls back to initials for unknown classes', () => {

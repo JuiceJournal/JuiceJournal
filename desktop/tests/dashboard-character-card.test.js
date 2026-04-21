@@ -231,13 +231,13 @@ test('renderer fills hero banner artwork and meta fields from normalized account
     getCharacterVisualModel: () => ({
       deriveCharacterVisual: () => ({
         portraitKey: 'shaman',
-        bannerKey: 'druid-shaman',
+        bannerKey: 'shaman',
         tone: 'ember',
         badgeText: 'S',
         classLabel: 'Shaman',
         baseClassLabel: 'Druid',
-        portraitPath: 'assets/characters/poe2/druid-shaman.png',
-        bannerPath: 'assets/characters/banners/poe2/druid-shaman.webp'
+        portraitPath: 'assets/characters/poe2/shaman.png',
+        bannerPath: 'assets/characters/banners/poe2/shaman.jpg'
       })
     })
   });
@@ -245,19 +245,19 @@ test('renderer fills hero banner artwork and meta fields from normalized account
   context.renderCharacterSummaryCard();
 
   assert.equal(elements.characterSummaryCard.dataset.characterState, 'ready');
-  assert.equal(elements.characterBanner.dataset.characterBanner, 'druid-shaman');
+  assert.equal(elements.characterBanner.dataset.characterBanner, 'shaman');
   assert.equal(elements.characterBanner.dataset.characterTone, 'ember');
   assert.equal(elements.characterBannerImage.hidden, false);
   assert.equal(
     elements.characterBannerImage.src,
-    'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/assets/characters/banners/poe2/druid-shaman.webp'
+    'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/assets/characters/banners/poe2/shaman.jpg'
   );
   assert.equal(elements.characterPortrait.dataset.characterPortrait, 'shaman');
   assert.equal(elements.characterPortrait.dataset.characterTone, 'ember');
   assert.equal(elements.characterPortraitImage.hidden, false);
   assert.equal(
     elements.characterPortraitImage.src,
-    'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/assets/characters/poe2/druid-shaman.png'
+    'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/assets/characters/poe2/shaman.png'
   );
   assert.equal(elements.characterPortraitBadge.textContent, 'S');
   assert.equal(elements.characterPortraitBadge.style.display, 'none');
@@ -323,10 +323,10 @@ test('renderer keeps hero text current when character art is unavailable', () =>
     normalizePoeVersion: (value) => value,
     getCharacterVisualModel: () => ({
       deriveCharacterVisual: () => ({
-        portraitKey: 'monk',
-        bannerKey: 'monk-invoker',
+        portraitKey: 'invoker',
+        bannerKey: 'invoker',
         tone: 'azure',
-        badgeText: 'M',
+        badgeText: 'I',
         classLabel: 'Invoker',
         baseClassLabel: 'Monk',
         portraitPath: '',
@@ -338,11 +338,11 @@ test('renderer keeps hero text current when character art is unavailable', () =>
   context.renderCharacterSummaryCard();
 
   assert.equal(elements.characterSummaryCard.dataset.characterState, 'ready');
-  assert.equal(elements.characterBanner.dataset.characterBanner, 'monk-invoker');
+  assert.equal(elements.characterBanner.dataset.characterBanner, 'invoker');
   assert.equal(elements.characterBanner.dataset.characterTone, 'azure');
   assert.equal(elements.characterBannerImage.hidden, true);
   assert.equal(elements.characterPortraitImage.hidden, true);
-  assert.equal(elements.characterPortraitBadge.textContent, 'M');
+  assert.equal(elements.characterPortraitBadge.textContent, 'I');
   assert.notEqual(elements.characterPortraitBadge.style.display, 'none');
   assert.equal(elements.characterName.textContent, 'KELLEE');
   assert.equal(elements.characterClass.textContent, 'Invoker');
