@@ -30,6 +30,35 @@ test('every canonical entry declares a portrait and banner file that exists', ()
   });
 });
 
+test('every playable ascendancy uses portrait and banner files different from its base class', () => {
+  const baseEntries = new Map(
+    PLAYABLE_CHARACTER_SUPPORT
+      .filter((entry) => !entry.ascendancy)
+      .map((entry) => [`${entry.poeVersion}:${entry.baseClass}`, entry])
+  );
+
+  const sharedPortraits = [];
+  const sharedBanners = [];
+
+  PLAYABLE_CHARACTER_SUPPORT
+    .filter((entry) => entry.ascendancy)
+    .forEach((entry) => {
+      const baseEntry = baseEntries.get(`${entry.poeVersion}:${entry.baseClass}`);
+      assert.ok(baseEntry, `Missing base entry for ${entry.id}`);
+
+      if (entry.portraitPath === baseEntry.portraitPath) {
+        sharedPortraits.push(entry.id);
+      }
+
+      if (entry.bannerPath === baseEntry.bannerPath) {
+        sharedBanners.push(entry.id);
+      }
+    });
+
+  assert.deepEqual(sharedPortraits, []);
+  assert.deepEqual(sharedBanners, []);
+});
+
 test('matrix resolves canonical base-class and ascendancy lookups', () => {
   assert.equal(
     findCharacterSupportEntry({ poeVersion: 'poe1', className: 'Templar' })?.id,
