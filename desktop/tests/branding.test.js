@@ -9,6 +9,7 @@ const mainProcessPath = path.join(desktopDir, 'main.js');
 const packageJsonPath = path.join(desktopDir, 'package.json');
 const windowsIconPath = path.join(desktopDir, 'src', 'assets', 'icon.ico');
 const desktopIconPngPath = path.join(desktopDir, 'src', 'assets', 'icon.png');
+const afterPackScriptPath = path.join(desktopDir, 'scripts', 'after-pack.js');
 
 function parseIcoEntries(buffer) {
   assert.equal(buffer.readUInt16LE(0), 0, 'ICO reserved header must be 0');
@@ -53,12 +54,24 @@ test('desktop package and main process point to the branded window metadata', ()
 
   assert.equal(packageJson.build.productName, 'Juice Journal');
   assert.equal(packageJson.build.win.icon, 'src/assets/icon.ico');
+  assert.equal(packageJson.build.win.signAndEditExecutable, false);
+  assert.equal(packageJson.build.afterPack, 'scripts/after-pack.js');
 
   assert.match(mainProcess, /const APP_NAME = 'Juice Journal';/);
   assert.match(mainProcess, /app\.setAppUserModelId\(APP_ID\);/);
   assert.match(mainProcess, /app\.setName\(APP_NAME\);/);
   assert.match(mainProcess, /icon:\s*APP_ICON_PATH,/);
   assert.match(mainProcess, /title:\s*APP_NAME/);
+});
+
+test('desktop build defines an afterPack hook that patches the packaged exe icon', () => {
+  const script = fs.readFileSync(afterPackScriptPath, 'utf8');
+
+  assert.match(script, /rcedit/);
+  assert.match(script, /appOutDir/);
+  assert.match(script, /icon\.ico/);
+  assert.match(script, /productFilename/);
+  assert.match(script, /\.exe/);
 });
 
 test('desktop window opens large enough to avoid default dashboard scrolling', () => {

@@ -28,7 +28,8 @@
   "devDependencies": {
     "electron": "^35.7.5",
     "electron-builder": "^26.8.2",
-    "playwright": "^1.59.1"
+    "playwright": "^1.59.1",
+    "rcedit": "^5.0.2"
   },
   "build": {
     "appId": "JuiceJournal.Desktop",
@@ -44,12 +45,14 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "src/assets/icon.ico"
+      "icon": "src/assets/icon.ico",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     },
+    "afterPack": "scripts/after-pack.js",
     "publish": [
       {
         "provider": "github",
