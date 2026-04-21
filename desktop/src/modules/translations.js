@@ -1089,11 +1089,7 @@ window.Translations = {
   }
 };
 
-[
-  'dashboard.characterSummary',
-  'stash.capabilityUnavailable.poe2',
-  'stash.capabilityUnavailable.generic'
-].forEach(function ensureRequiredTranslationKey(key) {
+Object.keys(window.Translations.en).forEach(function ensureEnglishFallbackCoverage(key) {
   Object.keys(window.Translations).forEach(function applyFallback(localeCode) {
     if (!window.Translations[localeCode][key]) {
       window.Translations[localeCode][key] = window.Translations.en[key] || key;
