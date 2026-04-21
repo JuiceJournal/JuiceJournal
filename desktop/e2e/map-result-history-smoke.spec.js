@@ -229,6 +229,7 @@ function createIsolatedProfile(testInfo, apiUrl) {
     env: {
       ...process.env,
       NODE_ENV: 'test',
+      JUICE_JOURNAL_FORCE_LIVE_AUTH: '1',
       JUICE_JOURNAL_E2E_APP_DATA_DIR: appDataDir,
       JUICE_JOURNAL_E2E_USER_DATA_DIR: userDataDir,
       JUICE_JOURNAL_E2E_API_URL: apiUrl,
@@ -305,11 +306,12 @@ async function waitForGuestReady(page) {
   await page.waitForLoadState('domcontentloaded');
   await expect(page).toHaveTitle(/Juice Journal/i);
   await expect(page.locator('#login-modal')).toBeVisible();
-  await expect(page.getByRole('button', { name: /continue with path of exile/i })).toBeEnabled();
+  await expect(page.locator('#poe-oauth-login')).toBeVisible();
+  await expect(page.locator('#poe-oauth-login')).toBeEnabled();
 }
 
 async function signInWithPoeOAuth(page) {
-  await page.getByRole('button', { name: /continue with path of exile/i }).click();
+  await page.locator('#poe-oauth-login').click();
   await expect(page.locator('#login-modal')).toBeHidden();
   await expect(page.locator('#username')).toHaveText(SMOKE_USER.username);
 }
