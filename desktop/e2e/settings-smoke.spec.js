@@ -35,6 +35,14 @@ function writeJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload));
 }
 
+function writeJsonWithAuthCookie(response, statusCode, payload, token) {
+  response.writeHead(statusCode, {
+    'Content-Type': 'application/json',
+    'Set-Cookie': `juice_journal_auth=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`,
+  });
+  response.end(JSON.stringify(payload));
+}
+
 function parseJsonBody(request) {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -106,7 +114,7 @@ async function startSmokeBackend() {
         return;
       }
 
-      writeJson(response, 200, {
+      writeJsonWithAuthCookie(response, 200, {
         success: true,
         data: {
           token: SMOKE_USER.token,
@@ -120,7 +128,7 @@ async function startSmokeBackend() {
           },
         },
         error: null,
-      });
+      }, SMOKE_USER.token);
       return;
     }
 
@@ -136,7 +144,7 @@ async function startSmokeBackend() {
         return;
       }
 
-      writeJson(response, 200, {
+      writeJsonWithAuthCookie(response, 200, {
         success: true,
         data: {
           token: 'smoke-token',
@@ -144,7 +152,7 @@ async function startSmokeBackend() {
           capabilities: {},
         },
         error: null,
-      });
+      }, 'smoke-token');
       return;
     }
 
