@@ -17,6 +17,12 @@ const cronService = require('./services/cronService');
 const env = require('./config/env');
 const logger = require('./services/logger');
 const { verifyRealtimeToken } = require('./middleware/auth');
+const {
+  REALTIME_AUTH_TIMEOUT_MS,
+  REALTIME_WS_MAX_PAYLOAD_BYTES,
+  parseRealtimeAuthMessage,
+  shouldRejectClientMessageAfterAuth
+} = require('./services/realtimeGatewayPolicy');
 
 // Route imports
 const authRoutes = require('./routes/auth');
@@ -32,7 +38,11 @@ const app = express();
 const server = http.createServer(app);
 
 // WebSocket server
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({
+  server,
+  maxPayload: REALTIME_WS_MAX_PAYLOAD_BYTES,
+  perMessageDeflate: false
+});
 
 // Keep active WebSocket connections
 const clients = new Map();
@@ -42,24 +52,24 @@ wss.on('connection', (ws) => {
     if (!clients.get(ws)?.userId) {
       ws.close(1008, 'Authentication timeout');
     }
-  }, 5000);
+  }, REALTIME_AUTH_TIMEOUT_MS);
 
   clients.set(ws, { userId: null });
 
   ws.on('message', (rawMessage) => {
     try {
-      const data = JSON.parse(rawMessage);
       const metadata = clients.get(ws);
 
       if (!metadata?.userId) {
-        if (data?.type !== 'AUTH' || typeof data.token !== 'string') {
-          ws.close(1008, 'Authentication required');
-          return;
-        }
-
-        const decoded = verifyRealtimeToken(data.token);
+        const authMessage = parseRealtimeAuthMessage(rawMessage);
+        const decoded = verifyRealtimeToken(authMessage.token);
         clients.set(ws, { userId: decoded.userId });
         clearTimeout(authTimeout);
+        return;
+      }
+
+      if (shouldRejectClientMessageAfterAuth()) {
+        ws.close(1008, 'Unexpected client message');
       }
     } catch (error) {
       ws.close(1008, 'Authentication failed');
@@ -87,7 +97,14 @@ const broadcast = (data, options = {}) => {
     }
 
     if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
+      client.send(message, (error) => {
+        if (error) {
+          clients.delete(client);
+          try {
+            client.terminate();
+          } catch {}
+        }
+      });
     }
   });
 };
