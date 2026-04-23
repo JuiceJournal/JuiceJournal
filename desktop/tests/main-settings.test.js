@@ -333,7 +333,7 @@ test('main overlay window guard skips creation when disabled and creates when en
 
 test('openAuthUrlInBrowser uses shell.openExternal when it succeeds', async () => {
   const calls = [];
-  const context = loadFunctions(['openAuthUrlInBrowser'], {
+  const context = loadFunctions(['isAllowedExternalAuthUrl', 'openAuthUrlInBrowser'], {
     shell: {
       openExternal: async (url) => {
         calls.push(['openExternal', url]);
@@ -342,6 +342,7 @@ test('openAuthUrlInBrowser uses shell.openExternal when it succeeds', async () =
     process: {
       platform: 'win32'
     },
+    URL,
     execFile() {
       calls.push(['execFile']);
     }
@@ -354,7 +355,7 @@ test('openAuthUrlInBrowser uses shell.openExternal when it succeeds', async () =
 
 test('openAuthUrlInBrowser falls back to cmd start on Windows when shell.openExternal fails', async () => {
   const calls = [];
-  const context = loadFunctions(['openAuthUrlInBrowser'], {
+  const context = loadFunctions(['isAllowedExternalAuthUrl', 'openAuthUrlInBrowser'], {
     shell: {
       openExternal: async (url) => {
         calls.push(['openExternal', url]);
@@ -364,6 +365,7 @@ test('openAuthUrlInBrowser falls back to cmd start on Windows when shell.openExt
     process: {
       platform: 'win32'
     },
+    URL,
     execFile(command, args, callback) {
       calls.push(['execFile', command, args]);
       callback(null);
@@ -376,6 +378,36 @@ test('openAuthUrlInBrowser falls back to cmd start on Windows when shell.openExt
     ['openExternal', 'https://www.pathofexile.com/oauth/authorize'],
     ['execFile', 'cmd', ['/c', 'start', '', 'https://www.pathofexile.com/oauth/authorize']]
   ]);
+});
+
+test('openAuthUrlInBrowser rejects unsafe external URLs before invoking the shell', async () => {
+  const calls = [];
+  const context = loadFunctions(['isAllowedExternalAuthUrl', 'openAuthUrlInBrowser'], {
+    shell: {
+      openExternal: async (url) => {
+        calls.push(['openExternal', url]);
+      }
+    },
+    process: {
+      platform: 'win32'
+    },
+    execFile() {
+      calls.push(['execFile']);
+    },
+    URL
+  });
+
+  assert.throws(
+    () => context.openAuthUrlInBrowser('javascript:alert(1)'),
+    /invalid external auth url/i
+  );
+
+  assert.throws(
+    () => context.openAuthUrlInBrowser('https://evil.example.com/oauth/authorize'),
+    /invalid external auth url/i
+  );
+
+  assert.deepEqual(calls, []);
 });
 
 test('main settings reject invalid apiUrl updates before any settings side effects occur', () => {

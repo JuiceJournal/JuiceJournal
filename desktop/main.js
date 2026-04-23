@@ -1525,6 +1525,10 @@ async function openPoeLoginFlow(startResponse, { redirectUrl, redirectUri, expec
 }
 
 function openAuthUrlInBrowser(authUrl) {
+  if (!isAllowedExternalAuthUrl(authUrl)) {
+    throw new Error('Invalid external auth URL');
+  }
+
   return shell.openExternal(authUrl).catch((error) => {
     if (process.platform !== 'win32') {
       throw error;
@@ -1540,6 +1544,24 @@ function openAuthUrlInBrowser(authUrl) {
       });
     });
   });
+}
+
+function isAllowedExternalAuthUrl(authUrl) {
+  try {
+    const parsed = new URL(authUrl);
+    if (parsed.protocol !== 'https:') {
+      return false;
+    }
+
+    if (parsed.username || parsed.password) {
+      return false;
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+    return hostname === 'pathofexile.com' || hostname === 'www.pathofexile.com';
+  } catch {
+    return false;
+  }
 }
 
 async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expectedState, codeVerifier }) {
