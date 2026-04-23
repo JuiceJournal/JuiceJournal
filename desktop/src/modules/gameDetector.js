@@ -47,9 +47,28 @@ const DEFAULT_LOG_PATHS = {
 const DEFAULT_POE_LOG_PATH = 'E:\\Grinding Gear Games\\Path of Exile\\logs\\Client.txt';
 
 const POLL_INTERVAL_MS = 5000; // check every 5 seconds
+const WINDOWS_PROCESS_QUERY_NAMES = [
+  ...new Set([
+    ...POE1_PROCESSES,
+    ...POE2_PROCESSES
+  ])
+];
 
 function normalizeProcessValue(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function buildWindowsProcessCommand() {
+  const filter = WINDOWS_PROCESS_QUERY_NAMES
+    .map((name) => `Name = '${name.replace(/'/g, "''")}'`)
+    .join(' OR ');
+
+  return [
+    '$ErrorActionPreference = "Stop";',
+    `Get-CimInstance Win32_Process -Filter "${filter}" |`,
+    'Select-Object Name,ExecutablePath,CommandLine |',
+    'ConvertTo-Json -Compress'
+  ].join(' ');
 }
 
 function normalizeProcessSnapshot(process = {}) {
@@ -179,12 +198,7 @@ class GameDetector extends EventEmitter {
    */
   _getRunningProcesses() {
     return new Promise((resolve, reject) => {
-      const command = [
-        '$ErrorActionPreference = "Stop";',
-        'Get-CimInstance Win32_Process |',
-        'Select-Object Name,ExecutablePath,CommandLine |',
-        'ConvertTo-Json -Compress'
-      ].join(' ');
+      const command = buildWindowsProcessCommand();
 
       execFile('powershell', ['-NoProfile', '-Command', command], { maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => {
         if (error) {
@@ -233,3 +247,4 @@ class GameDetector extends EventEmitter {
 module.exports = GameDetector;
 module.exports.DEFAULT_POE_LOG_PATH = DEFAULT_POE_LOG_PATH;
 module.exports.detectGameVersionFromProcesses = detectGameVersionFromProcesses;
+module.exports.buildWindowsProcessCommand = buildWindowsProcessCommand;

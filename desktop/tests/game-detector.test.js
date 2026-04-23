@@ -44,3 +44,15 @@ test('game detector falls back to poe1 for Steam PathOfExileSteam.exe under Path
     'poe1'
   );
 });
+
+test('game detector builds a targeted Windows process query instead of enumerating every process', () => {
+  const command = GameDetector.buildWindowsProcessCommand();
+
+  assert.match(command, /Get-CimInstance Win32_Process -Filter/);
+  assert.doesNotMatch(command, /Get-CimInstance Win32_Process \|/);
+  assert.match(command, /pathofexile\.exe/);
+  assert.match(command, /pathofexile2\.exe/);
+  assert.match(command, /pathofexilesteam\.exe/);
+  assert.match(command, /Select-Object Name,ExecutablePath,CommandLine/);
+  assert.match(command, /ConvertTo-Json -Compress/);
+});
