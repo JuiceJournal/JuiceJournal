@@ -124,6 +124,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('app-update-state-changed', (event, data) => callback(data));
   },
   getLastActiveCharacterHint: () => ipcRenderer.invoke('get-last-active-character-hint'),
+  getNativeGameInfoDiagnostics: () => ipcRenderer.invoke('get-native-game-info-diagnostics'),
 
   // Dinleyicileri temizle (sadece izin verilen kanallar)
   removeAllListeners: (channel) => {

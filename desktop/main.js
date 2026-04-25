@@ -41,6 +41,7 @@ const {
   validateHotkeys
 } = require('./src/modules/hotkeyModel');
 const { createNativeGameInfoProducer } = require('./src/modules/nativeGameInfoProducer');
+const { normalizeNativeInfoPayload } = require('./src/modules/nativeGameInfoProducerModel');
 const {
   getAppUpdateSupportState,
   createAppUpdateState,
@@ -776,6 +777,108 @@ function getNativeGameInfoProducer() {
 function getDetectedNativeGameInfoVersion() {
   return normalizePoeVersion(gameDetector ? gameDetector.getDetectedGame() : null)
     || normalizePoeVersion(store.get('lastDetectedPoeVersion'));
+}
+
+function sanitizeNativeGameInfoDiagnosticValue(value, depth = 0) {
+  const maxDepth = 5;
+  const maxArrayItems = 20;
+  const maxObjectKeys = 60;
+  const maxStringLength = 500;
+
+  if (value == null || typeof value === 'boolean' || typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    return value.length > maxStringLength
+      ? `${value.slice(0, maxStringLength)}...`
+      : value;
+  }
+
+  if (depth >= maxDepth) {
+    return '[max-depth]';
+  }
+
+  if (Array.isArray(value)) {
+    const result = value
+      .slice(0, maxArrayItems)
+      .map(item => sanitizeNativeGameInfoDiagnosticValue(item, depth + 1));
+
+    if (value.length > maxArrayItems) {
+      result.push(`[truncated:${value.length - maxArrayItems}]`);
+    }
+
+    return result;
+  }
+
+  if (typeof value !== 'object') {
+    return String(value);
+  }
+
+  const result = {};
+  const entries = Object.entries(value);
+
+  for (const [key, nestedValue] of entries.slice(0, maxObjectKeys)) {
+    if (/chat|message|whisper|guild|party/i.test(key)) {
+      result[key] = '[redacted]';
+      continue;
+    }
+
+    result[key] = sanitizeNativeGameInfoDiagnosticValue(nestedValue, depth + 1);
+  }
+
+  if (entries.length > maxObjectKeys) {
+    result.__truncatedKeys = entries.length - maxObjectKeys;
+  }
+
+  return result;
+}
+
+async function getNativeGameInfoDiagnostics() {
+  const detectedVersion = getDetectedNativeGameInfoVersion();
+  const gameId = getNativeGameInfoGameId(detectedVersion);
+  const gep = getNativeGameInfoGep();
+  const baseDiagnostics = {
+    available: false,
+    detectedVersion,
+    gameId,
+    producerBinding: nativeGameInfoProducerBinding || null,
+    lastActiveCharacterHint: lastActiveCharacterHint || null
+  };
+
+  if (!detectedVersion || !gameId) {
+    return {
+      ...baseDiagnostics,
+      reason: 'unsupported-game'
+    };
+  }
+
+  if (!gep || typeof gep.getInfo !== 'function') {
+    return {
+      ...baseDiagnostics,
+      reason: 'gep-unavailable'
+    };
+  }
+
+  try {
+    const info = await gep.getInfo(gameId);
+
+    return {
+      ...baseDiagnostics,
+      available: true,
+      info: sanitizeNativeGameInfoDiagnosticValue(info),
+      normalizedHint: normalizeNativeInfoPayload({
+        poeVersion: detectedVersion,
+        info
+      })
+    };
+  } catch (error) {
+    return {
+      ...baseDiagnostics,
+      reason: 'get-info-failed',
+      error: error?.message || String(error)
+    };
+  }
 }
 
 function setupOverwolfPackageManagerListeners() {
@@ -3447,6 +3550,10 @@ function setupIPC() {
 
   ipcMain.handle('get-last-active-character-hint', async () => {
     return lastActiveCharacterHint;
+  });
+
+  ipcMain.handle('get-native-game-info-diagnostics', async () => {
+    return getNativeGameInfoDiagnostics();
   });
 
   ipcMain.handle('save-map-result', async (event, result) => {
