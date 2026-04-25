@@ -1122,6 +1122,88 @@ test('desktop preload exposes native character hint listener', () => {
   assert.match(source, /onActiveCharacterHint:\s*\(callback\)\s*=>/);
   assert.match(source, /ipcRenderer\.on\('active-character-hint'/);
   assert.match(source, /getLastActiveCharacterHint:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('get-last-active-character-hint'\)/);
+  assert.match(source, /getNativeGameInfoDiagnostics:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('get-native-game-info-diagnostics'\)/);
+});
+
+test('main process returns sanitized native GEP diagnostics for the detected game', async () => {
+  const getInfoCalls = [];
+  const nativeModel = require('../src/modules/nativeGameInfoProducerModel');
+  const context = loadFunctions([
+    'normalizePoeVersion',
+    'getNativeGameInfoGameId',
+    'getNativeGameInfoGep',
+    'getDetectedNativeGameInfoVersion',
+    'sanitizeNativeGameInfoDiagnosticValue',
+    'getNativeGameInfoDiagnostics'
+  ], {
+    app: {
+      overwolf: {
+        packages: {
+          gep: {
+            async getInfo(gameId) {
+              getInfoCalls.push(gameId);
+              return {
+                me: {
+                  character_name: 'KocaAyVeMasha',
+                  character_class: 'Druid',
+                  character_level: 96
+                },
+                chat: {
+                  last_message: 'secret party text'
+                },
+                match_info: {
+                  current_zone: 'Clearfell Encampment'
+                }
+              };
+            }
+          }
+        }
+      }
+    },
+    store: {
+      get(key) {
+        if (key === 'lastDetectedPoeVersion') {
+          return 'poe2';
+        }
+        return null;
+      }
+    },
+    gameDetector: {
+      getDetectedGame() {
+        return 'poe2';
+      }
+    },
+    nativeGameInfoProducerBinding: {
+      detectedVersion: 'poe2',
+      gameId: 24886
+    },
+    lastActiveCharacterHint: null,
+    normalizeNativeInfoPayload: nativeModel.normalizeNativeInfoPayload
+  });
+
+  const diagnostics = await context.getNativeGameInfoDiagnostics();
+
+  assert.deepEqual(getInfoCalls, [24886]);
+  assert.equal(diagnostics.available, true);
+  assert.equal(diagnostics.detectedVersion, 'poe2');
+  assert.equal(diagnostics.gameId, 24886);
+  assert.equal(diagnostics.info.me.character_name, 'KocaAyVeMasha');
+  assert.equal(diagnostics.info.chat, '[redacted]');
+  assert.deepEqual(diagnostics.normalizedHint, {
+    source: 'native-info',
+    poeVersion: 'poe2',
+    characterName: 'KocaAyVeMasha',
+    className: 'Druid',
+    level: 96,
+    experience: null,
+    currentZone: 'Clearfell Encampment',
+    openedPage: null,
+    inTown: null,
+    scene: null,
+    eventName: null,
+    eventData: null,
+    confidence: 'high'
+  });
 });
 
 test('main process forwards native active-character hints to the renderer', () => {
