@@ -277,6 +277,8 @@ let overlayMapResultDismissTimer = null;
 let lastActiveCharacterHint = null;
 let nativeGameInfoProducer = null;
 let nativeGameInfoProducerBinding = null;
+let nativeGameInfoProducerGep = null;
+let overwolfPackageManagerListenersRegistered = false;
 let poeAuthServer = null;
 let trayHintShown = false;
 let pendingLootFlushInProgress = false;
@@ -748,17 +750,69 @@ function getNativeGameInfoGameId(version) {
   return null;
 }
 
+function getNativeGameInfoGep() {
+  return app?.overwolf?.packages?.gep || null;
+}
+
 function getNativeGameInfoProducer() {
-  if (!nativeGameInfoProducer) {
-    const gep = app?.overwolf?.packages?.gep || null;
+  const gep = getNativeGameInfoGep();
+
+  if (!gep) {
+    return null;
+  }
+
+  if (!nativeGameInfoProducer || nativeGameInfoProducerGep !== gep) {
     nativeGameInfoProducer = createNativeGameInfoProducer({
       gep,
       emitHint: emitActiveCharacterHint,
       logger: console
     });
+    nativeGameInfoProducerGep = gep;
   }
 
   return nativeGameInfoProducer;
+}
+
+function getDetectedNativeGameInfoVersion() {
+  return normalizePoeVersion(gameDetector ? gameDetector.getDetectedGame() : null)
+    || normalizePoeVersion(store.get('lastDetectedPoeVersion'));
+}
+
+function setupOverwolfPackageManagerListeners() {
+  const packageManager = app?.overwolf?.packages || null;
+
+  if (
+    overwolfPackageManagerListenersRegistered
+    || !packageManager
+    || typeof packageManager.on !== 'function'
+  ) {
+    return false;
+  }
+
+  packageManager.on('ready', (_event, packageName, version) => {
+    if (packageName !== 'gep') {
+      return;
+    }
+
+    console.log(`[NativeGameInfoProducer] Overwolf GEP package ready${version ? ` (${version})` : ''}`);
+    nativeGameInfoProducer = null;
+    nativeGameInfoProducerGep = null;
+    nativeGameInfoProducerBinding = null;
+
+    const detectedVersion = getDetectedNativeGameInfoVersion();
+    if (detectedVersion) {
+      syncNativeGameInfoProducer({ detectedVersion });
+    }
+  });
+
+  packageManager.on('failed-to-initialize', (_event, packageName) => {
+    if (packageName === 'gep') {
+      console.warn('[NativeGameInfoProducer] Overwolf GEP package failed to initialize');
+    }
+  });
+
+  overwolfPackageManagerListenersRegistered = true;
+  return true;
 }
 
 function stopNativeGameInfoProducer() {
@@ -792,6 +846,7 @@ function syncNativeGameInfoProducer(input = {}) {
     nativeGameInfoProducerBinding
     && nativeGameInfoProducerBinding.detectedVersion === detectedVersion
     && nativeGameInfoProducerBinding.gameId === gameId
+    && nativeGameInfoProducerGep === getNativeGameInfoGep()
   ) {
     return Promise.resolve(true);
   }
@@ -3489,6 +3544,7 @@ app.whenReady().then(() => {
 
   createTray();
   registerGlobalShortcuts();
+  setupOverwolfPackageManagerListeners();
   setupLogParser();
   setupGameDetector();
   getCurrentSessionFromBackend().catch(() => { });

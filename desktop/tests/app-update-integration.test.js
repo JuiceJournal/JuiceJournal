@@ -20,6 +20,17 @@ test('desktop package declares updater dependency and github publish config', ()
   });
 });
 
+test('desktop package exposes an ow-electron GEP test runtime', () => {
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+
+  assert.equal(packageJson.author.name, 'Juice Journal');
+  assert.deepEqual(packageJson.overwolf.packages, ['gep', 'utility']);
+  assert.match(packageJson.scripts['start:overwolf-gep'], /ow-electron \./);
+  assert.match(packageJson.scripts['start:overwolf-gep'], /--remote-debugging-port=9230/);
+  assert.match(packageJson.scripts['start:overwolf-gep'], /--owepm-packages-url=https:\/\/electronapi-qa\.overwolf\.com\/packages/);
+  assert.match(packageJson.devDependencies['@overwolf/ow-electron'], /^\^?\d+\.\d+\.\d+/);
+});
+
 test('main process exposes app update state, check, and install handlers', () => {
   const source = fs.readFileSync(mainJsPath, 'utf8');
 

@@ -10,6 +10,7 @@
     "test:desktop": "node --test tests/*.test.js",
     "test:e2e": "playwright test",
     "test:smoke": "playwright test e2e/settings-smoke.spec.js e2e/overlay-smoke.spec.js",
+    "start:overwolf-gep": "ow-electron . --remote-debugging-port=9230 --owepm-packages-url=https://electronapi-qa.overwolf.com/packages",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "pack": "electron-builder --dir",
@@ -27,6 +28,7 @@
   },
   "devDependencies": {
     "electron": "^35.7.5",
+    "@overwolf/ow-electron": "^39.6.1",
     "electron-builder": "^26.8.2",
     "playwright": "^1.59.1",
     "rcedit": "^5.0.2"
@@ -66,7 +68,15 @@
     "poe",
     "path-of-exile"
   ],
-  "author": "",
+  "author": {
+    "name": "Juice Journal"
+  },
+  "overwolf": {
+    "packages": [
+      "gep",
+      "utility"
+    ]
+  },
   "license": "MIT",
   "overrides": {
     "follow-redirects": "1.16.0"

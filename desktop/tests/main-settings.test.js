@@ -154,6 +154,13 @@ function loadFunctions(functionNames, contextOverrides = {}) {
     console: {
       log() { }
     },
+    app: {
+      overwolf: {
+        packages: {}
+      }
+    },
+    nativeGameInfoProducerGep: null,
+    overwolfPackageManagerListenersRegistered: false,
     ...contextOverrides
   });
 
@@ -175,6 +182,8 @@ function loadMainWithMocks({
   mainWindow,
   nativeGameInfoProducer,
   nativeGameInfoProducerBinding,
+  nativeGameInfoProducerGep,
+  overwolfPackageManagerListenersRegistered,
   priceService,
   store,
   storeState,
@@ -192,10 +201,14 @@ function loadMainWithMocks({
     ...storeState
   };
   const context = loadFunctions([
+    'normalizePoeVersion',
     'emitActiveCharacterHint',
     'clearNativeActiveCharacterHint',
     'getNativeGameInfoGameId',
+    'getNativeGameInfoGep',
     'getNativeGameInfoProducer',
+    'getDetectedNativeGameInfoVersion',
+    'setupOverwolfPackageManagerListeners',
     'stopNativeGameInfoProducer',
     'syncNativeGameInfoProducer',
     'applyGameVersion'
@@ -224,6 +237,8 @@ function loadMainWithMocks({
     },
     nativeGameInfoProducerBinding: nativeGameInfoProducerBinding ?? null,
     nativeGameInfoProducer: nativeGameInfoProducer ?? null,
+    nativeGameInfoProducerGep: nativeGameInfoProducerGep ?? null,
+    overwolfPackageManagerListenersRegistered: overwolfPackageManagerListenersRegistered ?? false,
     lastActiveCharacterHint: lastActiveCharacterHint ?? null,
     app: app || {
       overwolf: {
@@ -253,6 +268,15 @@ function loadMainWithMocks({
 
   return {
     ...context,
+    get lastActiveCharacterHint() {
+      return context.lastActiveCharacterHint;
+    },
+    get nativeGameInfoProducerBinding() {
+      return context.nativeGameInfoProducerBinding;
+    },
+    get nativeGameInfoProducerGep() {
+      return context.nativeGameInfoProducerGep;
+    },
     emittedActiveCharacterHints,
     messages,
     storeState: runtimeStoreState,
@@ -690,6 +714,7 @@ test('runtime game detection starts the native game info producer for poe2', () 
   const context = loadFunctions([
     'emitActiveCharacterHint',
     'getNativeGameInfoGameId',
+    'getNativeGameInfoGep',
     'getNativeGameInfoProducer',
     'stopNativeGameInfoProducer',
     'syncNativeGameInfoProducer',
@@ -792,6 +817,7 @@ test('runtime game detection does not restart the native game info producer when
     'emitActiveCharacterHint',
     'clearNativeActiveCharacterHint',
     'getNativeGameInfoGameId',
+    'getNativeGameInfoGep',
     'getNativeGameInfoProducer',
     'stopNativeGameInfoProducer',
     'syncNativeGameInfoProducer'
@@ -843,6 +869,8 @@ test('runtime game detection stops the native game info producer when the detect
     'emitActiveCharacterHint',
     'clearNativeActiveCharacterHint',
     'getNativeGameInfoGameId',
+    'getNativeGameInfoGep',
+    'getNativeGameInfoProducer',
     'stopNativeGameInfoProducer',
     'syncNativeGameInfoProducer',
     'applyGameVersion'
@@ -943,10 +971,7 @@ test('runtime game detection fails closed when the native gep package is unavail
     gameId: 24886
   });
 
-  assert.deepEqual(JSON.parse(JSON.stringify(starts)), [{
-    poeVersion: 'poe2',
-    gameId: 24886
-  }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(starts)), []);
   assert.deepEqual(context.emittedActiveCharacterHints, []);
   assert.equal(context.lastActiveCharacterHint, null);
   assert.equal(context.nativeGameInfoProducerBinding, null);
@@ -959,6 +984,52 @@ test('runtime game detection fails closed when the native gep package is unavail
       logPath: null
     }
   }]);
+});
+
+test('runtime game detection starts native game info after the GEP package becomes available', async () => {
+  const starts = [];
+  const createdWithGep = [];
+  const app = {
+    overwolf: {
+      packages: {}
+    }
+  };
+  const context = loadMainWithMocks({
+    app,
+    createNativeGameInfoProducer(options) {
+      createdWithGep.push(options.gep);
+      return {
+        start: async (payload) => {
+          starts.push(payload);
+          return true;
+        },
+        stop: async () => true
+      };
+    }
+  });
+
+  assert.equal(await context.syncNativeGameInfoProducer({ detectedVersion: 'poe2' }), false);
+  assert.deepEqual(JSON.parse(JSON.stringify(starts)), []);
+  assert.equal(context.nativeGameInfoProducerBinding, null);
+
+  const gep = {
+    setRequiredFeatures: async () => {},
+    getInfo: async () => ({}),
+    on() {},
+    removeListener() {}
+  };
+  app.overwolf.packages.gep = gep;
+
+  assert.equal(await context.syncNativeGameInfoProducer({ detectedVersion: 'poe2' }), true);
+  assert.deepEqual(createdWithGep, [gep]);
+  assert.deepEqual(JSON.parse(JSON.stringify(starts)), [{
+    poeVersion: 'poe2',
+    gameId: 24886
+  }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.nativeGameInfoProducerBinding)), {
+    detectedVersion: 'poe2',
+    gameId: 24886
+  });
 });
 
 test('main runtime log events attach normalized runtime session state to existing map IPC payloads', () => {
