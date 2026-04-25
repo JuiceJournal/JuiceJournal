@@ -1,5 +1,6 @@
 const {
   getRequiredFeaturesForVersion,
+  normalizeNativeEventPayload,
   normalizeNativeInfoPayload
 } = require('./nativeGameInfoProducerModel');
 
@@ -40,6 +41,16 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
       }
     }
 
+    if (session.gameEventHandler) {
+      try {
+        gep.removeListener('new-game-event', session.gameEventHandler);
+        session.gameEventHandler = null;
+      } catch (error) {
+        warnFailClosed(error);
+        success = false;
+      }
+    }
+
     if (session.gameExitHandler) {
       try {
         gep.removeListener('game-exit', session.gameExitHandler);
@@ -72,6 +83,22 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
     if (hint?.confidence === 'high' && typeof emitHint === 'function') {
       emitHint(hint);
     }
+  }
+
+  function getNativeEvents(payload) {
+    if (!payload || typeof payload !== 'object') {
+      return [];
+    }
+
+    if (Array.isArray(payload.events)) {
+      return payload.events;
+    }
+
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+
+    return [payload];
   }
 
   async function rollbackStartupSession(session, error) {
@@ -133,6 +160,7 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
       gameId,
       closed: false,
       infoUpdateHandler: null,
+      gameEventHandler: null,
       gameExitHandler: null
     };
     activeSession = currentSession;
@@ -159,6 +187,27 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
       }
     };
 
+    const gameEventHandler = async (_event, updatedGameId, payload) => {
+      if (!hasActiveSession(currentSession) || updatedGameId !== currentSession.gameId) {
+        return;
+      }
+
+      try {
+        for (const event of getNativeEvents(payload)) {
+          const hint = normalizeNativeEventPayload({
+            poeVersion: currentSession.poeVersion,
+            event
+          });
+
+          if (hint && typeof emitHint === 'function') {
+            emitHint(hint);
+          }
+        }
+      } catch (error) {
+        warnFailClosed(error);
+      }
+    };
+
     const gameExitHandler = async (_event, exitedGameId) => {
       if (!hasActiveSession(currentSession) || exitedGameId !== currentSession.gameId) {
         return;
@@ -176,10 +225,12 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
     }
 
     currentSession.infoUpdateHandler = infoUpdateHandler;
+    currentSession.gameEventHandler = gameEventHandler;
     currentSession.gameExitHandler = gameExitHandler;
 
     try {
       gep.on('new-info-update', infoUpdateHandler);
+      gep.on('new-game-event', gameEventHandler);
       gep.on('game-exit', gameExitHandler);
     } catch (error) {
       return rollbackStartupSession(currentSession, error);

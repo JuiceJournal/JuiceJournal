@@ -737,6 +737,10 @@ function clearNativeActiveCharacterHint() {
 }
 
 function getNativeGameInfoGameId(version) {
+  if (version === 'poe1') {
+    return 7212;
+  }
+
   if (version === 'poe2') {
     return 24886;
   }

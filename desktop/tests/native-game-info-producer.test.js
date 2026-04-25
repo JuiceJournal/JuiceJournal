@@ -2,6 +2,26 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const PRODUCER_REQUEST = '../src/modules/nativeGameInfoProducer';
+const RUNTIME_FEATURES = ['gep_internal', 'me', 'match_info', 'game_info', 'death', 'kill'];
+
+function nativeInfoHint(overrides = {}) {
+  return {
+    source: 'native-info',
+    poeVersion: 'poe2',
+    characterName: null,
+    className: null,
+    level: null,
+    experience: null,
+    currentZone: null,
+    openedPage: null,
+    inTown: null,
+    scene: null,
+    eventName: null,
+    eventData: null,
+    confidence: 'high',
+    ...overrides
+  };
+}
 
 function isDirectMissingModule(error, request) {
   return error?.code === 'MODULE_NOT_FOUND'
@@ -149,21 +169,74 @@ test('producer emits a high-confidence hint after immediate getInfo and subscrib
   assert.deepEqual(setRequiredFeaturesCalls, [
     {
       gameId: 24886,
-      features: ['gep_internal', 'me', 'match_info']
+      features: RUNTIME_FEATURES
     }
   ]);
-  assert.deepEqual(onCalls, ['new-info-update', 'game-exit']);
+  assert.deepEqual(onCalls, ['new-info-update', 'new-game-event', 'game-exit']);
   assert.equal(typeof listeners.get('new-info-update'), 'function');
+  assert.equal(typeof listeners.get('new-game-event'), 'function');
   assert.equal(typeof listeners.get('game-exit'), 'function');
   assert.deepEqual(emitted, [
-    {
-      source: 'native-info',
-      poeVersion: 'poe2',
+    nativeInfoHint({
       characterName: 'KELLEE',
       level: 92,
-      experience: 123456789,
-      confidence: 'high'
-    }
+      experience: 123456789
+    })
+  ]);
+});
+
+test('producer starts PoE1 with the shared runtime feature set', async () => {
+  const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
+  const setRequiredFeaturesCalls = [];
+  const listeners = new Map();
+  const gep = {
+    async setRequiredFeatures(gameId, features) {
+      setRequiredFeaturesCalls.push({ gameId, features });
+    },
+    async getInfo(gameId) {
+      assert.equal(gameId, 7212);
+
+      return {
+        me: {
+          character_name: 'MapRunner',
+          character_level: '95',
+          character_class: 'Deadeye',
+          character_experience: '987654321'
+        }
+      };
+    },
+    on(eventName, handler) {
+      listeners.set(eventName, handler);
+    },
+    removeListener() {}
+  };
+  const emitted = [];
+  const producer = createNativeGameInfoProducer({
+    gep,
+    emitHint: hint => emitted.push(hint)
+  });
+
+  const started = await producer.start({
+    poeVersion: 'poe1',
+    gameId: 7212
+  });
+
+  assert.equal(started, true);
+  assert.deepEqual(setRequiredFeaturesCalls, [{
+    gameId: 7212,
+    features: RUNTIME_FEATURES
+  }]);
+  assert.equal(typeof listeners.get('new-info-update'), 'function');
+  assert.equal(typeof listeners.get('new-game-event'), 'function');
+  assert.equal(typeof listeners.get('game-exit'), 'function');
+  assert.deepEqual(emitted, [
+    nativeInfoHint({
+      poeVersion: 'poe1',
+      characterName: 'MapRunner',
+      className: 'Deadeye',
+      level: 95,
+      experience: 987654321
+    })
   ]);
 });
 
@@ -217,23 +290,65 @@ test('producer refreshes on new-info-update and tears down the active session on
   await infoUpdateHandler({}, 24886);
 
   assert.deepEqual(emitted, [
-    {
-      source: 'native-info',
-      poeVersion: 'poe2',
+    nativeInfoHint({
       characterName: 'KELLEE',
       level: 93,
-      experience: 223456789,
-      confidence: 'high'
-    }
+      experience: 223456789
+    })
   ]);
 
   await gameExitHandler({}, 24886);
 
-  assert.deepEqual(removed, ['new-info-update', 'game-exit']);
+  assert.deepEqual(removed, ['new-info-update', 'new-game-event', 'game-exit']);
 
   await infoUpdateHandler({}, 24886);
 
   assert.equal(emitted.length, 1);
+});
+
+test('producer emits normalized non-chat game events from the active session', async () => {
+  const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
+  const emitted = [];
+  const listeners = new Map();
+  const gep = {
+    async setRequiredFeatures() {},
+    async getInfo() {
+      return null;
+    },
+    on(eventName, handler) {
+      listeners.set(eventName, handler);
+    },
+    removeListener(eventName, handler) {
+      if (listeners.get(eventName) === handler) {
+        listeners.delete(eventName);
+      }
+    }
+  };
+  const producer = createNativeGameInfoProducer({
+    gep,
+    emitHint: hint => emitted.push(hint)
+  });
+
+  await producer.start({
+    poeVersion: 'poe2',
+    gameId: 24886
+  });
+
+  const eventHandler = listeners.get('new-game-event');
+
+  assert.equal(typeof eventHandler, 'function');
+
+  await eventHandler({}, 24886, { events: [{ name: 'death', data: null }] });
+  await eventHandler({}, 24886, { events: [{ name: 'chat', data: '#global raw line' }] });
+  await eventHandler({}, 7212, { events: [{ name: 'boss_kill', data: 'Wrong game' }] });
+
+  assert.deepEqual(emitted, [
+    nativeInfoHint({
+      eventName: 'death',
+      eventData: null,
+      confidence: 'medium'
+    })
+  ]);
 });
 
 test('producer returns false and logs a warning when required feature setup fails', async () => {
@@ -344,9 +459,10 @@ test('producer rolls back subscriptions and returns false when listener registra
   });
 
   assert.equal(started, false);
-  assert.deepEqual(onCalls, ['new-info-update', 'game-exit']);
+  assert.deepEqual(onCalls, ['new-info-update', 'new-game-event', 'game-exit']);
   assert.deepEqual(warnings, [registrationError]);
   assert.deepEqual(listeners.get('new-info-update'), []);
+  assert.deepEqual(listeners.get('new-game-event'), []);
   assert.deepEqual(listeners.get('game-exit'), []);
 });
 
@@ -411,14 +527,11 @@ test('producer does not leak stale listeners when overlapping starts resolve out
   assert.equal(listeners.get('new-info-update').length, 1);
   assert.equal(listeners.get('game-exit').length, 1);
   assert.deepEqual(emitted, [
-    {
-      source: 'native-info',
-      poeVersion: 'poe2',
+    nativeInfoHint({
       characterName: 'SECOND',
       level: 95,
-      experience: 423456789,
-      confidence: 'high'
-    }
+      experience: 423456789
+    })
   ]);
 
   await producer.stop();
@@ -489,14 +602,11 @@ test('producer rolls back subscriptions when startup emission fails after activa
   assert.equal(listeners.get('new-info-update').length, 1);
   assert.equal(listeners.get('game-exit').length, 1);
   assert.deepEqual(emitted, [
-    {
-      source: 'native-info',
-      poeVersion: 'poe2',
+    nativeInfoHint({
       characterName: 'RECOVERED',
       level: 96,
-      experience: 523456789,
-      confidence: 'high'
-    }
+      experience: 523456789
+    })
   ]);
 });
 
@@ -541,7 +651,7 @@ test('producer startup rollback stays fail-closed when cleanup throws', async ()
   });
 
   assert.equal(started, false);
-  assert.deepEqual(warnings, [cleanupError, cleanupError, startupError]);
+  assert.deepEqual(warnings, [cleanupError, cleanupError, cleanupError, startupError]);
 
   const restarted = await producer.start({
     poeVersion: 'poe2',
@@ -550,6 +660,7 @@ test('producer startup rollback stays fail-closed when cleanup throws', async ()
 
   assert.equal(restarted, false);
   assert.equal(listeners.get('new-info-update').length, 1);
+  assert.equal(listeners.get('new-game-event').length, 1);
   assert.equal(listeners.get('game-exit').length, 1);
 });
 
@@ -775,13 +886,10 @@ test('producer ignores stale info updates after the active session changes', asy
   await staleUpdatePromise;
 
   assert.deepEqual(emitted, [
-    {
-      source: 'native-info',
-      poeVersion: 'poe2',
+    nativeInfoHint({
       characterName: 'FRESH',
       level: 94,
-      experience: 323456789,
-      confidence: 'high'
-    }
+      experience: 323456789
+    })
   ]);
 });

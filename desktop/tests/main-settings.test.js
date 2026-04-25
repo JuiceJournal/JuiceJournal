@@ -778,6 +778,14 @@ test('runtime game detection starts the native game info producer for poe2', () 
   ]);
 });
 
+test('runtime game detection maps PoE1 and PoE2 to native GEP game ids', () => {
+  const context = loadFunctions(['getNativeGameInfoGameId']);
+
+  assert.equal(context.getNativeGameInfoGameId('poe1'), 7212);
+  assert.equal(context.getNativeGameInfoGameId('poe2'), 24886);
+  assert.equal(context.getNativeGameInfoGameId('unknown'), null);
+});
+
 test('runtime game detection does not restart the native game info producer when the mapping is unchanged', async () => {
   const starts = [];
   const context = loadFunctions([
@@ -887,7 +895,7 @@ test('runtime game detection stops the native game info producer when the detect
     }
   });
 
-  context.applyGameVersion('poe1');
+  context.applyGameVersion('unknown');
 
   assert.equal(stopCalls, 1);
   assert.equal(context.lastActiveCharacterHint, null);
@@ -899,9 +907,9 @@ test('runtime game detection stops the native game info producer when the detect
     {
       channel: 'game-version-changed',
       payload: {
-        version: 'poe1',
+        version: 'unknown',
         settingsVersion: 'poe1',
-        lastDetectedVersion: 'poe1',
+        lastDetectedVersion: 'unknown',
         logPath: null
       }
     }
