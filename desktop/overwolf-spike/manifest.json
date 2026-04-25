@@ -1,0 +1,32 @@
+{
+  "name": "Juice Journal GEP Capture",
+  "version": "0.1.0",
+  "description": "Manual PoE and PoE2 Overwolf Game Events Provider capture harness.",
+  "manualOnly": true,
+  "games": [
+    {
+      "id": 7212,
+      "name": "Path of Exile",
+      "features": [
+        "gep_internal",
+        "me",
+        "match_info",
+        "game_info",
+        "death",
+        "kill"
+      ]
+    },
+    {
+      "id": 24886,
+      "name": "Path of Exile 2",
+      "features": [
+        "gep_internal",
+        "me",
+        "match_info",
+        "game_info",
+        "death",
+        "kill"
+      ]
+    }
+  ]
+}

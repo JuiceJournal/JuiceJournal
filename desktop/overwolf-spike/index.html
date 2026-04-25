@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Juice Journal GEP Capture</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Consolas, "Courier New", monospace;
+      background: #11110f;
+      color: #f0dfb8;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+    }
+
+    button {
+      background: #b8892f;
+      border: 0;
+      border-radius: 4px;
+      color: #11110f;
+      cursor: pointer;
+      font-weight: 700;
+      padding: 8px 12px;
+    }
+
+    pre {
+      background: #191812;
+      border: 1px solid #4d3f24;
+      border-radius: 4px;
+      min-height: 320px;
+      overflow: auto;
+      padding: 12px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>Juice Journal GEP Capture</h1>
+  <p>Manual Overwolf runtime capture for Path of Exile and Path of Exile 2.</p>
+  <button id="start">Start Capture</button>
+  <pre id="output">Waiting for capture...</pre>
+  <script src="./capture.js"></script>
+</body>
+</html>
