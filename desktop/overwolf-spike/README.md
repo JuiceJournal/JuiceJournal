@@ -23,6 +23,12 @@ For a debug session:
 npm run start:dev-gep
 ```
 
+The debug script includes `--owepm-packages-url=https://electronapi-qa.overwolf.com/packages`, which is required while testing the GEP package outside the normal release channel.
+
+## Dependency Note
+
+`@overwolf/ow-electron` is a dev-only dependency for this manual harness. As of `39.6.1`, npm audit reports a moderate transitive `@electron/get -> got` advisory with no available npm fix. Do not ship this harness or its dependency tree in the normal desktop release package.
+
 ## Capture Scope
 
 Target game ids:

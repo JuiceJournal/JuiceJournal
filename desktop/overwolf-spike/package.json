@@ -1,12 +1,22 @@
 {
   "name": "juice-journal-overwolf-spike",
+  "productName": "Juice Journal GEP Capture",
   "version": "0.1.0",
   "private": true,
+  "author": {
+    "name": "Juice Journal"
+  },
+  "overwolf": {
+    "packages": [
+      "gep",
+      "utility"
+    ]
+  },
   "description": "Manual Overwolf GEP payload capture harness for Juice Journal.",
   "main": "main.js",
   "scripts": {
     "start": "ow-electron .",
-    "start:dev-gep": "ow-electron . --remote-debugging-port=9229"
+    "start:dev-gep": "ow-electron . --remote-debugging-port=9229 --owepm-packages-url=https://electronapi-qa.overwolf.com/packages"
   },
   "devDependencies": {
     "@overwolf/ow-electron": "^39.6.1"

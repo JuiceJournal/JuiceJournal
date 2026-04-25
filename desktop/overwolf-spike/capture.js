@@ -1,12 +1,10 @@
 (function () {
-  const FEATURES = ['gep_internal', 'me', 'match_info', 'game_info', 'death', 'kill'];
-  const GAME_IDS = [7212, 24886];
   const output = document.getElementById('output');
   const startButton = document.getElementById('start');
 
   function append(record) {
     const timestamp = new Date().toISOString();
-    output.textContent += `\n\n[${timestamp}]\n${JSON.stringify(record, null, 2)}`;
+    output.textContent += `\n\n[${timestamp}]\n${JSON.stringify(sanitizeRecord(record), null, 2)}`;
   }
 
   function redactChatEvent(event) {
@@ -40,59 +38,40 @@
     return redactChatEvent(payload);
   }
 
-  function getOverwolfEventsApi() {
-    return window.overwolf?.games?.events || null;
-  }
-
-  function setRequiredFeatures(eventsApi, features) {
-    return new Promise((resolve) => {
-      if (typeof eventsApi?.setRequiredFeatures !== 'function') {
-        resolve({ success: false, reason: 'setRequiredFeatures unavailable' });
-        return;
-      }
-
-      eventsApi.setRequiredFeatures(features, (result) => {
-        resolve(result || { success: true });
-      });
-    });
-  }
-
-  function wireEvents(eventsApi) {
-    if (eventsApi?.onInfoUpdates2?.addListener) {
-      eventsApi.onInfoUpdates2.addListener((payload) => {
-        append({ type: 'info', payload: sanitizePayload(payload) });
-      });
+  function sanitizeRecord(record) {
+    if (!record || typeof record !== 'object') {
+      return record;
     }
 
-    if (eventsApi?.onNewEvents?.addListener) {
-      eventsApi.onNewEvents.addListener((payload) => {
-        append({ type: 'event', payload: sanitizePayload(payload) });
-      });
+    if (record.payload) {
+      return {
+        ...record,
+        payload: sanitizePayload(record.payload)
+      };
     }
+
+    return sanitizePayload(record);
   }
 
   async function startCapture() {
     output.textContent = 'Starting Overwolf GEP capture...';
-    const eventsApi = getOverwolfEventsApi();
+    const captureApi = window.gepCapture;
 
-    if (!eventsApi) {
+    if (!captureApi || typeof captureApi.start !== 'function') {
       append({
         type: 'error',
-        message: 'overwolf.games.events is unavailable. Run this harness inside Overwolf ow-electron.'
+        message: 'GEP capture bridge is unavailable. Run this harness with ow-electron.'
       });
       return;
     }
 
-    append({
-      type: 'target-games',
-      gameIds: GAME_IDS,
-      features: FEATURES
-    });
-
-    const result = await setRequiredFeatures(eventsApi, FEATURES);
-    append({ type: 'set-required-features', result });
-    wireEvents(eventsApi);
+    const result = await captureApi.start();
+    append({ type: 'start-result', result });
   }
+
+  window.gepCapture?.onRecord?.((record) => {
+    append(record);
+  });
 
   startButton.addEventListener('click', () => {
     startCapture().catch((error) => {
