@@ -184,7 +184,16 @@ test('renderer fills hero banner artwork and meta fields from normalized account
     characterBannerImage: {
       src: '',
       hidden: true,
-      alt: ''
+      alt: '',
+      style: {
+        values: {},
+        setProperty(name, value) {
+          this.values[name] = value;
+        },
+        removeProperty(name) {
+          delete this.values[name];
+        }
+      }
     },
     characterPortrait: { dataset: {} },
     characterPortraitImage: {
@@ -237,7 +246,8 @@ test('renderer fills hero banner artwork and meta fields from normalized account
         classLabel: 'Shaman',
         baseClassLabel: 'Druid',
         portraitPath: 'assets/characters/poe2/shaman.png',
-        bannerPath: 'assets/characters/banners/poe2/shaman.jpg'
+        bannerPath: 'assets/characters/banners/poe2/shaman.jpg',
+        bannerObjectPosition: 'center 32%'
       })
     })
   });
@@ -252,6 +262,7 @@ test('renderer fills hero banner artwork and meta fields from normalized account
     elements.characterBannerImage.src,
     'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/assets/characters/banners/poe2/shaman.jpg'
   );
+  assert.equal(elements.characterBannerImage.style.values['--character-banner-position'], 'center 32%');
   assert.equal(elements.characterPortrait.dataset.characterPortrait, 'shaman');
   assert.equal(elements.characterPortrait.dataset.characterTone, 'ember');
   assert.equal(elements.characterPortraitImage.hidden, false);
@@ -278,7 +289,16 @@ test('renderer keeps hero text current when character art is unavailable', () =>
     characterBannerImage: {
       src: '',
       hidden: true,
-      alt: ''
+      alt: '',
+      style: {
+        values: {},
+        setProperty(name, value) {
+          this.values[name] = value;
+        },
+        removeProperty(name) {
+          delete this.values[name];
+        }
+      }
     },
     characterPortrait: { dataset: {} },
     characterPortraitImage: {

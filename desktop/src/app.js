@@ -1141,7 +1141,7 @@ function refreshRendererOverlayState() {
 }
 
 function applyNativeCharacterHint(nativeHint) {
-  if (!nativeHint || typeof nativeHint !== 'object' || !state.account) {
+  if (!nativeHint || typeof nativeHint !== 'object') {
     return false;
   }
 
@@ -1154,38 +1154,41 @@ function applyNativeCharacterHint(nativeHint) {
     const normalized = normalizeText(value);
     return normalized === 'poe1' || normalized === 'poe2' ? normalized : null;
   };
+  const normalizeDisplayText = (value) => (
+    typeof value === 'string' && value.trim()
+      ? value.trim()
+      : null
+  );
+  const normalizeLevel = (value) => {
+    const normalized = Number(value);
+    return Number.isFinite(normalized) && normalized > 0 ? normalized : 0;
+  };
 
   if (nativeHint.confidence !== 'high') {
     return false;
   }
 
   const poeVersion = normalizeVersion(nativeHint.poeVersion);
+  const account = state.account || null;
   const activePoeVersion = normalizeVersion(state.detectedGameVersion)
-    || normalizeVersion(account.activePoeVersion)
-    || normalizeVersion(state.settings?.poeVersion);
+    || normalizeVersion(account?.activePoeVersion)
+    || normalizeVersion(state.settings?.poeVersion)
+    || poeVersion;
   const characterName = normalizeText(nativeHint.characterName);
   if (!poeVersion || !characterName || !activePoeVersion || poeVersion !== activePoeVersion) {
     return false;
   }
 
-  const account = state.account;
-  const characters = Array.isArray(account.charactersByGame?.[poeVersion])
+  const characters = Array.isArray(account?.charactersByGame?.[poeVersion])
     ? account.charactersByGame[poeVersion]
-    : (Array.isArray(account.characters)
+    : (Array.isArray(account?.characters)
       ? account.characters.filter((character) => normalizeVersion(character?.poeVersion) === poeVersion)
       : []);
 
-  if (!characters.length) {
-    return false;
-  }
-
   let matches = characters.filter((character) => normalizeText(character?.name) === characterName);
-  if (!matches.length) {
-    return false;
-  }
 
   const className = normalizeText(nativeHint.className);
-  if (className) {
+  if (className && matches.length) {
     const classMatches = matches.filter((character) => normalizeText(character?.className) === className);
     if (classMatches.length) {
       matches = classMatches;
@@ -1193,24 +1196,59 @@ function applyNativeCharacterHint(nativeHint) {
   }
 
   const league = normalizeText(nativeHint.league);
-  if (league) {
+  if (league && matches.length) {
     const leagueMatches = matches.filter((character) => normalizeText(character?.league) === league);
     if (leagueMatches.length) {
       matches = leagueMatches;
     }
   }
 
-  const matchedCharacter = matches[0] || null;
+  const nativeCharacterName = normalizeDisplayText(nativeHint.characterName);
+  const nativeClassName = normalizeDisplayText(nativeHint.className);
+  const nativeLeague = normalizeDisplayText(nativeHint.league) || normalizeDisplayText(nativeHint.currentZone);
+  const accountMatchedCharacter = matches[0] || null;
+  const shouldAwaitAccountCharacter = !accountMatchedCharacter && Boolean(state.currentUser);
+  const matchedCharacter = accountMatchedCharacter || (nativeCharacterName
+    ? {
+      id: `native-${poeVersion}-${characterName.replace(/[^a-z0-9_-]+/g, '-')}`,
+      name: nativeCharacterName,
+      level: normalizeLevel(nativeHint.level),
+      className: nativeClassName,
+      ascendancy: null,
+      league: nativeLeague,
+      poeVersion,
+      source: 'native-game-info',
+      nativeBaseClassName: nativeClassName,
+      classSource: 'native-base-class',
+      identitySource: shouldAwaitAccountCharacter
+        ? 'native-game-info-pending-account'
+        : 'native-game-info'
+    }
+    : null);
   if (!matchedCharacter) {
     return false;
   }
 
-  account.activePoeVersion = poeVersion;
-  account.selectedCharacter = matchedCharacter;
-  if (account.selectedCharacterByGame && typeof account.selectedCharacterByGame === 'object' && matchedCharacter.id) {
-    account.selectedCharacterByGame[poeVersion] = matchedCharacter.id;
+  const targetAccount = account || {
+    accountName: 'Native game session',
+    activePoeVersion: poeVersion,
+    characters: [],
+    charactersByGame: {
+      [poeVersion]: [matchedCharacter]
+    },
+    selectedCharacterByGame: {}
+  };
+
+  targetAccount.activePoeVersion = poeVersion;
+  targetAccount.selectedCharacter = matchedCharacter;
+  if (
+    targetAccount.selectedCharacterByGame
+    && typeof targetAccount.selectedCharacterByGame === 'object'
+    && matchedCharacter.id
+  ) {
+    targetAccount.selectedCharacterByGame[poeVersion] = matchedCharacter.id;
   }
-  account.summary = {
+  targetAccount.summary = {
     status: 'ready',
     id: matchedCharacter.id || null,
     name: matchedCharacter.name || null,
@@ -1218,10 +1256,18 @@ function applyNativeCharacterHint(nativeHint) {
     className: matchedCharacter.className || null,
     ascendancy: matchedCharacter.ascendancy || null,
     league: matchedCharacter.league || null,
-    poeVersion: matchedCharacter.poeVersion || poeVersion
+    poeVersion: matchedCharacter.poeVersion || poeVersion,
+    nativeBaseClassName: nativeClassName || matchedCharacter.nativeBaseClassName || null,
+    classSource: accountMatchedCharacter ? 'account' : (matchedCharacter.classSource || 'native-base-class'),
+    identitySource: accountMatchedCharacter
+      ? 'account+native-game-info'
+      : (matchedCharacter.identitySource || 'native-game-info')
   };
-  state.activeCharacterRefreshSource = 'native-high-confidence';
-  if (typeof clearActiveCharacterRefreshTimers === 'function') {
+  state.account = targetAccount;
+  state.activeCharacterRefreshSource = shouldAwaitAccountCharacter
+    ? 'native-awaiting-account'
+    : 'native-high-confidence';
+  if (!shouldAwaitAccountCharacter && typeof clearActiveCharacterRefreshTimers === 'function') {
     clearActiveCharacterRefreshTimers();
   }
 
@@ -1270,6 +1316,13 @@ function renderCharacterSummaryCard() {
     elements.characterBannerImage.hidden = !visual.bannerPath;
     elements.characterBannerImage.src = bannerSource;
     elements.characterBannerImage.alt = isReady ? `${summary.name} banner` : 'Character banner';
+    if (elements.characterBannerImage.style) {
+      if (visual.bannerObjectPosition) {
+        elements.characterBannerImage.style.setProperty('--character-banner-position', visual.bannerObjectPosition);
+      } else {
+        elements.characterBannerImage.style.removeProperty('--character-banner-position');
+      }
+    }
   }
   if (elements.characterPortrait) {
     elements.characterPortrait.dataset.characterPortrait = visual.portraitKey || 'unknown';

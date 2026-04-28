@@ -56,6 +56,7 @@
     tone,
     portraitPath,
     bannerPath,
+    bannerObjectPosition = 'center 46%',
   }) {
     const baseSlug = toSlug(baseClass);
     const ascendancySlug = toSlug(ascendancy);
@@ -76,7 +77,25 @@
       tone,
       portraitPath,
       bannerPath,
+      bannerObjectPosition,
     };
+  }
+
+  const BANNER_OBJECT_POSITIONS = {
+    'poe2:mercenary:gemling-legionnaire': 'center 24%',
+    'poe2:monk:invoker': 'center 28%',
+    'poe2:huntress:amazon': 'center 30%',
+    'poe2:druid:shaman': 'center 32%',
+  };
+
+  function getBannerObjectPosition({ poeVersion, baseClass, ascendancy }) {
+    const baseSlug = toSlug(baseClass);
+    const ascendancySlug = toSlug(ascendancy);
+    const entryKey = ascendancySlug
+      ? `${poeVersion}:${baseSlug}:${ascendancySlug}`
+      : `${poeVersion}:${baseSlug}`;
+
+    return BANNER_OBJECT_POSITIONS[entryKey] || 'center 46%';
   }
 
   function createAscendancySupportEntry({ poeVersion, baseClass, ascendancy, tone }) {
@@ -91,6 +110,7 @@
       tone,
       portraitPath: `assets/characters/${poeVersion}/${slug}.${poeVersion === 'poe1' ? 'jpg' : 'png'}`,
       bannerPath: `assets/characters/banners/${poeVersion}/${slug}.jpg`,
+      bannerObjectPosition: getBannerObjectPosition({ poeVersion, baseClass, ascendancy }),
     });
   }
 

@@ -21,6 +21,7 @@ test('character visual model maps PoE2 Shaman to a dedicated portrait treatment'
   assert.equal(visual.bannerKey, 'shaman');
   assert.equal(visual.portraitPath, 'assets/characters/poe2/shaman.png');
   assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/shaman.jpg');
+  assert.equal(visual.bannerObjectPosition, 'center 32%');
 });
 
 test('character visual model maps PoE1 Necromancer to a unique witch ascendancy treatment', () => {
@@ -71,6 +72,7 @@ test('character visual model maps PoE2 Monk2 to Invoker with unique ascendancy a
   assert.equal(visual.tone, 'azure');
   assert.equal(visual.portraitPath, 'assets/characters/poe2/invoker.png');
   assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/invoker.jpg');
+  assert.equal(visual.bannerObjectPosition, 'center 28%');
 });
 
 test('character visual model maps PoE2 Invoker to a unique monk ascendancy portrait and banner', () => {
@@ -121,6 +123,7 @@ test('character visual model maps PoE2 Mercenary3 to Gemling Legionnaire', () =>
   assert.equal(visual.bannerKey, 'gemling-legionnaire');
   assert.equal(visual.portraitPath, 'assets/characters/poe2/gemling-legionnaire.png');
   assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/gemling-legionnaire.jpg');
+  assert.equal(visual.bannerObjectPosition, 'center 24%');
 });
 
 test('character visual model maps PoE2 Huntress1 to Amazon', () => {
@@ -137,6 +140,7 @@ test('character visual model maps PoE2 Huntress1 to Amazon', () => {
   assert.equal(visual.bannerKey, 'amazon');
   assert.equal(visual.portraitPath, 'assets/characters/poe2/amazon.png');
   assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/amazon.jpg');
+  assert.equal(visual.bannerObjectPosition, 'center 30%');
 });
 
 test('character visual model prefers significant-word initials for stop-word ascendancies', () => {

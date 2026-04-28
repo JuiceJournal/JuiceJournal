@@ -204,6 +204,134 @@ test('renderer applies a high-confidence native poe2 character hint without wait
   assert.equal(overlayRefreshCalls, 1);
 });
 
+test('renderer preserves exact account ascendancy when native poe2 hint only reports the base class', () => {
+  let renderCalls = 0;
+  let overlayRefreshCalls = 0;
+  const context = loadFunctions(['applyNativeCharacterHint'], {
+    state: {
+      detectedGameVersion: 'poe2',
+      currentUser: { username: 'tester' },
+      account: {
+        activePoeVersion: 'poe2',
+        charactersByGame: {
+          poe2: [
+            { id: 'char-abuser', name: 'AbuserSpear', className: 'Amazon', league: 'Standard', poeVersion: 'poe2' },
+            { id: 'char-invoker', name: 'BellMonk', className: 'Invoker', league: 'Standard', poeVersion: 'poe2' }
+          ]
+        },
+        summary: { status: 'ready', name: 'Unknown' }
+      }
+    },
+    renderCharacterSummaryCard() {
+      renderCalls += 1;
+    },
+    refreshRendererOverlayState() {
+      overlayRefreshCalls += 1;
+    },
+    clearActiveCharacterRefreshTimers() {}
+  });
+
+  const result = context.applyNativeCharacterHint({
+    source: 'native-game-info',
+    poeVersion: 'poe2',
+    characterName: 'AbuserSpear',
+    className: 'Huntress',
+    level: 92,
+    league: 'Standard',
+    confidence: 'high'
+  });
+
+  assert.equal(result, true);
+  assert.equal(context.state.account.selectedCharacter.id, 'char-abuser');
+  assert.equal(context.state.account.summary.name, 'AbuserSpear');
+  assert.equal(context.state.account.summary.className, 'Amazon');
+  assert.equal(context.state.account.summary.nativeBaseClassName, 'Huntress');
+  assert.equal(context.state.account.summary.classSource, 'account');
+  assert.equal(context.state.account.summary.identitySource, 'account+native-game-info');
+  assert.equal(renderCalls, 1);
+  assert.equal(overlayRefreshCalls, 1);
+});
+
+test('renderer preserves exact account invoker class when native poe2 hint reports monk', () => {
+  const context = loadFunctions(['applyNativeCharacterHint'], {
+    state: {
+      detectedGameVersion: 'poe2',
+      currentUser: { username: 'tester' },
+      account: {
+        activePoeVersion: 'poe2',
+        charactersByGame: {
+          poe2: [
+            { id: 'char-invoker', name: 'BellMonk', className: 'Invoker', league: 'Standard', poeVersion: 'poe2' }
+          ]
+        },
+        summary: { status: 'ready', name: 'Unknown' }
+      }
+    },
+    renderCharacterSummaryCard() {},
+    refreshRendererOverlayState() {},
+    clearActiveCharacterRefreshTimers() {}
+  });
+
+  const result = context.applyNativeCharacterHint({
+    source: 'native-game-info',
+    poeVersion: 'poe2',
+    characterName: 'BellMonk',
+    className: 'Monk',
+    level: 91,
+    league: 'Standard',
+    confidence: 'high'
+  });
+
+  assert.equal(result, true);
+  assert.equal(context.state.account.selectedCharacter.id, 'char-invoker');
+  assert.equal(context.state.account.summary.className, 'Invoker');
+  assert.equal(context.state.account.summary.nativeBaseClassName, 'Monk');
+  assert.equal(context.state.account.summary.classSource, 'account');
+});
+
+test('renderer keeps account refresh pending when native fallback is not exact enough', () => {
+  let clearedRefreshes = 0;
+  const context = loadFunctions(['applyNativeCharacterHint'], {
+    state: {
+      detectedGameVersion: 'poe2',
+      currentUser: { username: 'tester' },
+      settings: {
+        poeVersion: 'poe2'
+      },
+      account: {
+        activePoeVersion: 'poe2',
+        charactersByGame: {
+          poe2: []
+        },
+        summary: { status: 'no_character_selected' }
+      }
+    },
+    renderCharacterSummaryCard() {},
+    refreshRendererOverlayState() {},
+    clearActiveCharacterRefreshTimers() {
+      clearedRefreshes += 1;
+    }
+  });
+
+  const result = context.applyNativeCharacterHint({
+    source: 'native-game-info',
+    poeVersion: 'poe2',
+    characterName: 'AbuserSpear',
+    className: 'Huntress',
+    level: 92,
+    currentZone: 'Canal Hideout',
+    confidence: 'high'
+  });
+
+  assert.equal(result, true);
+  assert.equal(context.state.account.summary.className, 'Huntress');
+  assert.equal(context.state.account.summary.nativeBaseClassName, 'Huntress');
+  assert.equal(context.state.account.summary.classSource, 'native-base-class');
+  assert.equal(context.state.account.summary.identitySource, 'native-game-info-pending-account');
+  assert.equal(context.state.activeCharacterRefreshSource, 'native-awaiting-account');
+  assert.equal(clearedRefreshes, 0);
+});
+
 test('renderer marks a high-confidence native hint as the active-character refresh source and clears the api fallback', () => {
   let clearedRefreshes = 0;
   const context = loadFunctions(['applyNativeCharacterHint'], {
@@ -239,6 +367,45 @@ test('renderer marks a high-confidence native hint as the active-character refre
   assert.equal(result, true);
   assert.equal(context.state.activeCharacterRefreshSource, 'native-high-confidence');
   assert.equal(clearedRefreshes, 1);
+});
+
+test('renderer applies a high-confidence native hint when no account is linked yet', () => {
+  let renderCalls = 0;
+  let overlayRefreshCalls = 0;
+  const context = loadFunctions(['applyNativeCharacterHint'], {
+    state: {
+      detectedGameVersion: 'poe2',
+      settings: {
+        poeVersion: 'poe2'
+      },
+      account: null
+    },
+    renderCharacterSummaryCard() {
+      renderCalls += 1;
+    },
+    refreshRendererOverlayState() {
+      overlayRefreshCalls += 1;
+    }
+  });
+
+  const result = context.applyNativeCharacterHint({
+    source: 'native-game-info',
+    poeVersion: 'poe2',
+    characterName: 'AbuserSpear',
+    className: 'Huntress',
+    level: 92,
+    currentZone: 'Canal Hideout',
+    confidence: 'high'
+  });
+
+  assert.equal(result, true);
+  assert.equal(context.state.account.accountName, 'Native game session');
+  assert.equal(context.state.account.summary.name, 'AbuserSpear');
+  assert.equal(context.state.account.summary.className, 'Huntress');
+  assert.equal(context.state.account.summary.level, 92);
+  assert.equal(context.state.account.summary.league, 'Canal Hideout');
+  assert.equal(renderCalls, 1);
+  assert.equal(overlayRefreshCalls, 1);
 });
 
 test('renderer ignores a high-confidence native hint for a different game version', () => {

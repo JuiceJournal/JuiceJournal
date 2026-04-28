@@ -33,6 +33,18 @@ test('character normalizer tags realm characters with app poeVersion keys', () =
   }]);
 });
 
+test('character normalizer preserves exact PoE2 account class names for ascendancy artwork', () => {
+  const normalized = poeApiService.normalizeCharacters([
+    { id: 'amazon-id', name: 'AbuserSpear', level: 92, class: 'Amazon', league: 'Standard' },
+    { id: 'invoker-id', name: 'BellMonk', level: 91, class: 'Invoker', league: 'Standard' }
+  ], 'poe2');
+
+  assert.equal(normalized[0].class, 'Amazon');
+  assert.equal(normalized[1].class, 'Invoker');
+  assert.equal(normalized[0].poeVersion, 'poe2');
+  assert.equal(normalized[1].poeVersion, 'poe2');
+});
+
 test('character payload selects the highest-level character per game as default', () => {
   const payload = poeApiService.buildCharacterPayload({
     poe2: [
