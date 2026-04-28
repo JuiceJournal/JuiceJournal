@@ -13,7 +13,17 @@
       return '';
     }
 
-    return value.trim();
+    const trimmed = value.trim();
+    if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return typeof parsed === 'string' ? parsed.trim() : trimmed;
+      } catch (error) {
+        return trimmed;
+      }
+    }
+
+    return trimmed;
   }
 
   function normalizeNumber(value) {
@@ -22,7 +32,7 @@
     }
 
     if (typeof value === 'string') {
-      value = value.trim();
+      value = normalizeString(value);
 
       if (!value) {
         return null;

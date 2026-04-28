@@ -1140,6 +1140,16 @@ test('main process returns sanitized native GEP diagnostics for the detected gam
       overwolf: {
         packages: {
           gep: {
+            async getFeatures(gameId) {
+              assert.equal(gameId, 24886);
+              return ['gep_internal', 'me', 'match_info', 'game_info', 'death', 'kill'];
+            },
+            async getSupportedGames() {
+              return [
+                { id: 7212, name: 'Path of Exile' },
+                { id: 24886, name: 'Path of Exile 2' }
+              ];
+            },
             async getInfo(gameId) {
               getInfoCalls.push(gameId);
               return {
@@ -1178,6 +1188,7 @@ test('main process returns sanitized native GEP diagnostics for the detected gam
       gameId: 24886
     },
     lastActiveCharacterHint: null,
+    getRequiredFeaturesForVersion: nativeModel.getRequiredFeaturesForVersion,
     normalizeNativeInfoPayload: nativeModel.normalizeNativeInfoPayload
   });
 
@@ -1187,6 +1198,9 @@ test('main process returns sanitized native GEP diagnostics for the detected gam
   assert.equal(diagnostics.available, true);
   assert.equal(diagnostics.detectedVersion, 'poe2');
   assert.equal(diagnostics.gameId, 24886);
+  assert.deepEqual(diagnostics.requiredFeatures, ['gep_internal', 'me', 'match_info', 'game_info', 'death', 'kill']);
+  assert.deepEqual(diagnostics.supportedFeatures, ['gep_internal', 'me', 'match_info', 'game_info', 'death', 'kill']);
+  assert.equal(diagnostics.infoType, 'object');
   assert.equal(diagnostics.info.me.character_name, 'KocaAyVeMasha');
   assert.equal(diagnostics.info.chat, '[redacted]');
   assert.deepEqual(diagnostics.normalizedHint, {

@@ -57,7 +57,11 @@ test('overwolf spike capture script redacts chat and does not persist raw payloa
   assert.match(mainScript, /waitForGepPackage/);
   assert.match(mainScript, /package-manager-status/);
   assert.match(mainScript, /failed-to-initialize/);
-  assert.match(mainScript, /setRequiredFeatures\(target\.gameId, FEATURES\)/);
+  assert.match(mainScript, /getSupportedGames/);
+  assert.match(mainScript, /getFeatures\(target\.gameId\)/);
+  assert.match(mainScript, /'game-detected'/);
+  assert.match(mainScript, /event\.enable\(\)/);
+  assert.match(mainScript, /setRequiredFeatures\(target\.gameId, targetFeatures\)/);
   assert.match(mainScript, /ipcMain\.handle\('gep:start-capture'/);
   assert.match(captureScript, /redactChatEvent/);
   assert.match(captureScript, /window\.gepCapture/);

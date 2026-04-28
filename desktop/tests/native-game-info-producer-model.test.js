@@ -167,6 +167,37 @@ test('normalizeNativeInfoPayload maps PoE2 optional runtime fields', () => {
   });
 });
 
+test('normalizeNativeInfoPayload unwraps JSON-quoted GEP string fields', () => {
+  const normalizeNativeInfoPayload = getNativeGameInfoProducerModelExport('normalizeNativeInfoPayload');
+
+  const hint = normalizeNativeInfoPayload({
+    poeVersion: 'poe2',
+    info: {
+      me: {
+        character_name: '"AbuserSpear"',
+        character_level: '"92"',
+        character_class: '"Huntress"',
+        character_exp: 2312556745
+      },
+      match_info: {
+        current_zone: '"Canal Hideout"',
+        opened_page: '"character_sheet"',
+        in_town: true
+      },
+      game_info: {
+        scene: '"in_game"'
+      }
+    }
+  });
+
+  assert.equal(hint.characterName, 'AbuserSpear');
+  assert.equal(hint.className, 'Huntress');
+  assert.equal(hint.level, 92);
+  assert.equal(hint.currentZone, 'Canal Hideout');
+  assert.equal(hint.openedPage, 'character_sheet');
+  assert.equal(hint.scene, 'in_game');
+});
+
 test('normalizeNativeInfoPayload returns null without character_name', () => {
   const normalizeNativeInfoPayload = getNativeGameInfoProducerModelExport('normalizeNativeInfoPayload');
 

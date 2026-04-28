@@ -61,6 +61,16 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
       }
     }
 
+    if (session.gameDetectedHandler) {
+      try {
+        gep.removeListener('game-detected', session.gameDetectedHandler);
+        session.gameDetectedHandler = null;
+      } catch (error) {
+        warnFailClosed(error);
+        success = false;
+      }
+    }
+
     return success;
   }
 
@@ -136,7 +146,7 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
   }
 
   async function start({ poeVersion, gameId } = {}) {
-    const stopped = await stop();
+    const stopped = activeSession ? await stop() : true;
     if (!stopped) {
       return false;
     }
@@ -161,19 +171,24 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
       closed: false,
       infoUpdateHandler: null,
       gameEventHandler: null,
-      gameExitHandler: null
+      gameExitHandler: null,
+      gameDetectedHandler: null
     };
     activeSession = currentSession;
 
-    try {
-      await gep.setRequiredFeatures(gameId, requiredFeatures);
-    } catch (error) {
-      return rollbackStartupSession(currentSession, error);
-    }
+    const gameDetectedHandler = async (event, detectedGameId) => {
+      if (!hasActiveSession(currentSession) || detectedGameId !== currentSession.gameId) {
+        return;
+      }
 
-    if (!hasActiveSession(currentSession)) {
-      return false;
-    }
+      try {
+        if (typeof event?.enable === 'function') {
+          await event.enable();
+        }
+      } catch (error) {
+        warnFailClosed(error);
+      }
+    };
 
     const infoUpdateHandler = async (_event, updatedGameId) => {
       if (!hasActiveSession(currentSession) || updatedGameId !== currentSession.gameId) {
@@ -224,14 +239,27 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
       return false;
     }
 
+    currentSession.gameDetectedHandler = gameDetectedHandler;
     currentSession.infoUpdateHandler = infoUpdateHandler;
     currentSession.gameEventHandler = gameEventHandler;
     currentSession.gameExitHandler = gameExitHandler;
 
     try {
+      gep.on('game-detected', gameDetectedHandler);
       gep.on('new-info-update', infoUpdateHandler);
       gep.on('new-game-event', gameEventHandler);
       gep.on('game-exit', gameExitHandler);
+    } catch (error) {
+      return rollbackStartupSession(currentSession, error);
+    }
+
+    if (!hasActiveSession(currentSession)) {
+      clearSubscriptions(currentSession);
+      return false;
+    }
+
+    try {
+      await gep.setRequiredFeatures(gameId, requiredFeatures);
     } catch (error) {
       return rollbackStartupSession(currentSession, error);
     }

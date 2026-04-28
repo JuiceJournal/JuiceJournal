@@ -41,7 +41,10 @@ const {
   validateHotkeys
 } = require('./src/modules/hotkeyModel');
 const { createNativeGameInfoProducer } = require('./src/modules/nativeGameInfoProducer');
-const { normalizeNativeInfoPayload } = require('./src/modules/nativeGameInfoProducerModel');
+const {
+  getRequiredFeaturesForVersion,
+  normalizeNativeInfoPayload
+} = require('./src/modules/nativeGameInfoProducerModel');
 const {
   getAppUpdateSupportState,
   createAppUpdateState,
@@ -838,10 +841,12 @@ async function getNativeGameInfoDiagnostics() {
   const detectedVersion = getDetectedNativeGameInfoVersion();
   const gameId = getNativeGameInfoGameId(detectedVersion);
   const gep = getNativeGameInfoGep();
+  const requiredFeatures = getRequiredFeaturesForVersion(detectedVersion);
   const baseDiagnostics = {
     available: false,
     detectedVersion,
     gameId,
+    requiredFeatures,
     producerBinding: nativeGameInfoProducerBinding || null,
     lastActiveCharacterHint: lastActiveCharacterHint || null
   };
@@ -861,11 +866,37 @@ async function getNativeGameInfoDiagnostics() {
   }
 
   try {
+    let supportedFeatures = null;
+    let supportedFeaturesError = null;
+    let supportedGames = null;
+    let supportedGamesError = null;
+
+    if (typeof gep.getFeatures === 'function') {
+      try {
+        supportedFeatures = await gep.getFeatures(gameId);
+      } catch (error) {
+        supportedFeaturesError = error?.message || String(error);
+      }
+    }
+
+    if (typeof gep.getSupportedGames === 'function') {
+      try {
+        supportedGames = await gep.getSupportedGames();
+      } catch (error) {
+        supportedGamesError = error?.message || String(error);
+      }
+    }
+
     const info = await gep.getInfo(gameId);
 
     return {
       ...baseDiagnostics,
       available: true,
+      supportedFeatures: sanitizeNativeGameInfoDiagnosticValue(supportedFeatures),
+      supportedFeaturesError,
+      supportedGames: sanitizeNativeGameInfoDiagnosticValue(supportedGames),
+      supportedGamesError,
+      infoType: Array.isArray(info) ? 'array' : typeof info,
       info: sanitizeNativeGameInfoDiagnosticValue(info),
       normalizedHint: normalizeNativeInfoPayload({
         poeVersion: detectedVersion,

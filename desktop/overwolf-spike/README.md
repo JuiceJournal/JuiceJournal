@@ -45,6 +45,10 @@ Requested features:
 - `death`
 - `kill`
 
+The harness also records `getSupportedGames()` and per-game `getFeatures(gameId)` output before calling `setRequiredFeatures`. If the runtime reports a smaller supported feature set than the documented list, the harness records both the requested and runtime-supported feature lists and subscribes to the runtime-supported subset for that capture.
+
+When GEP emits `game-detected`, the harness calls `event.enable()` for the PoE/PoE2 target before expecting native game data. This mirrors Overwolf's sample app flow and is required for the GEP package to connect to the detected game process.
+
 ## Handling Captured Data
 
 Use the on-screen output to inspect payload shape. If a payload should become a fixture, manually sanitize it first and place it under `fixtures/`.

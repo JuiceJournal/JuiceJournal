@@ -208,6 +208,66 @@ async function emitInfoSnapshot(gep, webContents, target) {
   }
 }
 
+async function emitSupportedGames(gep, webContents) {
+  if (typeof gep?.getSupportedGames !== 'function') {
+    sendRecord(webContents, {
+      type: 'supported-games-unavailable'
+    });
+    return;
+  }
+
+  try {
+    const games = await gep.getSupportedGames();
+    sendRecord(webContents, {
+      type: 'supported-games',
+      games
+    });
+  } catch (error) {
+    sendRecord(webContents, {
+      type: 'supported-games-error',
+      error: serializeError(error)
+    });
+  }
+}
+
+async function getSupportedFeatures(gep, webContents, target) {
+  if (typeof gep?.getFeatures !== 'function') {
+    sendRecord(webContents, {
+      type: 'supported-features-unavailable',
+      target
+    });
+    return null;
+  }
+
+  try {
+    const features = await gep.getFeatures(target.gameId);
+    sendRecord(webContents, {
+      type: 'supported-features',
+      target,
+      features
+    });
+    return Array.isArray(features) ? features : null;
+  } catch (error) {
+    sendRecord(webContents, {
+      type: 'supported-features-error',
+      target,
+      error: serializeError(error)
+    });
+    return null;
+  }
+}
+
+function getTargetFeatures(supportedFeatures) {
+  if (!Array.isArray(supportedFeatures)) {
+    return FEATURES;
+  }
+
+  const supportedFeatureSet = new Set(supportedFeatures);
+  const targetFeatures = FEATURES.filter((feature) => supportedFeatureSet.has(feature));
+
+  return targetFeatures.length > 0 ? targetFeatures : FEATURES;
+}
+
 async function startCapture(webContents) {
   stopCapture();
 
@@ -276,6 +336,23 @@ async function startCapture(webContents) {
   };
 
   const handlers = [
+    ['game-detected', (event, gameId, name, gameInfo) => {
+      const target = GAME_TARGETS.find((candidate) => candidate.gameId === gameId);
+
+      sendRecord(webContents, {
+        type: 'game-detected',
+        target: target || { gameId, label: name },
+        gameInfo: sanitizePayload(gameInfo)
+      });
+
+      if (target && typeof event?.enable === 'function') {
+        event.enable();
+        sendRecord(webContents, {
+          type: 'game-enabled',
+          target
+        });
+      }
+    }],
     ['new-info-update', infoUpdateHandler],
     ['new-game-event', gameEventHandler],
     ['game-exit', gameExitHandler]
@@ -287,12 +364,19 @@ async function startCapture(webContents) {
     }
     activeCapture = { gep, handlers };
 
+    await emitSupportedGames(gep, webContents);
+
     for (const target of GAME_TARGETS) {
-      await gep.setRequiredFeatures(target.gameId, FEATURES);
+      const supportedFeatures = await getSupportedFeatures(gep, webContents, target);
+      const targetFeatures = getTargetFeatures(supportedFeatures);
+
+      await gep.setRequiredFeatures(target.gameId, targetFeatures);
       sendRecord(webContents, {
         type: 'set-required-features',
         target,
-        features: FEATURES
+        features: targetFeatures,
+        requestedFeatures: FEATURES,
+        supportedFeatures
       });
       await emitInfoSnapshot(gep, webContents, target);
     }

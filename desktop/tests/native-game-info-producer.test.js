@@ -172,7 +172,8 @@ test('producer emits a high-confidence hint after immediate getInfo and subscrib
       features: RUNTIME_FEATURES
     }
   ]);
-  assert.deepEqual(onCalls, ['new-info-update', 'new-game-event', 'game-exit']);
+  assert.deepEqual(onCalls, ['game-detected', 'new-info-update', 'new-game-event', 'game-exit']);
+  assert.equal(typeof listeners.get('game-detected'), 'function');
   assert.equal(typeof listeners.get('new-info-update'), 'function');
   assert.equal(typeof listeners.get('new-game-event'), 'function');
   assert.equal(typeof listeners.get('game-exit'), 'function');
@@ -299,11 +300,58 @@ test('producer refreshes on new-info-update and tears down the active session on
 
   await gameExitHandler({}, 24886);
 
-  assert.deepEqual(removed, ['new-info-update', 'new-game-event', 'game-exit']);
+  assert.deepEqual(removed, ['new-info-update', 'new-game-event', 'game-exit', 'game-detected']);
 
   await infoUpdateHandler({}, 24886);
 
   assert.equal(emitted.length, 1);
+});
+
+test('producer enables the active GEP game when the target game is detected', async () => {
+  const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
+  const listeners = new Map();
+  const enableCalls = [];
+  const gep = {
+    async setRequiredFeatures() {},
+    async getInfo() {
+      return null;
+    },
+    on(eventName, handler) {
+      listeners.set(eventName, handler);
+    },
+    removeListener(eventName, handler) {
+      if (listeners.get(eventName) === handler) {
+        listeners.delete(eventName);
+      }
+    }
+  };
+
+  const producer = createNativeGameInfoProducer({ gep });
+
+  const started = await producer.start({
+    poeVersion: 'poe2',
+    gameId: 24886
+  });
+
+  assert.equal(started, true);
+
+  const gameDetectedHandler = listeners.get('game-detected');
+
+  assert.equal(typeof gameDetectedHandler, 'function');
+
+  await gameDetectedHandler({
+    enable() {
+      enableCalls.push('poe2');
+    }
+  }, 24886, 'Path of Exile 2');
+
+  await gameDetectedHandler({
+    enable() {
+      enableCalls.push('poe1');
+    }
+  }, 7212, 'Path of Exile');
+
+  assert.deepEqual(enableCalls, ['poe2']);
 });
 
 test('producer emits normalized non-chat game events from the active session', async () => {
@@ -459,7 +507,7 @@ test('producer rolls back subscriptions and returns false when listener registra
   });
 
   assert.equal(started, false);
-  assert.deepEqual(onCalls, ['new-info-update', 'new-game-event', 'game-exit']);
+  assert.deepEqual(onCalls, ['game-detected', 'new-info-update', 'new-game-event', 'game-exit']);
   assert.deepEqual(warnings, [registrationError]);
   assert.deepEqual(listeners.get('new-info-update'), []);
   assert.deepEqual(listeners.get('new-game-event'), []);
@@ -651,7 +699,7 @@ test('producer startup rollback stays fail-closed when cleanup throws', async ()
   });
 
   assert.equal(started, false);
-  assert.deepEqual(warnings, [cleanupError, cleanupError, cleanupError, startupError]);
+  assert.deepEqual(warnings, [cleanupError, cleanupError, cleanupError, cleanupError, startupError]);
 
   const restarted = await producer.start({
     poeVersion: 'poe2',
