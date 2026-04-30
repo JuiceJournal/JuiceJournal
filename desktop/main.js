@@ -2328,6 +2328,7 @@ async function startNewSession(input = {}) {
     return session;
   } catch (error) {
     showNotification(t('notificationError'), t('sessionStartFailed'));
+    throw error;
   }
 }
 

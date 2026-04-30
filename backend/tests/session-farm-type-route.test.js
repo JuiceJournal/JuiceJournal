@@ -164,3 +164,13 @@ test('backend session route resolves farm type ids from dedicated or legacy payl
     null
   );
 });
+
+test('backend session route imports sequelize before using transactions', () => {
+  const source = fs.readFileSync(routePath, 'utf8');
+
+  assert.match(
+    source,
+    /const\s*\{[^}]*\bsequelize\b[^}]*\}\s*=\s*require\(['"]\.\.\/models['"]\)/s
+  );
+  assert.match(source, /sequelize\.transaction\(/);
+});

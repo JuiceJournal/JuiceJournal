@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, param, query, validationResult } = require('express-validator');
-const { Session, LootEntry } = require('../models');
+const { sequelize, Session, LootEntry } = require('../models');
 const { authenticate } = require('../middleware/auth');
 const logger = require('../services/logger');
 

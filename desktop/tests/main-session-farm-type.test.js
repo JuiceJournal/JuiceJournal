@@ -244,6 +244,36 @@ test('main session start forwards the selected farm type to api and queued paylo
   ]);
 });
 
+test('main session start surfaces non-retryable api failures to the renderer', async () => {
+  const notificationCalls = [];
+  const context = loadFunctions(['normalizeStoredFarmTypeId', 'startNewSession'], {
+    currentSession: null,
+    resolveLeagueContext: () => ({
+      activeVersion: 'poe1',
+      league: 'Mirage'
+    }),
+    getActiveFarmTypeId: () => null,
+    apiClient: {
+      async startSession() {
+        throw new Error('sequelize is not defined');
+      }
+    },
+    isRetryableApiError: () => false,
+    showNotification(title, body) {
+      notificationCalls.push([title, body]);
+    },
+    t: (key) => key,
+    mainWindow: null
+  });
+
+  await assert.rejects(
+    () => context.startNewSession({ mapName: 'Dunes Map' }),
+    /sequelize is not defined/
+  );
+
+  assert.deepEqual(notificationCalls, [['notificationError', 'sessionStartFailed']]);
+});
+
 test('auto-start map handler passes the active farm type into session creation', async () => {
   const startCalls = [];
   const runtimeCalls = [];
