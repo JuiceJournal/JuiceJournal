@@ -228,7 +228,7 @@ test('successful poe oauth login initializes a local session and dashboard boots
   );
 });
 
-test('bootstrapCurrentUserSession continues in guest mode when no auth token exists', async () => {
+test('bootstrapCurrentUserSession requires login when no auth token exists', async () => {
   const calls = [];
   const state = { mapResults: [{ id: 'map-1' }] };
   const context = loadFunctions(['hideLoginModal', 'isServerUnavailableError', 'bootstrapCurrentUserSession'], {
@@ -261,15 +261,14 @@ test('bootstrapCurrentUserSession continues in guest mode when no auth token exi
 
   const result = await context.bootstrapCurrentUserSession();
 
-  assert.equal(result.mode, 'guest');
+  assert.equal(result.mode, 'login-required');
   assert.equal(state.mapResults.length, 0);
   assert.deepEqual(calls, [
-    ['hideLoginModal', 'hidden'],
-    ['hideRegisterModal', 'hidden']
+    ['showLoginModal']
   ]);
 });
 
-test('bootstrapCurrentUserSession falls back to offline guest mode when backend is unavailable', async () => {
+test('bootstrapCurrentUserSession requires login when backend is unavailable', async () => {
   const calls = [];
   const state = { mapResults: [{ id: 'map-1' }] };
   const context = loadFunctions(['hideLoginModal', 'isServerUnavailableError', 'bootstrapCurrentUserSession'], {
@@ -305,12 +304,10 @@ test('bootstrapCurrentUserSession falls back to offline guest mode when backend 
 
   const result = await context.bootstrapCurrentUserSession();
 
-  assert.equal(result.mode, 'guest-offline');
+  assert.equal(result.mode, 'login-required');
   assert.equal(state.mapResults.length, 0);
   assert.deepEqual(calls, [
-    ['hideLoginModal', 'hidden'],
-    ['hideRegisterModal', 'hidden'],
-    ['showToast', 'settings.api', 'toast.serverUnavailable', 'warning']
+    ['showLoginModal']
   ]);
 });
 

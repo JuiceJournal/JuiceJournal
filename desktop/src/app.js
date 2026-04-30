@@ -2118,21 +2118,12 @@ function isServerUnavailableError(error) {
 }
 
 async function bootstrapCurrentUserSession() {
-  const runtimeMode = typeof window.electronAPI.getRuntimeMode === 'function'
-    ? await window.electronAPI.getRuntimeMode()
-    : { isPackaged: true, isDev: false };
-  const requiresLiveAuth = Boolean(runtimeMode?.isPackaged || runtimeMode?.forceLiveAuth);
   const hasToken = await window.electronAPI.hasAuthToken();
 
   if (!hasToken) {
     state.mapResults = [];
-    if (requiresLiveAuth) {
-      showLoginModal();
-      return { mode: 'login-required' };
-    }
-
-    hideLoginModal();
-    return { mode: 'guest' };
+    showLoginModal();
+    return { mode: 'login-required' };
   }
 
   try {
@@ -2153,12 +2144,6 @@ async function bootstrapCurrentUserSession() {
     return { mode: 'login-required' };
   } catch (error) {
     state.mapResults = [];
-
-    if (isServerUnavailableError(error) && !requiresLiveAuth) {
-      hideLoginModal();
-      showToast(window.t('settings.api'), window.t('toast.serverUnavailable'), 'warning');
-      return { mode: 'guest-offline' };
-    }
 
     showLoginModal();
     return { mode: 'login-required' };
