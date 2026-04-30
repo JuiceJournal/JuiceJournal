@@ -11,6 +11,37 @@ const {
 
 const desktopDir = path.resolve(__dirname, '..');
 
+function readJpegDimensions(filePath) {
+  const buffer = fs.readFileSync(filePath);
+  let offset = 2;
+
+  if (buffer[0] !== 0xff || buffer[1] !== 0xd8) {
+    throw new Error(`Expected a JPEG image: ${filePath}`);
+  }
+
+  while (offset < buffer.length) {
+    if (buffer[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    const marker = buffer[offset + 1];
+    const length = buffer.readUInt16BE(offset + 2);
+    const isStartOfFrame = marker >= 0xc0 && marker <= 0xc3;
+
+    if (isStartOfFrame) {
+      return {
+        height: buffer.readUInt16BE(offset + 5),
+        width: buffer.readUInt16BE(offset + 7),
+      };
+    }
+
+    offset += 2 + length;
+  }
+
+  throw new Error(`Unable to read JPEG dimensions: ${filePath}`);
+}
+
 test('character support matrix includes every playable canonical entry', () => {
   const actualKeys = PLAYABLE_CHARACTER_SUPPORT.map((entry) => entry.id).sort();
 
@@ -28,6 +59,35 @@ test('every canonical entry declares a portrait and banner file that exists', ()
     assert.equal(fs.existsSync(portraitPath), true, `Missing portrait asset for ${entry.id}: ${entry.portraitPath}`);
     assert.equal(fs.existsSync(bannerPath), true, `Missing banner asset for ${entry.id}: ${entry.bannerPath}`);
   });
+});
+
+test('every PoE1 portrait asset is square enough for the circular dashboard slot', () => {
+  const invalidPortraits = PLAYABLE_CHARACTER_SUPPORT
+    .filter((entry) => entry.poeVersion === 'poe1')
+    .map((entry) => {
+      const portraitPath = path.join(desktopDir, 'src', entry.portraitPath);
+      const dimensions = readJpegDimensions(portraitPath);
+      const ratio = dimensions.width / dimensions.height;
+
+      return {
+        id: entry.id,
+        path: entry.portraitPath,
+        ...dimensions,
+        ratio,
+      };
+    })
+    .filter((entry) => (
+      entry.width < 512
+      || entry.height < 512
+      || entry.ratio < 0.95
+      || entry.ratio > 1.12
+    ));
+
+  assert.deepEqual(
+    invalidPortraits,
+    [],
+    `PoE1 portraits must be high-resolution and near-square for the circular UI crop: ${JSON.stringify(invalidPortraits)}`
+  );
 });
 
 test('every playable ascendancy uses portrait and banner files different from its base class', () => {

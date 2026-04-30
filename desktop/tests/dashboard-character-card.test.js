@@ -177,6 +177,18 @@ test('character card stylesheet defines banner art and hero layout rules', () =>
   assert.match(css, /\.character-portrait-shell/);
 });
 
+test('character portrait slot keeps PoE1 class art centered in a square circular crop', () => {
+  const css = fs.readFileSync(stylesPath, 'utf8');
+
+  assert.match(css, /\.character-portrait-shell\s*\{[^}]*aspect-ratio:\s*1;/s);
+  assert.match(css, /\.character-portrait-shell\s*\{[^}]*border-radius:\s*50%;/s);
+  assert.match(css, /\.character-portrait-shell\s*\{[^}]*overflow:\s*hidden;/s);
+  assert.match(css, /\.character-portrait-shell img\s*\{[^}]*width:\s*100%;/s);
+  assert.match(css, /\.character-portrait-shell img\s*\{[^}]*height:\s*100%;/s);
+  assert.match(css, /\.character-portrait-shell img\s*\{[^}]*object-fit:\s*cover;/s);
+  assert.match(css, /\.character-portrait-shell img\s*\{[^}]*object-position:\s*center top;/s);
+});
+
 test('renderer fills hero banner artwork and meta fields from normalized account state', () => {
   const elements = {
     characterSummaryCard: { dataset: {} },
