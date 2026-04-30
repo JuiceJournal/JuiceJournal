@@ -115,6 +115,8 @@ let poe1IndexCacheTime = 0;
 let poe2IndexCache = null;
 let poe2IndexCacheTime = 0;
 const INDEX_CACHE_TTL = 30 * 60 * 1000;
+const poe1DivineRateCache = new Map();
+const DIVINE_RATE_CACHE_TTL = 5 * 60 * 1000;
 
 function getTypeMapping(poeVersion) {
   return poeVersion === 'poe2' ? POE2_ITEM_TYPE_MAPPING : POE1_ITEM_TYPE_MAPPING;
@@ -122,6 +124,170 @@ function getTypeMapping(poeVersion) {
 
 function getDefaultSyncTypes(poeVersion) {
   return poeVersion === 'poe2' ? POE2_SYNC_TYPES : POE1_SYNC_TYPES;
+}
+
+function getLineChaosValue(line = {}) {
+  return Number(line.chaosEquivalent ?? line.chaosValue ?? 0) || 0;
+}
+
+function getPoe1DivineToChaos(data) {
+  const divineLine = data?.lines?.find(line =>
+    (line.currencyTypeName || line.name || '').toLowerCase() === 'divine orb'
+  );
+  const divineToChaos = getLineChaosValue(divineLine);
+  return divineToChaos > 0 ? divineToChaos : 180;
+}
+
+function getPoe1DivineValue(line, divineToChaos) {
+  const explicitDivineValue = Number(line?.divineEquivalent ?? line?.divineValue);
+  if (Number.isFinite(explicitDivineValue) && explicitDivineValue > 0) {
+    return explicitDivineValue;
+  }
+
+  const chaosValue = getLineChaosValue(line);
+  if (!chaosValue || !divineToChaos) {
+    return null;
+  }
+
+  return Math.round((chaosValue / divineToChaos) * 1000000) / 1000000;
+}
+
+function roundPriceValue(value, precision = 6) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  const multiplier = 10 ** precision;
+  return Math.round(value * multiplier) / multiplier;
+}
+
+function getExchangeDivineToChaos(data, fallback = null) {
+  const primary = data?.core?.primary;
+  const secondary = data?.core?.secondary;
+  const rates = data?.core?.rates || {};
+
+  if (primary === 'chaos' && secondary === 'divine' && Number(rates.divine) > 0) {
+    return 1 / Number(rates.divine);
+  }
+
+  if (primary === 'divine' && Number(rates.chaos) > 0) {
+    return Number(rates.chaos);
+  }
+
+  return fallback;
+}
+
+function getExchangeLineValues(line, data, options = {}) {
+  const primaryValue = Number(line?.primaryValue) || 0;
+  const primary = data?.core?.primary;
+  const rates = data?.core?.rates || {};
+  const divineToChaos = options.divineToChaos || getExchangeDivineToChaos(data);
+  let chaosValue = 0;
+  let divineValue = null;
+
+  if (primary === 'chaos') {
+    chaosValue = primaryValue;
+    if (line?.id === data?.core?.secondary) {
+      divineValue = 1;
+    } else if (line?.maxVolumeCurrency === 'divine' && Number(line.maxVolumeRate) > 0) {
+      divineValue = 1 / Number(line.maxVolumeRate);
+    } else if (Number(rates.divine) > 0) {
+      divineValue = chaosValue * Number(rates.divine);
+    } else if (divineToChaos) {
+      divineValue = chaosValue / divineToChaos;
+    }
+  } else if (primary === 'divine') {
+    divineValue = primaryValue;
+    if (Number(rates.chaos) > 0) {
+      chaosValue = divineValue * Number(rates.chaos);
+    } else if (divineToChaos) {
+      chaosValue = divineValue * divineToChaos;
+    }
+  } else {
+    chaosValue = primaryValue;
+    if (divineToChaos) {
+      divineValue = chaosValue / divineToChaos;
+    }
+  }
+
+  return {
+    chaosValue: roundPriceValue(chaosValue, 2) || 0,
+    divineValue: roundPriceValue(divineValue)
+  };
+}
+
+function buildExchangeItemInfoMap(data) {
+  const itemInfoMap = {};
+  const registerItem = (item) => {
+    if (!item?.id) return;
+    itemInfoMap[item.id] = {
+      name: item.name || item.id,
+      image: item.image ? `https://web.poecdn.com${item.image}` : null
+    };
+  };
+
+  (data?.core?.items || []).forEach(registerItem);
+  (data?.items || []).forEach(registerItem);
+
+  return itemInfoMap;
+}
+
+function normalizeExchangeData(data, type, poeVersion = 'poe1', options = {}) {
+  const items = [];
+  const typeMapping = getTypeMapping(poeVersion);
+  const itemInfoMap = buildExchangeItemInfoMap(data);
+
+  if (!data?.lines) {
+    return items;
+  }
+
+  data.lines.forEach(line => {
+    const info = itemInfoMap[line.id] || {};
+    const values = getExchangeLineValues(line, data, options);
+
+    items.push({
+      name: info.name || line.id || 'Unknown',
+      type: typeMapping[type] || 'currency',
+      chaosValue: values.chaosValue,
+      divineValue: values.divineValue,
+      iconUrl: info.image || null,
+      sparklineData: line.sparkline || null
+    });
+  });
+
+  const divineToChaos = getExchangeDivineToChaos(data, options.divineToChaos);
+  const secondary = data?.core?.secondary;
+  if (data?.core?.primary === 'chaos' && secondary && divineToChaos) {
+    const info = itemInfoMap[secondary];
+    if (info?.name && !items.some(item => item.name.toLowerCase() === info.name.toLowerCase())) {
+      items.push({
+        name: info.name,
+        type: typeMapping[type] || 'currency',
+        chaosValue: roundPriceValue(divineToChaos, 2) || 0,
+        divineValue: 1,
+        iconUrl: info.image || null,
+        sparklineData: null
+      });
+    }
+  }
+
+  return items;
+}
+
+async function getPoe1DivineToChaosForLeague(league = 'Standard') {
+  const cacheKey = String(league || 'Standard').toLowerCase();
+  const cached = poe1DivineRateCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp) < DIVINE_RATE_CACHE_TTL) {
+    return cached.divineToChaos;
+  }
+
+  const data = await getCurrencyOverview(league, 'Currency', 'poe1');
+  const divineToChaos = getPoe1DivineToChaos(data);
+  poe1DivineRateCache.set(cacheKey, {
+    divineToChaos,
+    timestamp: Date.now()
+  });
+  return divineToChaos;
 }
 
 /**
@@ -303,7 +469,7 @@ const getItemOverview = async (league = 'Standard', type = 'Map', poeVersion = '
 /**
  * Currency verilerini normalize et
  */
-const normalizeCurrencyData = (data, type, poeVersion = 'poe1') => {
+const normalizeCurrencyData = (data, type, poeVersion = 'poe1', options = {}) => {
   const items = [];
   const typeMapping = getTypeMapping(poeVersion);
 
@@ -350,14 +516,16 @@ const normalizeCurrencyData = (data, type, poeVersion = 'poe1') => {
     });
   } else {
     // PoE 1 format
+    const divineToChaos = options.divineToChaos || getPoe1DivineToChaos(data);
     data.lines.forEach(line => {
       const itemType = typeMapping[type] || 'currency';
+      const chaosValue = getLineChaosValue(line);
 
       items.push({
         name: line.currencyTypeName || line.name,
         type: itemType,
-        chaosValue: line.chaosEquivalent || line.chaosValue || 0,
-        divineValue: line.divineEquivalent || (line.chaosEquivalent / 180) || null,
+        chaosValue,
+        divineValue: getPoe1DivineValue(line, divineToChaos),
         iconUrl: line.icon || null,
         sparklineData: line.sparkline || line.receiveSparkLine || null
       });
@@ -385,7 +553,7 @@ const normalizeCurrencyData = (data, type, poeVersion = 'poe1') => {
 /**
  * Item verilerini normalize et
  */
-const normalizeItemData = (data, type, poeVersion = 'poe1') => {
+const normalizeItemData = (data, type, poeVersion = 'poe1', options = {}) => {
   const items = [];
   const typeMapping = getTypeMapping(poeVersion);
 
@@ -401,6 +569,10 @@ const normalizeItemData = (data, type, poeVersion = 'poe1') => {
 
     if (!chaosValue && line.exaltedValue) {
       chaosValue = line.exaltedValue * 15;
+    }
+
+    if (!divineValue && poeVersion === 'poe1' && options.divineToChaos) {
+      divineValue = getPoe1DivineValue({ chaosValue }, options.divineToChaos);
     }
 
     items.push({
@@ -419,17 +591,21 @@ const normalizeItemData = (data, type, poeVersion = 'poe1') => {
 /**
  * Belirli bir tip icin fiyatlari senkronize et
  */
-const syncPricesByType = async (league, type, poeVersion = 'poe1') => {
+const syncPricesByType = async (league, type, poeVersion = 'poe1', options = {}) => {
   try {
     let items = [];
+    const divineToChaos = poeVersion === 'poe1' && type !== 'Currency'
+      ? options.divineToChaos || await getPoe1DivineToChaosForLeague(league)
+      : options.divineToChaos;
+    const normalizationOptions = divineToChaos ? { divineToChaos } : {};
 
     // PoE 2: all types use exchange API; PoE 1: Currency/Fragment use currencyoverview, rest use itemoverview
     if (poeVersion === 'poe2' || type === 'Currency' || type === 'Fragment') {
       const data = await getCurrencyOverview(league, type, poeVersion);
-      items = normalizeCurrencyData(data, type, poeVersion);
+      items = normalizeCurrencyData(data, type, poeVersion, normalizationOptions);
     } else {
       const data = await getItemOverview(league, type, poeVersion);
-      items = normalizeItemData(data, type, poeVersion);
+      items = normalizeItemData(data, type, poeVersion, normalizationOptions);
     }
 
     // PoE 1: also fetch from exchange API to get additional items (e.g. Crusader's Exalted Orb)
@@ -442,21 +618,27 @@ const syncPricesByType = async (league, type, poeVersion = 'poe1') => {
             timeout: 30000,
             headers: REQUEST_HEADERS
           });
-          const exItems = normalizeCurrencyData(exRes.data, type, 'poe2'); // same format as PoE2
-          // Override type mapping to use PoE1 categories
-          const typeMapping = getTypeMapping('poe1');
-          const existingNames = new Set(items.map(i => i.name.toLowerCase()));
+          const exItems = normalizeExchangeData(exRes.data, type, 'poe1', { divineToChaos });
+          const existingNames = new Map(items.map((item, index) => [item.name.toLowerCase(), index]));
           let added = 0;
+          let updated = 0;
           for (const item of exItems) {
-            item.type = typeMapping[type] || 'currency';
-            if (!existingNames.has(item.name.toLowerCase())) {
+            const key = item.name.toLowerCase();
+            const existingIndex = existingNames.get(key);
+            if (existingIndex !== undefined) {
+              items[existingIndex] = {
+                ...items[existingIndex],
+                ...item
+              };
+              updated++;
+            } else {
               items.push(item);
-              existingNames.add(item.name.toLowerCase());
+              existingNames.set(key, items.length - 1);
               added++;
             }
           }
-          if (added > 0) {
-            console.log(`  +${added} extra items from PoE1 exchange API for ${type}`);
+          if (added > 0 || updated > 0) {
+            console.log(`  +${added} extra, ~${updated} updated items from PoE1 exchange API for ${type}`);
           }
         }
       } catch (exError) {
@@ -494,6 +676,9 @@ const syncPricesByType = async (league, type, poeVersion = 'poe1') => {
  */
 const syncAllPrices = async (league = 'Standard', types = null, poeVersion = 'poe1') => {
   const targetTypes = types || getDefaultSyncTypes(poeVersion);
+  const divineToChaos = poeVersion === 'poe1'
+    ? await getPoe1DivineToChaosForLeague(league).catch(() => null)
+    : null;
 
   const results = {
     league,
@@ -505,7 +690,7 @@ const syncAllPrices = async (league = 'Standard', types = null, poeVersion = 'po
   for (const type of targetTypes) {
     console.log(`${type} senkronizasyonu basliyor (${poeVersion})...`);
 
-    const result = await syncPricesByType(league, type, poeVersion);
+    const result = await syncPricesByType(league, type, poeVersion, { divineToChaos });
     results.types.push(result);
 
     // Rate limiting
@@ -530,10 +715,9 @@ const getChaosOrbValue = async (league = 'Standard', poeVersion = 'poe1') => {
     const data = await getCurrencyOverview(league, 'Currency', poeVersion);
 
     if (poeVersion === 'poe2') {
-      // PoE 2 exchange API provides rates in core
-      const divineRate = data.core?.rates?.divine;
-      if (divineRate) {
-        return { divineToChaos: 1 / divineRate, chaosToDivine: divineRate };
+      const divineToChaos = getExchangeDivineToChaos(data);
+      if (divineToChaos) {
+        return { divineToChaos, chaosToDivine: 1 / divineToChaos };
       }
     } else {
       const divineOrb = data.lines.find(line =>
@@ -588,10 +772,16 @@ const getItemPrice = async (itemName, itemType = null, league = 'Standard', poeV
     );
 
     if (item) {
+      const divineToChaos = poeVersion === 'poe1'
+        ? getPoe1DivineToChaos(data)
+        : null;
+      const chaosValue = item.chaosEquivalent || item.chaosValue || 0;
       return {
         name: item.currencyTypeName || item.name || item.id,
-        chaosValue: item.chaosEquivalent || item.chaosValue || 0,
-        divineValue: item.divineValue || (item.chaosEquivalent / 180) || null,
+        chaosValue,
+        divineValue: poeVersion === 'poe1'
+          ? getPoe1DivineValue(item, divineToChaos)
+          : item.divineValue || null,
         source: 'poe.ninja',
         updatedAt: new Date()
       };
@@ -613,6 +803,10 @@ module.exports = {
   getItemPrice,
   normalizeCurrencyData,
   normalizeItemData,
+  normalizeExchangeData,
+  getExchangeDivineToChaos,
+  getPoe1DivineToChaos,
+  getPoe1DivineToChaosForLeague,
   getDefaultSyncTypes,
   getActiveLeagues,
   getPoe2IndexState
