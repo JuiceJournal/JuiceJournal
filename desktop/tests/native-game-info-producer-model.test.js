@@ -72,6 +72,33 @@ test('normalizeNativeInfoPayload returns a high-confidence hint', () => {
   });
 });
 
+test('normalizeNativeInfoPayload carries class and ascendancy fields when GEP provides them', () => {
+  const normalizeNativeInfoPayload = getNativeGameInfoProducerModelExport('normalizeNativeInfoPayload');
+
+  const hint = normalizeNativeInfoPayload({
+    poeVersion: 'poe2',
+    info: {
+      me: {
+        character_name: 'KELLEE',
+        character_class: 'Monk2',
+        character_ascendancy: 'Invoker',
+        character_level: 92
+      }
+    }
+  });
+
+  assert.deepEqual(hint, {
+    source: 'native-info',
+    poeVersion: 'poe2',
+    characterName: 'KELLEE',
+    className: 'Monk2',
+    ascendancy: 'Invoker',
+    level: 92,
+    experience: null,
+    confidence: 'high'
+  });
+});
+
 test('normalizeNativeInfoPayload returns null without character_name', () => {
   const normalizeNativeInfoPayload = getNativeGameInfoProducerModelExport('normalizeNativeInfoPayload');
 

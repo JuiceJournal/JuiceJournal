@@ -55,12 +55,24 @@
     const normalizedPoeVersion = normalizePoeVersion(poeVersion);
     const me = info && typeof info === 'object' ? info.me : null;
     const characterName = normalizeString(me?.character_name);
+    const className = normalizeString(
+      me?.character_class
+      || me?.characterClass
+      || me?.class_name
+      || me?.class
+    );
+    const ascendancy = normalizeString(
+      me?.character_ascendancy
+      || me?.characterAscendancy
+      || me?.ascendancy_class
+      || me?.ascendancy
+    );
 
     if (!normalizedPoeVersion || !characterName) {
       return null;
     }
 
-    return {
+    const hint = {
       source: 'native-info',
       poeVersion: normalizedPoeVersion,
       characterName,
@@ -68,6 +80,16 @@
       experience: normalizeNumber(me?.character_exp),
       confidence: 'high'
     };
+
+    if (className) {
+      hint.className = className;
+    }
+
+    if (ascendancy) {
+      hint.ascendancy = ascendancy;
+    }
+
+    return hint;
   }
 
   return {

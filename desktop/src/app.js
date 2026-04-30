@@ -1145,14 +1145,52 @@ function applyNativeCharacterHint(nativeHint) {
     return false;
   }
 
+  const account = state.account;
   const normalizeText = (value) => (
     typeof value === 'string'
       ? value.trim().toLowerCase()
       : ''
   );
+  const normalizeDisplayText = (value) => {
+    const normalized = typeof value === 'string' ? value.trim() : '';
+    return normalized || null;
+  };
+  const normalizeNumber = (value) => {
+    if (value == null || typeof value === 'boolean') {
+      return 0;
+    }
+
+    const normalized = Number(value);
+    return Number.isFinite(normalized) ? normalized : 0;
+  };
   const normalizeVersion = (value) => {
     const normalized = normalizeText(value);
     return normalized === 'poe1' || normalized === 'poe2' ? normalized : null;
+  };
+  const createNativeCharacterId = (character) => [
+    'native',
+    character.poeVersion,
+    normalizeText(character.name).replace(/[^a-z0-9]+/g, '-'),
+    normalizeText(character.className || character.ascendancy || 'unknown').replace(/[^a-z0-9]+/g, '-')
+  ].filter(Boolean).join(':');
+  const ensureRuntimeCharacterStored = (character) => {
+    account.characters = Array.isArray(account.characters) ? account.characters : [];
+    account.charactersByGame = account.charactersByGame && typeof account.charactersByGame === 'object'
+      ? account.charactersByGame
+      : {};
+    account.charactersByGame[poeVersion] = Array.isArray(account.charactersByGame[poeVersion])
+      ? account.charactersByGame[poeVersion]
+      : [];
+
+    const hasCharacter = account.characters.some((candidate) => candidate.id === character.id);
+    if (!hasCharacter) {
+      account.characters.push(character);
+    }
+
+    const hasGameCharacter = account.charactersByGame[poeVersion].some((candidate) => candidate.id === character.id);
+    if (!hasGameCharacter) {
+      account.charactersByGame[poeVersion].push(character);
+    }
   };
 
   if (nativeHint.confidence !== 'high') {
@@ -1168,24 +1206,16 @@ function applyNativeCharacterHint(nativeHint) {
     return false;
   }
 
-  const account = state.account;
   const characters = Array.isArray(account.charactersByGame?.[poeVersion])
     ? account.charactersByGame[poeVersion]
     : (Array.isArray(account.characters)
       ? account.characters.filter((character) => normalizeVersion(character?.poeVersion) === poeVersion)
       : []);
 
-  if (!characters.length) {
-    return false;
-  }
-
   let matches = characters.filter((character) => normalizeText(character?.name) === characterName);
-  if (!matches.length) {
-    return false;
-  }
 
   const className = normalizeText(nativeHint.className);
-  if (className) {
+  if (matches.length && className) {
     const classMatches = matches.filter((character) => normalizeText(character?.className) === className);
     if (classMatches.length) {
       matches = classMatches;
@@ -1193,23 +1223,35 @@ function applyNativeCharacterHint(nativeHint) {
   }
 
   const league = normalizeText(nativeHint.league);
-  if (league) {
+  if (matches.length && league) {
     const leagueMatches = matches.filter((character) => normalizeText(character?.league) === league);
     if (leagueMatches.length) {
       matches = leagueMatches;
     }
   }
 
-  const matchedCharacter = matches[0] || null;
+  const matchedCharacter = matches[0] || {
+    name: normalizeDisplayText(nativeHint.characterName),
+    level: normalizeNumber(nativeHint.level),
+    className: normalizeDisplayText(nativeHint.className),
+    ascendancy: normalizeDisplayText(nativeHint.ascendancy),
+    league: normalizeDisplayText(nativeHint.league),
+    poeVersion
+  };
+  if (!matchedCharacter.id) {
+    matchedCharacter.id = createNativeCharacterId(matchedCharacter);
+  }
   if (!matchedCharacter) {
     return false;
   }
 
+  ensureRuntimeCharacterStored(matchedCharacter);
   account.activePoeVersion = poeVersion;
   account.selectedCharacter = matchedCharacter;
-  if (account.selectedCharacterByGame && typeof account.selectedCharacterByGame === 'object' && matchedCharacter.id) {
-    account.selectedCharacterByGame[poeVersion] = matchedCharacter.id;
-  }
+  account.selectedCharacterByGame = account.selectedCharacterByGame && typeof account.selectedCharacterByGame === 'object'
+    ? account.selectedCharacterByGame
+    : {};
+  account.selectedCharacterByGame[poeVersion] = matchedCharacter.id;
   account.summary = {
     status: 'ready',
     id: matchedCharacter.id || null,

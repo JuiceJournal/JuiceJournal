@@ -241,6 +241,55 @@ test('renderer marks a high-confidence native hint as the active-character refre
   assert.equal(clearedRefreshes, 1);
 });
 
+test('renderer applies an unmatched native character as the active runtime character', () => {
+  let renderCalls = 0;
+  const context = loadFunctions(['applyNativeCharacterHint'], {
+    state: {
+      detectedGameVersion: 'poe2',
+      account: {
+        accountName: 'AuthenticatedA',
+        activePoeVersion: 'poe2',
+        characters: [
+          { id: 'char-a', name: 'AccountACharacter', className: 'Druid2', league: 'Standard', poeVersion: 'poe2' }
+        ],
+        charactersByGame: {
+          poe2: [
+            { id: 'char-a', name: 'AccountACharacter', className: 'Druid2', league: 'Standard', poeVersion: 'poe2' }
+          ]
+        },
+        selectedCharacterByGame: { poe2: 'char-a' },
+        summary: { status: 'ready', name: 'AccountACharacter' }
+      }
+    },
+    renderCharacterSummaryCard() {
+      renderCalls += 1;
+    },
+    refreshRendererOverlayState() {}
+  });
+
+  const result = context.applyNativeCharacterHint({
+    source: 'native-game-info',
+    poeVersion: 'poe2',
+    characterName: 'FriendBCharacter',
+    className: 'Monk2',
+    ascendancy: 'Invoker',
+    level: 94,
+    league: 'Standard',
+    confidence: 'high'
+  });
+
+  assert.equal(result, true);
+  assert.equal(context.state.account.selectedCharacter.name, 'FriendBCharacter');
+  assert.equal(context.state.account.summary.name, 'FriendBCharacter');
+  assert.equal(context.state.account.summary.level, 94);
+  assert.equal(context.state.account.summary.className, 'Monk2');
+  assert.equal(context.state.account.summary.ascendancy, 'Invoker');
+  assert.equal(context.state.account.selectedCharacterByGame.poe2, context.state.account.selectedCharacter.id);
+  assert.match(context.state.account.selectedCharacter.id, /^native:poe2:/);
+  assert.equal(context.state.account.charactersByGame.poe2.length, 2);
+  assert.equal(renderCalls, 1);
+});
+
 test('renderer ignores a high-confidence native hint for a different game version', () => {
   let renderCalls = 0;
   const context = loadFunctions(['applyNativeCharacterHint'], {
