@@ -18,7 +18,7 @@
     "date-fns": "^3.0.0",
     "tailwindcss": "^3.3.6",
     "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.32",
+    "postcss": "8.5.12",
     "@headlessui/react": "^1.7.17",
     "@heroicons/react": "^2.0.18",
     "react-hot-toast": "^2.4.1",
@@ -32,6 +32,7 @@
     "typescript": "^5.3.3"
   },
   "overrides": {
-    "follow-redirects": "1.16.0"
+    "follow-redirects": "1.16.0",
+    "postcss": "8.5.12"
   }
 }

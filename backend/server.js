@@ -36,6 +36,15 @@ const poeRoutes = require('./routes/poe');
 
 const app = express();
 const server = http.createServer(app);
+const REQUEST_BODY_LIMIT = process.env.REQUEST_BODY_LIMIT || '1mb';
+const URLENCODED_BODY_LIMIT = process.env.URLENCODED_BODY_LIMIT || '100kb';
+const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS || '30000', 10);
+const HEADERS_TIMEOUT_MS = parseInt(process.env.HEADERS_TIMEOUT_MS || '15000', 10);
+const KEEP_ALIVE_TIMEOUT_MS = parseInt(process.env.KEEP_ALIVE_TIMEOUT_MS || '5000', 10);
+
+server.requestTimeout = REQUEST_TIMEOUT_MS;
+server.headersTimeout = HEADERS_TIMEOUT_MS;
+server.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS;
 
 // WebSocket server
 const wss = new WebSocket.Server({
@@ -116,6 +125,8 @@ app.broadcast = broadcast;
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: {
     success: false,
     error: 'Too many requests were sent. Please try again later.'
@@ -123,6 +134,7 @@ const limiter = rateLimit({
 });
 
 // Middleware
+app.disable('x-powered-by');
 const helmetConfig = helmet({
   crossOriginResourcePolicy: { policy: 'same-origin' },
   crossOriginEmbedderPolicy: false
@@ -149,8 +161,13 @@ app.use(cors({
   credentials: true
 }));
 app.use(limiter);
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: REQUEST_BODY_LIMIT, strict: true }));
+app.use(express.urlencoded({
+  extended: true,
+  limit: URLENCODED_BODY_LIMIT,
+  parameterLimit: 100,
+  depth: 5
+}));
 
 // Request logging middleware
 if (process.env.NODE_ENV === 'development') {

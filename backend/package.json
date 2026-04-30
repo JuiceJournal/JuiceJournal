@@ -16,20 +16,20 @@
     "docker:psql": "docker exec -it juice-journal-db psql -U postgres -d juicejournal"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "axios": "1.15.0",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "bcryptjs": "^2.4.3",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
+    "node-cron": "^4.2.1",
     "pg": "^8.11.3",
     "pg-hstore": "^2.3.4",
     "sequelize": "^6.37.8",
-    "axios": "1.15.0",
-    "ws": "^8.14.2",
-    "node-cron": "^3.0.3",
-    "helmet": "^7.1.0",
-    "express-rate-limit": "^7.1.5",
-    "express-validator": "^7.0.1"
+    "ws": "^8.14.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

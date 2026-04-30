@@ -5,6 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const { User } = require('../models');
@@ -28,6 +29,30 @@ setInterval(() => {
     }
   }
 }, 60 * 1000).unref();
+
+function createOAuthState(userId = null) {
+  const state = crypto.randomUUID();
+  oauthStates.set(state, {
+    createdAt: Date.now(),
+    userId: userId || null
+  });
+  return state;
+}
+
+function consumeOAuthState(state, userId = null) {
+  const storedState = oauthStates.get(state);
+  if (!storedState) {
+    return false;
+  }
+
+  const expectedUserId = userId || null;
+  const stateUserId = storedState.userId || null;
+  const expired = Date.now() - storedState.createdAt > OAUTH_STATE_TTL_MS;
+  const wrongUser = stateUserId !== expectedUserId;
+  oauthStates.delete(state);
+
+  return !expired && !wrongUser;
+}
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -334,9 +359,9 @@ router.post('/poe/login/start',
   authLimiter,
   [
     body('redirectUri').optional().isString(),
-    body('codeChallenge').optional().isString(),
-    body('codeChallengeMethod').optional().isString(),
-    body('state').optional().isString(),
+    body('codeChallenge').optional().isString().isLength({ min: 43, max: 128 }),
+    body('codeChallengeMethod').optional().isIn(['S256']),
+    body('state').optional().isString().isLength({ max: 128 }),
     handleValidationErrors
   ],
   async (req, res) => {
@@ -364,9 +389,7 @@ router.post('/poe/login/start',
         return errorResponse(res, 400, 'Invalid redirect URI', 'INVALID_REDIRECT_URI');
       }
 
-      // Store state for verification on callback
-      const oauthState = state || `state-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      oauthStates.set(oauthState, { createdAt: Date.now() });
+      const oauthState = createOAuthState();
 
       const authUrl = poeAuthService.buildAuthorizationUrl({
         redirectUri,
@@ -401,9 +424,9 @@ router.post('/poe/login/complete',
   authLimiter,
   [
     body('redirectUri').optional().isString(),
-    body('code').optional().isString(),
-    body('codeVerifier').optional().isString(),
-    body('state').optional().isString(),
+    body('code').optional().isString().isLength({ max: 2048 }),
+    body('codeVerifier').optional().isString().isLength({ min: 43, max: 128 }),
+    body('state').optional().isString().isLength({ max: 128 }),
     handleValidationErrors
   ],
   async (req, res) => {
@@ -450,10 +473,9 @@ router.post('/poe/login/complete',
 
       // Verify OAuth state to prevent CSRF
       const receivedState = req.body.state;
-      if (!receivedState || !oauthStates.has(receivedState)) {
+      if (!receivedState || !consumeOAuthState(receivedState)) {
         return errorResponse(res, 400, 'Invalid or expired OAuth state', 'OAUTH_STATE_INVALID');
       }
-      oauthStates.delete(receivedState);
 
       const tokenPayload = await poeAuthService.exchangeCode({
         code,
@@ -493,9 +515,9 @@ router.post('/poe/connect/start',
   authLimiter,
   [
     body('redirectUri').optional().isString(),
-    body('codeChallenge').optional().isString(),
-    body('codeChallengeMethod').optional().isString(),
-    body('state').optional().isString(),
+    body('codeChallenge').optional().isString().isLength({ min: 43, max: 128 }),
+    body('codeChallengeMethod').optional().isIn(['S256']),
+    body('state').optional().isString().isLength({ max: 128 }),
     handleValidationErrors
   ],
   async (req, res) => {
@@ -523,9 +545,7 @@ router.post('/poe/connect/start',
         return errorResponse(res, 400, 'Invalid redirect URI', 'INVALID_REDIRECT_URI');
       }
 
-      // Store state for verification on callback
-      const oauthState = state || `state-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      oauthStates.set(oauthState, { createdAt: Date.now() });
+      const oauthState = createOAuthState(req.userId);
 
       const authUrl = poeAuthService.buildAuthorizationUrl({
         redirectUri,
@@ -560,9 +580,9 @@ router.post('/poe/connect/complete',
   authLimiter,
   [
     body('redirectUri').optional().isString(),
-    body('code').optional().isString(),
-    body('codeVerifier').optional().isString(),
-    body('state').optional().isString(),
+    body('code').optional().isString().isLength({ max: 2048 }),
+    body('codeVerifier').optional().isString().isLength({ min: 43, max: 128 }),
+    body('state').optional().isString().isLength({ max: 128 }),
     handleValidationErrors
   ],
   async (req, res) => {
@@ -599,10 +619,9 @@ router.post('/poe/connect/complete',
 
       // Verify OAuth state to prevent CSRF
       const receivedState = req.body.state;
-      if (!receivedState || !oauthStates.has(receivedState)) {
+      if (!receivedState || !consumeOAuthState(receivedState, req.userId)) {
         return errorResponse(res, 400, 'Invalid or expired OAuth state', 'OAUTH_STATE_INVALID');
       }
-      oauthStates.delete(receivedState);
 
       const tokenPayload = await poeAuthService.exchangeCode({
         code,

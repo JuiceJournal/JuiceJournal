@@ -14,8 +14,10 @@ const { autoUpdater } = require('electron-updater');
 const crypto = require('crypto');
 const http = require('http');
 const fs = require('fs');
+const net = require('net');
 const os = require('os');
 const path = require('path');
+const { execFile } = require('child_process');
 const Store = require('electron-store');
 
 // Module imports
@@ -427,21 +429,77 @@ function initializeAppUpdater() {
 
 // ─── URL validation for SSRF prevention ───────────────────────────────
 
-const INTERNAL_IP_PREFIXES = ['10.', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.', '192.168.', '169.254.'];
+const LOCAL_API_PORTS = new Set([80, 443, 3000, 3001]);
+
+function normalizeHostname(hostname) {
+  return String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
+}
+
+function getUrlPort(url) {
+  if (url.port) {
+    return parseInt(url.port, 10);
+  }
+  return url.protocol === 'https:' ? 443 : 80;
+}
+
+function isLoopbackHost(hostname) {
+  const normalized = normalizeHostname(hostname);
+  return normalized === 'localhost'
+    || normalized === '::1'
+    || normalized === '0:0:0:0:0:0:0:1'
+    || normalized === '127.0.0.1'
+    || normalized.startsWith('127.');
+}
+
+function isPrivateOrReservedIp(hostname) {
+  const normalized = normalizeHostname(hostname);
+  const version = net.isIP(normalized);
+
+  if (version === 4) {
+    const parts = normalized.split('.').map((part) => Number(part));
+    const [a, b] = parts;
+    return a === 0
+      || a === 10
+      || a === 127
+      || a === 169 && b === 254
+      || a === 172 && b >= 16 && b <= 31
+      || a === 192 && b === 168
+      || a >= 224;
+  }
+
+  if (version === 6) {
+    if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') {
+      return true;
+    }
+    if (normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80')) {
+      return true;
+    }
+    const mappedIpv4 = normalized.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (mappedIpv4) {
+      return isPrivateOrReservedIp(mappedIpv4[1]);
+    }
+  }
+
+  return false;
+}
 
 function isValidApiUrl(urlString) {
   if (!urlString || typeof urlString !== 'string') return false;
   try {
-    const url = new URL(urlString);
+    const url = new URL(urlString.trim());
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
-    const hostname = url.hostname.toLowerCase();
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '0.0.0.0') {
-      const port = url.port ? parseInt(url.port, 10) : (url.protocol === 'https:' ? 443 : 80);
-      if (port !== 3000 && port !== 3001 && port !== 80 && port !== 443) return false;
+    if (url.username || url.password) return false;
+
+    const hostname = normalizeHostname(url.hostname);
+    const port = getUrlPort(url);
+    if (isLoopbackHost(hostname)) {
+      return LOCAL_API_PORTS.has(port);
     }
-    for (const prefix of INTERNAL_IP_PREFIXES) {
-      if (hostname.startsWith(prefix)) return false;
+
+    if (isPrivateOrReservedIp(hostname)) {
+      return false;
     }
+
     return true;
   } catch {
     return false;
@@ -3126,7 +3184,7 @@ function setupIPC() {
       const result = await openPoeLoginFlow(startResponse, {
         redirectUrl,
         redirectUri,
-        expectedState: state,
+        expectedState: startResponse.state || state,
         codeVerifier,
       });
 
@@ -3178,7 +3236,7 @@ function setupIPC() {
     return await openPoeLinkFlow(startResponse, {
       redirectUrl,
       redirectUri,
-      expectedState: state,
+      expectedState: startResponse.state || state,
       codeVerifier,
     });
   });

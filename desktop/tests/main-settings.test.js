@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const net = require('node:net');
 const path = require('node:path');
 const vm = require('node:vm');
 
@@ -495,6 +496,28 @@ test('main settings reject blank apiUrl updates before persisting or mutating th
   assert.equal(refreshTrayMenuCalls, 0);
   assert.equal(setBaseURLCalls, 0);
   assert.deepEqual(writes, []);
+});
+
+test('main apiUrl validation allows expected localhost ports and rejects credentialed or private-network targets', () => {
+  const context = loadFunctions([
+    'normalizeHostname',
+    'getUrlPort',
+    'isLoopbackHost',
+    'isPrivateOrReservedIp',
+    'isValidApiUrl'
+  ], {
+    URL,
+    net,
+    LOCAL_API_PORTS: new Set([80, 443, 3000, 3001])
+  });
+
+  assert.equal(context.isValidApiUrl('http://localhost:3001'), true);
+  assert.equal(context.isValidApiUrl('https://api.juicejournal.example'), true);
+  assert.equal(context.isValidApiUrl('http://127.0.0.1:9999'), false);
+  assert.equal(context.isValidApiUrl('https://user:pass@api.juicejournal.example'), false);
+  assert.equal(context.isValidApiUrl('http://192.168.1.10:3001'), false);
+  assert.equal(context.isValidApiUrl('http://10.0.0.5:3001'), false);
+  assert.equal(context.isValidApiUrl('http://[fd00::1]:3001'), false);
 });
 
 test('runtime game detection keeps the selected settings version while emitting runtime payload to the renderer', () => {
