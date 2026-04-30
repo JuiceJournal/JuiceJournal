@@ -26,7 +26,7 @@
     "tesseract.js": "^5.0.3"
   },
   "devDependencies": {
-    "electron": "^35.7.5",
+    "electron": "^41.3.0",
     "electron-builder": "^26.8.2",
     "playwright": "^1.59.1",
     "rcedit": "^5.0.2"
@@ -69,6 +69,8 @@
   "author": "",
   "license": "MIT",
   "overrides": {
-    "follow-redirects": "1.16.0"
+    "follow-redirects": "1.16.0",
+    "@xmldom/xmldom": "0.9.10",
+    "lodash": "4.18.1"
   }
 }
