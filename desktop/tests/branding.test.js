@@ -108,6 +108,15 @@ test('desktop build defines an afterPack hook that patches the packaged exe icon
   assert.match(script, /\.exe/);
 });
 
+test('desktop package exposes a packaged dev runner for taskbar icon validation', () => {
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+
+  assert.equal(
+    packageJson.scripts['dev:packaged'],
+    'powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-packaged-dev.ps1 -Build'
+  );
+});
+
 test('desktop window opens large enough to avoid default dashboard scrolling', () => {
   const mainProcess = fs.readFileSync(mainProcessPath, 'utf8');
 
