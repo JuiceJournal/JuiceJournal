@@ -61,6 +61,17 @@ const WINDOWS_APP_ICON_PATH = path.join(__dirname, 'src', 'assets', 'icon.ico');
 const APP_ICON_PATH = process.platform === 'win32'
   ? WINDOWS_APP_ICON_PATH
   : path.join(__dirname, 'src', 'assets', 'icon.png');
+
+function applyWindowsAppIdentity() {
+  if (process.platform === 'win32') {
+    app.setAppUserModelId(APP_ID);
+  }
+
+  app.setName(APP_NAME);
+}
+
+applyWindowsAppIdentity();
+
 const MAIN_PROCESS_TRANSLATIONS = {
   tr: {
     trayStillRunning: 'Uygulama sistem tepsisinde calismaya devam ediyor.',
@@ -1777,6 +1788,7 @@ function createMainWindow() {
     icon: createWindowIcon(),
     title: APP_NAME
   });
+  mainWindow.setIcon(createWindowIcon());
 
   // Load the dashboard shell.
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
@@ -3512,9 +3524,6 @@ function setupIPC() {
  * App ready
  */
 app.whenReady().then(() => {
-  app.setAppUserModelId(APP_ID);
-  app.setName(APP_NAME);
-
   // Initialize the API client.
   const resolvedToken = getDecryptedAuthToken();
   apiClient = new APIClient(store.get('apiUrl'), resolvedToken);

@@ -60,6 +60,7 @@ test('desktop package and main process point to the branded window metadata', ()
   assert.match(mainProcess, /const APP_NAME = 'Juice Journal';/);
   assert.match(mainProcess, /app\.setAppUserModelId\(APP_ID\);/);
   assert.match(mainProcess, /app\.setName\(APP_NAME\);/);
+  assert.match(mainProcess, /applyWindowsAppIdentity\(\);/);
   assert.match(mainProcess, /icon:\s*createWindowIcon\(\),/);
   assert.match(mainProcess, /title:\s*APP_NAME/);
 });
@@ -69,7 +70,21 @@ test('desktop main process loads the taskbar window icon as a native image', () 
 
   assert.match(mainProcess, /function\s+createWindowIcon\(\)/);
   assert.match(mainProcess, /nativeImage\.createFromPath\(APP_ICON_PATH\)/);
+  assert.match(mainProcess, /mainWindow\.setIcon\(createWindowIcon\(\)\)/);
   assert.match(mainProcess, /icon:\s*createWindowIcon\(\),/);
+});
+
+test('desktop applies the Windows app identity before Electron is ready', () => {
+  const mainProcess = fs.readFileSync(mainProcessPath, 'utf8');
+  const identityCallIndex = mainProcess.indexOf('applyWindowsAppIdentity();');
+  const readyCallIndex = mainProcess.indexOf('app.whenReady().then');
+
+  assert.ok(identityCallIndex >= 0, 'Expected main process to apply Windows app identity');
+  assert.ok(readyCallIndex >= 0, 'Expected main process to register app.whenReady');
+  assert.ok(
+    identityCallIndex < readyCallIndex,
+    'Expected AppUserModelID to be applied before app.whenReady handlers create windows'
+  );
 });
 
 test('development mode does not open DevTools unless explicitly requested', () => {
