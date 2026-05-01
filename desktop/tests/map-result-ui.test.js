@@ -170,6 +170,16 @@ test('dashboard map session flow includes farm type selector controls before map
   assert.match(html, /id="clear-farm-type-btn"/);
 });
 
+test('dashboard provides a branded new map session modal instead of native prompts', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+
+  assert.match(html, /id="map-session-modal"/);
+  assert.match(html, /id="map-session-name-input"/);
+  assert.match(html, /id="map-session-confirm-btn"/);
+  assert.match(html, /id="map-session-cancel-btn"/);
+  assert.match(html, /data-modal-purpose="new-map-session"/);
+});
+
 test('renderer farm type selector populates options and reflects the active farm type', () => {
   const elements = {
     sessionFarmTypeSelect: {
@@ -339,6 +349,77 @@ test('starting a map session does not rely on unsupported renderer prompt', asyn
     league: 'Mirage',
     farmTypeId: 'abyss'
   }]);
+});
+
+test('starting a map session uses the branded modal when runtime map name is missing', async () => {
+  const startSessionCalls = [];
+  const context = loadFunctions(['normalizeSessionMapName', 'getRuntimeSessionMapName', 'handleStartSession'], {
+    state: {
+      runtimeSession: null
+    },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        startSession: async (payload) => {
+          startSessionCalls.push(payload);
+          return { id: 'session-1', mapName: payload.mapName };
+        }
+      }
+    },
+    requestMapSessionName: async () => 'Abyssal City Map',
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      farmTypeId: 'abyss',
+      label: 'PoE 1 - Mirage'
+    }),
+    updateActiveSessionUI: () => {},
+    refreshTrackerData: async () => {},
+    showToast: () => {},
+    getUserFacingErrorMessage: () => 'error'
+  });
+
+  await context.handleStartSession();
+
+  assert.deepEqual(startSessionCalls.map((payload) => ({ ...payload })), [{
+    mapName: 'Abyssal City Map',
+    poeVersion: 'poe1',
+    league: 'Mirage',
+    farmTypeId: 'abyss'
+  }]);
+});
+
+test('starting a map session aborts cleanly when the branded modal is cancelled', async () => {
+  const startSessionCalls = [];
+  const context = loadFunctions(['normalizeSessionMapName', 'getRuntimeSessionMapName', 'handleStartSession'], {
+    state: {
+      runtimeSession: null
+    },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        startSession: async (payload) => {
+          startSessionCalls.push(payload);
+          return { id: 'session-1', mapName: payload.mapName };
+        }
+      }
+    },
+    requestMapSessionName: async () => null,
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      farmTypeId: 'abyss',
+      label: 'PoE 1 - Mirage'
+    }),
+    updateActiveSessionUI: () => {},
+    refreshTrackerData: async () => {},
+    showToast: () => {},
+    getUserFacingErrorMessage: () => 'error'
+  });
+
+  await context.handleStartSession();
+
+  assert.deepEqual(startSessionCalls, []);
 });
 
 test('dashboard html includes a last map result card with summary fields', () => {

@@ -95,6 +95,13 @@ const elements = {
   // Modals
   loginModal: document.getElementById('login-modal'),
   registerModal: document.getElementById('register-modal'),
+  mapSessionModal: document.getElementById('map-session-modal'),
+  mapSessionForm: document.getElementById('map-session-form'),
+  mapSessionNameInput: document.getElementById('map-session-name-input'),
+  mapSessionDefaultName: document.getElementById('map-session-default-name'),
+  mapSessionContext: document.getElementById('map-session-context'),
+  mapSessionConfirmBtn: document.getElementById('map-session-confirm-btn'),
+  mapSessionCancelBtn: document.getElementById('map-session-cancel-btn'),
 
   // Forms
   loginForm: document.getElementById('login-form'),
@@ -2820,17 +2827,89 @@ function getRuntimeSessionMapName() {
   );
 }
 
+function requestMapSessionName({ defaultName, trackerContext } = {}) {
+  const fallbackName = normalizeSessionMapName(defaultName)
+    || `${window.t ? window.t('misc.unknownMap') : 'Unknown Map'} ${new Date().toLocaleString()}`;
+
+  if (!elements.mapSessionModal || !elements.mapSessionNameInput || !elements.mapSessionForm) {
+    return Promise.resolve(fallbackName);
+  }
+
+  elements.mapSessionDefaultName.textContent = fallbackName;
+  if (elements.mapSessionContext) {
+    elements.mapSessionContext.textContent = trackerContext?.label || 'PoE Session';
+  }
+  elements.mapSessionNameInput.value = fallbackName;
+  elements.mapSessionNameInput.select();
+  elements.mapSessionModal.classList.remove('hidden');
+
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const cleanup = () => {
+      elements.mapSessionModal.classList.add('hidden');
+      elements.mapSessionForm.removeEventListener('submit', handleSubmit);
+      elements.mapSessionCancelBtn?.removeEventListener('click', handleCancel);
+      elements.mapSessionModal.removeEventListener('click', handleBackdropClick);
+      document.removeEventListener('keydown', handleKeydown);
+    };
+
+    const settle = (value) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    function handleSubmit(event) {
+      event.preventDefault();
+      const selectedName = normalizeSessionMapName(elements.mapSessionNameInput.value) || fallbackName;
+      settle(selectedName);
+    }
+
+    function handleCancel() {
+      settle(null);
+    }
+
+    function handleBackdropClick(event) {
+      if (event.target === elements.mapSessionModal) {
+        settle(null);
+      }
+    }
+
+    function handleKeydown(event) {
+      if (event.key === 'Escape') {
+        settle(null);
+      }
+    }
+
+    elements.mapSessionForm.addEventListener('submit', handleSubmit);
+    elements.mapSessionCancelBtn?.addEventListener('click', handleCancel);
+    elements.mapSessionModal.addEventListener('click', handleBackdropClick);
+    document.addEventListener('keydown', handleKeydown);
+    requestAnimationFrame(() => {
+      elements.mapSessionNameInput.focus();
+    });
+  });
+}
+
 async function handleStartSession() {
   const trackerContext = getSelectedTrackerContext();
-  const mapName = getRuntimeSessionMapName();
+  const runtimeMapName = getRuntimeSessionMapName();
+  const requestedMapName = runtimeMapName || await requestMapSessionName({ trackerContext });
+  const mapName = normalizeSessionMapName(requestedMapName);
+  if (!mapName) {
+    return;
+  }
+
   const sessionPayload = {
+    mapName,
     poeVersion: trackerContext.poeVersion,
     league: trackerContext.league
   };
-
-  if (mapName) {
-    sessionPayload.mapName = mapName;
-  }
 
   if (trackerContext.farmTypeId) {
     sessionPayload.farmTypeId = trackerContext.farmTypeId;

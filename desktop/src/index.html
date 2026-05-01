@@ -121,6 +121,41 @@
       </div>
     </div>
 
+    <!-- New Map Session Modal -->
+    <div id="map-session-modal" class="modal hidden map-session-modal" data-modal-purpose="new-map-session" role="dialog" aria-modal="true" aria-labelledby="map-session-title">
+      <div class="modal-content map-session-content">
+        <form id="map-session-form" class="map-session-form">
+          <div class="map-session-orb" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/>
+              <path d="M12 3v18"/>
+              <path d="M4 8l8 4.5L20 8"/>
+            </svg>
+          </div>
+          <div class="map-session-copy">
+            <p class="modal-kicker">Atlas Ledger</p>
+            <h2 id="map-session-title">Start New Map</h2>
+            <p class="modal-subtitle compact">Name this run before tracking starts. Use the in-game area name when it is available.</p>
+          </div>
+          <div class="map-session-context">
+            <span id="map-session-context">PoE Session</span>
+            <strong id="map-session-default-name">Unknown Map</strong>
+          </div>
+          <label class="map-session-label" for="map-session-name-input">Map name</label>
+          <input id="map-session-name-input" type="text" autocomplete="off" spellcheck="false" placeholder="Dunes Map, City Square Map">
+          <div class="map-session-actions">
+            <button id="map-session-cancel-btn" type="button" class="btn btn-secondary">Cancel</button>
+            <button id="map-session-confirm-btn" type="submit" class="btn btn-primary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              <span>Start Map</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Main Content -->
     <main class="main">
       <!-- Dashboard Page -->
