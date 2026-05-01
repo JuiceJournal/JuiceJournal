@@ -117,6 +117,15 @@ test('desktop package exposes a packaged dev runner for taskbar icon validation'
   );
 });
 
+test('desktop development script defaults to OW-Electron so Overwolf GEP is available', () => {
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+
+  assert.equal(packageJson.scripts.dev, 'npm run dev:ow');
+  assert.equal(packageJson.scripts['dev:electron'], 'electron . --dev');
+  assert.match(packageJson.scripts['dev:ow'], /^ow-electron \. --dev/);
+  assert.deepEqual(packageJson.overwolf.packages, ['gep', 'overlay']);
+});
+
 test('desktop window opens large enough to avoid default dashboard scrolling', () => {
   const mainProcess = fs.readFileSync(mainProcessPath, 'utf8');
 

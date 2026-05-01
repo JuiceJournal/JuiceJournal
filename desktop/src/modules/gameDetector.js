@@ -79,7 +79,7 @@ function normalizeProcessSnapshot(process = {}) {
   };
 }
 
-function isSteamPoe2Process(process) {
+function isPoe2InstallPath(process) {
   const joined = `${process.executablePath} ${process.commandLine}`;
   return joined.includes('path of exile 2');
 }
@@ -89,7 +89,7 @@ function detectGameVersionFromProcesses(processes = []) {
 
   const poe2Running = normalizedProcesses.some((process) => (
     POE2_PROCESSES.includes(process.name)
-    || ((process.name === 'pathofexilesteam.exe' || process.name === 'pathofexile_x64steam.exe') && isSteamPoe2Process(process))
+    || (POE1_PROCESSES.includes(process.name) && isPoe2InstallPath(process))
   ));
 
   if (poe2Running) {

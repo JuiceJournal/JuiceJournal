@@ -32,6 +32,19 @@ test('game detector treats Steam PathOfExileSteam.exe under Path of Exile 2 as p
   );
 });
 
+test('game detector treats standalone PathOfExile.exe under Path of Exile 2 as poe2', () => {
+  assert.equal(
+    GameDetector.detectGameVersionFromProcesses([
+      {
+        name: 'PathOfExile.exe',
+        executablePath: 'C:\\Program Files\\Grinding Gear Games\\Path of Exile 2\\PathOfExile.exe',
+        commandLine: '"C:\\Program Files\\Grinding Gear Games\\Path of Exile 2\\PathOfExile.exe" --nopatch'
+      }
+    ]),
+    'poe2'
+  );
+});
+
 test('game detector falls back to poe1 for Steam PathOfExileSteam.exe under Path of Exile', () => {
   assert.equal(
     GameDetector.detectGameVersionFromProcesses([
