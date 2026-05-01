@@ -258,9 +258,14 @@ test('renderer selection changes sync the active farm type to the main process',
 
 test('starting a map session forwards the selected farm type without changing existing context fields', async () => {
   const startSessionCalls = [];
-  const context = loadFunctions(['handleStartSession'], {
-    prompt: () => 'Dunes Map',
-    state: {},
+  const context = loadFunctions(['normalizeSessionMapName', 'getRuntimeSessionMapName', 'handleStartSession'], {
+    state: {
+      runtimeSession: {
+        summary: {
+          currentAreaName: 'Dunes Map'
+        }
+      }
+    },
     window: {
       t: (key) => key,
       electronAPI: {
@@ -289,6 +294,50 @@ test('starting a map session forwards the selected farm type without changing ex
     poeVersion: 'poe2',
     league: 'Fate of the Vaal',
     farmTypeId: 'breach'
+  }]);
+});
+
+test('starting a map session does not rely on unsupported renderer prompt', async () => {
+  const startSessionCalls = [];
+  const context = loadFunctions(['normalizeSessionMapName', 'getRuntimeSessionMapName', 'handleStartSession'], {
+    prompt: () => {
+      throw new Error('prompt() is not supported');
+    },
+    state: {
+      runtimeSession: {
+        currentInstance: {
+          areaName: 'Crimson Temple'
+        }
+      }
+    },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        startSession: async (payload) => {
+          startSessionCalls.push(payload);
+          return { id: 'session-1' };
+        }
+      }
+    },
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      farmTypeId: 'abyss',
+      label: 'PoE 1 • Mirage'
+    }),
+    updateActiveSessionUI: () => {},
+    refreshTrackerData: async () => {},
+    showToast: () => {},
+    getUserFacingErrorMessage: () => 'error'
+  });
+
+  await context.handleStartSession();
+
+  assert.deepEqual(startSessionCalls.map((payload) => ({ ...payload })), [{
+    mapName: 'Crimson Temple',
+    poeVersion: 'poe1',
+    league: 'Mirage',
+    farmTypeId: 'abyss'
   }]);
 });
 

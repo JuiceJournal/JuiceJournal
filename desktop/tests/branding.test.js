@@ -60,8 +60,27 @@ test('desktop package and main process point to the branded window metadata', ()
   assert.match(mainProcess, /const APP_NAME = 'Juice Journal';/);
   assert.match(mainProcess, /app\.setAppUserModelId\(APP_ID\);/);
   assert.match(mainProcess, /app\.setName\(APP_NAME\);/);
-  assert.match(mainProcess, /icon:\s*APP_ICON_PATH,/);
+  assert.match(mainProcess, /icon:\s*createWindowIcon\(\),/);
   assert.match(mainProcess, /title:\s*APP_NAME/);
+});
+
+test('desktop main process loads the taskbar window icon as a native image', () => {
+  const mainProcess = fs.readFileSync(mainProcessPath, 'utf8');
+
+  assert.match(mainProcess, /function\s+createWindowIcon\(\)/);
+  assert.match(mainProcess, /nativeImage\.createFromPath\(APP_ICON_PATH\)/);
+  assert.match(mainProcess, /icon:\s*createWindowIcon\(\),/);
+});
+
+test('development mode does not open DevTools unless explicitly requested', () => {
+  const mainProcess = fs.readFileSync(mainProcessPath, 'utf8');
+
+  assert.match(mainProcess, /JUICE_JOURNAL_OPEN_DEVTOOLS/);
+  assert.match(mainProcess, /process\.argv\.includes\(['"]--devtools['"]\)/);
+  assert.doesNotMatch(
+    mainProcess,
+    /if\s*\(\s*isDev\s*\)\s*\{\s*mainWindow\.webContents\.openDevTools\(\)/s
+  );
 });
 
 test('desktop build defines an afterPack hook that patches the packaged exe icon', () => {

@@ -241,9 +241,9 @@ router.post('/start',
       .notEmpty()
       .withMessage('League is required')
       .isLength({ max: 50 }),
-    body('mapTier').optional().isInt({ min: 1, max: 21 }),
+    body('mapTier').optional({ nullable: true }).isInt({ min: 1, max: 21 }),
     body('farmTypeId').optional({ nullable: true }).trim().isLength({ max: 50 }),
-    body('mapType').optional().trim().isLength({ max: 50 }),
+    body('mapType').optional({ nullable: true }).trim().isLength({ max: 50 }),
     body('strategyTag').optional({ nullable: true }).trim().isLength({ max: 50 }),
     body('notes').optional({ nullable: true }).trim().isLength({ max: 2000 }),
     body('costChaos').optional().isFloat({ min: 0 }),

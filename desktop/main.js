@@ -1744,13 +1744,20 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
   });
 }
 
-// Development mod kontrolu
+// Development mode controls.
 const isDev = !app.isPackaged;
 const forceLiveAuth = process.env.JUICE_JOURNAL_FORCE_LIVE_AUTH === '1'
   || process.argv.includes('--force-live-auth');
+const shouldOpenDevTools = process.env.JUICE_JOURNAL_OPEN_DEVTOOLS === '1'
+  || process.argv.includes('--devtools');
+
+function createWindowIcon() {
+  const image = nativeImage.createFromPath(APP_ICON_PATH);
+  return image.isEmpty() ? APP_ICON_PATH : image;
+}
 
 /**
- * Ana pencereyi olustur
+ * Create the main window.
  */
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -1767,15 +1774,14 @@ function createMainWindow() {
       nodeIntegration: false,
       sandbox: true
     },
-    icon: APP_ICON_PATH,
+    icon: createWindowIcon(),
     title: APP_NAME
   });
 
-  // HTML dosyasini yukle
+  // Load the dashboard shell.
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
-  // Development modunda DevTools ac
-  if (isDev) {
+  if (shouldOpenDevTools) {
     mainWindow.webContents.openDevTools();
   }
 

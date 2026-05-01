@@ -407,6 +407,7 @@ window.Translations = {
     'misc.endSessionConfirm': "Mevcut map session'ini bitirmek istiyor musunuz?",
     'misc.durationMin': 'dk',
     'misc.durationSec': 'sn',
+    'misc.unknownMap': 'Bilinmeyen Map',
   },
 
   de: {
@@ -1110,6 +1111,7 @@ window.Translations = {
     'misc.endSessionConfirm': 'Do you want to end the current map session?',
     'misc.durationMin': 'm',
     'misc.durationSec': 's',
+    'misc.unknownMap': 'Unknown Map',
   }
 };
 

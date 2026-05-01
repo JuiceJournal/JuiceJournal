@@ -2803,16 +2803,34 @@ async function refreshTrackerData({ includeSessions = false, includeCurrency = f
 /**
  * Start a session
  */
-async function handleStartSession() {
-  const mapName = prompt(window.t('misc.mapPrompt'), 'Dunes Map');
-  if (!mapName) return;
+function normalizeSessionMapName(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
 
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function getRuntimeSessionMapName() {
+  return normalizeSessionMapName(
+    state.runtimeSession?.currentInstance?.areaName
+      || state.runtimeSession?.summary?.currentAreaName
+      || state.runtimeSession?.currentArea
+  );
+}
+
+async function handleStartSession() {
   const trackerContext = getSelectedTrackerContext();
+  const mapName = getRuntimeSessionMapName();
   const sessionPayload = {
-    mapName,
     poeVersion: trackerContext.poeVersion,
     league: trackerContext.league
   };
+
+  if (mapName) {
+    sessionPayload.mapName = mapName;
+  }
 
   if (trackerContext.farmTypeId) {
     sessionPayload.farmTypeId = trackerContext.farmTypeId;
@@ -2828,7 +2846,7 @@ async function handleStartSession() {
         window.t('dashboard.activeSession'),
         session.queued
           ? `${window.t('toast.sessionQueued')} (${trackerContext.label})`
-          : `${mapName} ${window.t('toast.sessionStarted')} (${trackerContext.label})`
+          : `${session.mapName || mapName || window.t('misc.unknownMap')} ${window.t('toast.sessionStarted')} (${trackerContext.label})`
       );
     }
   } catch (error) {

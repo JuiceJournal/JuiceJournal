@@ -174,3 +174,16 @@ test('backend session route imports sequelize before using transactions', () => 
   );
   assert.match(source, /sequelize\.transaction\(/);
 });
+
+test('backend session start validation accepts nullable optional map context from desktop', () => {
+  const source = fs.readFileSync(routePath, 'utf8');
+
+  assert.match(
+    source,
+    /body\('mapTier'\)\.optional\(\{\s*nullable:\s*true\s*\}\)\.isInt\(\{\s*min:\s*1,\s*max:\s*21\s*\}\)/
+  );
+  assert.match(
+    source,
+    /body\('mapType'\)\.optional\(\{\s*nullable:\s*true\s*\}\)\.trim\(\)\.isLength\(\{\s*max:\s*50\s*\}\)/
+  );
+});
