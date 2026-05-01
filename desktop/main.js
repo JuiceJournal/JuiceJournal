@@ -43,6 +43,7 @@ const {
   validateHotkeys
 } = require('./src/modules/hotkeyModel');
 const { createNativeGameInfoProducer } = require('./src/modules/nativeGameInfoProducer');
+const { createOverwolfOverlayProvider } = require('./src/modules/overwolfOverlayProvider');
 const {
   getAppUpdateSupportState,
   createAppUpdateState,
@@ -290,6 +291,7 @@ let overlayMapResultDismissTimer = null;
 let lastActiveCharacterHint = null;
 let nativeGameInfoProducer = null;
 let nativeGameInfoProducerBinding = null;
+let overwolfOverlayProvider = null;
 let poeAuthServer = null;
 let trayHintShown = false;
 let pendingLootFlushInProgress = false;
@@ -824,6 +826,60 @@ function getNativeGameInfoProducer() {
   }
 
   return nativeGameInfoProducer;
+}
+
+function getOverwolfOverlayApi() {
+  const overwolf = app?.overwolf || null;
+  return overwolf?.overlay
+    || overwolf?.windows
+    || overwolf?.packages?.overlay
+    || overwolf?.packages?.windows
+    || null;
+}
+
+function getOverwolfOverlayProvider() {
+  const overlayApi = getOverwolfOverlayApi();
+  if (!overwolfOverlayProvider || (!overwolfOverlayProvider.isAvailable() && overlayApi)) {
+    overwolfOverlayProvider = createOverwolfOverlayProvider({
+      overlayApi,
+      entryPath: path.join(__dirname, 'src', 'overlay.html'),
+      logger: console
+    });
+  }
+
+  return overwolfOverlayProvider;
+}
+
+function isOverwolfOverlayAvailable() {
+  return getOverwolfOverlayProvider().isAvailable();
+}
+
+function renderOverwolfOverlayWindow(overlayState) {
+  if (!isOverwolfOverlayAvailable()) {
+    return Promise.resolve({
+      handled: false,
+      provider: 'overwolf',
+      reason: 'overlay-api-unavailable'
+    });
+  }
+
+  try {
+    return Promise.resolve(getOverwolfOverlayProvider().renderState(overlayState)).catch((error) => {
+      console.warn('[OverwolfOverlayProvider] Failed to render overlay state', error);
+      return {
+        handled: false,
+        provider: 'overwolf',
+        reason: 'render-failed'
+      };
+    });
+  } catch (error) {
+    console.warn('[OverwolfOverlayProvider] Failed to render overlay state', error);
+    return Promise.resolve({
+      handled: false,
+      provider: 'overwolf',
+      reason: 'render-failed'
+    });
+  }
 }
 
 function stopNativeGameInfoProducer() {
@@ -2018,7 +2074,11 @@ function buildOverlayState({ character = overlayCharacterState, runtimeSession =
 }
 
 function ensureOverlayWindowForSettings() {
-  if (isOverlayEnabled() && app.isReady()) {
+  const overwolfAvailable = typeof isOverwolfOverlayAvailable === 'function'
+    ? isOverwolfOverlayAvailable()
+    : false;
+
+  if (isOverlayEnabled() && app.isReady() && !overwolfAvailable) {
     createOverlayWindow();
   }
 
@@ -2057,6 +2117,19 @@ function updateOverlayWindow({ character, runtimeSession } = {}) {
   }
 
   const overlayState = buildOverlayState();
+  const overwolfAvailable = typeof isOverwolfOverlayAvailable === 'function'
+    ? isOverwolfOverlayAvailable()
+    : false;
+
+  if (overwolfAvailable) {
+    if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
+      overlayWindow.hide();
+    }
+
+    renderOverwolfOverlayWindow(overlayState).catch(() => { });
+    return overlayState;
+  }
+
   if (!overlayWindow || overlayWindow.isDestroyed()) {
     return overlayState;
   }

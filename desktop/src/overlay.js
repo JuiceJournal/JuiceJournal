@@ -11,6 +11,7 @@
     meta: document.querySelector('[data-overlay-meta]')
   };
   let passthroughEnabled = true;
+  let lastRenderedMode = 'runtime';
 
   function getOverlayModel() {
     return root.overlayStateModel || null;
@@ -161,25 +162,28 @@
   function renderState(input) {
     const state = normalizeRenderedState(input);
     const visibility = state.visibility || 'waiting';
+    const mode = state.mode || 'runtime';
+    const isExitingMapResult = visibility === 'hidden' && lastRenderedMode === 'map-result';
 
     if (elements.html) {
       elements.html.dataset.overlayVisibility = visibility;
-      elements.html.dataset.overlayMode = state.mode || 'runtime';
+      elements.html.dataset.overlayMode = mode;
     }
 
     if (elements.card) {
       elements.card.dataset.overlayState = visibility;
-      elements.card.dataset.overlayMode = state.mode || 'runtime';
+      elements.card.dataset.overlayMode = mode;
       elements.card.dataset.overlayTone = state.tone || 'neutral';
-      elements.card.hidden = visibility === 'hidden';
+      elements.card.setAttribute('data-overlay-exiting', isExitingMapResult ? 'true' : 'false');
+      elements.card.hidden = visibility === 'hidden' && !isExitingMapResult;
     }
 
-    setText(elements.kickerLabel, state.mode === 'map-result' ? 'Map Result' : 'Juice Journal');
+    setText(elements.kickerLabel, mode === 'map-result' ? 'Map Result' : 'Juice Journal');
     setText(elements.primary, state.primaryLine);
     setText(elements.secondary, state.secondaryLine);
     setText(elements.meta, state.metaLine);
     if (elements.pin) {
-      const showPin = state.mode === 'map-result' && visibility !== 'hidden';
+      const showPin = mode === 'map-result' && visibility !== 'hidden';
       elements.pin.hidden = !showPin;
       elements.pin.setAttribute('aria-pressed', showPin && state.pinned ? 'true' : 'false');
       if (elements.dismiss) {
@@ -192,6 +196,7 @@
       }
     }
 
+    lastRenderedMode = mode;
     return state;
   }
 

@@ -50,7 +50,7 @@
       box-shadow: 0 16px 34px var(--overlay-shadow);
       backdrop-filter: blur(14px);
       opacity: 1;
-      transform: translateY(0);
+      transform: translateX(0) scale(1);
       transition: opacity 150ms ease, transform 150ms ease;
     }
 
@@ -188,7 +188,15 @@
 
     [data-overlay-state="hidden"] {
       opacity: 0;
-      transform: translateY(4px);
+      transform: translateX(110%) scale(0.98);
+    }
+
+    [data-overlay-mode="map-result"][data-overlay-state="visible"] {
+      animation: slideInFromRight 220ms cubic-bezier(0.2, 0.84, 0.24, 1) both;
+    }
+
+    [data-overlay-exiting="true"] {
+      animation: slideOutToRight 180ms ease-in both;
     }
 
     [data-overlay-mode="map-result"][data-overlay-tone="positive"] {
@@ -201,6 +209,30 @@
       --overlay-accent: #f28d84;
       --overlay-border: rgba(242, 141, 132, 0.34);
       --overlay-muted: #ddbeb9;
+    }
+
+    @keyframes slideInFromRight {
+      from {
+        opacity: 0;
+        transform: translateX(110%) scale(0.98);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+      }
+    }
+
+    @keyframes slideOutToRight {
+      from {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+      }
+
+      to {
+        opacity: 0;
+        transform: translateX(110%) scale(0.98);
+      }
     }
   </style>
 </head>
