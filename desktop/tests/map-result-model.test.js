@@ -207,6 +207,13 @@ function createSnapshot(items) {
   };
 }
 
+function createSnapshotAt(timestamp, items) {
+  return {
+    timestamp: Date.parse(timestamp),
+    items
+  };
+}
+
 test('map result model returns null when required snapshots are incomplete', () => {
   const deriveMapResult = getMapResultModelExport('deriveMapResult');
 
@@ -311,7 +318,7 @@ test('map result model derives normalized inputs outputs and net profit from sna
   assert.equal(result.poeVersion, 'poe2');
   assert.equal(result.league, 'Fate of the Vaal');
   assert.equal(result.farmType, 'Ritual');
-  assert.equal(result.durationSeconds, 185);
+  assert.equal(result.durationSeconds, 395);
   assert.equal(result.inputValue, 9);
   assert.equal(result.outputValue, 136);
   assert.equal(result.netProfit, 127);
@@ -352,6 +359,56 @@ test('map result model derives normalized inputs outputs and net profit from sna
       currencyCode: 'chaos'
     }
   ]);
+});
+
+test('map result model sums active runtime inside the stash snapshot window across re-entries', () => {
+  const deriveMapResult = getMapResultModelExport('deriveMapResult');
+
+  const result = deriveMapResult({
+    farmType: { id: 'breach', label: 'Breach' },
+    runtimeSession: {
+      sessionId: 'runtime-reentry',
+      instances: [
+        {
+          areaName: 'Hideout',
+          enteredAt: '2026-04-11T09:55:00.000Z',
+          exitedAt: '2026-04-11T09:58:00.000Z',
+          durationSeconds: 180,
+          status: 'completed'
+        },
+        {
+          areaName: 'Strand Map',
+          enteredAt: '2026-04-11T10:01:00.000Z',
+          exitedAt: '2026-04-11T10:06:30.000Z',
+          durationSeconds: 330,
+          status: 'completed'
+        },
+        {
+          areaName: 'Strand Map',
+          enteredAt: '2026-04-11T10:09:00.000Z',
+          exitedAt: '2026-04-11T10:13:15.000Z',
+          durationSeconds: 255,
+          status: 'completed'
+        },
+        {
+          areaName: 'Next Farm',
+          enteredAt: '2026-04-11T10:25:00.000Z',
+          exitedAt: '2026-04-11T10:30:00.000Z',
+          durationSeconds: 300,
+          status: 'completed'
+        }
+      ]
+    },
+    beforeSnapshot: createSnapshotAt('2026-04-11T10:00:00.000Z', [
+      { itemKey: 'chaos::currency', baseType: 'Chaos Orb', category: 'currency', quantity: 1, chaosValue: 1, totalChaosValue: 1 }
+    ]),
+    afterSnapshot: createSnapshotAt('2026-04-11T10:20:00.000Z', [
+      { itemKey: 'chaos::currency', baseType: 'Chaos Orb', category: 'currency', quantity: 11, chaosValue: 1, totalChaosValue: 11 }
+    ])
+  });
+
+  assert.equal(result.durationSeconds, 585);
+  assert.equal(result.netProfit, 10);
 });
 
 test('map result model ignores value-only repricing when quantity does not change', () => {

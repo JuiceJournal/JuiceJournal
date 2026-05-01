@@ -176,6 +176,107 @@
     return null;
   }
 
+  function parseTimestampMs(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function getIntervalOverlapSeconds(startMs, endMs, windowStartMs, windowEndMs) {
+    if (
+      !Number.isFinite(startMs)
+      || !Number.isFinite(endMs)
+      || endMs <= startMs
+      || !Number.isFinite(windowStartMs)
+      || !Number.isFinite(windowEndMs)
+      || windowEndMs <= windowStartMs
+    ) {
+      return 0;
+    }
+
+    const overlapStart = Math.max(startMs, windowStartMs);
+    const overlapEnd = Math.min(endMs, windowEndMs);
+    return Math.max(0, Math.round((overlapEnd - overlapStart) / 1000));
+  }
+
+  function getCompletedInstances(runtimeSession = {}) {
+    const instances = Array.isArray(runtimeSession?.instances)
+      ? runtimeSession.instances
+      : [];
+
+    if (instances.length) {
+      return instances.filter((instance) => instance?.status === 'completed');
+    }
+
+    const lastCompletedInstance = getLastCompletedInstance(runtimeSession);
+    return lastCompletedInstance ? [lastCompletedInstance] : [];
+  }
+
+  function getInstanceDurationSeconds(instance = {}) {
+    const targetInstance = instance || {};
+    const directDuration = normalizeNumber(targetInstance.durationSeconds, NaN);
+    if (Number.isFinite(directDuration)) {
+      return Math.max(0, directDuration);
+    }
+
+    const enteredAt = parseTimestampMs(targetInstance.enteredAt);
+    const exitedAt = parseTimestampMs(targetInstance.exitedAt);
+    if (Number.isFinite(enteredAt) && Number.isFinite(exitedAt)) {
+      return Math.max(0, Math.round((exitedAt - enteredAt) / 1000));
+    }
+
+    return 0;
+  }
+
+  function getRuntimeTotalActiveSeconds(runtimeSession = {}) {
+    const totalActiveSeconds = normalizeNumber(runtimeSession.totalActiveSeconds, NaN);
+    if (Number.isFinite(totalActiveSeconds) && totalActiveSeconds > 0) {
+      return totalActiveSeconds;
+    }
+
+    const summaryTotalActiveSeconds = normalizeNumber(runtimeSession.summary?.totalActiveSeconds, NaN);
+    if (Number.isFinite(summaryTotalActiveSeconds) && summaryTotalActiveSeconds > 0) {
+      return summaryTotalActiveSeconds;
+    }
+
+    return 0;
+  }
+
+  function deriveRuntimeDurationSeconds(runtimeSession = {}, beforeSnapshot, afterSnapshot) {
+    const instances = getCompletedInstances(runtimeSession);
+    const windowStartMs = getSnapshotTimestamp(beforeSnapshot);
+    const windowEndMs = getSnapshotTimestamp(afterSnapshot);
+
+    if (instances.length && Number.isFinite(windowStartMs) && Number.isFinite(windowEndMs) && windowEndMs > windowStartMs) {
+      const windowedDuration = instances.reduce((total, instance) => {
+        const enteredAt = parseTimestampMs(instance.enteredAt);
+        const exitedAt = parseTimestampMs(instance.exitedAt);
+        return total + getIntervalOverlapSeconds(enteredAt, exitedAt, windowStartMs, windowEndMs);
+      }, 0);
+
+      if (windowedDuration > 0) {
+        return windowedDuration;
+      }
+    }
+
+    if (instances.length) {
+      const summedDuration = instances.reduce((total, instance) => total + getInstanceDurationSeconds(instance), 0);
+      if (summedDuration > 0) {
+        return summedDuration;
+      }
+    }
+
+    const totalActiveSeconds = getRuntimeTotalActiveSeconds(runtimeSession);
+    if (totalActiveSeconds > 0) {
+      return totalActiveSeconds;
+    }
+
+    return getInstanceDurationSeconds(getLastCompletedInstance(runtimeSession));
+  }
+
   function getSnapshotTimestamp(snapshot = {}) {
     const timestamp = normalizeNumber(snapshot?.timestamp, NaN);
     if (Number.isFinite(timestamp)) {
@@ -256,7 +357,6 @@
       topOutputs = topOutputs.sort((a, b) => b.valueDelta - a.valueDelta).slice(0, MAX_TOP_ITEMS);
     }
 
-    const lastCompletedInstance = getLastCompletedInstance(runtimeSession);
     const createdAt = getCreatedAt(beforeSnapshot, afterSnapshot);
 
     return {
@@ -268,7 +368,7 @@
       poeVersion: normalizePoeVersion(poeVersion),
       league: normalizeString(characterSummary?.league ?? afterSnapshot?.league ?? beforeSnapshot?.league),
       farmType: farmTypeLabel,
-      durationSeconds: normalizeNumber(lastCompletedInstance?.durationSeconds, 0),
+      durationSeconds: deriveRuntimeDurationSeconds(runtimeSession, beforeSnapshot, afterSnapshot),
       inputValue,
       outputValue,
       netProfit,
