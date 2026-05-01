@@ -15,7 +15,7 @@
     "pack": "electron-builder --dir",
     "icon:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-icon-assets.ps1",
     "icon:test": "node --test tests/branding.test.js",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "node scripts/patch-deprecated-deps.js && electron-builder install-app-deps"
   },
   "dependencies": {
     "axios": "1.15.0",
@@ -23,6 +23,7 @@
     "electron-store": "^8.1.0",
     "electron-updater": "^6.8.3",
     "node-global-key-listener": "^0.1.1",
+    "punycode": "2.3.1",
     "tesseract.js": "^5.0.3"
   },
   "devDependencies": {
