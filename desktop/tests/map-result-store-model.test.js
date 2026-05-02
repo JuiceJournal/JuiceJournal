@@ -267,6 +267,129 @@ test('renderer saves the latest map result and stores returned history in state'
   assert.deepEqual(state.mapResults, [{ id: 'new-1' }, { id: 'old-1' }]);
 });
 
+test('renderer creates a completed map result directly from an ended session', () => {
+  const context = loadFunctions([
+    'getSessionNumber',
+    'getSessionTimestampMs',
+    'getCompletedSessionDurationSeconds',
+    'getCompletedSessionFarmTypeLabel',
+    'createCompletedSessionMapResult'
+  ], {
+    state: {
+      account: {
+        summary: { id: 'char-1', name: 'JaylenBaliston' },
+        accountName: 'Esquetta#4179'
+      },
+      settings: { poeVersion: 'poe2' },
+      farmType: { selectedFarmTypeId: 'ritual' }
+    },
+    getFarmTypeModel: () => ({
+      listFarmTypes: () => [
+        { id: 'ritual', label: 'Ritual' },
+        { id: 'expedition', label: 'Expedition' }
+      ]
+    }),
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe2',
+      league: 'Mirage',
+      farmTypeId: 'ritual'
+    }),
+    normalizePoeVersion: (value) => value
+  });
+
+  const result = context.createCompletedSessionMapResult({
+    id: 'session-1',
+    mapName: 'Unknown Map',
+    farmTypeId: 'expedition',
+    startedAt: '2026-05-02T15:10:00.000Z',
+    endedAt: '2026-05-02T15:12:05.000Z',
+    totalLootChaos: '0',
+    profitChaos: '0',
+    poeVersion: 'poe2',
+    league: 'Mirage'
+  });
+
+  assert.equal(result.id, 'map-result-session-1');
+  assert.equal(result.sessionId, 'session-1');
+  assert.equal(result.farmType, 'Expedition');
+  assert.equal(result.durationSeconds, 125);
+  assert.equal(result.netProfit, 0);
+  assert.equal(result.poeVersion, 'poe2');
+  assert.equal(result.characterName, 'JaylenBaliston');
+});
+
+test('ending a map session persists a zero-profit completed map result', async () => {
+  const persisted = [];
+  const calls = [];
+  const state = {
+    currentSession: {
+      id: 'session-2',
+      mapName: 'Unknown Map',
+      farmTypeId: 'ritual',
+      startedAt: '2026-05-02T15:10:00.000Z',
+      poeVersion: 'poe1',
+      league: 'Mirage'
+    }
+  };
+  const context = loadFunctions([
+    'getSessionNumber',
+    'getSessionTimestampMs',
+    'getCompletedSessionDurationSeconds',
+    'getCompletedSessionFarmTypeLabel',
+    'createCompletedSessionMapResult',
+    'handleEndSession'
+  ], {
+    state,
+    confirm: () => true,
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        async endSession() {
+          return {
+            id: 'session-2',
+            mapName: 'Unknown Map',
+            farmTypeId: 'ritual',
+            startedAt: '2026-05-02T15:10:00.000Z',
+            endedAt: '2026-05-02T15:11:30.000Z',
+            durationSec: 90,
+            totalLootChaos: '0',
+            profitChaos: '0',
+            poeVersion: 'poe1',
+            league: 'Mirage'
+          };
+        }
+      }
+    },
+    getFarmTypeModel: () => ({
+      listFarmTypes: () => [{ id: 'ritual', label: 'Ritual' }]
+    }),
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      farmTypeId: 'ritual'
+    }),
+    normalizePoeVersion: (value) => value,
+    persistMapResultHistory: async (result) => {
+      persisted.push(result);
+      return [result];
+    },
+    updateActiveSessionUI: () => calls.push('updateActiveSessionUI'),
+    refreshTrackerData: async () => calls.push('refreshTrackerData'),
+    showToast: (...args) => calls.push(['showToast', ...args]),
+    getUserFacingErrorMessage: () => 'errors.sessionEnd'
+  });
+
+  await context.handleEndSession();
+
+  assert.equal(state.currentSession, null);
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0].id, 'map-result-session-2');
+  assert.equal(persisted[0].farmType, 'Ritual');
+  assert.equal(persisted[0].durationSeconds, 90);
+  assert.equal(persisted[0].netProfit, 0);
+  assert.deepEqual(calls, ['updateActiveSessionUI', 'refreshTrackerData']);
+});
+
 test('renderer history loader keeps startup alive when map-result history is unavailable', async () => {
   const state = {
     mapResults: [{ id: 'stale-1' }]

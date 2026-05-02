@@ -439,6 +439,13 @@ test('dashboard html includes a map result history card with a farm type filter'
   assert.match(html, /id="map-result-history"/);
 });
 
+test('end map button uses the shared visible icon wrapper', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+
+  assert.match(html, /id="end-session-btn"[\s\S]*class="btn-glyph btn-glyph-stop"/);
+  assert.match(html, /id="end-session-btn"[\s\S]*data-i18n="dashboard\.endMap"/);
+});
+
 test('renderer shows an empty last map result state when no completed result exists', () => {
   const elements = {
     lastMapResultCard: {

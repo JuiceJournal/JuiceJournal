@@ -2614,6 +2614,92 @@ function deriveCurrentMapResult(profitReport = null) {
   });
 }
 
+function getSessionNumber(value, fallback = 0) {
+  const normalized = Number(value);
+  return Number.isFinite(normalized) ? normalized : fallback;
+}
+
+function getSessionTimestampMs(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getCompletedSessionDurationSeconds(session = {}) {
+  const directDuration = getSessionNumber(
+    session.durationSeconds ?? session.durationSec ?? session.duration_sec,
+    NaN
+  );
+  if (Number.isFinite(directDuration) && directDuration > 0) {
+    return Math.round(directDuration);
+  }
+
+  const startedAt = getSessionTimestampMs(session.startedAt ?? session.started_at);
+  const endedAt = getSessionTimestampMs(session.endedAt ?? session.ended_at ?? session.completedAt);
+  if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt) || endedAt < startedAt) {
+    return 0;
+  }
+
+  return Math.max(1, Math.round((endedAt - startedAt) / 1000));
+}
+
+function getCompletedSessionFarmTypeLabel(session = {}) {
+  const { listFarmTypes } = getFarmTypeModel();
+  const farmTypeId = session.farmTypeId
+    || session.mapType
+    || state.farmType?.selectedFarmTypeId
+    || getSelectedTrackerContext().farmTypeId
+    || null;
+  const farmType = listFarmTypes().find((entry) => entry.id === farmTypeId);
+
+  return farmType?.label || farmTypeId || 'No farm type';
+}
+
+function createCompletedSessionMapResult(session = {}) {
+  const sessionId = session.id || session.sessionId;
+  const durationSeconds = getCompletedSessionDurationSeconds(session);
+  if (!sessionId || durationSeconds <= 0) {
+    return null;
+  }
+
+  const trackerContext = getSelectedTrackerContext();
+  const characterSummary = state.account?.summary || {};
+  const totalLootChaos = getSessionNumber(session.totalLootChaos ?? session.total_loot_chaos, 0);
+  const costChaos = getSessionNumber(session.costChaos ?? session.cost_chaos, 0);
+  const netProfit = getSessionNumber(session.profitChaos ?? session.profit_chaos, totalLootChaos - costChaos);
+  const poeVersion = normalizePoeVersion(session.poeVersion ?? session.poe_version)
+    || trackerContext.poeVersion
+    || state.settings?.poeVersion
+    || 'poe1';
+  const createdAt = session.endedAt
+    || session.ended_at
+    || session.completedAt
+    || new Date().toISOString();
+
+  return {
+    id: `map-result-${sessionId}`,
+    sessionId,
+    characterId: characterSummary.id || null,
+    characterName: characterSummary.name || null,
+    accountName: state.account?.accountName || null,
+    poeVersion,
+    league: session.league || trackerContext.league || characterSummary.league || null,
+    mapName: session.mapName || session.map_name || 'Unknown Map',
+    farmType: getCompletedSessionFarmTypeLabel(session),
+    durationSeconds,
+    inputValue: costChaos,
+    outputValue: totalLootChaos,
+    netProfit,
+    profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral',
+    topInputs: [],
+    topOutputs: [],
+    createdAt
+  };
+}
+
 async function loadMapResultHistory() {
   if (!state.currentUser) {
     state.mapResults = [];
@@ -2941,8 +3027,27 @@ async function handleEndSession() {
 
   if (!confirm(window.t('misc.endSessionConfirm'))) return;
 
+  const previousSession = state.currentSession;
+  const completedAt = new Date().toISOString();
+
   try {
     const result = await window.electronAPI.endSession();
+    const completedSession = {
+      ...previousSession,
+      ...(result || {}),
+      endedAt: result?.endedAt || result?.ended_at || completedAt,
+      status: result?.status || 'completed'
+    };
+    const completedMapResult = createCompletedSessionMapResult(completedSession);
+
+    if (completedMapResult) {
+      try {
+        await persistMapResultHistory(completedMapResult);
+      } catch (error) {
+        console.warn('Failed to persist completed map session result', error);
+      }
+    }
+
     state.currentSession = null;
     updateActiveSessionUI();
     await refreshTrackerData({ includeSessions: true });
