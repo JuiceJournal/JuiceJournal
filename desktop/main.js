@@ -2243,6 +2243,14 @@ function registerGlobalShortcuts(overrides = {}) {
   }
 }
 
+function registerStartupGlobalShortcuts() {
+  try {
+    registerGlobalShortcuts();
+  } catch (error) {
+    console.warn(`[Hotkeys] ${error.message}`);
+  }
+}
+
 /**
  * Ekran goruntusu al ve OCR tara
  */
@@ -3631,7 +3639,7 @@ app.whenReady().then(() => {
   }
 
   createTray();
-  registerGlobalShortcuts();
+  registerStartupGlobalShortcuts();
   setupLogParser();
   setupGameDetector();
   getCurrentSessionFromBackend().catch(() => { });

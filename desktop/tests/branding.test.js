@@ -10,6 +10,7 @@ const packageJsonPath = path.join(desktopDir, 'package.json');
 const windowsIconPath = path.join(desktopDir, 'src', 'assets', 'icon.ico');
 const desktopIconPngPath = path.join(desktopDir, 'src', 'assets', 'icon.png');
 const afterPackScriptPath = path.join(desktopDir, 'scripts', 'after-pack.js');
+const startDevScriptPath = path.join(desktopDir, 'scripts', 'start-dev.js');
 
 function parseIcoEntries(buffer) {
   assert.equal(buffer.readUInt16LE(0), 0, 'ICO reserved header must be 0');
@@ -117,13 +118,17 @@ test('desktop package exposes a packaged dev runner for taskbar icon validation'
   );
 });
 
-test('desktop development script defaults to OW-Electron so Overwolf GEP is available', () => {
+test('desktop development script prefers OW-Electron but keeps an Electron fallback', () => {
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  const script = fs.readFileSync(startDevScriptPath, 'utf8');
 
-  assert.equal(packageJson.scripts.dev, 'npm run dev:ow');
+  assert.equal(packageJson.scripts.dev, 'node scripts/start-dev.js');
   assert.equal(packageJson.scripts['dev:electron'], 'electron . --dev');
   assert.match(packageJson.scripts['dev:ow'], /^ow-electron \. --dev/);
   assert.deepEqual(packageJson.overwolf.packages, ['gep', 'overlay']);
+  assert.match(script, /dev:ow/);
+  assert.match(script, /fallback/i);
+  assert.match(script, /dev:electron/);
 });
 
 test('desktop window opens large enough to avoid default dashboard scrolling', () => {

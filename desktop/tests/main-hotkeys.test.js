@@ -259,6 +259,23 @@ test('main hotkeys roll back to existing registrations when a new shortcut canno
   ]);
 });
 
+test('startup hotkey registration warns instead of blocking the desktop window', () => {
+  const warnings = [];
+  const context = loadFunctions(mainJsPath, ['registerStartupGlobalShortcuts'], {
+    registerGlobalShortcuts() {
+      throw new Error('Unable to register global shortcut: F9');
+    },
+    console: {
+      warn(message) {
+        warnings.push(message);
+      }
+    }
+  });
+
+  assert.doesNotThrow(() => context.registerStartupGlobalShortcuts());
+  assert.deepEqual(warnings, ['[Hotkeys] Unable to register global shortcut: F9']);
+});
+
 test('saving desktop settings persists normalized hotkeys and re-registers shortcuts', () => {
   const writes = [];
   let registerGlobalShortcutsCalls = 0;

@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "npm run dev:ow",
+    "dev": "node scripts/start-dev.js",
     "dev:electron": "electron . --dev",
     "dev:ow": "ow-electron . --dev --remote-debugging-port=9222",
     "dev:packaged": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-packaged-dev.ps1 -Build",
