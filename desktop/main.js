@@ -815,6 +815,24 @@ function getNativeGameInfoGameId(version) {
   return null;
 }
 
+function getOverwolfRuntimeDiagnostics() {
+  const overwolf = app?.overwolf || null;
+  const packages = overwolf?.packages || null;
+
+  return {
+    runtime: overwolf ? 'ow-electron' : 'electron',
+    gep: packages?.gep ? 'available' : 'unavailable',
+    overlay: getOverwolfOverlayApi() ? 'available' : 'unavailable'
+  };
+}
+
+function logOverwolfRuntimeDiagnostics() {
+  const diagnostics = getOverwolfRuntimeDiagnostics();
+  console.info(
+    `[OverwolfRuntime] runtime=${diagnostics.runtime} gep=${diagnostics.gep} overlay=${diagnostics.overlay}`
+  );
+}
+
 function getNativeGameInfoProducer() {
   if (!nativeGameInfoProducer) {
     const gep = app?.overwolf?.packages?.gep || null;
@@ -3628,6 +3646,7 @@ app.whenReady().then(() => {
   setupIPC();
 
   createMainWindow();
+  logOverwolfRuntimeDiagnostics();
   initializeAppUpdater();
   mainWindow.show(); // Show the window.
   mainWindow.focus();
