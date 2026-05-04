@@ -29,13 +29,13 @@ Review-ready means:
 
 ### 1. Review Build Artifact
 
-Status: not ready.
+Status: partially ready.
 
 Required:
 
-- Produce a Windows reviewer artifact from the desktop app.
+- Produce a Windows reviewer artifact from the desktop app. Current candidate: `desktop/dist/Juice Journal Setup 1.0.0.exe`.
 - Verify the artifact on a clean-ish Windows user profile, not only through `npm run dev`.
-- Record artifact filename, app version, git SHA, build timestamp, and SHA256.
+- Record artifact filename, app version, git SHA, build timestamp, and SHA256. Current candidate SHA256: `09E2139CEBCA3B2ABA7CCBE7D6AAED37E4FDA4952C64CA39CC22C656BE232CD1`.
 - Confirm DevTools does not open automatically.
 - Confirm taskbar/window icon is correct in the review artifact.
 - Confirm app launch, close, logout, and relaunch do not leave stale windows or broken state.
@@ -45,6 +45,12 @@ Evidence to attach:
 - Build command output.
 - Artifact metadata.
 - Screenshot of the running packaged/review build.
+
+Current evidence:
+
+- `cd desktop && npm run build:win` completed on 2026-05-04.
+- `desktop/dist/win-unpacked/Juice Journal.exe` launched and stayed running for an 8 second smoke window.
+- Still missing: clean-profile install smoke, screenshot evidence, and manual taskbar icon confirmation.
 
 ### 2. Authentication And Demo Path
 

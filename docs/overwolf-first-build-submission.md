@@ -107,12 +107,17 @@ Run these before checking the form's QA checkbox:
 
 ## Build Artifact Checklist
 
-- Produce the Windows review build from `desktop`.
+- Candidate Windows review build produced from `desktop` on 2026-05-04.
+- Artifact: `desktop/dist/Juice Journal Setup 1.0.0.exe`
+- Version: `1.0.0`
+- Git SHA: `666ffbed98bdd39bc9b66009b2c1752ac0c0eeac`
+- SHA256: `09E2139CEBCA3B2ABA7CCBE7D6AAED37E4FDA4952C64CA39CC22C656BE232CD1`
+- Build command: `cd desktop && npm run build:win`
+- Packaged launch smoke: `desktop/dist/win-unpacked/Juice Journal.exe` launched on 2026-05-04 and stayed running for the 8 second smoke window.
 - Keep Product Name/Name and Author stable across versions; Overwolf's testing guidance calls out UID consistency.
 - If submitting an OW-Electron executable/installer, include exact launch instructions and note whether remote debugging is enabled only for review diagnostics.
 - If Overwolf asks for an OPK specifically, clarify whether they expect OW-Native OPK or OW-Electron installer/upload handling for this first MVP path.
-- Record the git commit SHA used for the submitted build.
-- Record the artifact filename, version, build time, and SHA256.
+- Before final submission, rerun the build from the final submission commit and update this metadata if it changes.
 
 ## Known MVP Limitations To State Clearly
 
