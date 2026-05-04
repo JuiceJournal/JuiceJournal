@@ -3,7 +3,13 @@ const {
   normalizeNativeInfoPayload
 } = require('./nativeGameInfoProducerModel');
 
-function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) {
+function createNativeGameInfoProducer({
+  gep,
+  emitHint,
+  logger = console,
+  requiredFeaturesRetryDelayMs = 1500,
+  requiredFeaturesMaxAttempts = 4
+} = {}) {
   let sessionId = 0;
   let activeSession = null;
 
@@ -23,12 +29,31 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
     return Boolean(session) && activeSession === session && session.closed !== true;
   }
 
+  function waitForRetryDelay() {
+    const delayMs = Math.max(0, Number(requiredFeaturesRetryDelayMs) || 0);
+    if (!delayMs) {
+      return Promise.resolve();
+    }
+
+    return new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+
   function clearSubscriptions(session = activeSession) {
     if (typeof gep?.removeListener !== 'function' || !session) {
       return false;
     }
 
     let success = true;
+
+    if (session.gameDetectedHandler) {
+      try {
+        gep.removeListener('game-detected', session.gameDetectedHandler);
+        session.gameDetectedHandler = null;
+      } catch (error) {
+        warnFailClosed(error);
+        success = false;
+      }
+    }
 
     if (session.infoUpdateHandler) {
       try {
@@ -51,6 +76,56 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
     }
 
     return success;
+  }
+
+  async function getSupportedRequiredFeatures(session, requiredFeatures) {
+    if (typeof gep?.getFeatures !== 'function') {
+      return requiredFeatures;
+    }
+
+    try {
+      const supportedFeatures = await gep.getFeatures(session.gameId);
+      if (!hasActiveSession(session) || !Array.isArray(supportedFeatures) || supportedFeatures.length === 0) {
+        return requiredFeatures;
+      }
+
+      const supported = new Set(supportedFeatures.map(feature => String(feature)));
+      const filtered = requiredFeatures.filter(feature => supported.has(feature));
+
+      return filtered.length > 0 ? filtered : requiredFeatures;
+    } catch (error) {
+      warnFailClosed(error);
+      return requiredFeatures;
+    }
+  }
+
+  async function setRequiredFeaturesWithRetry(session, requiredFeatures) {
+    const attempts = Math.max(1, Number(requiredFeaturesMaxAttempts) || 1);
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      if (!hasActiveSession(session)) {
+        return false;
+      }
+
+      try {
+        const supportedRequiredFeatures = await getSupportedRequiredFeatures(session, requiredFeatures);
+        if (!hasActiveSession(session)) {
+          return false;
+        }
+
+        await gep.setRequiredFeatures(session.gameId, supportedRequiredFeatures);
+        return true;
+      } catch (error) {
+        lastError = error;
+        if (attempt >= attempts) {
+          throw lastError;
+        }
+        await waitForRetryDelay();
+      }
+    }
+
+    throw lastError || new Error('Unable to set required GEP features');
   }
 
   async function emitFromInfo(session, gameId) {
@@ -133,20 +208,25 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
       gameId,
       closed: false,
       infoUpdateHandler: null,
-      gameExitHandler: null
+      gameExitHandler: null,
+      gameDetectedHandler: null
     };
     activeSession = currentSession;
 
-    try {
-      await gep.setRequiredFeatures(gameId, requiredFeatures);
-    } catch (error) {
-      return rollbackStartupSession(currentSession, error);
-    }
+    const gameDetectedHandler = async (event, detectedGameId) => {
+      if (!hasActiveSession(currentSession) || detectedGameId !== currentSession.gameId) {
+        return;
+      }
 
-    if (!hasActiveSession(currentSession)) {
-      return false;
-    }
-
+      try {
+        if (event && typeof event.enable === 'function') {
+          event.enable();
+        }
+        await emitFromInfo(currentSession, detectedGameId);
+      } catch (error) {
+        warnFailClosed(error);
+      }
+    };
     const infoUpdateHandler = async (_event, updatedGameId) => {
       if (!hasActiveSession(currentSession) || updatedGameId !== currentSession.gameId) {
         return;
@@ -175,12 +255,23 @@ function createNativeGameInfoProducer({ gep, emitHint, logger = console } = {}) 
       return false;
     }
 
+    currentSession.gameDetectedHandler = gameDetectedHandler;
     currentSession.infoUpdateHandler = infoUpdateHandler;
     currentSession.gameExitHandler = gameExitHandler;
 
     try {
+      gep.on('game-detected', gameDetectedHandler);
       gep.on('new-info-update', infoUpdateHandler);
       gep.on('game-exit', gameExitHandler);
+    } catch (error) {
+      return rollbackStartupSession(currentSession, error);
+    }
+
+    try {
+      const featuresRegistered = await setRequiredFeaturesWithRetry(currentSession, requiredFeatures);
+      if (!featuresRegistered) {
+        return false;
+      }
     } catch (error) {
       return rollbackStartupSession(currentSession, error);
     }
