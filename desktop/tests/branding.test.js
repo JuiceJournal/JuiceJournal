@@ -125,6 +125,7 @@ test('desktop development script requires OW-Electron for GEP runtime data', () 
   assert.match(packageJson.scripts['dev:ow'], /^ow-electron \. --dev/);
   assert.match(packageJson.scripts['dev:ow'], /--owepm-packages-url=https:\/\/electronapi-qa\.overwolf\.com\/packages/);
   assert.deepEqual(packageJson.overwolf.packages, ['gep', 'overlay']);
+  assert.equal(packageJson.author?.name, 'Furkan Tasci');
   assert.equal(fs.existsSync(path.join(desktopDir, 'scripts', 'start-dev.js')), false);
 });
 

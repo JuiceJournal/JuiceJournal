@@ -2982,6 +2982,99 @@ function requestMapSessionName({ defaultName, trackerContext } = {}) {
   });
 }
 
+function requestEndSessionConfirmation(session = state.currentSession) {
+  if (!elements.mapSessionModal || !elements.mapSessionForm) {
+    return Promise.resolve(true);
+  }
+
+  const title = elements.mapSessionModal.querySelector('#map-session-title');
+  const subtitle = elements.mapSessionModal.querySelector('.modal-subtitle.compact');
+  const label = elements.mapSessionModal.querySelector('.map-session-label');
+  const previous = {
+    purpose: elements.mapSessionModal.dataset.modalPurpose,
+    title: title?.textContent || '',
+    subtitle: subtitle?.textContent || '',
+    context: elements.mapSessionContext?.textContent || '',
+    defaultName: elements.mapSessionDefaultName?.textContent || '',
+    inputValue: elements.mapSessionNameInput?.value || '',
+    inputHidden: elements.mapSessionNameInput?.hidden === true,
+    labelHidden: label?.hidden === true,
+    confirmText: elements.mapSessionConfirmBtn?.textContent || '',
+    cancelText: elements.mapSessionCancelBtn?.textContent || ''
+  };
+
+  if (title) title.textContent = 'End Map Session';
+  if (subtitle) subtitle.textContent = 'Finish this run and save the completed map result.';
+  if (elements.mapSessionContext) elements.mapSessionContext.textContent = 'Active run';
+  if (elements.mapSessionDefaultName) elements.mapSessionDefaultName.textContent = session?.mapName || 'Unknown Map';
+  if (elements.mapSessionNameInput) elements.mapSessionNameInput.hidden = true;
+  if (label) label.hidden = true;
+  if (elements.mapSessionConfirmBtn) elements.mapSessionConfirmBtn.textContent = 'End Map';
+  if (elements.mapSessionCancelBtn) elements.mapSessionCancelBtn.textContent = 'Keep Tracking';
+  elements.mapSessionModal.dataset.modalPurpose = 'end-map-session';
+  elements.mapSessionModal.classList.remove('hidden');
+
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const restore = () => {
+      elements.mapSessionModal.classList.add('hidden');
+      elements.mapSessionModal.dataset.modalPurpose = previous.purpose || 'new-map-session';
+      if (title) title.textContent = previous.title;
+      if (subtitle) subtitle.textContent = previous.subtitle;
+      if (elements.mapSessionContext) elements.mapSessionContext.textContent = previous.context;
+      if (elements.mapSessionDefaultName) elements.mapSessionDefaultName.textContent = previous.defaultName;
+      if (elements.mapSessionNameInput) {
+        elements.mapSessionNameInput.hidden = previous.inputHidden;
+        elements.mapSessionNameInput.value = previous.inputValue;
+      }
+      if (label) label.hidden = previous.labelHidden;
+      if (elements.mapSessionConfirmBtn) elements.mapSessionConfirmBtn.textContent = previous.confirmText;
+      if (elements.mapSessionCancelBtn) elements.mapSessionCancelBtn.textContent = previous.cancelText;
+      elements.mapSessionForm.removeEventListener('submit', handleSubmit);
+      elements.mapSessionCancelBtn?.removeEventListener('click', handleCancel);
+      elements.mapSessionModal.removeEventListener('click', handleBackdropClick);
+      document.removeEventListener('keydown', handleKeydown);
+    };
+
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      restore();
+      resolve(value);
+    };
+
+    function handleSubmit(event) {
+      event.preventDefault();
+      settle(true);
+    }
+
+    function handleCancel() {
+      settle(false);
+    }
+
+    function handleBackdropClick(event) {
+      if (event.target === elements.mapSessionModal) {
+        settle(false);
+      }
+    }
+
+    function handleKeydown(event) {
+      if (event.key === 'Escape') {
+        settle(false);
+      }
+    }
+
+    elements.mapSessionForm.addEventListener('submit', handleSubmit);
+    elements.mapSessionCancelBtn?.addEventListener('click', handleCancel);
+    elements.mapSessionModal.addEventListener('click', handleBackdropClick);
+    document.addEventListener('keydown', handleKeydown);
+    requestAnimationFrame(() => {
+      elements.mapSessionConfirmBtn?.focus();
+    });
+  });
+}
+
 async function handleStartSession() {
   const trackerContext = getSelectedTrackerContext();
   const runtimeMapName = getRuntimeSessionMapName();
@@ -3025,7 +3118,7 @@ async function handleStartSession() {
 async function handleEndSession() {
   if (!state.currentSession) return;
 
-  if (!confirm(window.t('misc.endSessionConfirm'))) return;
+  if (!await requestEndSessionConfirmation(state.currentSession)) return;
 
   const previousSession = state.currentSession;
   const completedAt = new Date().toISOString();

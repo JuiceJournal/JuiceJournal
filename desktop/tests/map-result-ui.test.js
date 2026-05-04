@@ -180,6 +180,13 @@ test('dashboard provides a branded new map session modal instead of native promp
   assert.match(html, /data-modal-purpose="new-map-session"/);
 });
 
+test('ending a map session uses the branded modal instead of a native confirm', () => {
+  const source = extractFunctionSource(fs.readFileSync(appJsPath, 'utf8'), 'handleEndSession');
+
+  assert.match(source, /requestEndSessionConfirmation/);
+  assert.doesNotMatch(source, /confirm\(/);
+});
+
 test('renderer farm type selector populates options and reflects the active farm type', () => {
   const elements = {
     sessionFarmTypeSelect: {

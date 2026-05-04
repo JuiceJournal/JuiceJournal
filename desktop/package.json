@@ -72,7 +72,9 @@
     "poe",
     "path-of-exile"
   ],
-  "author": "",
+  "author": {
+    "name": "Furkan Tasci"
+  },
   "license": "MIT",
   "overrides": {
     "follow-redirects": "1.16.0",

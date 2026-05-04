@@ -37,6 +37,7 @@ const {
 const { appendMapResult } = require('./src/modules/mapResultStoreModel');
 const { deriveMapResultOverlayState } = require('./src/modules/mapResultOverlayModel');
 const { deriveOverlayState } = require('./src/modules/overlayStateModel');
+const { listFarmTypes } = require('./src/modules/farmTypeModel');
 const {
   DEFAULT_SCAN_HOTKEY,
   DEFAULT_STASH_SCAN_HOTKEY,
@@ -290,7 +291,10 @@ let overlayMapResultState = null;
 let overlayMapResultDismissTimer = null;
 let lastActiveCharacterHint = null;
 let nativeGameInfoProducer = null;
+let nativeGameInfoProducerGep = null;
 let nativeGameInfoProducerBinding = null;
+let overwolfPackageListenersRegistered = false;
+let overwolfPackageReadyPollTimer = null;
 let overwolfOverlayProvider = null;
 let poeAuthServer = null;
 let trayHintShown = false;
@@ -754,6 +758,15 @@ function getActiveFarmTypeId() {
   return normalizeStoredFarmTypeId(store.get('activeFarmTypeId'));
 }
 
+function resolveFarmTypeLabel(farmTypeId) {
+  const normalized = normalizeStoredFarmTypeId(farmTypeId);
+  if (!normalized) {
+    return null;
+  }
+
+  return listFarmTypes().find((farmType) => farmType.id === normalized)?.label || normalized;
+}
+
 function setActiveFarmTypeId(farmTypeId) {
   const normalized = normalizeStoredFarmTypeId(farmTypeId);
   store.set('activeFarmTypeId', normalized);
@@ -834,16 +847,129 @@ function logOverwolfRuntimeDiagnostics() {
 }
 
 function getNativeGameInfoProducer() {
-  if (!nativeGameInfoProducer) {
-    const gep = app?.overwolf?.packages?.gep || null;
+  const gep = app?.overwolf?.packages?.gep || null;
+  if (!gep) {
+    return null;
+  }
+
+  if (!nativeGameInfoProducer || nativeGameInfoProducerGep !== gep) {
     nativeGameInfoProducer = createNativeGameInfoProducer({
       gep,
       emitHint: emitActiveCharacterHint,
       logger: console
     });
+    nativeGameInfoProducerGep = gep;
   }
 
   return nativeGameInfoProducer;
+}
+
+function resyncNativeGameInfoProducerForDetectedGame() {
+  const detectedVersion = normalizePoeVersion(gameDetector ? gameDetector.getDetectedGame() : null)
+    || normalizePoeVersion(store.get('lastDetectedPoeVersion'));
+  const gameId = getNativeGameInfoGameId(detectedVersion);
+
+  if (!detectedVersion || !gameId) {
+    return Promise.resolve(false);
+  }
+
+  return syncNativeGameInfoProducer({
+    detectedVersion,
+    gameId
+  });
+}
+
+function clearOverwolfPackageReadyPoll() {
+  if (!overwolfPackageReadyPollTimer) {
+    return false;
+  }
+
+  clearInterval(overwolfPackageReadyPollTimer);
+  overwolfPackageReadyPollTimer = null;
+  return true;
+}
+
+function handleOverwolfPackageReady(_event, packageName, version) {
+  console.info(`[OverwolfRuntime] package ready ${packageName}${version ? `@${version}` : ''}`);
+
+  if (packageName === 'overlay') {
+    updateOverlayWindow();
+    return;
+  }
+
+  if (packageName !== 'gep') {
+    return;
+  }
+
+  clearOverwolfPackageReadyPoll();
+  nativeGameInfoProducer = null;
+  nativeGameInfoProducerGep = null;
+  nativeGameInfoProducerBinding = null;
+
+  return resyncNativeGameInfoProducerForDetectedGame().catch((error) => {
+    console.warn('[NativeGameInfoProducer] Failed to resync after GEP became ready', error);
+    return false;
+  });
+}
+
+function probeOverwolfGepPackageAvailability(version = 'available') {
+  const gep = app?.overwolf?.packages?.gep || null;
+  if (!gep) {
+    return false;
+  }
+
+  if (nativeGameInfoProducerGep === gep) {
+    clearOverwolfPackageReadyPoll();
+    return true;
+  }
+
+  return handleOverwolfPackageReady(null, 'gep', version);
+}
+
+function startOverwolfPackageReadyPoll() {
+  const packages = app?.overwolf?.packages || null;
+  if (!packages || overwolfPackageReadyPollTimer) {
+    return false;
+  }
+
+  overwolfPackageReadyPollTimer = setInterval(() => {
+    const result = probeOverwolfGepPackageAvailability('polled');
+    if (result && typeof result.catch === 'function') {
+      result.catch((error) => {
+        console.warn('[OverwolfRuntime] Failed while polling for GEP package readiness', error);
+      });
+    }
+  }, 1000);
+
+  if (typeof overwolfPackageReadyPollTimer.unref === 'function') {
+    overwolfPackageReadyPollTimer.unref();
+  }
+
+  return true;
+}
+
+function registerOverwolfPackageListeners() {
+  const packages = app?.overwolf?.packages || null;
+  if (!packages || typeof packages.on !== 'function' || overwolfPackageListenersRegistered) {
+    return false;
+  }
+
+  overwolfPackageListenersRegistered = true;
+
+  packages.on('ready', handleOverwolfPackageReady);
+  packages.on('failed-to-initialize', (_event, packageName) => {
+    console.warn(`[OverwolfRuntime] package failed to initialize ${packageName}`);
+  });
+  packages.on('crashed', (_event, canRecover) => {
+    console.warn(`[OverwolfRuntime] package manager crashed recoverable=${Boolean(canRecover)}`);
+  });
+
+  const gepReady = probeOverwolfGepPackageAvailability('available');
+  if (!gepReady) {
+    startOverwolfPackageReadyPoll();
+  }
+
+  return true;
 }
 
 function getOverwolfOverlayApi() {
@@ -905,6 +1031,7 @@ function stopNativeGameInfoProducer() {
   clearNativeActiveCharacterHint();
 
   if (!nativeGameInfoProducer || typeof nativeGameInfoProducer.stop !== 'function') {
+    nativeGameInfoProducerGep = null;
     return Promise.resolve(false);
   }
 
@@ -912,9 +1039,12 @@ function stopNativeGameInfoProducer() {
     return Promise.resolve(nativeGameInfoProducer.stop()).catch((error) => {
       console.warn('[NativeGameInfoProducer] Failed to stop producer', error);
       return false;
+    }).finally(() => {
+      nativeGameInfoProducerGep = null;
     });
   } catch (error) {
     console.warn('[NativeGameInfoProducer] Failed to stop producer', error);
+    nativeGameInfoProducerGep = null;
     return Promise.resolve(false);
   }
 }
@@ -2064,6 +2194,18 @@ function dismissMapResultOverlay() {
   return updateOverlayWindow();
 }
 
+function getActiveSessionOverlayState(session = currentSession) {
+  if (!session || typeof session !== 'object') {
+    return null;
+  }
+
+  return {
+    ...session,
+    farmType: resolveFarmTypeLabel(session.farmTypeId || session.mapType),
+    farmTypeLabel: resolveFarmTypeLabel(session.farmTypeId || session.mapType)
+  };
+}
+
 function buildOverlayState({ character = overlayCharacterState, runtimeSession = overlayRuntimeState } = {}) {
   const mapResultState = deriveMapResultOverlayState({
     overlayEnabled: isOverlayEnabled(),
@@ -2087,7 +2229,9 @@ function buildOverlayState({ character = overlayCharacterState, runtimeSession =
   return deriveOverlayState({
     enabled: isOverlayEnabled(),
     character,
-    runtime: runtimeSession
+    runtime: runtimeSession,
+    session: getActiveSessionOverlayState(),
+    now: Date.now()
   });
 }
 
@@ -2433,6 +2577,9 @@ async function startNewSession(input = {}) {
     }
 
     currentSession = session;
+    if (typeof updateOverlayWindow === 'function') {
+      updateOverlayWindow();
+    }
 
     // Bildirim goster
     showNotification(t('notificationMapStarted'), t('mapStartedBody', { mapName }));
@@ -2516,6 +2663,9 @@ async function endCurrentSession() {
     }
 
     currentSession = null;
+    if (typeof updateOverlayWindow === 'function') {
+      updateOverlayWindow();
+    }
 
     return queued ? { ...session, queued: true } : session;
   } catch (error) {
@@ -2639,7 +2789,11 @@ function setupLogParser() {
     }
   }
 
-  logParser = new LogParser(poePath);
+  logParser = new LogParser(poePath, {
+    poeVersion: normalizePoeVersion(store.get('lastDetectedPoeVersion'))
+      || normalizePoeVersion(store.get('poeVersion'))
+      || 'poe1'
+  });
 
   logParser.on('mapEntered', (data) => {
     handleMapEntered(data).catch(() => {
@@ -3647,6 +3801,7 @@ app.whenReady().then(() => {
 
   createMainWindow();
   logOverwolfRuntimeDiagnostics();
+  registerOverwolfPackageListeners();
   initializeAppUpdater();
   mainWindow.show(); // Show the window.
   mainWindow.focus();

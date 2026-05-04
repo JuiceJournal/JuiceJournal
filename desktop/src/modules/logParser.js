@@ -13,11 +13,29 @@ const fsp = require('fs/promises');
 const path = require('path');
 const { EventEmitter } = require('events');
 
+const SAFE_AREA_NAMES = new Set([
+  'hideout',
+  'town',
+  'tavern',
+  "lioneye's watch",
+  'forest encampment',
+  'the sarn encampment',
+  'highgate',
+  "overseer's tower",
+  "lilly's hideout",
+  'kingsmarch',
+  'canal hideout',
+  'ziggurat refuge',
+  'the ziggurat refuge',
+  'clearfell encampment'
+]);
+
 class LogParser extends EventEmitter {
-  constructor(logPath) {
+  constructor(logPath, options = {}) {
     super();
     
     this.logPath = logPath;
+    this.poeVersion = options.poeVersion || null;
     this.tail = null;
     this.isRunning = false;
     this.lastPosition = 0;
@@ -142,8 +160,10 @@ class LogParser extends EventEmitter {
         regex: /You have entered ([^\.]+)\./i,
         handler: (match) => {
           const areaName = match[1].trim();
-          // Only match map areas.
-          if (areaName.toLowerCase().includes('map')) {
+          const normalizedAreaName = areaName.toLowerCase();
+          const isSafeArea = SAFE_AREA_NAMES.has(normalizedAreaName);
+          // PoE2 endgame areas such as "Tower" do not consistently include "Map" in Client.txt.
+          if (!isSafeArea && (this.poeVersion === 'poe2' || normalizedAreaName.includes('map'))) {
             return {
               type: 'map_entered',
               mapName: areaName,

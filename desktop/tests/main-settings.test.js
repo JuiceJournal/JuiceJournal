@@ -933,23 +933,14 @@ test('runtime game detection stops the native game info producer when the detect
 
 test('runtime game detection fails closed when the native gep package is unavailable', async () => {
   const starts = [];
-  const actualCreateNativeGameInfoProducer = require('../src/modules/nativeGameInfoProducer').createNativeGameInfoProducer;
   const context = loadMainWithMocks({
     app: {
       overwolf: {
         packages: {}
       }
     },
-    createNativeGameInfoProducer(options) {
-      const producer = actualCreateNativeGameInfoProducer(options);
-
-      return {
-        start: async (payload) => {
-          starts.push(payload);
-          return producer.start(payload);
-        },
-        stop: async () => producer.stop()
-      };
+    createNativeGameInfoProducer() {
+      assert.fail('producer should not be constructed before the GEP package is ready');
     }
   });
 
@@ -958,10 +949,7 @@ test('runtime game detection fails closed when the native gep package is unavail
     gameId: 24886
   });
 
-  assert.deepEqual(JSON.parse(JSON.stringify(starts)), [{
-    poeVersion: 'poe2',
-    gameId: 24886
-  }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(starts)), []);
   assert.deepEqual(context.emittedActiveCharacterHints, []);
   assert.equal(context.lastActiveCharacterHint, null);
   assert.equal(context.nativeGameInfoProducerBinding, null);
@@ -974,6 +962,78 @@ test('runtime game detection fails closed when the native gep package is unavail
       logPath: null
     }
   }]);
+});
+
+test('overwolf package ready event retries native character producer binding', async () => {
+  const starts = [];
+  const capturedProducerOptions = [];
+  const gep = { name: 'ready-gep' };
+  const context = loadFunctions([
+    'normalizePoeVersion',
+    'emitActiveCharacterHint',
+    'getNativeGameInfoGameId',
+    'getNativeGameInfoProducer',
+    'stopNativeGameInfoProducer',
+    'syncNativeGameInfoProducer',
+    'resyncNativeGameInfoProducerForDetectedGame',
+    'clearOverwolfPackageReadyPoll',
+    'handleOverwolfPackageReady'
+  ], {
+    app: {
+      overwolf: {
+        packages: {
+          gep
+        }
+      }
+    },
+    gameDetector: {
+      getDetectedGame() {
+        return 'poe2';
+      }
+    },
+    store: {
+      get() {
+        return null;
+      }
+    },
+    createNativeGameInfoProducer(options) {
+      capturedProducerOptions.push(options);
+      return {
+        start: async (payload) => {
+          starts.push(payload);
+          return true;
+        },
+        stop: async () => true
+      };
+    },
+    nativeGameInfoProducer: {
+      stop: async () => true
+    },
+    nativeGameInfoProducerGep: null,
+    nativeGameInfoProducerBinding: {
+      detectedVersion: 'poe2',
+      gameId: 24886
+    },
+    overwolfPackageReadyPollTimer: null,
+    mainWindow: null,
+    console: {
+      info() {},
+      warn() {}
+    }
+  });
+
+  await context.handleOverwolfPackageReady(null, 'gep', '304.0.0');
+
+  assert.equal(capturedProducerOptions.length, 1);
+  assert.equal(capturedProducerOptions[0].gep, gep);
+  assert.deepEqual(JSON.parse(JSON.stringify(starts)), [{
+    poeVersion: 'poe2',
+    gameId: 24886
+  }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.nativeGameInfoProducerBinding)), {
+    detectedVersion: 'poe2',
+    gameId: 24886
+  });
 });
 
 test('main runtime log events attach normalized runtime session state to existing map IPC payloads', () => {

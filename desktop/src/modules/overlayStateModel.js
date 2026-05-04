@@ -18,6 +18,21 @@
     return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 0;
   }
 
+  function formatDuration(seconds) {
+    const normalized = normalizeSeconds(seconds);
+    if (!normalized) {
+      return '0s';
+    }
+
+    const minutes = Math.floor(normalized / 60);
+    const remainingSeconds = normalized % 60;
+    if (!minutes) {
+      return `${remainingSeconds}s`;
+    }
+
+    return `${minutes}m ${String(remainingSeconds).padStart(2, '0')}s`;
+  }
+
   function getCharacterSummary(character) {
     if (!character || typeof character !== 'object') {
       return null;
@@ -42,6 +57,35 @@
       name,
       league,
       className: normalizeString(source.className ?? source.class)
+    };
+  }
+
+  function getActiveSessionSummary(session, now = Date.now()) {
+    if (!session || typeof session !== 'object') {
+      return null;
+    }
+
+    const status = normalizeString(session.status, 'active');
+    if (status !== 'active' && status !== 'queued' && status !== 'running') {
+      return null;
+    }
+
+    const mapName = normalizeString(session.mapName ?? session.map_name, 'Unknown Map');
+    const farmType = normalizeString(session.farmType ?? session.farmTypeLabel ?? session.mapTypeLabel);
+    const league = normalizeString(session.league);
+    const poeVersion = normalizeString(session.poeVersion ?? session.gameVersion);
+    const startedAt = normalizeString(session.startedAt ?? session.started_at);
+    const startedMs = startedAt ? Date.parse(startedAt) : NaN;
+    const elapsedSeconds = normalizeSeconds(session.elapsedSeconds ?? (
+      Number.isFinite(startedMs) ? (now - startedMs) / 1000 : 0
+    ));
+
+    return {
+      mapName,
+      farmType,
+      league,
+      poeVersion,
+      elapsedSeconds
     };
   }
 
@@ -97,13 +141,29 @@
     ].filter(Boolean).join(SEPARATOR) || 'Character sync needed';
   }
 
-  function deriveOverlayState({ enabled = false, character, runtime } = {}) {
-    if (enabled !== true) {
+  function deriveOverlayState({ enabled = false, character, runtime, session, now = Date.now() } = {}) {
+    const sessionSummary = getActiveSessionSummary(session, now);
+    if (enabled !== true && !sessionSummary) {
       return {
         visibility: 'hidden',
         primaryLine: '',
         secondaryLine: '',
         metaLine: ''
+      };
+    }
+
+    if (sessionSummary) {
+      const contextLine = [
+        sessionSummary.farmType || 'No farm type',
+        sessionSummary.poeVersion ? sessionSummary.poeVersion.replace(/^poe/i, 'PoE ') : null,
+        sessionSummary.league
+      ].filter(Boolean).join(SEPARATOR);
+
+      return {
+        visibility: 'visible',
+        primaryLine: sessionSummary.mapName,
+        secondaryLine: contextLine || 'Active map session',
+        metaLine: `elapsed ${formatDuration(sessionSummary.elapsedSeconds)}`
       };
     }
 

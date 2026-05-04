@@ -340,7 +340,7 @@ test('ending a map session persists a zero-profit completed map result', async (
     'handleEndSession'
   ], {
     state,
-    confirm: () => true,
+    requestEndSessionConfirmation: async () => true,
     window: {
       t: (key) => key,
       electronAPI: {

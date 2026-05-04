@@ -92,6 +92,28 @@ test('overlay state model falls back to waiting state when runtime data is missi
   assert.equal(state.secondaryLine, 'Waiting for runtime session');
 });
 
+test('overlay state model shows active map session details even without GEP runtime data', () => {
+  const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
+
+  const state = deriveOverlayState({
+    enabled: false,
+    now: Date.parse('2026-05-04T12:03:10.000Z'),
+    session: {
+      status: 'active',
+      mapName: 'Tower',
+      farmType: 'Expedition',
+      poeVersion: 'poe2',
+      league: 'Standard',
+      startedAt: '2026-05-04T12:02:00.000Z'
+    }
+  });
+
+  assert.equal(state.visibility, 'visible');
+  assert.equal(state.primaryLine, 'Tower');
+  assert.equal(state.secondaryLine, 'Expedition \u00b7 PoE 2 \u00b7 Standard');
+  assert.equal(state.metaLine, 'elapsed 1m 10s');
+});
+
 test('overlay state model returns hidden state when overlay is disabled or omitted', () => {
   const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
 
