@@ -8,12 +8,53 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createNativeGameInfoProducerModel() {
   const POE2_REQUIRED_FEATURES = ['gep_internal', 'me', 'match_info'];
 
+  function stripWrappingQuotes(value) {
+    let normalized = value.trim();
+    const quotePairs = [
+      ['"', '"'],
+      ['\'', '\''],
+      ['“', '”'],
+      ['‘', '’']
+    ];
+    let stripped = true;
+
+    while (stripped && normalized.length >= 2) {
+      stripped = false;
+
+      for (const [openQuote, closeQuote] of quotePairs) {
+        if (normalized.startsWith(openQuote) && normalized.endsWith(closeQuote)) {
+          normalized = normalized.slice(1, -1).trim();
+          stripped = true;
+          break;
+        }
+      }
+    }
+
+    return normalized;
+  }
+
   function normalizeString(value) {
     if (typeof value !== 'string') {
       return '';
     }
 
-    return value.trim();
+    return stripWrappingQuotes(value);
+  }
+
+  function getInfoBucket(info, bucketName) {
+    if (!info || typeof info !== 'object') {
+      return null;
+    }
+
+    if (info[bucketName] && typeof info[bucketName] === 'object') {
+      return info[bucketName];
+    }
+
+    if (info.info && typeof info.info === 'object' && info.info[bucketName] && typeof info.info[bucketName] === 'object') {
+      return info.info[bucketName];
+    }
+
+    return null;
   }
 
   function normalizeNumber(value) {
@@ -53,7 +94,7 @@
 
   function normalizeNativeInfoPayload({ poeVersion, info } = {}) {
     const normalizedPoeVersion = normalizePoeVersion(poeVersion);
-    const me = info && typeof info === 'object' ? info.me : null;
+    const me = getInfoBucket(info, 'me');
     const characterName = normalizeString(me?.character_name);
     const className = normalizeString(
       me?.character_class
@@ -63,9 +104,19 @@
     );
     const ascendancy = normalizeString(
       me?.character_ascendancy
+      || me?.character_ascendancy_name
       || me?.characterAscendancy
       || me?.ascendancy_class
+      || me?.ascendancy_name
       || me?.ascendancy
+      || me?.sub_class
+      || me?.subClass
+    );
+    const league = normalizeString(
+      me?.character_league
+      || me?.characterLeague
+      || me?.league_name
+      || me?.league
     );
 
     if (!normalizedPoeVersion || !characterName) {
@@ -87,6 +138,10 @@
 
     if (ascendancy) {
       hint.ascendancy = ascendancy;
+    }
+
+    if (league) {
+      hint.league = league;
     }
 
     return hint;

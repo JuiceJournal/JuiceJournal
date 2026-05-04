@@ -6,12 +6,37 @@
 
   root.nativeCharacterHintModel = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createNativeCharacterHintModel() {
+  function stripWrappingQuotes(value) {
+    let normalized = value.trim();
+    const quotePairs = [
+      ['"', '"'],
+      ['\'', '\''],
+      ['“', '”'],
+      ['‘', '’']
+    ];
+    let stripped = true;
+
+    while (stripped && normalized.length >= 2) {
+      stripped = false;
+
+      for (const [openQuote, closeQuote] of quotePairs) {
+        if (normalized.startsWith(openQuote) && normalized.endsWith(closeQuote)) {
+          normalized = normalized.slice(1, -1).trim();
+          stripped = true;
+          break;
+        }
+      }
+    }
+
+    return normalized;
+  }
+
   function normalizeString(value, fallback = null) {
     if (typeof value !== 'string') {
       return fallback;
     }
 
-    const normalized = value.trim();
+    const normalized = stripWrappingQuotes(value);
     return normalized || fallback;
   }
 
@@ -29,7 +54,7 @@
     const characterName = normalizeString(payload.characterName || payload.name);
     const className = normalizeString(payload.className || payload.class);
     const ascendancy = normalizeString(payload.ascendancy || payload.ascendancyClass);
-    const league = normalizeString(payload.league);
+    const league = normalizeString(payload.league || payload.characterLeague || payload.character_league);
 
     if (!poeVersion || (!characterName && !className && !league)) {
       return null;

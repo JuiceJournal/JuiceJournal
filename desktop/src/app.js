@@ -1153,13 +1153,37 @@ function applyNativeCharacterHint(nativeHint) {
   }
 
   const account = state.account;
+  const stripWrappingQuotes = (value) => {
+    let normalized = typeof value === 'string' ? value.trim() : '';
+    const quotePairs = [
+      ['"', '"'],
+      ['\'', '\''],
+      ['“', '”'],
+      ['‘', '’']
+    ];
+    let stripped = true;
+
+    while (stripped && normalized.length >= 2) {
+      stripped = false;
+
+      for (const [openQuote, closeQuote] of quotePairs) {
+        if (normalized.startsWith(openQuote) && normalized.endsWith(closeQuote)) {
+          normalized = normalized.slice(1, -1).trim();
+          stripped = true;
+          break;
+        }
+      }
+    }
+
+    return normalized;
+  };
   const normalizeText = (value) => (
     typeof value === 'string'
-      ? value.trim().toLowerCase()
+      ? stripWrappingQuotes(value).toLowerCase()
       : ''
   );
   const normalizeDisplayText = (value) => {
-    const normalized = typeof value === 'string' ? value.trim() : '';
+    const normalized = stripWrappingQuotes(value);
     return normalized || null;
   };
   const normalizeNumber = (value) => {

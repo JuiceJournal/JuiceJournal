@@ -41,6 +41,27 @@ test('native character hint model normalizes fallback fields into a medium-confi
   });
 });
 
+test('native character hint model strips wrapping quotes from identity fields', () => {
+  const { deriveNativeCharacterHint } = require('../src/modules/nativeCharacterHintModel');
+
+  const result = deriveNativeCharacterHint({
+    source: 'native-game-info',
+    poeVersion: 'poe2',
+    characterName: '"KocaAyVeMasha"',
+    className: '"Druid"',
+    characterLeague: '"Fate of the Vaal"'
+  });
+
+  assert.deepEqual(result, {
+    source: 'native-game-info',
+    poeVersion: 'poe2',
+    characterName: 'KocaAyVeMasha',
+    className: 'Druid',
+    league: 'Fate of the Vaal',
+    confidence: 'high'
+  });
+});
+
 test('native character hint model rejects empty payloads', () => {
   const { deriveNativeCharacterHint } = require('../src/modules/nativeCharacterHintModel');
 

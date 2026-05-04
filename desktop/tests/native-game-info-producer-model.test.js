@@ -99,6 +99,35 @@ test('normalizeNativeInfoPayload carries class and ascendancy fields when GEP pr
   });
 });
 
+test('normalizeNativeInfoPayload strips wrapping quotes and reads nested league fields', () => {
+  const normalizeNativeInfoPayload = getNativeGameInfoProducerModelExport('normalizeNativeInfoPayload');
+
+  const hint = normalizeNativeInfoPayload({
+    poeVersion: 'poe2',
+    info: {
+      info: {
+        me: {
+          character_name: '"KocaAyVeMasha"',
+          character_class: 'Druid',
+          character_level: '96',
+          character_league: 'Fate of the Vaal'
+        }
+      }
+    }
+  });
+
+  assert.deepEqual(hint, {
+    source: 'native-info',
+    poeVersion: 'poe2',
+    characterName: 'KocaAyVeMasha',
+    className: 'Druid',
+    league: 'Fate of the Vaal',
+    level: 96,
+    experience: null,
+    confidence: 'high'
+  });
+});
+
 test('normalizeNativeInfoPayload returns null without character_name', () => {
   const normalizeNativeInfoPayload = getNativeGameInfoProducerModelExport('normalizeNativeInfoPayload');
 

@@ -241,6 +241,50 @@ test('renderer marks a high-confidence native hint as the active-character refre
   assert.equal(clearedRefreshes, 1);
 });
 
+test('renderer matches quoted native character names to account characters before falling back', () => {
+  const context = loadFunctions(['applyNativeCharacterHint'], {
+    state: {
+      detectedGameVersion: 'poe2',
+      account: {
+        activePoeVersion: 'poe2',
+        charactersByGame: {
+          poe2: [
+            {
+              id: 'char-koca',
+              name: 'KocaAyVeMasha',
+              level: 96,
+              className: 'Druid',
+              ascendancy: 'Shaman',
+              league: 'Fate of the Vaal',
+              poeVersion: 'poe2'
+            }
+          ]
+        },
+        summary: { status: 'ready', name: 'OldCharacter' }
+      }
+    },
+    renderCharacterSummaryCard() {},
+    refreshRendererOverlayState() {}
+  });
+
+  const result = context.applyNativeCharacterHint({
+    source: 'native-game-info',
+    poeVersion: 'poe2',
+    characterName: '"KocaAyVeMasha"',
+    className: 'Druid',
+    level: 96,
+    confidence: 'high'
+  });
+
+  assert.equal(result, true);
+  assert.equal(context.state.account.selectedCharacter.id, 'char-koca');
+  assert.equal(context.state.account.summary.name, 'KocaAyVeMasha');
+  assert.equal(context.state.account.summary.league, 'Fate of the Vaal');
+  assert.equal(context.state.account.summary.className, 'Druid');
+  assert.equal(context.state.account.summary.ascendancy, 'Shaman');
+  assert.equal(context.state.account.charactersByGame.poe2.length, 1);
+});
+
 test('renderer applies an unmatched native character as the active runtime character', () => {
   let renderCalls = 0;
   const context = loadFunctions(['applyNativeCharacterHint'], {
