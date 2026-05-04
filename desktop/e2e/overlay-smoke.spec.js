@@ -573,9 +573,10 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
       topOutputs: [{ label: 'Ancient Orb', valueDelta: 35 }],
       createdAt: new Date().toISOString()
     }, {
-      durationMs: 200
+      durationMs: 1500
     });
 
+    await expect(overlayWindow.locator('[data-overlay-pin]')).toBeVisible();
     await overlayWindow.locator('[data-overlay-pin]').click();
     await expect(overlayWindow.locator('[data-overlay-pin]')).toHaveAttribute('aria-pressed', 'true');
     await page.waitForTimeout(350);

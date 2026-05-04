@@ -147,7 +147,7 @@ Evidence to attach:
 
 ### 7. Overwolf Runtime, GEP, And Overlay
 
-Status: not submission-blocking if clearly scoped, but must be truthful.
+Status: partially ready; automated smoke passes, live runtime evidence still required.
 
 Required:
 
@@ -163,6 +163,12 @@ Evidence to attach:
 - PoE 1 detection screenshot/log.
 - PoE 2 detection screenshot/log.
 - Overlay screenshot only if it works in the review environment.
+
+Current evidence:
+
+- `cd desktop && npm run test:smoke` passed on 2026-05-04 for Settings and overlay smoke coverage.
+- Overlay smoke covers runtime preview, post-map result overlay, pin behavior, and dismiss behavior in the desktop harness.
+- Still missing: live Overwolf runtime/GEP screenshots/logs with actual PoE 1 and PoE 2 processes.
 
 ### 8. Compliance And Safety
 
