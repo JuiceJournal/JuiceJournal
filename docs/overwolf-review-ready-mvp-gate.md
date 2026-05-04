@@ -103,7 +103,7 @@ Evidence to attach:
 
 ### 4. Session Tracking
 
-Status: needs full reviewer smoke.
+Status: partially ready; history smoke passes, full packaged start/end smoke still required.
 
 Required:
 
@@ -118,6 +118,12 @@ Evidence to attach:
 
 - Session page screenshot with completed entry.
 - App restart check showing the same completed result.
+
+Current evidence:
+
+- `cd desktop && npx playwright test e2e/map-result-history-smoke.spec.js` passed on 2026-05-04.
+- The smoke covers persisted map results, newest-first ordering, and farm-type filtering.
+- Still missing: packaged-build manual Dashboard `Start New Map -> End Map -> Last Map Result -> Sessions -> restart` smoke.
 
 ### 5. Currency Data
 
