@@ -146,14 +146,21 @@ class LogParser extends EventEmitter {
     const mapEnterPatterns = [
       // Generating level X area "Map..."
       {
-        regex: /Generating level (\d+) area "Map([^"]+)"/i,
-        handler: (match) => ({
-          type: 'map_entered',
-          mapName: this.formatMapName(match[2]),
-          mapTier: parseInt(match[1]),
-          timestamp: this.extractTimestamp(line),
-          raw: line
-        })
+        regex: /Generating level (\d+) area "([^"]+)"/i,
+        handler: (match) => {
+          const areaId = match[2].trim();
+          if (!/^Map/i.test(areaId)) {
+            return null;
+          }
+
+          return {
+            type: 'map_entered',
+            mapName: this.formatMapName(areaId),
+            mapTier: parseInt(match[1]),
+            timestamp: this.extractTimestamp(line),
+            raw: line
+          };
+        }
       },
       // Entering area Map...
       {
@@ -183,6 +190,23 @@ class LogParser extends EventEmitter {
     
     const mapExitPatterns = [
       {
+        regex: /Generating level \d+ area "([^"]+)"/i,
+        handler: (match) => {
+          const areaName = this.formatAreaName(match[1]);
+          if (!SAFE_AREA_NAMES.has(areaName.toLowerCase())) {
+            return null;
+          }
+
+          return {
+            type: 'map_exited',
+            location: areaName,
+            timestamp: this.extractTimestamp(line),
+            duration: this.mapStartTime ? Date.now() - this.mapStartTime : null,
+            raw: line
+          };
+        }
+      },
+      {
         regex: /You have entered (Hideout|Town|Tavern|Lioneye's Watch|Forest Encampment|The Sarn Encampment|Highgate|Overseer's Tower|Lilly's Hideout|Kingsmarch)\./i,
         handler: (match) => ({
           type: 'map_exited',
@@ -195,6 +219,10 @@ class LogParser extends EventEmitter {
       {
         regex: /Connecting to instance server/i,
         handler: (match) => {
+          if (this.poeVersion === 'poe2') {
+            return null;
+          }
+
           // Leaving a map and connecting to a new instance.
           if (this.currentMap) {
             return {
@@ -275,16 +303,34 @@ class LogParser extends EventEmitter {
    * Format the map name
    */
   formatMapName(rawName) {
-    // "Dunes" -> "Dunes Map"
-    // "MapDunes" -> "Dunes Map"
-    let name = rawName.replace(/^Map/, '');
-    name = name.replace(/([A-Z])/g, ' $1').trim(); // Split CamelCase.
+    const name = this.formatAreaName(rawName);
+
+    if (this.poeVersion === 'poe2') {
+      return name;
+    }
     
     if (!name.toLowerCase().endsWith('map')) {
-      name += ' Map';
+      return `${name} Map`;
     }
 
     return name;
+  }
+
+  /**
+   * Format internal area ids from Client.txt into player-facing names.
+   */
+  formatAreaName(rawName) {
+    let name = String(rawName || '').trim().replace(/^Map/i, '');
+
+    if (/^Hideout[A-Z]/.test(name)) {
+      name = `${name.replace(/^Hideout/, '')} Hideout`;
+    }
+
+    return name
+      .replace(/_/g, ' ')
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   /**

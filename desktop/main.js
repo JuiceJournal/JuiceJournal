@@ -2841,18 +2841,18 @@ function setupLogParser() {
 function setupGameDetector() {
   gameDetector = new GameDetector();
 
-  gameDetector.on('gameLaunched', ({ version }) => {
+  gameDetector.on('gameLaunched', ({ version, processes }) => {
     const gameLabel = version === 'poe2' ? 'Path of Exile 2' : 'Path of Exile';
     console.log(`[GameDetector] ${gameLabel} launched`);
-    applyGameVersion(version);
+    applyGameVersion(version, { processes });
     showNotification(t('notificationInfo'), t('gameDetected', { game: gameLabel }));
   });
 
-  gameDetector.on('gameSwitched', ({ from, to }) => {
+  gameDetector.on('gameSwitched', ({ from, to, processes }) => {
     const fromLabel = from === 'poe2' ? 'PoE 2' : 'PoE 1';
     const toLabel = to === 'poe2' ? 'PoE 2' : 'PoE 1';
     console.log(`[GameDetector] Switched from ${fromLabel} to ${toLabel}`);
-    applyGameVersion(to);
+    applyGameVersion(to, { processes });
     showNotification(t('notificationInfo'), t('gameSwitched', { from: fromLabel, to: toLabel }));
   });
 
@@ -2884,7 +2884,7 @@ function handleGameClosed(version, at = new Date()) {
 /**
  * Apply detected game version — update store, price service, log parser, and notify renderer
  */
-function applyGameVersion(version) {
+function applyGameVersion(version, options = {}) {
   const previousDetectedVersion = store.get('lastDetectedPoeVersion');
   const selectedSettingsVersion = store.get('poeVersion');
   store.set('lastDetectedPoeVersion', version);
@@ -2897,7 +2897,9 @@ function applyGameVersion(version) {
   let detectedLogPath = null;
 
   // Always re-check the runtime Client.txt path so same-version launches can refresh tracking.
-  detectedLogPath = GameDetector.findLogPath(version);
+  detectedLogPath = GameDetector.findLogPath(version, {
+    processes: Array.isArray(options.processes) ? options.processes : []
+  });
 
   if (shouldRetargetPriceService) {
     // Runtime services should follow the detected game without changing the user's saved selection.
