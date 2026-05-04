@@ -1797,28 +1797,6 @@ async function openPoeLoginFlow(startResponse, { redirectUrl, redirectUri, expec
   });
 }
 
-function openAuthUrlInBrowser(authUrl) {
-  if (!isAllowedExternalAuthUrl(authUrl)) {
-    throw new Error('Invalid external auth URL');
-  }
-
-  return shell.openExternal(authUrl).catch((error) => {
-    if (process.platform !== 'win32') {
-      throw error;
-    }
-
-    return new Promise((resolve, reject) => {
-      execFile('cmd', ['/c', 'start', '', authUrl], (fallbackError) => {
-        if (fallbackError) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
-    });
-  });
-}
-
 function isAllowedExternalAuthUrl(authUrl) {
   try {
     const parsed = new URL(authUrl);
@@ -1835,6 +1813,47 @@ function isAllowedExternalAuthUrl(authUrl) {
   } catch {
     return false;
   }
+}
+
+function openUrlWithWindowsFallback(authUrl, originalError) {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'powershell',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        'Start-Process -FilePath $args[0]',
+        authUrl
+      ],
+      {
+        windowsHide: true
+      },
+      (fallbackError) => {
+        if (fallbackError) {
+          reject(originalError);
+          return;
+        }
+        resolve();
+      }
+    );
+  });
+}
+
+function openAuthUrlInBrowser(authUrl) {
+  if (!isAllowedExternalAuthUrl(authUrl)) {
+    throw new Error('Invalid external auth URL');
+  }
+
+  return shell.openExternal(authUrl).catch((error) => {
+    if (process.platform !== 'win32') {
+      throw error;
+    }
+
+    return openUrlWithWindowsFallback(authUrl, error);
+  });
 }
 
 async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expectedState, codeVerifier }) {
@@ -1987,7 +2006,9 @@ function createMainWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false
     },
     icon: createWindowIcon(),
     title: APP_NAME
@@ -2061,7 +2082,9 @@ function createOverlayWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false
     },
     title: `${APP_NAME} Overlay`
   });

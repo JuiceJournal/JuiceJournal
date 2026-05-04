@@ -334,7 +334,7 @@ test('main overlay window guard skips creation when disabled and creates when en
 
 test('openAuthUrlInBrowser uses shell.openExternal when it succeeds', async () => {
   const calls = [];
-  const context = loadFunctions(['isAllowedExternalAuthUrl', 'openAuthUrlInBrowser'], {
+  const context = loadFunctions(['isAllowedExternalAuthUrl', 'openUrlWithWindowsFallback', 'openAuthUrlInBrowser'], {
     shell: {
       openExternal: async (url) => {
         calls.push(['openExternal', url]);
@@ -354,9 +354,9 @@ test('openAuthUrlInBrowser uses shell.openExternal when it succeeds', async () =
   assert.deepEqual(calls, [['openExternal', 'https://www.pathofexile.com/oauth/authorize']]);
 });
 
-test('openAuthUrlInBrowser falls back to cmd start on Windows when shell.openExternal fails', async () => {
+test('openAuthUrlInBrowser falls back to a hidden PowerShell Start-Process on Windows when shell.openExternal fails', async () => {
   const calls = [];
-  const context = loadFunctions(['isAllowedExternalAuthUrl', 'openAuthUrlInBrowser'], {
+  const context = loadFunctions(['isAllowedExternalAuthUrl', 'openUrlWithWindowsFallback', 'openAuthUrlInBrowser'], {
     shell: {
       openExternal: async (url) => {
         calls.push(['openExternal', url]);
@@ -367,8 +367,9 @@ test('openAuthUrlInBrowser falls back to cmd start on Windows when shell.openExt
       platform: 'win32'
     },
     URL,
-    execFile(command, args, callback) {
+    execFile(command, args, options, callback) {
       calls.push(['execFile', command, args]);
+      assert.equal(options.windowsHide, true);
       callback(null);
     }
   });
@@ -377,13 +378,25 @@ test('openAuthUrlInBrowser falls back to cmd start on Windows when shell.openExt
 
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
     ['openExternal', 'https://www.pathofexile.com/oauth/authorize'],
-    ['execFile', 'cmd', ['/c', 'start', '', 'https://www.pathofexile.com/oauth/authorize']]
+    [
+      'execFile',
+      'powershell',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        'Start-Process -FilePath $args[0]',
+        'https://www.pathofexile.com/oauth/authorize'
+      ]
+    ]
   ]);
 });
 
 test('openAuthUrlInBrowser rejects unsafe external URLs before invoking the shell', async () => {
   const calls = [];
-  const context = loadFunctions(['isAllowedExternalAuthUrl', 'openAuthUrlInBrowser'], {
+  const context = loadFunctions(['isAllowedExternalAuthUrl', 'openUrlWithWindowsFallback', 'openAuthUrlInBrowser'], {
     shell: {
       openExternal: async (url) => {
         calls.push(['openExternal', url]);
