@@ -1,0 +1,7 @@
+{
+  "name": "uuid",
+  "version": "14.0.0",
+  "description": "Juice Journal safe CommonJS uuid shim for Sequelize",
+  "main": "index.js",
+  "license": "MIT"
+}

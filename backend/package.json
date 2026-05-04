@@ -29,6 +29,7 @@
     "pg": "^8.11.3",
     "pg-hstore": "^2.3.4",
     "sequelize": "^6.37.8",
+    "uuid": "file:vendor/uuid-safe",
     "ws": "^8.14.2"
   },
   "devDependencies": {
@@ -42,6 +43,7 @@
   "author": "",
   "license": "MIT",
   "overrides": {
-    "follow-redirects": "1.16.0"
+    "follow-redirects": "1.16.0",
+    "uuid": "file:vendor/uuid-safe"
   }
 }
