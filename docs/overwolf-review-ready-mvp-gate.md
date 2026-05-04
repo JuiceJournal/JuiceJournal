@@ -50,11 +50,15 @@ Current evidence:
 
 - `cd desktop && npm run build:win` completed on 2026-05-04.
 - `desktop/dist/win-unpacked/Juice Journal.exe` launched and stayed running for an 8 second smoke window.
-- Still missing: clean-profile install smoke, screenshot evidence, and manual taskbar icon confirmation.
+- `desktop/dist/Juice Journal Setup 1.0.0.exe /S /D=<repo>/.tmp/overwolf-review-install-20260504` installed with exit code `0`.
+- Installed `Juice Journal.exe` launched on 2026-05-04, showed the `Juice Journal` main window title, and stayed running for a 10 second smoke window.
+- Silent uninstall completed with exit code `0` and removed the custom install directory.
+- `cd desktop && npm run icon:test` passed 11/11 branding/icon checks.
+- Still missing: screenshot evidence and manual taskbar icon confirmation from the visible Windows shell.
 
 ### 2. Authentication And Demo Path
 
-Status: needs decision.
+Status: decision required before submission.
 
 Required:
 
@@ -69,6 +73,13 @@ Evidence to attach:
 - Login screenshot.
 - Dashboard after login.
 - Logout/relogin smoke result.
+
+Current decision recommendation:
+
+- Prefer real Path of Exile OAuth/reviewer credentials for the Overwolf review build.
+- Do not rely on backend mock OAuth as the primary reviewer path; it is useful for local automation, but it weakens the credibility of a review submission if presented as the normal flow.
+- If external GGG OAuth access is still unavailable, provide a clearly labeled reviewer/demo state only for screenshots and app navigation, and disclose that official account/stash access is pending external approval.
+- Before final submission, set the build/review environment so the user-facing app does not describe itself as mock-linked unless we intentionally choose a demo path.
 
 ### 3. Dashboard Core Flow
 

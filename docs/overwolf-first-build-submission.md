@@ -54,7 +54,7 @@ Juice Journal is an OW-Electron desktop farming journal for Path of Exile 1 and 
 
 Review flow:
 1. Launch the supplied Windows build.
-2. Sign in with Path of Exile when credentials/API access are available, or use the provided demo account state if review credentials are not available.
+2. Sign in with Path of Exile using reviewer credentials/API access when available. If official GGG OAuth access is still pending, use the clearly labeled reviewer/demo state only for app navigation and screenshot review.
 3. Open Dashboard and verify the character summary, selected game version, farm type selector, active map session card, today's summary, OCR fallback area, and last map result card.
 4. Start a new map session from Dashboard, select/confirm a map name, then end the map and verify that the completed result appears in Last Map Result and Sessions history.
 5. Open Sessions and verify recorded farming sessions and session details.
@@ -114,6 +114,7 @@ Run these before checking the form's QA checkbox:
 - SHA256: `09E2139CEBCA3B2ABA7CCBE7D6AAED37E4FDA4952C64CA39CC22C656BE232CD1`
 - Build command: `cd desktop && npm run build:win`
 - Packaged launch smoke: `desktop/dist/win-unpacked/Juice Journal.exe` launched on 2026-05-04 and stayed running for the 8 second smoke window.
+- Installer smoke: `desktop/dist/Juice Journal Setup 1.0.0.exe` installed silently to a custom repo-local review directory on 2026-05-04 with exit code `0`; the installed `Juice Journal.exe` launched, showed the `Juice Journal` main window title, stayed running for the 10 second smoke window, and uninstalled silently with exit code `0`.
 - Keep Product Name/Name and Author stable across versions; Overwolf's testing guidance calls out UID consistency.
 - If submitting an OW-Electron executable/installer, include exact launch instructions and note whether remote debugging is enabled only for review diagnostics.
 - If Overwolf asks for an OPK specifically, clarify whether they expect OW-Native OPK or OW-Electron installer/upload handling for this first MVP path.
