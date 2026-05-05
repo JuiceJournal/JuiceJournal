@@ -37,6 +37,28 @@ test('log parser tracks PoE2 generated map areas and safe generated area exits',
   assert.equal(exits[0].location, 'Canal Hideout');
 });
 
+test('log parser keeps PoE2 Abyssal Depths transitions inside the active map', () => {
+  const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
+  const entries = [];
+  const exits = [];
+
+  parser.on('mapEntered', (payload) => entries.push(payload));
+  parser.on('mapExited', (payload) => exits.push(payload));
+
+  parser.parseLine('2026/05/04 21:00:38 7155484 2caa22d2 [DEBUG Client 98516] Generating level 80 area "MapChannel" with seed 10066852');
+  parser.parseLine('2026/05/04 21:02:34 7271093 2caa22d2 [INFO Client 98516] : You have entered Abyssal Depths.');
+  parser.parseLine('2026/05/04 21:07:21 7271093 2caa22d2 [INFO Client 98516] : You have entered Channel.');
+  parser.parseLine('2026/05/04 21:10:38 7155484 2caa22d2 [DEBUG Client 98516] Generating level 65 area "HideoutCanal" with seed 1');
+
+  assert.deepEqual(
+    entries.map((entry) => entry.mapName),
+    ['Channel']
+  );
+  assert.equal(exits.length, 1);
+  assert.equal(exits[0].mapName, 'Channel');
+  assert.equal(exits[0].location, 'Canal Hideout');
+});
+
 test('log parser does not treat PoE2 safe social areas as map entries', () => {
   const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
   const entries = [];

@@ -1646,6 +1646,71 @@ function resolveLeagueContext(overrides = {}) {
   };
 }
 
+function normalizePositiveRate(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function readLocalChaosPrice(itemName, poeVersion) {
+  if (!priceService || priceService.poeVersion !== poeVersion) {
+    return null;
+  }
+
+  const localPrice = priceService.getPriceInfo(itemName);
+  return normalizePositiveRate(localPrice?.chaosValue);
+}
+
+function readBackendChaosPrice(price) {
+  return normalizePositiveRate(price?.chaosValue ?? price?.data?.chaosValue);
+}
+
+async function lookupProfitCurrencyChaosRate(itemName, context) {
+  if (apiClient && typeof apiClient.getItemPrice === 'function') {
+    try {
+      const price = await apiClient.getItemPrice(itemName, {
+        poeVersion: context.poeVersion,
+        league: context.league
+      });
+      const backendChaos = readBackendChaosPrice(price);
+      if (backendChaos) {
+        return {
+          chaosValue: backendChaos,
+          source: 'backend-price-api'
+        };
+      }
+    } catch (error) {
+      // Fall back to the local desktop price cache when the backend is unreachable.
+    }
+  }
+
+  const localChaos = readLocalChaosPrice(itemName, context.poeVersion);
+  if (localChaos) {
+    return { chaosValue: localChaos, source: 'local-price-service' };
+  }
+
+  return { chaosValue: null, source: 'unavailable' };
+}
+
+async function getProfitCurrencyRates(options = {}) {
+  const { activeVersion: poeVersion, league } = resolveLeagueContext(options);
+  const context = { poeVersion, league };
+  const [divine, mirror] = await Promise.all([
+    lookupProfitCurrencyChaosRate('Divine Orb', context),
+    lookupProfitCurrencyChaosRate('Mirror of Kalandra', context)
+  ]);
+
+  return {
+    poeVersion,
+    league,
+    divineChaos: divine.chaosValue,
+    mirrorChaos: mirror.chaosValue,
+    sources: {
+      divine: divine.source,
+      mirror: mirror.source
+    }
+  };
+}
+
 async function getCurrentSessionFromBackend() {
   try {
     const session = await apiClient.getActiveSession();
@@ -2620,19 +2685,6 @@ async function startNewSession(input = {}) {
 }
 
 async function handleMapEntered(data) {
-  if (store.get('autoStartSession') && !currentSession) {
-    const session = await startNewSession({
-      mapName: data.mapName,
-      mapTier: data.mapTier,
-      farmTypeId: getActiveFarmTypeId(),
-      ...getTrackerContextDefaults()
-    });
-    showNotification(t('notificationAutoSession'), t('autoSessionBody', { mapName: data.mapName }));
-    if (mainWindow) {
-      mainWindow.webContents.send('session-started', session);
-    }
-  }
-
   publishRuntimeSessionEvent('area_entered', data);
 }
 
@@ -3618,6 +3670,11 @@ function setupIPC() {
       };
     }
     return priceService.getStatus();
+  });
+
+  ipcMain.handle('get-profit-currency-rates', async (event, options = {}) => {
+    assertDesktopUserAuthenticated();
+    return getProfitCurrencyRates(options);
   });
 
   // List stash tabs from PoE API

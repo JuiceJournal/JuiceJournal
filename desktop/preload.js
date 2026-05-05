@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Stash & Prices
   syncPrices: (options) => ipcRenderer.invoke('sync-prices', options),
   getPriceStatus: () => ipcRenderer.invoke('get-price-status'),
+  getProfitCurrencyRates: (options) => ipcRenderer.invoke('get-profit-currency-rates', options),
   takeStashSnapshot: (options) => ipcRenderer.invoke('take-stash-snapshot', options),
   calculateProfit: (beforeId, afterId) => ipcRenderer.invoke('calculate-profit', beforeId, afterId),
   saveMapResult: (result) => ipcRenderer.invoke('save-map-result', result),

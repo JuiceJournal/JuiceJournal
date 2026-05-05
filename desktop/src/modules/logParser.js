@@ -30,6 +30,20 @@ const SAFE_AREA_NAMES = new Set([
   'clearfell encampment'
 ]);
 
+const POE2_SIDE_AREA_NAMES = new Set([
+  'abyssal depth',
+  'abyssal depths',
+  'the abyssal depths'
+]);
+
+function normalizeAreaKey(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function isPoe2SideAreaName(value) {
+  return POE2_SIDE_AREA_NAMES.has(normalizeAreaKey(value));
+}
+
 class LogParser extends EventEmitter {
   constructor(logPath, options = {}) {
     super();
@@ -153,9 +167,14 @@ class LogParser extends EventEmitter {
             return null;
           }
 
+          const mapName = this.formatMapName(areaId);
+          if (this.poeVersion === 'poe2' && isPoe2SideAreaName(mapName)) {
+            return null;
+          }
+
           return {
             type: 'map_entered',
-            mapName: this.formatMapName(areaId),
+            mapName,
             mapTier: parseInt(match[1]),
             timestamp: this.extractTimestamp(line),
             raw: line
@@ -167,10 +186,30 @@ class LogParser extends EventEmitter {
         regex: /You have entered ([^\.]+)\./i,
         handler: (match) => {
           const areaName = match[1].trim();
-          const normalizedAreaName = areaName.toLowerCase();
+          const normalizedAreaName = normalizeAreaKey(areaName);
           const isSafeArea = SAFE_AREA_NAMES.has(normalizedAreaName);
+          if (this.poeVersion === 'poe2') {
+            if (isSafeArea) {
+              return null;
+            }
+
+            // PoE2 maps can contain side areas such as Abyssal Depths. While a map
+            // is active, non-safe area transitions should not supersede the map.
+            if (this.currentMap || isPoe2SideAreaName(areaName)) {
+              return null;
+            }
+
+            return {
+              type: 'map_entered',
+              mapName: areaName,
+              mapTier: null,
+              timestamp: this.extractTimestamp(line),
+              raw: line
+            };
+          }
+
           // PoE2 endgame areas such as "Tower" do not consistently include "Map" in Client.txt.
-          if (!isSafeArea && (this.poeVersion === 'poe2' || normalizedAreaName.includes('map'))) {
+          if (!isSafeArea && normalizedAreaName.includes('map')) {
             return {
               type: 'map_entered',
               mapName: areaName,

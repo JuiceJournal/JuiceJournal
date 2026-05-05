@@ -274,40 +274,14 @@ test('main session start surfaces non-retryable api failures to the renderer', a
   assert.deepEqual(notificationCalls, [['notificationError', 'sessionStartFailed']]);
 });
 
-test('auto-start map handler passes the active farm type into session creation', async () => {
+test('map-enter handler publishes runtime state and leaves session start to the renderer prompt', async () => {
   const startCalls = [];
   const runtimeCalls = [];
-  const notificationCalls = [];
-  const context = loadFunctions(['normalizeStoredFarmTypeId', 'handleMapEntered'], {
-    store: {
-      get(key) {
-        if (key === 'autoStartSession') {
-          return true;
-        }
-
-        assert.fail(`Unexpected store.get(${key})`);
-      }
-    },
+  const context = loadFunctions(['handleMapEntered'], {
     currentSession: null,
-    getTrackerContextDefaults: () => ({
-      poeVersion: 'poe2',
-      league: 'Fate of the Vaal'
-    }),
-    getActiveFarmTypeId: () => 'breach',
     startNewSession(input) {
       startCalls.push({ ...input });
-      return Promise.resolve({ id: 'session-1' });
-    },
-    showNotification(title, body) {
-      notificationCalls.push([title, body]);
-    },
-    t: (key, values = {}) => values.mapName ? `${key}:${values.mapName}` : key,
-    mainWindow: {
-      webContents: {
-        send(channel, payload) {
-          runtimeCalls.push([channel, payload]);
-        }
-      }
+      throw new Error('main process should not auto-start sessions on map enter');
     },
     publishRuntimeSessionEvent(type, payload) {
       runtimeCalls.push([type, payload]);
@@ -319,16 +293,6 @@ test('auto-start map handler passes the active farm type into session creation',
     mapTier: 16
   });
 
-  assert.deepEqual(startCalls, [{
-    mapName: 'Crimson Temple',
-    mapTier: 16,
-    poeVersion: 'poe2',
-    league: 'Fate of the Vaal',
-    farmTypeId: 'breach'
-  }]);
-  assert.deepEqual(notificationCalls, [['notificationAutoSession', 'autoSessionBody:Crimson Temple']]);
-  assert.deepEqual(runtimeCalls, [
-    ['session-started', { id: 'session-1' }],
-    ['area_entered', { mapName: 'Crimson Temple', mapTier: 16 }]
-  ]);
+  assert.deepEqual(startCalls, []);
+  assert.deepEqual(runtimeCalls, [['area_entered', { mapName: 'Crimson Temple', mapTier: 16 }]]);
 });

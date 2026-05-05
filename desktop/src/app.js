@@ -22,12 +22,14 @@ const state = {
   account: null,
   runtimeSession: null,
   overlay: null,
+  profitCurrencyRates: {},
   appUpdate: null,
   capabilities: null,
   selectedSession: null,
   pendingLootCount: 0,
   pendingSyncEntries: [],
   auditTrail: [],
+  mapSessionPromptActive: false,
   farmType: window.farmTypeModel
     ? window.farmTypeModel.createFarmTypeState()
     : { selectedFarmTypeId: null }
@@ -98,6 +100,7 @@ const elements = {
   mapSessionModal: document.getElementById('map-session-modal'),
   mapSessionForm: document.getElementById('map-session-form'),
   mapSessionNameInput: document.getElementById('map-session-name-input'),
+  mapSessionFarmTypeSelect: document.getElementById('map-session-farm-type-select'),
   mapSessionDefaultName: document.getElementById('map-session-default-name'),
   mapSessionContext: document.getElementById('map-session-context'),
   mapSessionConfirmBtn: document.getElementById('map-session-confirm-btn'),
@@ -1794,8 +1797,125 @@ function syncDesktopCurrencyIcons() {
 function currencyHTML(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1') {
   const num = parseFloat(value);
   const imgPath = getCurrencyAssetPath(type, poeVersion);
-  const formatted = isNaN(num) ? '0' : (type === 'divine' ? num.toFixed(2) : num.toFixed(1));
+  const formatted = isNaN(num) ? '0' : (type === 'divine' || type === 'mirror' ? num.toFixed(2) : num.toFixed(1));
   return `<span class="currency-value">${formatted} <img src="${imgPath}" class="currency-icon" width="${iconSize}" height="${iconSize}" alt="${type}" draggable="false"></span>`;
+}
+
+function normalizeProfitPoeVersion(poeVersion) {
+  if (typeof normalizePoeVersion === 'function') {
+    return normalizePoeVersion(poeVersion) || 'poe1';
+  }
+
+  return poeVersion === 'poe2' ? 'poe2' : 'poe1';
+}
+
+function getProfitCurrencyModel() {
+  return window.profitCurrencyModel || null;
+}
+
+function getProfitCurrencyLeague(fallback = 'Standard') {
+  try {
+    const trackerContext = typeof getSelectedTrackerContext === 'function'
+      ? getSelectedTrackerContext()
+      : null;
+    if (typeof trackerContext?.league === 'string' && trackerContext.league.trim()) {
+      return trackerContext.league.trim();
+    }
+  } catch { }
+
+  try {
+    if (typeof getResolvedActiveLeague === 'function') {
+      const league = getResolvedActiveLeague();
+      if (typeof league === 'string' && league.trim()) {
+        return league.trim();
+      }
+    }
+  } catch { }
+
+  return fallback;
+}
+
+function getProfitCurrencyRateKey(poeVersion, league) {
+  return `${normalizeProfitPoeVersion(poeVersion)}:${String(league || 'Standard').trim() || 'Standard'}`;
+}
+
+function getProfitCurrencyRates(poeVersion = state.settings.poeVersion || 'poe1', league = null) {
+  const normalizedVersion = normalizeProfitPoeVersion(poeVersion);
+  const resolvedLeague = league || (typeof getProfitCurrencyLeague === 'function'
+    ? getProfitCurrencyLeague()
+    : 'Standard');
+  const key = getProfitCurrencyRateKey(normalizedVersion, resolvedLeague);
+  return state.profitCurrencyRates?.[key]
+    || state.profitCurrencyRates?.[normalizedVersion]
+    || null;
+}
+
+function setProfitCurrencyRates(poeVersion, rates = {}, league = null) {
+  const model = getProfitCurrencyModel();
+  const normalizedVersion = normalizeProfitPoeVersion(poeVersion);
+  const normalizedRates = model?.normalizeProfitCurrencyRates
+    ? model.normalizeProfitCurrencyRates(rates)
+    : {
+      divineChaos: Number(rates.divineChaos) > 0 ? Number(rates.divineChaos) : null,
+      mirrorChaos: Number(rates.mirrorChaos) > 0 ? Number(rates.mirrorChaos) : null
+    };
+  const resolvedLeague = league || rates.league || getProfitCurrencyLeague();
+  const payload = {
+    ...normalizedRates,
+    poeVersion: normalizedVersion,
+    league: resolvedLeague,
+    sources: rates.sources || null
+  };
+
+  state.profitCurrencyRates[getProfitCurrencyRateKey(normalizedVersion, resolvedLeague)] = payload;
+  state.profitCurrencyRates[normalizedVersion] = payload;
+  return payload;
+}
+
+async function refreshProfitCurrencyRates(poeVersion = state.settings.poeVersion || 'poe1', league = null) {
+  const normalizedVersion = normalizeProfitPoeVersion(poeVersion);
+  const resolvedLeague = league || getProfitCurrencyLeague();
+
+  if (typeof window.electronAPI?.getProfitCurrencyRates !== 'function') {
+    return getProfitCurrencyRates(normalizedVersion, resolvedLeague);
+  }
+
+  try {
+    const rates = await window.electronAPI.getProfitCurrencyRates({
+      poeVersion: normalizedVersion,
+      league: resolvedLeague
+    });
+    return setProfitCurrencyRates(normalizedVersion, rates || {}, resolvedLeague);
+  } catch {
+    return getProfitCurrencyRates(normalizedVersion, resolvedLeague);
+  }
+}
+
+function profitCurrencyHTML(value, iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1', options = {}) {
+  const normalizedVersion = normalizeProfitPoeVersion(poeVersion);
+  const model = getProfitCurrencyModel();
+  const rates = options.rates || getProfitCurrencyRates(normalizedVersion, options.league) || {};
+
+  if (!model || typeof model.selectProfitCurrency !== 'function') {
+    return currencyHTML(value, 'chaos', iconSize, normalizedVersion);
+  }
+
+  const selected = model.selectProfitCurrency(value, rates);
+  return currencyHTML(selected.value, selected.type, iconSize, normalizedVersion);
+}
+
+function formatAdaptiveProfitText(value, poeVersion = state.settings.poeVersion || 'poe1', options = {}) {
+  const normalizedVersion = normalizeProfitPoeVersion(poeVersion);
+  const model = getProfitCurrencyModel();
+  const rates = options.rates || getProfitCurrencyRates(normalizedVersion, options.league) || {};
+
+  if (model && typeof model.formatProfitCurrencyText === 'function') {
+    return model.formatProfitCurrencyText(value, rates, options);
+  }
+
+  const normalizedValue = Math.round(Number(value) || 0);
+  const sign = options.signed && normalizedValue > 0 ? '+' : normalizedValue < 0 ? '-' : '';
+  return `${sign}${Math.abs(normalizedValue)}c`;
 }
 
 /**
@@ -1984,10 +2104,9 @@ function setupEventListeners() {
 function setupIPCListeners() {
   // Map olaylari
   window.electronAPI.onMapEntered((data) => {
-    if (data?.runtimeSession) {
-      setRuntimeSessionState(data.runtimeSession);
-    }
-    showToast(window.t('toast.mapEnteredTitle'), window.t('toast.mapEnteredBody', { mapName: data.mapName }));
+    handleMapEnteredEvent(data).catch((error) => {
+      showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.sessionStart'), 'error');
+    });
   });
 
   window.electronAPI.onMapExited((data) => {
@@ -2010,16 +2129,18 @@ function setupIPCListeners() {
     refreshTrackerData({ includeSessions: true });
   });
 
-  window.electronAPI.onSessionEnded((session) => {
+  window.electronAPI.onSessionEnded(async (session) => {
     state.currentSession = null;
     updateActiveSessionUI();
     stopSessionClock();
-    const profit = parseFloat(session.profitChaos);
+    await persistCompletedSessionMapResult(session);
+    const rawProfit = parseFloat(session?.profitChaos);
+    const profit = Number.isFinite(rawProfit) ? rawProfit : 0;
     const message = profit >= 0
       ? window.t('toast.sessionProfitBody', { value: profit.toFixed(1) })
       : window.t('toast.sessionLossBody', { value: Math.abs(profit).toFixed(1) });
     showToast(window.t('toast.sessionCompletedTitle'), message, profit >= 0 ? 'success' : 'warning');
-    refreshTrackerData({ includeSessions: true });
+    await refreshTrackerData({ includeSessions: true });
   });
 
   // Loot olaylari
@@ -2169,6 +2290,36 @@ function showLoginModal() {
 
   if (elements.registerModal) {
     elements.registerModal.classList.add('hidden');
+  }
+}
+
+async function handleMapEnteredEvent(data = {}) {
+  if (data?.runtimeSession) {
+    setRuntimeSessionState(data.runtimeSession);
+  }
+
+  showToast(window.t('toast.mapEnteredTitle'), window.t('toast.mapEnteredBody', { mapName: data.mapName }));
+
+  const shouldPromptForSession = Boolean(state.settings?.autoStartSession)
+    && !state.currentSession
+    && !state.mapSessionPromptActive;
+
+  if (!shouldPromptForSession) {
+    return;
+  }
+
+  const detectedMapName = typeof data.mapName === 'string' && data.mapName.trim()
+    ? data.mapName.trim()
+    : null;
+
+  state.mapSessionPromptActive = true;
+  try {
+    await handleStartSession({
+      defaultMapName: detectedMapName,
+      source: 'map-detected'
+    });
+  } finally {
+    state.mapSessionPromptActive = false;
   }
 }
 
@@ -2592,7 +2743,14 @@ async function handlePoeDisconnect() {
 
 function getSelectedTrackerContext() {
   const poeVersion = getResolvedLeagueVersion();
-  const league = getResolvedActiveLeague();
+  const characterSummary = state.account?.summary || null;
+  const characterLeague = characterSummary?.status === 'ready'
+    && typeof characterSummary.league === 'string'
+    && characterSummary.league.trim()
+    && (!characterSummary.poeVersion || characterSummary.poeVersion === poeVersion)
+    ? characterSummary.league.trim()
+    : null;
+  const league = characterLeague || getResolvedActiveLeague();
   const farmTypeId = state.farmType?.selectedFarmTypeId || null;
 
   return {
@@ -2724,6 +2882,21 @@ function createCompletedSessionMapResult(session = {}) {
   };
 }
 
+async function persistCompletedSessionMapResult(session = {}) {
+  const completedMapResult = createCompletedSessionMapResult(session);
+  if (!completedMapResult) {
+    return null;
+  }
+
+  try {
+    await persistMapResultHistory(completedMapResult);
+    return completedMapResult;
+  } catch (error) {
+    console.warn('Failed to persist completed map session result', error);
+    return null;
+  }
+}
+
 async function loadMapResultHistory() {
   if (!state.currentUser) {
     state.mapResults = [];
@@ -2770,9 +2943,12 @@ function isPageActive(page) {
 }
 
 function resetDashboardSummary() {
+  const formatProfit = typeof profitCurrencyHTML === 'function'
+    ? profitCurrencyHTML
+    : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
   elements.todaySessions.textContent = '0';
-  elements.todayProfit.innerHTML = currencyHTML(0, 'chaos', 18, state.settings.poeVersion || 'poe1');
-  elements.todayAvg.innerHTML = currencyHTML(0, 'chaos', 18, state.settings.poeVersion || 'poe1');
+  elements.todayProfit.innerHTML = formatProfit(0, 18, state.settings.poeVersion || 'poe1');
+  elements.todayAvg.innerHTML = formatProfit(0, 18, state.settings.poeVersion || 'poe1');
 }
 
 function renderLatestMapResult() {
@@ -2801,9 +2977,11 @@ function renderLatestMapResult() {
   elements.lastMapResultCard.dataset.resultState = 'ready';
   elements.lastMapResultFarmType.textContent = latest.farmType || 'Unknown farm type';
   elements.lastMapResultDuration.textContent = formatDuration(latest.durationSeconds || 0);
-  elements.lastMapResultProfit.innerHTML = currencyHTML(
+  const formatProfit = typeof profitCurrencyHTML === 'function'
+    ? profitCurrencyHTML
+    : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
+  elements.lastMapResultProfit.innerHTML = formatProfit(
     latest.netProfit || 0,
-    'chaos',
     16,
     latest.poeVersion || state.settings?.poeVersion || 'poe1'
   );
@@ -2847,6 +3025,9 @@ function renderMapResultHistory() {
     return;
   }
 
+  const formatProfit = typeof profitCurrencyHTML === 'function'
+    ? profitCurrencyHTML
+    : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
   elements.mapResultHistory.innerHTML = filteredResults.map((result) => `
     <article class="map-result-history-item" data-result-id="${escapeHTML(result?.id || '')}">
       <div class="map-result-history-main">
@@ -2854,9 +3035,8 @@ function renderMapResultHistory() {
         <span>${formatDuration(Number(result?.durationSeconds || 0))}</span>
       </div>
       <div class="map-result-history-meta">
-        <span class="map-result-history-profit">${currencyHTML(
+        <span class="map-result-history-profit">${formatProfit(
           result?.netProfit || 0,
-          'chaos',
           14,
           result?.poeVersion || state.settings?.poeVersion || 'poe1'
         )}</span>
@@ -2937,20 +3117,72 @@ function getRuntimeSessionMapName() {
   );
 }
 
-function requestMapSessionName({ defaultName, trackerContext } = {}) {
+function setMapSessionConfirmButton(label = 'Start Map') {
+  if (!elements.mapSessionConfirmBtn) {
+    return;
+  }
+
+  elements.mapSessionConfirmBtn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+      <polygon points="5 3 19 12 5 21 5 3"/>
+    </svg>
+    <span>${escapeHTML(label)}</span>
+  `;
+}
+
+function populateMapSessionFarmTypes(selectedFarmTypeId = '') {
+  if (!elements.mapSessionFarmTypeSelect) {
+    return null;
+  }
+
+  const { listFarmTypes } = getFarmTypeModel();
+  const farmTypes = listFarmTypes();
+  const normalizedSelection = farmTypes.some((farmType) => farmType.id === selectedFarmTypeId)
+    ? selectedFarmTypeId
+    : '';
+
+  elements.mapSessionFarmTypeSelect.innerHTML = [
+    '<option value="">No farm type</option>',
+    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}">${escapeHTML(farmType.label)}</option>`)
+  ].join('');
+  elements.mapSessionFarmTypeSelect.value = normalizedSelection;
+
+  return normalizedSelection || null;
+}
+
+function requestMapSessionDetails({ defaultName, trackerContext } = {}) {
   const fallbackName = normalizeSessionMapName(defaultName)
     || `${window.t ? window.t('misc.unknownMap') : 'Unknown Map'} ${new Date().toLocaleString()}`;
 
   if (!elements.mapSessionModal || !elements.mapSessionNameInput || !elements.mapSessionForm) {
-    return Promise.resolve(fallbackName);
+    return Promise.resolve({
+      mapName: fallbackName,
+      farmTypeId: trackerContext?.farmTypeId || null
+    });
   }
+
+  const title = elements.mapSessionModal.querySelector('#map-session-title');
+  const subtitle = elements.mapSessionModal.querySelector('.modal-subtitle.compact');
+  const label = elements.mapSessionModal.querySelector('.map-session-label');
+  const farmTypeLabel = elements.mapSessionFarmTypeSelect?.previousElementSibling;
+
+  if (title) title.textContent = 'Start New Map';
+  if (subtitle) subtitle.textContent = 'Confirm the detected map and choose the farm type before tracking starts.';
+  if (label) label.hidden = false;
+  if (farmTypeLabel) farmTypeLabel.hidden = false;
+  if (elements.mapSessionFarmTypeSelect) elements.mapSessionFarmTypeSelect.hidden = false;
+  setMapSessionConfirmButton('Start Map');
 
   elements.mapSessionDefaultName.textContent = fallbackName;
   if (elements.mapSessionContext) {
     elements.mapSessionContext.textContent = trackerContext?.label || 'PoE Session';
   }
   elements.mapSessionNameInput.value = fallbackName;
+  elements.mapSessionNameInput.hidden = false;
   elements.mapSessionNameInput.select();
+  populateMapSessionFarmTypes(trackerContext?.farmTypeId || '');
+  if (elements.mapSessionCancelBtn) elements.mapSessionCancelBtn.textContent = 'Cancel';
+  elements.mapSessionModal.dataset.modalPurpose = 'new-map-session';
   elements.mapSessionModal.classList.remove('hidden');
 
   return new Promise((resolve) => {
@@ -2977,7 +3209,10 @@ function requestMapSessionName({ defaultName, trackerContext } = {}) {
     function handleSubmit(event) {
       event.preventDefault();
       const selectedName = normalizeSessionMapName(elements.mapSessionNameInput.value) || fallbackName;
-      settle(selectedName);
+      settle({
+        mapName: selectedName,
+        farmTypeId: elements.mapSessionFarmTypeSelect?.value || null
+      });
     }
 
     function handleCancel() {
@@ -3006,6 +3241,11 @@ function requestMapSessionName({ defaultName, trackerContext } = {}) {
   });
 }
 
+async function requestMapSessionName(options = {}) {
+  const result = await requestMapSessionDetails(options);
+  return result?.mapName || null;
+}
+
 function requestEndSessionConfirmation(session = state.currentSession) {
   if (!elements.mapSessionModal || !elements.mapSessionForm) {
     return Promise.resolve(true);
@@ -3014,6 +3254,7 @@ function requestEndSessionConfirmation(session = state.currentSession) {
   const title = elements.mapSessionModal.querySelector('#map-session-title');
   const subtitle = elements.mapSessionModal.querySelector('.modal-subtitle.compact');
   const label = elements.mapSessionModal.querySelector('.map-session-label');
+  const farmTypeLabel = elements.mapSessionFarmTypeSelect?.previousElementSibling;
   const previous = {
     purpose: elements.mapSessionModal.dataset.modalPurpose,
     title: title?.textContent || '',
@@ -3023,7 +3264,10 @@ function requestEndSessionConfirmation(session = state.currentSession) {
     inputValue: elements.mapSessionNameInput?.value || '',
     inputHidden: elements.mapSessionNameInput?.hidden === true,
     labelHidden: label?.hidden === true,
-    confirmText: elements.mapSessionConfirmBtn?.textContent || '',
+    farmTypeValue: elements.mapSessionFarmTypeSelect?.value || '',
+    farmTypeHidden: elements.mapSessionFarmTypeSelect?.hidden === true,
+    farmTypeLabelHidden: farmTypeLabel?.hidden === true,
+    confirmHTML: elements.mapSessionConfirmBtn?.innerHTML || '',
     cancelText: elements.mapSessionCancelBtn?.textContent || ''
   };
 
@@ -3033,6 +3277,8 @@ function requestEndSessionConfirmation(session = state.currentSession) {
   if (elements.mapSessionDefaultName) elements.mapSessionDefaultName.textContent = session?.mapName || 'Unknown Map';
   if (elements.mapSessionNameInput) elements.mapSessionNameInput.hidden = true;
   if (label) label.hidden = true;
+  if (farmTypeLabel) farmTypeLabel.hidden = true;
+  if (elements.mapSessionFarmTypeSelect) elements.mapSessionFarmTypeSelect.hidden = true;
   if (elements.mapSessionConfirmBtn) elements.mapSessionConfirmBtn.textContent = 'End Map';
   if (elements.mapSessionCancelBtn) elements.mapSessionCancelBtn.textContent = 'Keep Tracking';
   elements.mapSessionModal.dataset.modalPurpose = 'end-map-session';
@@ -3053,7 +3299,12 @@ function requestEndSessionConfirmation(session = state.currentSession) {
         elements.mapSessionNameInput.value = previous.inputValue;
       }
       if (label) label.hidden = previous.labelHidden;
-      if (elements.mapSessionConfirmBtn) elements.mapSessionConfirmBtn.textContent = previous.confirmText;
+      if (farmTypeLabel) farmTypeLabel.hidden = previous.farmTypeLabelHidden;
+      if (elements.mapSessionFarmTypeSelect) {
+        elements.mapSessionFarmTypeSelect.hidden = previous.farmTypeHidden;
+        elements.mapSessionFarmTypeSelect.value = previous.farmTypeValue;
+      }
+      if (elements.mapSessionConfirmBtn) elements.mapSessionConfirmBtn.innerHTML = previous.confirmHTML;
       if (elements.mapSessionCancelBtn) elements.mapSessionCancelBtn.textContent = previous.cancelText;
       elements.mapSessionForm.removeEventListener('submit', handleSubmit);
       elements.mapSessionCancelBtn?.removeEventListener('click', handleCancel);
@@ -3099,26 +3350,48 @@ function requestEndSessionConfirmation(session = state.currentSession) {
   });
 }
 
-async function handleStartSession() {
+async function handleStartSession(options = {}) {
   const trackerContext = getSelectedTrackerContext();
-  const runtimeMapName = getRuntimeSessionMapName();
-  const requestedMapName = runtimeMapName || await requestMapSessionName({ trackerContext });
+  const runtimeMapName = normalizeSessionMapName(options.defaultMapName) || getRuntimeSessionMapName();
+  const requestedSession = await requestMapSessionDetails({
+    defaultName: runtimeMapName,
+    trackerContext
+  });
+  const requestedMapName = typeof requestedSession === 'string'
+    ? requestedSession
+    : requestedSession?.mapName;
   const mapName = normalizeSessionMapName(requestedMapName);
   if (!mapName) {
     return;
   }
 
+  const farmTypeId = typeof requestedSession === 'string'
+    ? trackerContext.farmTypeId
+    : (requestedSession?.farmTypeId || null);
   const sessionPayload = {
     mapName,
     poeVersion: trackerContext.poeVersion,
     league: trackerContext.league
   };
 
-  if (trackerContext.farmTypeId) {
-    sessionPayload.farmTypeId = trackerContext.farmTypeId;
+  if (farmTypeId) {
+    sessionPayload.farmTypeId = farmTypeId;
   }
 
   try {
+    if (farmTypeId !== trackerContext.farmTypeId && window.electronAPI?.setActiveFarmType) {
+      await window.electronAPI.setActiveFarmType(farmTypeId);
+      if (state.farmType && typeof getFarmTypeModel === 'function') {
+        const { selectFarmType, clearFarmType } = getFarmTypeModel();
+        if (farmTypeId) {
+          selectFarmType(state.farmType, farmTypeId);
+        } else {
+          clearFarmType(state.farmType);
+        }
+        renderFarmTypeSelector();
+      }
+    }
+
     const session = await window.electronAPI.startSession(sessionPayload);
     if (session) {
       state.currentSession = session;
@@ -3155,15 +3428,7 @@ async function handleEndSession() {
       endedAt: result?.endedAt || result?.ended_at || completedAt,
       status: result?.status || 'completed'
     };
-    const completedMapResult = createCompletedSessionMapResult(completedSession);
-
-    if (completedMapResult) {
-      try {
-        await persistMapResultHistory(completedMapResult);
-      } catch (error) {
-        console.warn('Failed to persist completed map session result', error);
-      }
-    }
+    await persistCompletedSessionMapResult(completedSession);
 
     state.currentSession = null;
     updateActiveSessionUI();
@@ -3197,6 +3462,9 @@ function updateActiveSessionUI() {
   const itemCount = lootEntries.reduce((sum, loot) => sum + parseInt(loot.quantity || 0, 10), 0);
   const liveDuration = getLiveDuration(state.currentSession);
   const profitClass = profitChaos >= 0 ? 'session-info-value positive' : 'session-info-value negative';
+  const formatProfit = typeof profitCurrencyHTML === 'function'
+    ? profitCurrencyHTML
+    : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
   if (state.currentSession) {
     const contextLabel = `${state.currentSession.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} • ${escapeHTML(state.currentSession.league || 'Standard')}`;
     elements.activeSession.innerHTML = `
@@ -3231,7 +3499,7 @@ function updateActiveSessionUI() {
         </div>
         <div class="session-info-item session-info-item--metric">
           <span class="session-info-label">${window.t('dashboard.liveProfit')}</span>
-          <span class="${profitClass}">${currencyHTML(profitChaos, 'chaos', 16, state.currentSession.poeVersion || state.settings.poeVersion || 'poe1')}</span>
+          <span class="${profitClass}">${formatProfit(profitChaos, 16, state.currentSession.poeVersion || state.settings.poeVersion || 'poe1')}</span>
         </div>
         <div class="session-info-item">
           <span class="session-info-label">${window.t('dashboard.itemsCollected')}</span>
@@ -3335,10 +3603,13 @@ async function loadDashboardStats() {
     const totalSessions = parseInt(summary.totalSessions || 0, 10);
     const totalProfit = parseFloat(summary.totalProfit || 0);
     const avgProfitPerMap = parseFloat(summary.avgProfitPerMap || 0);
+    const formatProfit = typeof profitCurrencyHTML === 'function'
+      ? profitCurrencyHTML
+      : (value, iconSize, version) => currencyHTML(value, 'chaos', iconSize, version);
 
     elements.todaySessions.textContent = String(totalSessions);
-    elements.todayProfit.innerHTML = currencyHTML(totalProfit, 'chaos', 18, poeVersion);
-    elements.todayAvg.innerHTML = currencyHTML(avgProfitPerMap, 'chaos', 18, poeVersion);
+    elements.todayProfit.innerHTML = formatProfit(totalProfit, 18, poeVersion);
+    elements.todayAvg.innerHTML = formatProfit(avgProfitPerMap, 18, poeVersion);
   } catch (error) {
     resetDashboardSummary();
   }
@@ -3381,6 +3652,9 @@ function renderSessionsList() {
     return;
   }
 
+  const formatProfit = typeof profitCurrencyHTML === 'function'
+    ? profitCurrencyHTML
+    : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
   elements.sessionsList.innerHTML = state.sessions.map((session) => {
     const profit = parseFloat(session.profitChaos || 0);
     const lootCount = Array.isArray(session.lootEntries)
@@ -3406,7 +3680,7 @@ function renderSessionsList() {
           <span class="session-secondary-label">${window.t('sessions.lootCount')}</span>
           <span class="session-secondary-value">${lootCount}</span>
         </div>
-        <div class="session-profit ${profit >= 0 ? 'positive' : 'negative'}">${currencyHTML(profit, 'chaos', 16, session.poeVersion || state.settings.poeVersion || 'poe1')}</div>
+        <div class="session-profit ${profit >= 0 ? 'positive' : 'negative'}">${formatProfit(profit, 16, session.poeVersion || state.settings.poeVersion || 'poe1')}</div>
         <div class="session-status ${safeStatus}">${window.t(`sessions.${safeStatus}`)}</div>
       </button>
     `;
@@ -3816,6 +4090,7 @@ async function handleSyncPrices() {
     if (elements.priceItemCount) {
       elements.priceItemCount.textContent = `${result.itemCount} items`;
     }
+    await refreshProfitCurrencyRates(result.poeVersion || state.settings.poeVersion || 'poe1', league);
     showToast(window.t('stash.priceData'), window.t('stash.pricesSynced', { count: result.itemCount }), 'success');
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.pricesSyncFailed'), 'error');
@@ -3925,6 +4200,21 @@ async function handleCalculateProfit() {
     }
 
     stashState.lastMapResult = deriveCurrentMapResult(report);
+    if (stashState.lastMapResult) {
+      const trackerContext = typeof getSelectedTrackerContext === 'function'
+        ? getSelectedTrackerContext()
+        : {};
+      const rates = typeof refreshProfitCurrencyRates === 'function'
+        ? await refreshProfitCurrencyRates(
+          stashState.lastMapResult.poeVersion || trackerContext.poeVersion,
+          stashState.lastMapResult.league || trackerContext.league
+        )
+        : null;
+      stashState.lastMapResult = {
+        ...stashState.lastMapResult,
+        profitCurrencyRates: rates
+      };
+    }
     renderProfitReport(report);
     if (stashState.lastMapResult && Number(stashState.lastMapResult.durationSeconds || 0) > 0) {
       if (typeof window.electronAPI?.showMapResultOverlay === 'function') {
@@ -3962,13 +4252,24 @@ function renderProfitReport(report) {
 
   // Main profit value
   if (elements.profitChaosValue) {
-    const val = Math.round(summary.netProfitChaos);
-    elements.profitChaosValue.textContent = `${val >= 0 ? '+' : ''}${val}c`;
+    const val = Number(summary.netProfitChaos || 0);
+    const poeVersion = stashState.lastMapResult?.poeVersion || getSelectedTrackerContext().poeVersion;
+    const rates = {
+      ...(getProfitCurrencyRates(poeVersion, stashState.lastMapResult?.league || getSelectedTrackerContext().league) || {}),
+      divineChaos: Number(summary.divinePrice || 0) > 0
+        ? Number(summary.divinePrice)
+        : getProfitCurrencyRates(poeVersion)?.divineChaos
+    };
+    elements.profitChaosValue.textContent = formatAdaptiveProfitText(val, poeVersion, {
+      signed: true,
+      rates
+    });
     elements.profitChaosValue.className = 'profit-value ' + (val >= 0 ? 'positive' : 'negative');
   }
 
   if (elements.profitDivineValue) {
-    elements.profitDivineValue.textContent = `${summary.netProfitDivine.toFixed(1)} div`;
+    const divineValue = Number(summary.netProfitDivine || 0);
+    elements.profitDivineValue.textContent = `${divineValue.toFixed(1)} div`;
   }
 
   if (elements.profitGainedValue) {
@@ -4007,8 +4308,18 @@ function renderProfitReport(report) {
 
   // Update status badge
   if (elements.stashTrackerStatus) {
-    const val = Math.round(summary.netProfitChaos);
-    elements.stashTrackerStatus.textContent = `${val >= 0 ? '+' : ''}${val}c`;
+    const val = Number(summary.netProfitChaos || 0);
+    const poeVersion = stashState.lastMapResult?.poeVersion || getSelectedTrackerContext().poeVersion;
+    const rates = {
+      ...(getProfitCurrencyRates(poeVersion, stashState.lastMapResult?.league || getSelectedTrackerContext().league) || {}),
+      divineChaos: Number(summary.divinePrice || 0) > 0
+        ? Number(summary.divinePrice)
+        : getProfitCurrencyRates(poeVersion)?.divineChaos
+    };
+    elements.stashTrackerStatus.textContent = formatAdaptiveProfitText(val, poeVersion, {
+      signed: true,
+      rates
+    });
     elements.stashTrackerStatus.style.color = val >= 0 ? 'var(--green)' : 'var(--red)';
   }
 }
@@ -4105,6 +4416,14 @@ async function loadPriceStatus() {
     if (elements.priceItemCount && status.itemCount > 0) {
       elements.priceItemCount.textContent = `${status.itemCount} items`;
       stashState.pricesSynced = true;
+      await refreshProfitCurrencyRates(status.poeVersion || state.settings.poeVersion || 'poe1');
+      renderLatestMapResult();
+      renderMapResultHistory();
+      renderSessionsList();
+      updateActiveSessionUI();
+      if (state.currentUser) {
+        await loadDashboardStats();
+      }
     }
   } catch {
     // Ignore
@@ -4134,6 +4453,9 @@ function renderSessionDrawer() {
   const poeVersion = session.poeVersion || state.settings.poeVersion || 'poe1';
   const analytics = buildSessionAnalytics(lootEntries);
   const safeStatus = ['active', 'completed', 'abandoned'].includes(session.status) ? session.status : 'unknown';
+  const formatProfit = typeof profitCurrencyHTML === 'function'
+    ? profitCurrencyHTML
+    : (value, iconSize, version) => currencyHTML(value, 'chaos', iconSize, version);
 
   elements.sessionDrawerTitle.textContent = session.mapName || 'Session';
   elements.sessionDrawerLootCount.textContent = String(lootEntries.length);
@@ -4164,7 +4486,7 @@ function renderSessionDrawer() {
     </div>
     <div class="session-drawer-metric">
       <span class="session-drawer-label">${window.t('dashboard.liveProfit')}</span>
-      <span class="session-drawer-value ${profit >= 0 ? 'positive' : 'negative'}">${currencyHTML(profit, 'chaos', 15, poeVersion)}</span>
+      <span class="session-drawer-value ${profit >= 0 ? 'positive' : 'negative'}">${formatProfit(profit, 15, poeVersion)}</span>
     </div>
     <div class="session-drawer-metric">
       <span class="session-drawer-label">${window.t('sessions.startedAt')}</span>
@@ -4667,6 +4989,7 @@ async function handleCurrencySync() {
     // apiClient unwraps: result = { message, league, results } (inner .data of API response)
     // Sync succeeded if we got here without throwing
     showToast(window.t('toast.currencyTitle'), window.t('currency.syncSuccess'), 'success');
+    await refreshProfitCurrencyRates(currencyState.poeVersion, currencyState.league);
     await loadCurrencyLeagues();
     await loadCurrencyPrices();
   } catch (e) {

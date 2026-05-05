@@ -337,6 +337,7 @@ test('ending a map session persists a zero-profit completed map result', async (
     'getCompletedSessionDurationSeconds',
     'getCompletedSessionFarmTypeLabel',
     'createCompletedSessionMapResult',
+    'persistCompletedSessionMapResult',
     'handleEndSession'
   ], {
     state,
@@ -545,11 +546,28 @@ test('desktop preload exposes map-result persistence bridge methods', () => {
   assert.match(source, /getMapResults:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('get-map-results'\)/);
 });
 
+test('desktop preload exposes adaptive profit currency rate lookup', () => {
+  const source = fs.readFileSync(preloadJsPath, 'utf8');
+
+  assert.match(
+    source,
+    /getProfitCurrencyRates:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\('get-profit-currency-rates',\s*options\)/
+  );
+});
+
 test('desktop main process registers map-result save and list IPC handlers', () => {
   const source = fs.readFileSync(mainJsPath, 'utf8');
 
   assert.match(source, /ipcMain\.handle\('save-map-result'/);
   assert.match(source, /ipcMain\.handle\('get-map-results'/);
+});
+
+test('desktop main process registers adaptive profit currency rate IPC handler', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+
+  assert.match(source, /ipcMain\.handle\('get-profit-currency-rates'/);
+  assert.match(source, /getProfitCurrencyRates/);
+  assert.match(source, /Mirror of Kalandra/);
 });
 
 test('desktop main stash snapshot payload keeps timestamp metadata for later map-result derivation', () => {

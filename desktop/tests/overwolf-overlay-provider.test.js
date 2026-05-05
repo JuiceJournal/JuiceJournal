@@ -142,3 +142,13 @@ test('overlay card supports map-result slide in and slide out states', () => {
   assert.match(html, /slideOutToRight/);
   assert.match(overlayJs, /data-overlay-exiting/);
 });
+
+test('overlay card loads and uses adaptive profit currency formatting for map results', () => {
+  const html = fs.readFileSync(overlayHtmlPath, 'utf8');
+  const overlayJs = fs.readFileSync(overlayJsPath, 'utf8');
+
+  assert.match(html, /modules\/profitCurrencyModel\.js[\s\S]*overlay\.js/);
+  assert.match(overlayJs, /formatSignedProfit/);
+  assert.match(overlayJs, /profitCurrencyModel/);
+  assert.match(overlayJs, /profitCurrencyRates/);
+});

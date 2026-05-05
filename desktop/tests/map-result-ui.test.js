@@ -170,11 +170,63 @@ test('dashboard map session flow includes farm type selector controls before map
   assert.match(html, /id="clear-farm-type-btn"/);
 });
 
+test('dashboard loads the profit currency model before renderer app code', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+
+  assert.match(html, /modules\/profitCurrencyModel\.js[\s\S]*app\.js/);
+});
+
+test('renderer formats map profit with adaptive divine and mirror denominations', () => {
+  const context = loadFunctions([
+    'normalizeProfitPoeVersion',
+    'getProfitCurrencyModel',
+    'getProfitCurrencyLeague',
+    'getProfitCurrencyRateKey',
+    'getProfitCurrencyRates',
+    'profitCurrencyHTML',
+    'formatAdaptiveProfitText'
+  ], {
+    state: {
+      settings: { poeVersion: 'poe1' },
+      profitCurrencyRates: {
+        poe1: { divineChaos: 100, mirrorChaos: 300000 }
+      }
+    },
+    window: {
+      profitCurrencyModel: {
+        selectProfitCurrency(chaosValue, rates) {
+          if (Math.abs(chaosValue) >= rates.mirrorChaos) {
+            return { type: 'mirror', value: chaosValue / rates.mirrorChaos };
+          }
+          if (Math.abs(chaosValue) >= rates.divineChaos) {
+            return { type: 'divine', value: chaosValue / rates.divineChaos };
+          }
+          return { type: 'chaos', value: chaosValue };
+        },
+        formatProfitCurrencyText(chaosValue, rates, options = {}) {
+          const selected = this.selectProfitCurrency(chaosValue, rates);
+          const sign = options.signed && chaosValue > 0 ? '+' : chaosValue < 0 ? '-' : '';
+          const value = Math.abs(selected.value);
+          if (selected.type === 'divine') return `${sign}${value.toFixed(2)} div`;
+          if (selected.type === 'mirror') return `${sign}${value.toFixed(2)} mirror`;
+          return `${sign}${value.toFixed(1)}c`;
+        }
+      }
+    },
+    currencyHTML: (value, type, iconSize, poeVersion) => `${value}|${type}|${iconSize}|${poeVersion}`
+  });
+
+  assert.equal(context.profitCurrencyHTML(5000, 16, 'poe1'), '50|divine|16|poe1');
+  assert.equal(context.profitCurrencyHTML(600000, 16, 'poe1'), '2|mirror|16|poe1');
+  assert.equal(context.formatAdaptiveProfitText(5000, 'poe1', { signed: true }), '+50.00 div');
+});
+
 test('dashboard provides a branded new map session modal instead of native prompts', () => {
   const html = fs.readFileSync(indexHtmlPath, 'utf8');
 
   assert.match(html, /id="map-session-modal"/);
   assert.match(html, /id="map-session-name-input"/);
+  assert.match(html, /id="map-session-farm-type-select"/);
   assert.match(html, /id="map-session-confirm-btn"/);
   assert.match(html, /id="map-session-cancel-btn"/);
   assert.match(html, /data-modal-purpose="new-map-session"/);
@@ -273,8 +325,36 @@ test('renderer selection changes sync the active farm type to the main process',
   ]);
 });
 
-test('starting a map session forwards the selected farm type without changing existing context fields', async () => {
+test('tracker context prefers the active character league over the default settings league', () => {
+  const context = loadFunctions(['getSelectedTrackerContext'], {
+    state: {
+      account: {
+        summary: {
+          status: 'ready',
+          poeVersion: 'poe2',
+          league: 'Fate of the Vaal'
+        }
+      },
+      farmType: {
+        selectedFarmTypeId: 'breach'
+      }
+    },
+    getResolvedLeagueVersion: () => 'poe2',
+    getResolvedActiveLeague: () => 'Standard'
+  });
+
+  assert.deepEqual({ ...context.getSelectedTrackerContext() }, {
+    poeVersion: 'poe2',
+    league: 'Fate of the Vaal',
+    farmTypeId: 'breach',
+    label: 'PoE 2 • Fate of the Vaal'
+  });
+});
+
+test('starting a map session opens the branded modal with detected map name and selected farm type', async () => {
   const startSessionCalls = [];
+  const activeFarmTypeCalls = [];
+  let modalRequest = null;
   const context = loadFunctions(['normalizeSessionMapName', 'getRuntimeSessionMapName', 'handleStartSession'], {
     state: {
       runtimeSession: {
@@ -289,8 +369,18 @@ test('starting a map session forwards the selected farm type without changing ex
         startSession: async (payload) => {
           startSessionCalls.push(payload);
           return { id: 'session-1' };
+        },
+        setActiveFarmType: async (farmTypeId) => {
+          activeFarmTypeCalls.push(farmTypeId);
         }
       }
+    },
+    requestMapSessionDetails: async (request) => {
+      modalRequest = request;
+      return {
+        mapName: request.defaultName,
+        farmTypeId: 'expedition'
+      };
     },
     getSelectedTrackerContext: () => ({
       poeVersion: 'poe2',
@@ -306,12 +396,15 @@ test('starting a map session forwards the selected farm type without changing ex
 
   await context.handleStartSession();
 
+  assert.equal(modalRequest.defaultName, 'Dunes Map');
+  assert.equal(modalRequest.trackerContext.farmTypeId, 'breach');
   assert.deepEqual(startSessionCalls.map((payload) => ({ ...payload })), [{
     mapName: 'Dunes Map',
     poeVersion: 'poe2',
     league: 'Fate of the Vaal',
-    farmTypeId: 'breach'
+    farmTypeId: 'expedition'
   }]);
+  assert.deepEqual(activeFarmTypeCalls, ['expedition']);
 });
 
 test('starting a map session does not rely on unsupported renderer prompt', async () => {
@@ -336,6 +429,10 @@ test('starting a map session does not rely on unsupported renderer prompt', asyn
         }
       }
     },
+    requestMapSessionDetails: async (request) => ({
+      mapName: request.defaultName,
+      farmTypeId: request.trackerContext.farmTypeId
+    }),
     getSelectedTrackerContext: () => ({
       poeVersion: 'poe1',
       league: 'Mirage',
@@ -373,7 +470,10 @@ test('starting a map session uses the branded modal when runtime map name is mis
         }
       }
     },
-    requestMapSessionName: async () => 'Abyssal City Map',
+    requestMapSessionDetails: async () => ({
+      mapName: 'Abyssal City Map',
+      farmTypeId: 'abyss'
+    }),
     getSelectedTrackerContext: () => ({
       poeVersion: 'poe1',
       league: 'Mirage',
@@ -411,7 +511,7 @@ test('starting a map session aborts cleanly when the branded modal is cancelled'
         }
       }
     },
-    requestMapSessionName: async () => null,
+    requestMapSessionDetails: async () => null,
     getSelectedTrackerContext: () => ({
       poeVersion: 'poe1',
       league: 'Mirage',
@@ -427,6 +527,104 @@ test('starting a map session aborts cleanly when the branded modal is cancelled'
   await context.handleStartSession();
 
   assert.deepEqual(startSessionCalls, []);
+});
+
+test('map-entered events prompt for a session with the detected map instead of silently auto-starting', async () => {
+  const startCalls = [];
+  const runtimeSnapshots = [];
+  const context = loadFunctions(['handleMapEnteredEvent'], {
+    state: {
+      currentSession: null,
+      settings: {
+        autoStartSession: true
+      }
+    },
+    setRuntimeSessionState(runtimeSession) {
+      runtimeSnapshots.push(runtimeSession);
+    },
+    showToast: () => {},
+    window: {
+      t: (key, values = {}) => values.mapName ? `${key}:${values.mapName}` : key
+    },
+    handleStartSession: async (options) => {
+      startCalls.push({ ...options });
+    }
+  });
+
+  await context.handleMapEnteredEvent({
+    mapName: 'Tower',
+    runtimeSession: {
+      currentInstance: {
+        areaName: 'Tower'
+      }
+    }
+  });
+
+  assert.deepEqual(runtimeSnapshots, [{
+    currentInstance: {
+      areaName: 'Tower'
+    }
+  }]);
+  assert.deepEqual(startCalls, [{ defaultMapName: 'Tower', source: 'map-detected' }]);
+});
+
+test('session-ended events persist completed map results for automatic log exits', async () => {
+  const listeners = {};
+  const persistedResults = [];
+  const refreshCalls = [];
+  const context = loadFunctions(['persistCompletedSessionMapResult', 'setupIPCListeners'], {
+    state: {
+      currentSession: {
+        id: 'session-1'
+      }
+    },
+    window: {
+      t: (key, values = {}) => `${key}:${values.value || ''}`,
+      electronAPI: {
+        onMapEntered: (handler) => { listeners.mapEntered = handler; },
+        onMapExited: (handler) => { listeners.mapExited = handler; },
+        onSessionStarted: (handler) => { listeners.sessionStarted = handler; },
+        onSessionEnded: (handler) => { listeners.sessionEnded = handler; },
+        onLootAdded: (handler) => { listeners.lootAdded = handler; },
+        onNavigate: (handler) => { listeners.navigate = handler; }
+      }
+    },
+    updateActiveSessionUI: () => {},
+    stopSessionClock: () => {},
+    showToast: () => {},
+    refreshTrackerData: async (options) => {
+      refreshCalls.push({ ...options });
+    },
+    createCompletedSessionMapResult: (session) => ({
+      id: `map-result-${session.id}`,
+      sessionId: session.id,
+      farmType: 'Abyss',
+      durationSeconds: session.durationSec,
+      netProfit: Number(session.profitChaos || 0),
+      poeVersion: 'poe2'
+    }),
+    persistMapResultHistory: async (result) => {
+      persistedResults.push({ ...result });
+    }
+  });
+
+  context.setupIPCListeners();
+
+  await listeners.sessionEnded({
+    id: 'session-1',
+    profitChaos: 0,
+    durationSec: 145
+  });
+
+  assert.deepEqual(persistedResults, [{
+    id: 'map-result-session-1',
+    sessionId: 'session-1',
+    farmType: 'Abyss',
+    durationSeconds: 145,
+    netProfit: 0,
+    poeVersion: 'poe2'
+  }]);
+  assert.deepEqual(refreshCalls, [{ includeSessions: true }]);
 });
 
 test('dashboard html includes a last map result card with summary fields', () => {

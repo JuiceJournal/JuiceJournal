@@ -141,7 +141,7 @@ window.Translations = {
     // Settings - PoE
     'settings.clientTxtPath': 'Client.txt Dosya Yolu',
     'settings.browse': 'Gozat',
-    'settings.autoStartSession': 'Yeni map girisinde otomatik session baslat',
+    'settings.autoStartSession': 'Yeni map girisinde start modalini ac',
     'settings.poeVersion': 'PoE Versiyonu',
     'settings.defaultLeague': 'Varsayilan Lig',
     'settings.defaultLeaguePlaceholder': 'Standard',
@@ -845,7 +845,7 @@ window.Translations = {
     // Settings - PoE
     'settings.clientTxtPath': 'Client.txt File Path',
     'settings.browse': 'Browse',
-    'settings.autoStartSession': 'Auto-start session on new map entry',
+    'settings.autoStartSession': 'Open start modal on new map entry',
     'settings.poeVersion': 'PoE Version',
     'settings.defaultLeague': 'Default League',
     'settings.defaultLeaguePlaceholder': 'Standard',

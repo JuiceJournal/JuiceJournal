@@ -143,6 +143,10 @@
           </div>
           <label class="map-session-label" for="map-session-name-input">Map name</label>
           <input id="map-session-name-input" type="text" autocomplete="off" spellcheck="false" placeholder="Dunes Map, City Square Map">
+          <label class="map-session-label" for="map-session-farm-type-select">Farm type</label>
+          <select id="map-session-farm-type-select" class="map-session-select">
+            <option value="">No farm type</option>
+          </select>
           <div class="map-session-actions">
             <button id="map-session-cancel-btn" type="button" class="btn btn-secondary">Cancel</button>
             <button id="map-session-confirm-btn" type="submit" class="btn btn-primary">
@@ -626,7 +630,7 @@
                 <div class="form-group checkbox">
                   <label>
                     <input type="checkbox" id="auto-start-session">
-                    <span data-i18n="settings.autoStartSession">Yeni map girisinde otomatik session baslat</span>
+                    <span data-i18n="settings.autoStartSession">Open start modal on new map entry</span>
                   </label>
                 </div>
               </div>
@@ -794,6 +798,7 @@
   <script src="modules/characterVisualModel.js"></script>
   <script src="modules/farmTypeModel.js"></script>
   <script src="modules/mapResultStoreModel.js"></script>
+  <script src="modules/profitCurrencyModel.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

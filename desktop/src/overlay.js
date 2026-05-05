@@ -17,6 +17,10 @@
     return root.overlayStateModel || null;
   }
 
+  function getProfitCurrencyModel() {
+    return root.profitCurrencyModel || null;
+  }
+
   function isDerivedOverlayState(value) {
     return value && typeof value === 'object' && typeof value.visibility === 'string';
   }
@@ -46,6 +50,15 @@
     return `${prefix}${Math.abs(rounded)}c`;
   }
 
+  function formatSignedProfit(value, profitCurrencyRates = {}) {
+    const model = getProfitCurrencyModel();
+    if (model && typeof model.formatProfitCurrencyText === 'function') {
+      return model.formatProfitCurrencyText(value, profitCurrencyRates, { signed: true });
+    }
+
+    return formatSignedChaos(value);
+  }
+
   function formatDuration(seconds) {
     const normalized = Math.max(0, Number(seconds ?? 0) || 0);
     if (!normalized) {
@@ -63,14 +76,18 @@
 
   function buildMapResultLines(state) {
     const result = state?.mapResult?.result || {};
+    const profitCurrencyRates = result.profitCurrencyRates
+      || result.currencyRates
+      || state?.mapResult?.profitCurrencyRates
+      || {};
     const topOutput = Array.isArray(result.topOutputs) && result.topOutputs.length > 0
       ? result.topOutputs[0]
       : null;
 
     return {
-      primaryLine: [result.farmType || 'Completed Map', formatSignedChaos(result.netProfit)].filter(Boolean).join(' · '),
+      primaryLine: [result.farmType || 'Completed Map', formatSignedProfit(result.netProfit, profitCurrencyRates)].filter(Boolean).join(' / '),
       secondaryLine: topOutput
-        ? `${topOutput.label || 'Top output'} ${formatSignedChaos(topOutput.valueDelta)}`
+        ? `${topOutput.label || 'Top output'} ${formatSignedProfit(topOutput.valueDelta, profitCurrencyRates)}`
         : 'Completed map result',
       metaLine: formatDuration(result.durationSeconds),
       tone: state?.mapResult?.tone || 'neutral',
