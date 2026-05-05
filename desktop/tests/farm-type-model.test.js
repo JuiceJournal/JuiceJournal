@@ -46,11 +46,35 @@ test('farm type model exposes the supported farm types in the approved order', (
 
   assert.deepEqual(
     farmTypes.map((farmType) => farmType.id),
-    ['abyss', 'breach', 'expedition', 'ritual', 'harbinger', 'essence', 'delirium']
+    ['abyss', 'breach', 'expedition', 'ritual', 'harbinger', 'essence', 'delirium', 'blight', 'legion', 'harvest', 'betrayal', 'incursion']
   );
   assert.deepEqual(
     farmTypes.map((farmType) => farmType.label),
-    ['Abyss', 'Breach', 'Expedition', 'Ritual', 'Harbinger', 'Essence', 'Delirium']
+    ['Abyss', 'Breach', 'Expedition', 'Ritual', 'Harbinger', 'Essence', 'Delirium', 'Blight', 'Legion', 'Harvest', 'Betrayal', 'Incursion']
+  );
+});
+
+test('farm type model filters trackable farms by game version', () => {
+  const listFarmTypes = getFarmTypeModelExport('listFarmTypes');
+
+  assert.deepEqual(
+    listFarmTypes({ poeVersion: 'poe1' }).map((farmType) => farmType.id),
+    ['abyss', 'breach', 'expedition', 'ritual', 'harbinger', 'essence', 'delirium', 'blight', 'legion', 'harvest', 'betrayal', 'incursion']
+  );
+  assert.deepEqual(
+    listFarmTypes({ poeVersion: 'poe2' }).map((farmType) => farmType.id),
+    ['abyss', 'breach', 'expedition', 'ritual', 'delirium', 'essence']
+  );
+  assert.deepEqual(
+    listFarmTypes({ poeVersion: 'poe2' }).map((farmType) => farmType.poeVersions),
+    [
+      ['poe1', 'poe2'],
+      ['poe1', 'poe2'],
+      ['poe1', 'poe2'],
+      ['poe1', 'poe2'],
+      ['poe1', 'poe2'],
+      ['poe1', 'poe2']
+    ]
   );
 });
 
@@ -62,8 +86,8 @@ test('farm type model returns a defensive copy of the supported farms list', () 
 
   const secondResult = listFarmTypes();
 
-  assert.equal(secondResult.length, 7);
-  assert.equal(secondResult[6].id, 'delirium');
+  assert.equal(secondResult.length, 12);
+  assert.equal(secondResult[11].id, 'incursion');
 });
 
 test('farm type model selects supported farm ids and clears unsupported ones', () => {
@@ -83,4 +107,21 @@ test('farm type model selects supported farm ids and clears unsupported ones', (
   clearFarmType(state);
 
   assert.equal(state.selectedFarmTypeId, null);
+});
+
+test('farm type model rejects farm ids unsupported by the selected game version', () => {
+  const createFarmTypeState = getFarmTypeModelExport('createFarmTypeState');
+  const selectFarmType = getFarmTypeModelExport('selectFarmType');
+  const isFarmTypeSupported = getFarmTypeModelExport('isFarmTypeSupported');
+  const getFarmTypeById = getFarmTypeModelExport('getFarmTypeById');
+
+  const state = createFarmTypeState();
+
+  assert.equal(selectFarmType(state, 'blight', { poeVersion: 'poe1' }), 'blight');
+  assert.equal(selectFarmType(state, 'blight', { poeVersion: 'poe2' }), null);
+  assert.equal(state.selectedFarmTypeId, null);
+  assert.equal(isFarmTypeSupported('blight', { poeVersion: 'poe1' }), true);
+  assert.equal(isFarmTypeSupported('blight', { poeVersion: 'poe2' }), false);
+  assert.equal(getFarmTypeById('blight', { poeVersion: 'poe1' })?.label, 'Blight');
+  assert.equal(getFarmTypeById('blight', { poeVersion: 'poe2' }), null);
 });

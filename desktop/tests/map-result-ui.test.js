@@ -277,6 +277,48 @@ test('renderer farm type selector populates options and reflects the active farm
   assert.equal(elements.clearFarmTypeBtn.disabled, false);
 });
 
+test('renderer farm type selector filters options by active PoE version', () => {
+  const elements = {
+    sessionFarmTypeSelect: {
+      innerHTML: '',
+      value: '',
+      disabled: false
+    },
+    clearFarmTypeBtn: {
+      disabled: false
+    }
+  };
+  const listCalls = [];
+  const context = loadFunctions(['renderFarmTypeSelector'], {
+    elements,
+    state: {
+      currentSession: null,
+      farmType: {
+        selectedFarmTypeId: 'blight'
+      }
+    },
+    escapeHTML: (value) => String(value),
+    getResolvedLeagueVersion: () => 'poe2',
+    getFarmTypeModel: () => ({
+      listFarmTypes: (options) => {
+        listCalls.push({ ...options });
+        return [
+          { id: 'abyss', label: 'Abyss' },
+          { id: 'ritual', label: 'Ritual' }
+        ];
+      }
+    })
+  });
+
+  context.renderFarmTypeSelector();
+
+  assert.deepEqual(listCalls, [{ poeVersion: 'poe2' }]);
+  assert.match(elements.sessionFarmTypeSelect.innerHTML, /value="abyss"/);
+  assert.doesNotMatch(elements.sessionFarmTypeSelect.innerHTML, /value="blight"/);
+  assert.equal(elements.sessionFarmTypeSelect.value, '');
+  assert.equal(elements.clearFarmTypeBtn.disabled, true);
+});
+
 test('renderer selection changes sync the active farm type to the main process', async () => {
   const calls = [];
   const elements = {
@@ -296,7 +338,8 @@ test('renderer selection changes sync the active farm type to the main process',
       farmType: farmTypeState
     },
     getFarmTypeModel: () => ({
-      selectFarmType(state, farmTypeId) {
+      selectFarmType(state, farmTypeId, options) {
+        calls.push(['selectFarmType', farmTypeId, { ...options }]);
         state.selectedFarmTypeId = farmTypeId || null;
         return state.selectedFarmTypeId;
       },
@@ -304,6 +347,7 @@ test('renderer selection changes sync the active farm type to the main process',
         state.selectedFarmTypeId = null;
       }
     }),
+    getResolvedLeagueVersion: () => 'poe2',
     renderFarmTypeSelector: () => calls.push(['renderFarmTypeSelector']),
     window: {
       electronAPI: {
@@ -318,11 +362,87 @@ test('renderer selection changes sync the active farm type to the main process',
   await context.handleFarmTypeSelectionClear();
 
   assert.deepEqual(calls, [
+    ['selectFarmType', 'essence', { poeVersion: 'poe2' }],
     ['setActiveFarmType', 'essence'],
     ['renderFarmTypeSelector'],
     ['setActiveFarmType', null],
     ['renderFarmTypeSelector']
   ]);
+});
+
+test('renderer clears unsupported farm type selection after a game-version sync', async () => {
+  const calls = [];
+  const farmTypeState = {
+    selectedFarmTypeId: 'blight'
+  };
+  const context = loadFunctions(['syncFarmTypeSelectionForVersion'], {
+    state: {
+      farmType: farmTypeState
+    },
+    normalizePoeVersion: (version) => version === 'poe1' || version === 'poe2' ? version : null,
+    getResolvedLeagueVersion: () => 'poe2',
+    getFarmTypeModel: () => ({
+      isFarmTypeSupported: (farmTypeId, options) => {
+        calls.push(['isFarmTypeSupported', farmTypeId, { ...options }]);
+        return false;
+      },
+      clearFarmType: (state) => {
+        calls.push(['clearFarmType']);
+        state.selectedFarmTypeId = null;
+      }
+    }),
+    renderFarmTypeSelector: () => calls.push(['renderFarmTypeSelector']),
+    window: {
+      electronAPI: {
+        setActiveFarmType: async (farmTypeId) => {
+          calls.push(['setActiveFarmType', farmTypeId]);
+        }
+      }
+    }
+  });
+
+  await context.syncFarmTypeSelectionForVersion('poe2');
+
+  assert.equal(farmTypeState.selectedFarmTypeId, null);
+  assert.deepEqual(calls, [
+    ['isFarmTypeSupported', 'blight', { poeVersion: 'poe2' }],
+    ['clearFarmType'],
+    ['setActiveFarmType', null],
+    ['renderFarmTypeSelector']
+  ]);
+});
+
+test('runtime game-version sync reconciles farm type support for the active version', () => {
+  const calls = [];
+  const state = {
+    settings: {
+      poeVersion: 'poe1'
+    }
+  };
+  const elements = {
+    versionBtns: [
+      { dataset: { version: 'poe1' }, classList: { toggle: () => {} } },
+      { dataset: { version: 'poe2' }, classList: { toggle: () => {} } }
+    ]
+  };
+  const context = loadFunctions(['syncRendererGameContext'], {
+    state,
+    elements,
+    normalizePoeVersion: (version) => version === 'poe1' || version === 'poe2' ? version : null,
+    syncDesktopCurrencyIcons: () => {},
+    loadSettingsLeagueOptions: () => Promise.resolve(),
+    updateGameStatusIndicator: () => {},
+    updateActiveLeagueFieldContext: () => {},
+    applyDashboardCapabilities: () => {},
+    scheduleActiveCharacterRefresh: () => {},
+    syncFarmTypeSelectionForVersion: (version) => {
+      calls.push(version);
+    }
+  });
+
+  context.syncRendererGameContext('poe2', { settingsVersion: 'poe2' });
+
+  assert.deepEqual(calls, ['poe2']);
 });
 
 test('tracker context prefers the active character league over the default settings league', () => {
@@ -405,6 +525,34 @@ test('starting a map session opens the branded modal with detected map name and 
     farmTypeId: 'expedition'
   }]);
   assert.deepEqual(activeFarmTypeCalls, ['expedition']);
+});
+
+test('start map modal farm selector uses the tracker context PoE version', () => {
+  const calls = [];
+  const elements = {
+    mapSessionFarmTypeSelect: {
+      innerHTML: '',
+      value: ''
+    }
+  };
+  const context = loadFunctions(['populateMapSessionFarmTypes'], {
+    elements,
+    escapeHTML: (value) => String(value),
+    getResolvedLeagueVersion: () => 'poe1',
+    getFarmTypeModel: () => ({
+      listFarmTypes: (options) => {
+        calls.push({ ...options });
+        return [
+          { id: 'abyss', label: 'Abyss' },
+          { id: 'ritual', label: 'Ritual' }
+        ];
+      }
+    })
+  });
+
+  assert.equal(context.populateMapSessionFarmTypes('ritual', { poeVersion: 'poe2' }), 'ritual');
+  assert.deepEqual(calls, [{ poeVersion: 'poe2' }]);
+  assert.match(elements.mapSessionFarmTypeSelect.innerHTML, /value="ritual"/);
 });
 
 test('starting a map session does not rely on unsupported renderer prompt', async () => {

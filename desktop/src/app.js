@@ -660,6 +660,47 @@ function getFarmTypeModel() {
   return window.farmTypeModel;
 }
 
+function getFarmTypePoeVersion(version = null) {
+  const normalizedVersion = normalizePoeVersion(version);
+  if (normalizedVersion) {
+    return normalizedVersion;
+  }
+
+  if (typeof getResolvedLeagueVersion === 'function') {
+    return normalizePoeVersion(getResolvedLeagueVersion()) || 'poe1';
+  }
+
+  return normalizePoeVersion(state.settings?.poeVersion) || 'poe1';
+}
+
+function listFarmTypesForVersion(version = null) {
+  const { listFarmTypes } = getFarmTypeModel();
+  return listFarmTypes({ poeVersion: getFarmTypePoeVersion(version) });
+}
+
+async function syncFarmTypeSelectionForVersion(version = null) {
+  if (!state.farmType?.selectedFarmTypeId) {
+    return null;
+  }
+
+  const poeVersion = typeof getFarmTypePoeVersion === 'function'
+    ? getFarmTypePoeVersion(version)
+    : (normalizePoeVersion(version)
+      || (typeof getResolvedLeagueVersion === 'function' ? getResolvedLeagueVersion() : 'poe1'));
+  const { isFarmTypeSupported, clearFarmType } = getFarmTypeModel();
+  if (isFarmTypeSupported(state.farmType.selectedFarmTypeId, { poeVersion })) {
+    return state.farmType.selectedFarmTypeId;
+  }
+
+  clearFarmType(state.farmType);
+  if (window.electronAPI?.setActiveFarmType) {
+    await window.electronAPI.setActiveFarmType(null);
+  }
+  renderFarmTypeSelector();
+
+  return null;
+}
+
 function getHotkeyModel() {
   if (!window.hotkeyModel) {
     throw new Error('hotkeyModel is not loaded');
@@ -981,6 +1022,12 @@ function syncRendererGameContext(version, options = {}) {
   updateActiveLeagueFieldContext({ syncValue: true });
   if (typeof applyDashboardCapabilities === 'function') {
     applyDashboardCapabilities();
+  }
+  if (typeof syncFarmTypeSelectionForVersion === 'function') {
+    void syncFarmTypeSelectionForVersion(normalizedSettingsVersion || normalizedDetectedVersion);
+  }
+  if (typeof renderFarmTypeSelector === 'function') {
+    renderFarmTypeSelector();
   }
   if (typeof scheduleActiveCharacterRefresh === 'function') {
     scheduleActiveCharacterRefresh({ version: normalizedDetectedVersion });
@@ -1412,12 +1459,21 @@ function renderFarmTypeSelector() {
   }
 
   const { listFarmTypes } = getFarmTypeModel();
-  const selectedFarmTypeId = state.farmType?.selectedFarmTypeId || '';
+  const poeVersion = typeof getFarmTypePoeVersion === 'function'
+    ? getFarmTypePoeVersion()
+    : (typeof getResolvedLeagueVersion === 'function' ? getResolvedLeagueVersion() : 'poe1');
+  const farmTypes = typeof listFarmTypesForVersion === 'function'
+    ? listFarmTypesForVersion(poeVersion)
+    : listFarmTypes({ poeVersion });
+  const currentFarmTypeId = state.farmType?.selectedFarmTypeId || '';
+  const selectedFarmTypeId = farmTypes.some((farmType) => farmType.id === currentFarmTypeId)
+    ? currentFarmTypeId
+    : '';
   const hasActiveSession = Boolean(state.currentSession);
 
   elements.sessionFarmTypeSelect.innerHTML = [
     '<option value="">No farm type</option>',
-    ...listFarmTypes().map((farmType) => `<option value="${escapeHTML(farmType.id)}">${escapeHTML(farmType.label)}</option>`)
+    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}">${escapeHTML(farmType.label)}</option>`)
   ].join('');
   elements.sessionFarmTypeSelect.value = selectedFarmTypeId;
   elements.sessionFarmTypeSelect.disabled = hasActiveSession;
@@ -1426,7 +1482,12 @@ function renderFarmTypeSelector() {
 
 async function handleFarmTypeSelectionChange() {
   const { selectFarmType } = getFarmTypeModel();
-  const selectedFarmTypeId = selectFarmType(state.farmType, elements.sessionFarmTypeSelect?.value || '');
+  const poeVersion = typeof getFarmTypePoeVersion === 'function'
+    ? getFarmTypePoeVersion()
+    : (typeof getResolvedLeagueVersion === 'function' ? getResolvedLeagueVersion() : 'poe1');
+  const selectedFarmTypeId = selectFarmType(state.farmType, elements.sessionFarmTypeSelect?.value || '', {
+    poeVersion
+  });
   if (window.electronAPI?.setActiveFarmType) {
     await window.electronAPI.setActiveFarmType(selectedFarmTypeId);
   }
@@ -1451,7 +1512,15 @@ async function loadActiveFarmTypeSelection() {
   const activeFarmTypeId = await window.electronAPI.getActiveFarmType();
 
   if (activeFarmTypeId) {
-    selectFarmType(state.farmType, activeFarmTypeId);
+    const poeVersion = typeof getFarmTypePoeVersion === 'function'
+      ? getFarmTypePoeVersion()
+      : (typeof getResolvedLeagueVersion === 'function' ? getResolvedLeagueVersion() : 'poe1');
+    const selectedFarmTypeId = selectFarmType(state.farmType, activeFarmTypeId, {
+      poeVersion
+    });
+    if (!selectedFarmTypeId && window.electronAPI?.setActiveFarmType) {
+      await window.electronAPI.setActiveFarmType(null);
+    }
     return;
   }
 
@@ -2829,13 +2898,19 @@ function getCompletedSessionDurationSeconds(session = {}) {
 }
 
 function getCompletedSessionFarmTypeLabel(session = {}) {
-  const { listFarmTypes } = getFarmTypeModel();
   const farmTypeId = session.farmTypeId
     || session.mapType
     || state.farmType?.selectedFarmTypeId
     || getSelectedTrackerContext().farmTypeId
     || null;
-  const farmType = listFarmTypes().find((entry) => entry.id === farmTypeId);
+  const poeVersion = normalizePoeVersion(session.poeVersion ?? session.poe_version)
+    || getSelectedTrackerContext().poeVersion
+    || state.settings?.poeVersion
+    || 'poe1';
+  const farmTypeModel = getFarmTypeModel();
+  const farmType = typeof farmTypeModel.getFarmTypeById === 'function'
+    ? (farmTypeModel.getFarmTypeById(farmTypeId, { poeVersion }) || farmTypeModel.getFarmTypeById(farmTypeId))
+    : farmTypeModel.listFarmTypes().find((entry) => entry.id === farmTypeId);
 
   return farmType?.label || farmTypeId || 'No farm type';
 }
@@ -3130,13 +3205,17 @@ function setMapSessionConfirmButton(label = 'Start Map') {
   `;
 }
 
-function populateMapSessionFarmTypes(selectedFarmTypeId = '') {
+function populateMapSessionFarmTypes(selectedFarmTypeId = '', options = {}) {
   if (!elements.mapSessionFarmTypeSelect) {
     return null;
   }
 
   const { listFarmTypes } = getFarmTypeModel();
-  const farmTypes = listFarmTypes();
+  const poeVersion = options.poeVersion
+    || (typeof getFarmTypePoeVersion === 'function'
+      ? getFarmTypePoeVersion()
+      : (typeof getResolvedLeagueVersion === 'function' ? getResolvedLeagueVersion() : 'poe1'));
+  const farmTypes = listFarmTypes({ poeVersion });
   const normalizedSelection = farmTypes.some((farmType) => farmType.id === selectedFarmTypeId)
     ? selectedFarmTypeId
     : '';
@@ -3180,7 +3259,9 @@ function requestMapSessionDetails({ defaultName, trackerContext } = {}) {
   elements.mapSessionNameInput.value = fallbackName;
   elements.mapSessionNameInput.hidden = false;
   elements.mapSessionNameInput.select();
-  populateMapSessionFarmTypes(trackerContext?.farmTypeId || '');
+  populateMapSessionFarmTypes(trackerContext?.farmTypeId || '', {
+    poeVersion: trackerContext?.poeVersion
+  });
   if (elements.mapSessionCancelBtn) elements.mapSessionCancelBtn.textContent = 'Cancel';
   elements.mapSessionModal.dataset.modalPurpose = 'new-map-session';
   elements.mapSessionModal.classList.remove('hidden');
@@ -3384,7 +3465,9 @@ async function handleStartSession(options = {}) {
       if (state.farmType && typeof getFarmTypeModel === 'function') {
         const { selectFarmType, clearFarmType } = getFarmTypeModel();
         if (farmTypeId) {
-          selectFarmType(state.farmType, farmTypeId);
+          selectFarmType(state.farmType, farmTypeId, {
+            poeVersion: trackerContext.poeVersion
+          });
         } else {
           clearFarmType(state.farmType);
         }
