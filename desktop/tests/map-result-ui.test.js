@@ -833,6 +833,137 @@ test('session-ended events persist completed map results for automatic log exits
   assert.deepEqual(refreshCalls, [{ includeSessions: true }]);
 });
 
+test('poe2 result smoke persists zero-profit map result and projects it into Last Map Result', async () => {
+  const listeners = {};
+  const savedResults = [];
+  const elements = {
+    lastMapResultCard: {
+      dataset: {
+        resultState: 'empty'
+      }
+    },
+    lastMapResultFarmType: {
+      textContent: ''
+    },
+    lastMapResultDuration: {
+      textContent: ''
+    },
+    lastMapResultProfit: {
+      innerHTML: ''
+    }
+  };
+  const state = {
+    currentSession: {
+      id: 'local-session-1'
+    },
+    settings: {
+      poeVersion: 'poe2'
+    },
+    account: {
+      accountName: 'Esquetta#4179',
+      summary: {
+        id: 'char-1',
+        name: 'KocaAyVeMasha',
+        league: 'Fate of the Vaal'
+      }
+    },
+    farmType: {
+      selectedFarmTypeId: 'abyss'
+    },
+    mapResults: []
+  };
+  const context = loadFunctions([
+    'setRuntimeSessionState',
+    'getSessionNumber',
+    'getSessionTimestampMs',
+    'getCompletedSessionDurationSeconds',
+    'getCompletedSessionFarmTypeLabel',
+    'createCompletedSessionMapResult',
+    'persistCompletedSessionMapResult',
+    'persistMapResultHistory',
+    'renderLatestMapResult',
+    'setupIPCListeners'
+  ], {
+    elements,
+    state,
+    window: {
+      t: (key, values = {}) => `${key}:${values.value || values.mapName || ''}`,
+      electronAPI: {
+        onMapEntered: (handler) => { listeners.mapEntered = handler; },
+        onMapExited: (handler) => { listeners.mapExited = handler; },
+        onSessionStarted: (handler) => { listeners.sessionStarted = handler; },
+        onSessionEnded: (handler) => { listeners.sessionEnded = handler; },
+        onLootAdded: (handler) => { listeners.lootAdded = handler; },
+        onNavigate: (handler) => { listeners.navigate = handler; },
+        async saveMapResult(result) {
+          savedResults.push(JSON.parse(JSON.stringify(result)));
+          return [result];
+        }
+      }
+    },
+    getFarmTypeModel: () => ({
+      getFarmTypeById: (id) => (id === 'abyss' ? { id: 'abyss', label: 'Abyss' } : null),
+      listFarmTypes: () => [{ id: 'abyss', label: 'Abyss' }]
+    }),
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe2',
+      league: 'Fate of the Vaal',
+      farmTypeId: 'abyss'
+    }),
+    normalizePoeVersion: (value) => value,
+    formatDuration: (seconds) => `duration:${seconds}`,
+    profitCurrencyHTML: (value, iconSize, poeVersion) => `profit:${value}:${iconSize}:${poeVersion}`,
+    renderRuntimeSessionState: () => {},
+    updateActiveSessionUI: () => {},
+    stopSessionClock: () => {},
+    showToast: () => {},
+    refreshTrackerData: async () => {}
+  });
+
+  context.setupIPCListeners();
+  listeners.mapExited({
+    mapName: 'Channel',
+    runtimeSession: {
+      instances: [{
+        areaName: 'Channel',
+        enteredAt: '2026-05-06T12:00:00.000Z',
+        exitedAt: '2026-05-06T12:05:30.000Z',
+        durationSeconds: 330,
+        status: 'completed'
+      }],
+      summary: {
+        status: 'idle',
+        lastAreaName: 'Channel'
+      }
+    }
+  });
+  await listeners.sessionEnded({
+    id: 'local-session-1',
+    mapName: 'Channel',
+    farmTypeId: 'abyss',
+    poeVersion: 'poe2',
+    league: 'Fate of the Vaal',
+    startedAt: '2026-05-06T12:00:00.000Z',
+    endedAt: '2026-05-06T12:05:30.000Z',
+    durationSeconds: 330,
+    totalLootChaos: 0,
+    profitChaos: 0
+  });
+
+  assert.equal(state.runtimeSession.instances[0].durationSeconds, 330);
+  assert.equal(savedResults.length, 1);
+  assert.equal(savedResults[0].poeVersion, 'poe2');
+  assert.equal(savedResults[0].league, 'Fate of the Vaal');
+  assert.equal(savedResults[0].mapName, 'Channel');
+  assert.equal(savedResults[0].farmType, 'Abyss');
+  assert.equal(savedResults[0].durationSeconds, 330);
+  assert.equal(savedResults[0].netProfit, 0);
+  assert.equal(elements.lastMapResultCard.dataset.resultState, 'ready');
+  assert.equal(elements.lastMapResultFarmType.textContent, 'Abyss');
+  assert.equal(elements.lastMapResultDuration.textContent, 'duration:330');
+  assert.equal(elements.lastMapResultProfit.innerHTML, 'profit:0:16:poe2');
+});
+
 test('dashboard html includes a last map result card with summary fields', () => {
   const html = fs.readFileSync(indexHtmlPath, 'utf8');
 

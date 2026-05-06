@@ -82,6 +82,24 @@ test('log parser does not treat PoE2 safe social areas as map entries', () => {
   assert.equal(entries.length, 0);
 });
 
+test('log parser exits PoE2 maps when the player returns to a named hideout', () => {
+  const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
+  const entries = [];
+  const exits = [];
+
+  parser.on('mapEntered', (payload) => entries.push(payload));
+  parser.on('mapExited', (payload) => exits.push(payload));
+
+  parser.parseLine('2026/05/06 12:00:00 123456 abc [INFO Client 123] : Generating level 80 area "MapChannel" with seed 1');
+  parser.parseLine('2026/05/06 12:02:00 123456 abc [INFO Client 123] : You have entered Abyssal Depths.');
+  parser.parseLine('2026/05/06 12:05:30 123456 abc [INFO Client 123] : You have entered Canal Hideout.');
+
+  assert.deepEqual(entries.map((entry) => entry.mapName), ['Channel']);
+  assert.equal(exits.length, 1);
+  assert.equal(exits[0].mapName, 'Channel');
+  assert.equal(exits[0].location, 'Canal Hideout');
+});
+
 test('log parser keeps generic non-map area entries disabled for PoE1', () => {
   const parser = new LogParser('Client.txt', { poeVersion: 'poe1' });
   const entries = [];

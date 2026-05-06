@@ -21,8 +21,8 @@ Keep the remaining farm tracking work visible and testable. This file separates 
 | --- | --- | --- | --- |
 | PoE1 map log detection | Partial | Client.txt map enter and exit events can drive map activity. | Needs full farm lifecycle validation across portal re-entry, inventory dump, and stash snapshot windows. |
 | PoE1 profit | Partial | Profit is stash-diff based after before/after snapshots. | Needs stronger UX around snapshot requirements and multi-map farm duration aggregation. |
-| PoE2 map log detection | Partial | Generated map-area logs and side-area transitions are parsed. Abyssal Depths stays inside the parent map lifecycle, and known trial side areas are ignored as map starts. | Needs more real Client.txt samples from Steam and standalone clients for league-specific side areas. |
-| PoE2 profit | Planned | PoE2 stash/OCR profit is not production-ready. Zero-profit map result persistence works. | Need a reliable loot source or clearly scoped OCR fallback before profit can be trusted. |
+| PoE2 map log detection | Partial | Generated map-area logs and side-area transitions are parsed. Abyssal Depths stays inside the parent map lifecycle, known trial side areas are ignored as map starts, and named hideouts close the active map. | Needs more real Client.txt samples from Steam and standalone clients for league-specific side areas. |
+| PoE2 profit | Planned | PoE2 stash/OCR profit is not production-ready. Zero-profit map result persistence works for completed map sessions. | Need a reliable loot source or clearly scoped OCR fallback before profit can be trusted. |
 | Farm type selection | Partial | User can choose a game-version-aware trackable farm type at map start. PoE1 and PoE2 selectors are filtered by supported map-session farms. | Needs mechanic-specific result fields and separate lifecycle support for non-map farms. |
 | Adaptive profit display | Ready | Profit display can convert chaos into Divine or Mirror using synced per-game rates. | Needs visual QA in dashboard, sessions, stash result, and overlay after live price sync. |
 | In-game overlay | Partial | Runtime, map-result, and detected Start Map prompt overlay plumbing exists through Overwolf overlay when available, with Electron fallback. | Needs real fullscreen-borderless smoke, drag in/out polish, interactive prompt validation, and reviewer evidence. |
@@ -84,10 +84,9 @@ Keep the remaining farm tracking work visible and testable. This file separates 
 
 ## Next Implementation Slices
 
-1. Add a PoE2 result smoke scenario: enter map, choose farm type, leave side area, exit map, persist result, show Last Map Result.
-2. Add visual QA screenshots for adaptive profit display in dashboard, sessions, stash result, and overlay.
-3. Decide the PoE2 profit source strategy: official stash/account route, OCR fallback, or explicitly zero-profit runtime tracking until a reliable source exists.
-4. Upgrade the Start Map prompt from an in-game notice to a true in-game farm-type selector and confirm/cancel flow after Overwolf input behavior is validated.
+1. Add visual QA screenshots for adaptive profit display in dashboard, sessions, stash result, and overlay.
+2. Decide the PoE2 profit source strategy: official stash/account route, OCR fallback, or explicitly zero-profit runtime tracking until a reliable source exists.
+3. Upgrade the Start Map prompt from an in-game notice to a true in-game farm-type selector and confirm/cancel flow after Overwolf input behavior is validated.
 
 ## Completed Implementation Slices
 
@@ -96,3 +95,4 @@ Keep the remaining farm tracking work visible and testable. This file separates 
 | Game-version-aware farm taxonomy | Ready | `farmTypeModel` filters trackable farms by PoE1/PoE2, dashboard and Start Map selectors use active game context, and unsupported selections are cleared on game-version sync. |
 | PoE2 side-area parser fixtures | Ready | `logParser` keeps Abyssal Depths inside the active map and ignores Trial of the Sekhemas / Trial of Chaos entries when no map is active. |
 | Start-map overlay prompt shell | Ready | `overlayStateModel`, renderer map-entry handling, and main overlay state now surface detected map/farm context in the in-game overlay while the desktop modal remains the authoritative input path. |
+| PoE2 result smoke scenario | Ready | Automated smoke covers PoE2 map entry, Abyssal Depths side-area stability, named-hideout exit, zero-profit local completion metadata, persistence, and Last Map Result projection. |

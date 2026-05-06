@@ -250,14 +250,21 @@ class LogParser extends EventEmitter {
         }
       },
       {
-        regex: /You have entered (Hideout|Town|Tavern|Lioneye's Watch|Forest Encampment|The Sarn Encampment|Highgate|Overseer's Tower|Lilly's Hideout|Kingsmarch)\./i,
-        handler: (match) => ({
-          type: 'map_exited',
-          location: match[1],
-          timestamp: this.extractTimestamp(line),
-          duration: this.mapStartTime ? Date.now() - this.mapStartTime : null,
-          raw: line
-        })
+        regex: /You have entered ([^\.]+)\./i,
+        handler: (match) => {
+          const areaName = match[1].trim();
+          if (!SAFE_AREA_NAMES.has(normalizeAreaKey(areaName))) {
+            return null;
+          }
+
+          return {
+            type: 'map_exited',
+            location: areaName,
+            timestamp: this.extractTimestamp(line),
+            duration: this.mapStartTime ? Date.now() - this.mapStartTime : null,
+            raw: line
+          };
+        }
       },
       {
         regex: /Connecting to instance server/i,

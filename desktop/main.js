@@ -2717,24 +2717,49 @@ async function handleMapEntered(data) {
 /**
  * Mevcut session'i bitir
  */
-async function endCurrentSession() {
+async function endCurrentSession(options = {}) {
   try {
     if (!currentSession) return;
     let session = currentSession;
     let queued = false;
+    const endedAt = options.endedAt || new Date().toISOString();
+    const explicitDurationSeconds = Number(options.durationSeconds);
+    const startedAtMs = Date.parse(currentSession.startedAt || currentSession.started_at);
+    const endedAtMs = Date.parse(endedAt);
+    const durationSeconds = Number.isFinite(explicitDurationSeconds) && explicitDurationSeconds > 0
+      ? Math.round(explicitDurationSeconds)
+      : (Number.isFinite(startedAtMs) && Number.isFinite(endedAtMs) && endedAtMs >= startedAtMs
+        ? Math.max(1, Math.round((endedAtMs - startedAtMs) / 1000))
+        : null);
+    const completionPayload = {
+      endedAt
+    };
+
+    if (durationSeconds !== null) {
+      completionPayload.durationSeconds = durationSeconds;
+    }
 
     if (currentSession.localOnly) {
       queuePendingSessionAction({
         type: 'sessionEnd',
         sessionId: currentSession.id,
-        endedAt: new Date().toISOString()
+        ...completionPayload
       });
       setQueuedCurrentSession(null);
       queued = true;
+      session = {
+        ...currentSession,
+        ...completionPayload,
+        status: 'completed'
+      };
       appendAuditTrail('auditSessionEndQueued', { mapName: currentSession.mapName }, 'warning');
     } else {
       try {
-        session = await apiClient.endSession(currentSession.id);
+        session = await apiClient.endSession(currentSession.id, completionPayload);
+        session = {
+          ...session,
+          ...completionPayload
+        };
         appendAuditTrail('auditSessionEnded', { mapName: currentSession.mapName });
       } catch (error) {
         if (!isRetryableApiError(error)) {
@@ -2744,8 +2769,13 @@ async function endCurrentSession() {
         queuePendingSessionAction({
           type: 'sessionEnd',
           sessionId: currentSession.id,
-          endedAt: new Date().toISOString()
+          ...completionPayload
         });
+        session = {
+          ...currentSession,
+          ...completionPayload,
+          status: 'completed'
+        };
         queued = true;
         appendAuditTrail('auditSessionEndQueued', { mapName: currentSession.mapName }, 'warning');
       }
@@ -2903,11 +2933,17 @@ function setupLogParser() {
   });
 
   logParser.on('mapExited', (data) => {
+    const runtimePayload = publishRuntimeSessionEvent('area_exited', data);
     if (currentSession) {
-      endCurrentSession();
+      const instances = Array.isArray(runtimePayload?.runtimeSession?.instances)
+        ? runtimePayload.runtimeSession.instances
+        : [];
+      const lastCompletedInstance = instances[instances.length - 1] || null;
+      endCurrentSession({
+        endedAt: data.timestamp,
+        durationSeconds: lastCompletedInstance?.durationSeconds
+      });
     }
-
-    publishRuntimeSessionEvent('area_exited', data);
   });
 
   logParser.start();

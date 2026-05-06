@@ -317,6 +317,76 @@ test('main session start surfaces non-retryable api failures to the renderer', a
   assert.deepEqual(notificationCalls, [['notificationError', 'sessionStartFailed']]);
 });
 
+test('main local session end adds completed metadata for PoE2 zero-profit results', async () => {
+  const queuedActions = [];
+  const messages = [];
+  const context = loadFunctions(['endCurrentSession'], {
+    currentSession: {
+      id: 'local-session-1',
+      mapName: 'Channel',
+      farmTypeId: 'abyss',
+      poeVersion: 'poe2',
+      league: 'Fate of the Vaal',
+      startedAt: '2026-05-06T12:00:00.000Z',
+      endedAt: null,
+      totalLootChaos: 0,
+      profitChaos: 0,
+      localOnly: true,
+      queued: true
+    },
+    queuePendingSessionAction(action) {
+      queuedActions.push(JSON.parse(JSON.stringify(action)));
+    },
+    setQueuedCurrentSession() {},
+    appendAuditTrail() {},
+    showNotification() {},
+    t: (key) => key,
+    updateOverlayWindow() {},
+    mainWindow: {
+      webContents: {
+        send(channel, payload) {
+          messages.push({ channel, payload: JSON.parse(JSON.stringify(payload)) });
+        }
+      }
+    }
+  });
+
+  const result = await context.endCurrentSession({
+    endedAt: '2026-05-06T12:05:30.000Z'
+  });
+
+  assert.equal(result.id, 'local-session-1');
+  assert.equal(result.queued, true);
+  assert.equal(result.status, 'completed');
+  assert.equal(result.endedAt, '2026-05-06T12:05:30.000Z');
+  assert.equal(result.durationSeconds, 330);
+  assert.deepEqual(queuedActions, [{
+    type: 'sessionEnd',
+    sessionId: 'local-session-1',
+    endedAt: '2026-05-06T12:05:30.000Z',
+    durationSeconds: 330
+  }]);
+  assert.deepEqual(messages, [{
+    channel: 'session-ended',
+    payload: {
+      id: 'local-session-1',
+      mapName: 'Channel',
+      farmTypeId: 'abyss',
+      poeVersion: 'poe2',
+      league: 'Fate of the Vaal',
+      startedAt: '2026-05-06T12:00:00.000Z',
+      endedAt: '2026-05-06T12:05:30.000Z',
+      totalLootChaos: 0,
+      profitChaos: 0,
+      localOnly: true,
+      queued: true,
+      status: 'completed',
+      durationSeconds: 330
+    }
+  }]);
+  assert.equal(context.currentSession, null);
+});
+
 test('map-enter handler publishes runtime state and leaves session start to the renderer prompt', async () => {
   const startCalls = [];
   const runtimeCalls = [];
