@@ -172,7 +172,10 @@ test('backend session route imports sequelize before using transactions', () => 
     source,
     /const\s*\{[^}]*\bsequelize\b[^}]*\}\s*=\s*require\(['"]\.\.\/models['"]\)/s
   );
+  assert.match(source, /const\s*\{[^}]*\bTransaction\b[^}]*\}\s*=\s*require\(['"]sequelize['"]\)/s);
   assert.match(source, /sequelize\.transaction\(/);
+  assert.match(source, /Transaction\.ISOLATION_LEVELS\.SERIALIZABLE/);
+  assert.doesNotMatch(source, /sequelize\.Transaction\.ISOLATION_LEVELS/);
 });
 
 test('backend session start validation accepts nullable optional map context from desktop', () => {

@@ -3,6 +3,10 @@ const assert = require('node:assert/strict');
 
 const LogParser = require('../src/modules/logParser');
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 test('log parser treats PoE2 endgame area names without Map as map entries', () => {
   const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
   const entries = [];
@@ -108,4 +112,50 @@ test('log parser keeps generic non-map area entries disabled for PoE1', () => {
   parser.parseLine('2026/05/04 15:49:10 123456 abc [INFO Client 123] : You have entered The Coast.');
 
   assert.equal(entries.length, 0);
+});
+
+test('log parser keeps PoE1 league side instances inside the active map', async () => {
+  const parser = new LogParser('Client.txt', {
+    poeVersion: 'poe1',
+    instanceExitDelayMs: 20
+  });
+  const entries = [];
+  const exits = [];
+
+  parser.on('mapEntered', (payload) => entries.push(payload));
+  parser.on('mapExited', (payload) => exits.push(payload));
+
+  parser.parseLine('2026/05/06 18:00:00 123456 abc [INFO Client 123] : Generating level 83 area "MapDunes" with seed 1');
+  parser.parseLine('2026/05/06 18:02:00 123456 abc [INFO Client 123] : Connecting to instance server...');
+  parser.parseLine('2026/05/06 18:02:02 123456 abc [INFO Client 123] : You have entered The Sacred Grove.');
+  await wait(30);
+
+  assert.deepEqual(entries.map((entry) => entry.mapName), ['Dunes Map']);
+  assert.equal(exits.length, 0);
+  assert.equal(parser.getCurrentMap().mapName, 'Dunes Map');
+
+  parser.parseLine('2026/05/06 18:08:00 123456 abc [INFO Client 123] : You have entered Canal Hideout.');
+
+  assert.equal(exits.length, 1);
+  assert.equal(exits[0].mapName, 'Dunes Map');
+  assert.equal(exits[0].location, 'Canal Hideout');
+});
+
+test('log parser still exits PoE1 maps on unresolved instance changes after debounce', async () => {
+  const parser = new LogParser('Client.txt', {
+    poeVersion: 'poe1',
+    instanceExitDelayMs: 20
+  });
+  const exits = [];
+
+  parser.on('mapExited', (payload) => exits.push(payload));
+
+  parser.parseLine('2026/05/06 18:00:00 123456 abc [INFO Client 123] : Generating level 83 area "MapDunes" with seed 1');
+  parser.parseLine('2026/05/06 18:02:00 123456 abc [INFO Client 123] : Connecting to instance server...');
+  await wait(30);
+
+  assert.equal(exits.length, 1);
+  assert.equal(exits[0].mapName, 'Dunes Map');
+  assert.equal(exits[0].location, 'instance_change');
+  assert.equal(parser.getCurrentMap().mapName, null);
 });

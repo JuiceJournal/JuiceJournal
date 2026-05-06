@@ -463,6 +463,35 @@ test('main local session end adds completed metadata for PoE2 zero-profit result
   assert.equal(context.currentSession, null);
 });
 
+test('main keeps zero-loot PoE1 sessions open on map exit for stash diff completion', () => {
+  const context = loadFunctions(['normalizePoeVersion', 'getSessionValueNumber', 'shouldAutoEndSessionOnMapExit']);
+
+  assert.equal(
+    context.shouldAutoEndSessionOnMapExit({
+      poeVersion: 'poe1',
+      totalLootChaos: 0,
+      profitChaos: 0
+    }),
+    false
+  );
+  assert.equal(
+    context.shouldAutoEndSessionOnMapExit({
+      poeVersion: 'poe1',
+      totalLootChaos: 12,
+      profitChaos: 12
+    }),
+    true
+  );
+  assert.equal(
+    context.shouldAutoEndSessionOnMapExit({
+      poeVersion: 'poe2',
+      totalLootChaos: 0,
+      profitChaos: 0
+    }),
+    true
+  );
+});
+
 test('map-enter handler publishes runtime state and leaves session start to the renderer prompt', async () => {
   const startCalls = [];
   const runtimeCalls = [];

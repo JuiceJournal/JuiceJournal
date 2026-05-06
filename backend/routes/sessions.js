@@ -10,7 +10,7 @@ const { sequelize, Session, LootEntry } = require('../models');
 const { authenticate } = require('../middleware/auth');
 const logger = require('../services/logger');
 
-const { Op } = require('sequelize');
+const { Op, Transaction } = require('sequelize');
 
 function normalizeOptionalText(value, maxLength) {
   if (typeof value !== 'string') {
@@ -258,7 +258,7 @@ router.post('/start',
 
       // Check for an active session atomically to prevent race conditions.
       const session = await sequelize.transaction(
-        { isolationLevel: sequelize.Transaction.ISOLATION_LEVELS.SERIALIZABLE },
+        { isolationLevel: Transaction.ISOLATION_LEVELS.SERIALIZABLE },
         async (t) => {
           const activeSession = await Session.findOne({
             where: {

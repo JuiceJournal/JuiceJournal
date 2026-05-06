@@ -318,7 +318,7 @@ test('renderer creates a completed map result directly from an ended session', (
   assert.equal(result.characterName, 'JaylenBaliston');
 });
 
-test('ending a map session persists a zero-profit completed map result', async () => {
+test('ending a zero-profit PoE1 map session waits for stash diff before persisting a result', async () => {
   const persisted = [];
   const calls = [];
   const state = {
@@ -337,6 +337,9 @@ test('ending a map session persists a zero-profit completed map result', async (
     'getCompletedSessionDurationSeconds',
     'getCompletedSessionFarmTypeLabel',
     'createCompletedSessionMapResult',
+    'normalizeCompletedSessionPoeVersion',
+    'hasCompletedSessionValue',
+    'shouldPersistCompletedSessionMapResult',
     'persistCompletedSessionMapResult',
     'handleEndSession'
   ], {
@@ -383,11 +386,7 @@ test('ending a map session persists a zero-profit completed map result', async (
   await context.handleEndSession();
 
   assert.equal(state.currentSession, null);
-  assert.equal(persisted.length, 1);
-  assert.equal(persisted[0].id, 'map-result-session-2');
-  assert.equal(persisted[0].farmType, 'Ritual');
-  assert.equal(persisted[0].durationSeconds, 90);
-  assert.equal(persisted[0].netProfit, 0);
+  assert.equal(persisted.length, 0);
   assert.deepEqual(calls, ['updateActiveSessionUI', 'refreshTrackerData']);
 });
 
@@ -446,6 +445,67 @@ test('profit rendering is not blocked when map-result persistence fails', async 
   await context.handleCalculateProfit();
 
   assert.deepEqual(calls[0], ['renderProfitReport', 44]);
+  assert.equal(context.elements.calculateProfitBtn.disabled, false);
+});
+
+test('poe1 stash profit calculation ends the active session after persisting the map result', async () => {
+  const calls = [];
+  const state = {
+    currentSession: {
+      id: 'session-3',
+      poeVersion: 'poe1'
+    }
+  };
+  const context = loadFunctions([
+    'normalizeCompletedSessionPoeVersion',
+    'shouldEndSessionAfterStashProfit',
+    'completeCurrentSessionAfterStashProfit',
+    'handleCalculateProfit'
+  ], {
+    state,
+    elements: {
+      calculateProfitBtn: { disabled: false }
+    },
+    stashState: {
+      beforeSnapshotId: 'before',
+      afterSnapshotId: 'after',
+      lastMapResult: null
+    },
+    isStashTrackingEnabled: () => true,
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        async calculateProfit() {
+          calls.push('calculateProfit');
+          return { summary: { netProfitChaos: 44 } };
+        },
+        async endSession() {
+          calls.push('endSession');
+          return { id: 'session-3', status: 'completed' };
+        }
+      }
+    },
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe1', league: 'Mirage' }),
+    deriveCurrentMapResult: () => ({
+      id: 'map-result-1',
+      durationSeconds: 60,
+      poeVersion: 'poe1',
+      league: 'Mirage'
+    }),
+    persistMapResultHistory: async () => calls.push('persistMapResultHistory'),
+    renderProfitReport: () => calls.push('renderProfitReport'),
+    showToast: (...args) => calls.push(['showToast', ...args]),
+    getUserFacingErrorMessage: () => 'stash.profitFailed'
+  });
+
+  await context.handleCalculateProfit();
+
+  assert.deepEqual(calls, [
+    'calculateProfit',
+    'renderProfitReport',
+    'persistMapResultHistory',
+    'endSession'
+  ]);
   assert.equal(context.elements.calculateProfitBtn.disabled, false);
 });
 

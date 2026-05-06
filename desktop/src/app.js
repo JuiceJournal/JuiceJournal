@@ -3074,7 +3074,39 @@ function createCompletedSessionMapResult(session = {}) {
   };
 }
 
+function normalizeCompletedSessionPoeVersion(value) {
+  const normalized = String(value ?? '').toLowerCase();
+  return normalized === 'poe1' || normalized === 'poe2' ? normalized : null;
+}
+
+function hasCompletedSessionValue(session = {}) {
+  const totalLootChaos = getSessionNumber(session.totalLootChaos ?? session.total_loot_chaos, 0);
+  const profitChaos = getSessionNumber(session.profitChaos ?? session.profit_chaos, 0);
+  const costChaos = getSessionNumber(session.costChaos ?? session.cost_chaos, 0);
+
+  return totalLootChaos !== 0 || profitChaos !== 0 || costChaos !== 0;
+}
+
+function shouldPersistCompletedSessionMapResult(session = {}) {
+  const poeVersion = normalizeCompletedSessionPoeVersion(session.poeVersion ?? session.poe_version)
+    || getSelectedTrackerContext().poeVersion
+    || state.settings?.poeVersion
+    || 'poe1';
+
+  if (poeVersion !== 'poe1') {
+    return true;
+  }
+
+  // PoE1 has stash API profit tracking. A zero-value completed session is only
+  // a lifecycle marker until the before/after stash diff is calculated.
+  return hasCompletedSessionValue(session);
+}
+
 async function persistCompletedSessionMapResult(session = {}) {
+  if (!shouldPersistCompletedSessionMapResult(session)) {
+    return null;
+  }
+
   const completedMapResult = createCompletedSessionMapResult(session);
   if (!completedMapResult) {
     return null;
@@ -3085,6 +3117,31 @@ async function persistCompletedSessionMapResult(session = {}) {
     return completedMapResult;
   } catch (error) {
     console.warn('Failed to persist completed map session result', error);
+    return null;
+  }
+}
+
+function shouldEndSessionAfterStashProfit(mapResult = {}) {
+  if (!state.currentSession) {
+    return false;
+  }
+
+  const poeVersion = normalizeCompletedSessionPoeVersion(mapResult?.poeVersion)
+    || normalizeCompletedSessionPoeVersion(state.currentSession?.poeVersion ?? state.currentSession?.poe_version)
+    || getSelectedTrackerContext().poeVersion;
+
+  return poeVersion === 'poe1';
+}
+
+async function completeCurrentSessionAfterStashProfit(mapResult = {}) {
+  if (!shouldEndSessionAfterStashProfit(mapResult)) {
+    return null;
+  }
+
+  try {
+    return await window.electronAPI.endSession();
+  } catch (error) {
+    console.warn('Failed to end PoE1 session after stash profit calculation', error);
     return null;
   }
 }
@@ -3153,10 +3210,13 @@ function renderLatestMapResult() {
     return;
   }
 
+  const canDisplayMapResult = typeof isDisplayableMapResult === 'function'
+    ? isDisplayableMapResult
+    : (result) => Number(result?.durationSeconds || 0) > 0;
   const latest = Array.isArray(state.mapResults)
-    ? state.mapResults.find((result) => Number(result?.durationSeconds || 0) > 0) || null
+    ? state.mapResults.find((result) => canDisplayMapResult(result)) || null
     : null;
-  const hasCompletedResult = latest && Number(latest.durationSeconds || 0) > 0;
+  const hasCompletedResult = Boolean(latest);
 
   if (!hasCompletedResult) {
     elements.lastMapResultCard.dataset.resultState = 'empty';
@@ -3179,13 +3239,43 @@ function renderLatestMapResult() {
   );
 }
 
+function isPoe1ZeroLifecycleResult(result = {}) {
+  const poeVersion = normalizeCompletedSessionPoeVersion(result.poeVersion)
+    || state.settings?.poeVersion
+    || 'poe1';
+  const inputValue = getSessionNumber(result.inputValue, 0);
+  const outputValue = getSessionNumber(result.outputValue, 0);
+  const netProfit = getSessionNumber(result.netProfit, 0);
+  const id = String(result.id || '');
+  const hasSnapshotTimestampSuffix = /-\d{10,}$/.test(id);
+  const hasTopItems = (
+    Array.isArray(result.topInputs) && result.topInputs.length > 0
+  ) || (
+    Array.isArray(result.topOutputs) && result.topOutputs.length > 0
+  );
+
+  return poeVersion === 'poe1'
+    && inputValue === 0
+    && outputValue === 0
+    && netProfit === 0
+    && !hasTopItems
+    && !hasSnapshotTimestampSuffix;
+}
+
+function isDisplayableMapResult(result = {}) {
+  return Number(result?.durationSeconds || 0) > 0 && !isPoe1ZeroLifecycleResult(result);
+}
+
 function renderMapResultHistory() {
   if (!elements.mapResultFilter || !elements.mapResultHistory) {
     return;
   }
 
+  const canDisplayMapResult = typeof isDisplayableMapResult === 'function'
+    ? isDisplayableMapResult
+    : (result) => Number(result?.durationSeconds || 0) > 0;
   const results = Array.isArray(state.mapResults)
-    ? state.mapResults.filter((result) => Number(result?.durationSeconds || 0) > 0)
+    ? state.mapResults.filter((result) => canDisplayMapResult(result))
     : [];
   const availableFarmTypes = [];
   const seenFarmTypes = new Set();
@@ -4420,6 +4510,7 @@ async function handleCalculateProfit() {
     }
     renderProfitReport(report);
     if (stashState.lastMapResult && Number(stashState.lastMapResult.durationSeconds || 0) > 0) {
+      let mapResultPersisted = false;
       if (typeof window.electronAPI?.showMapResultOverlay === 'function') {
         try {
           await window.electronAPI.showMapResultOverlay(stashState.lastMapResult);
@@ -4430,8 +4521,13 @@ async function handleCalculateProfit() {
 
       try {
         await persistMapResultHistory(stashState.lastMapResult);
+        mapResultPersisted = true;
       } catch (error) {
         console.warn('Failed to persist map result history', error);
+      }
+
+      if (mapResultPersisted) {
+        await completeCurrentSessionAfterStashProfit(stashState.lastMapResult);
       }
     }
   } catch (error) {

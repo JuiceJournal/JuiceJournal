@@ -914,7 +914,12 @@ test('session-ended events persist completed map results for automatic log exits
   const listeners = {};
   const persistedResults = [];
   const refreshCalls = [];
-  const context = loadFunctions(['persistCompletedSessionMapResult', 'setupIPCListeners'], {
+  const context = loadFunctions([
+    'normalizeCompletedSessionPoeVersion',
+    'shouldPersistCompletedSessionMapResult',
+    'persistCompletedSessionMapResult',
+    'setupIPCListeners'
+  ], {
     state: {
       currentSession: {
         id: 'session-1'
@@ -954,6 +959,7 @@ test('session-ended events persist completed map results for automatic log exits
 
   await listeners.sessionEnded({
     id: 'session-1',
+    poeVersion: 'poe2',
     profitChaos: 0,
     durationSec: 145
   });
@@ -1015,6 +1021,9 @@ test('poe2 result smoke persists zero-profit map result and projects it into Las
     'getCompletedSessionDurationSeconds',
     'getCompletedSessionFarmTypeLabel',
     'createCompletedSessionMapResult',
+    'normalizeCompletedSessionPoeVersion',
+    'hasCompletedSessionValue',
+    'shouldPersistCompletedSessionMapResult',
     'persistCompletedSessionMapResult',
     'persistMapResultHistory',
     'renderLatestMapResult',
@@ -1205,6 +1214,72 @@ test('renderer keeps the last map result card empty when the latest result has n
   assert.equal(elements.lastMapResultFarmType.textContent, 'No completed map yet');
   assert.equal(elements.lastMapResultDuration.textContent, '—');
   assert.equal(elements.lastMapResultProfit.innerHTML, '—');
+});
+
+test('renderer skips stale zero-value PoE1 lifecycle results in the latest map card', () => {
+  const elements = {
+    lastMapResultCard: {
+      dataset: {
+        resultState: 'empty'
+      }
+    },
+    lastMapResultFarmType: {
+      textContent: ''
+    },
+    lastMapResultDuration: {
+      textContent: ''
+    },
+    lastMapResultProfit: {
+      innerHTML: ''
+    }
+  };
+  const context = loadFunctions([
+    'getSessionNumber',
+    'normalizeCompletedSessionPoeVersion',
+    'isPoe1ZeroLifecycleResult',
+    'isDisplayableMapResult',
+    'renderLatestMapResult'
+  ], {
+    elements,
+    state: {
+      settings: {
+        poeVersion: 'poe1'
+      },
+      mapResults: [
+        {
+          id: 'map-result-local-session-1',
+          farmType: 'Breach',
+          durationSeconds: 90,
+          inputValue: 0,
+          outputValue: 0,
+          netProfit: 0,
+          topInputs: [],
+          topOutputs: [],
+          poeVersion: 'poe1'
+        },
+        {
+          id: 'map-result-local-session-1-1775901600000',
+          farmType: 'Breach',
+          durationSeconds: 90,
+          inputValue: 0,
+          outputValue: 0,
+          netProfit: 0,
+          topInputs: [],
+          topOutputs: [],
+          poeVersion: 'poe1'
+        }
+      ]
+    },
+    formatDuration: (seconds) => `duration:${seconds}`,
+    currencyHTML: (value, type, iconSize, poeVersion) => `profit:${value}:${type}:${iconSize}:${poeVersion}`
+  });
+
+  context.renderLatestMapResult();
+
+  assert.equal(elements.lastMapResultCard.dataset.resultState, 'ready');
+  assert.equal(elements.lastMapResultFarmType.textContent, 'Breach');
+  assert.equal(elements.lastMapResultDuration.textContent, 'duration:90');
+  assert.equal(elements.lastMapResultProfit.innerHTML, 'profit:0:chaos:16:poe1');
 });
 
 test('renderer projects only the latest map result into the dashboard card', () => {

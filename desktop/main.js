@@ -2998,6 +2998,35 @@ async function handleMapEntered(data) {
   publishRuntimeSessionEvent('area_entered', data);
 }
 
+function getSessionValueNumber(session = {}, ...fields) {
+  for (const field of fields) {
+    const value = session[field];
+    const normalized = Number(value);
+    if (Number.isFinite(normalized)) {
+      return normalized;
+    }
+  }
+
+  return 0;
+}
+
+function shouldAutoEndSessionOnMapExit(session = {}) {
+  const poeVersion = normalizePoeVersion(session.poeVersion ?? session.poe_version)
+    || 'poe1';
+
+  if (poeVersion !== 'poe1') {
+    return true;
+  }
+
+  const totalLootChaos = getSessionValueNumber(session, 'totalLootChaos', 'total_loot_chaos');
+  const profitChaos = getSessionValueNumber(session, 'profitChaos', 'profit_chaos');
+
+  // PoE1 profit is normally finalized by the stash before/after diff. If no
+  // loot has been recorded yet, keep the session open after leaving the map so
+  // the player can dump loot and calculate the stash diff first.
+  return totalLootChaos !== 0 || profitChaos !== 0;
+}
+
 /**
  * Mevcut session'i bitir
  */
@@ -3218,7 +3247,7 @@ function setupLogParser() {
 
   logParser.on('mapExited', (data) => {
     const runtimePayload = publishRuntimeSessionEvent('area_exited', data);
-    if (currentSession) {
+    if (currentSession && shouldAutoEndSessionOnMapExit(currentSession)) {
       const instances = Array.isArray(runtimePayload?.runtimeSession?.instances)
         ? runtimePayload.runtimeSession.instances
         : [];

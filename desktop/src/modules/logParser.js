@@ -54,10 +54,15 @@ class LogParser extends EventEmitter {
     
     this.logPath = logPath;
     this.poeVersion = options.poeVersion || null;
+    this.instanceExitDelayMs = Number.isFinite(Number(options.instanceExitDelayMs))
+      ? Math.max(0, Number(options.instanceExitDelayMs))
+      : 1500;
     this.tail = null;
     this.isRunning = false;
     this.lastPosition = 0;
     this.watchInterval = null;
+    this.pendingInstanceExitTimer = null;
+    this.pendingInstanceExitData = null;
     
     // Map state
     this.currentMap = null;
@@ -103,6 +108,7 @@ class LogParser extends EventEmitter {
       clearInterval(this.watchInterval);
       this.watchInterval = null;
     }
+    this.clearPendingInstanceExit();
 
     this.emit('stopped');
   }
@@ -157,6 +163,8 @@ class LogParser extends EventEmitter {
    * Parse a single line
    */
   parseLine(line) {
+    this.reconcilePendingInstanceExit(line);
+
     // Detect map entry.
     // Example: 2023/12/25 15:30:45 ***** MAP LOADING : Maps/Dunes_01.tbw
     // Example: 2023/12/25 15:30:45 Generating level 16 area "MapDunes"
@@ -273,15 +281,17 @@ class LogParser extends EventEmitter {
             return null;
           }
 
-          // Leaving a map and connecting to a new instance.
+          // PoE1 Mirage/league mechanics can move the player into a side
+          // instance before they return to the same map. Wait briefly for the
+          // next area line before treating the connection as a real map exit.
           if (this.currentMap) {
-            return {
+            this.schedulePendingInstanceExit({
               type: 'map_exited',
               location: 'instance_change',
               timestamp: this.extractTimestamp(line),
               duration: this.mapStartTime ? Date.now() - this.mapStartTime : null,
               raw: line
-            };
+            });
           }
           return null;
         }
@@ -313,10 +323,78 @@ class LogParser extends EventEmitter {
     }
   }
 
+  clearPendingInstanceExit() {
+    if (this.pendingInstanceExitTimer) {
+      clearTimeout(this.pendingInstanceExitTimer);
+      this.pendingInstanceExitTimer = null;
+    }
+    this.pendingInstanceExitData = null;
+  }
+
+  schedulePendingInstanceExit(data) {
+    this.clearPendingInstanceExit();
+    this.pendingInstanceExitData = data;
+
+    if (this.instanceExitDelayMs <= 0) {
+      const pendingExit = this.pendingInstanceExitData;
+      this.pendingInstanceExitData = null;
+      this.handleMapExit(pendingExit);
+      return;
+    }
+
+    this.pendingInstanceExitTimer = setTimeout(() => {
+      const pendingExit = this.pendingInstanceExitData;
+      this.pendingInstanceExitTimer = null;
+      this.pendingInstanceExitData = null;
+      if (pendingExit) {
+        this.handleMapExit(pendingExit);
+      }
+    }, this.instanceExitDelayMs);
+  }
+
+  reconcilePendingInstanceExit(line) {
+    if (!this.pendingInstanceExitData) {
+      return;
+    }
+
+    const enteredMatch = line.match(/You have entered ([^\.]+)\./i);
+    if (!enteredMatch) {
+      const generatedMatch = line.match(/Generating level \d+ area "([^"]+)"/i);
+      if (!generatedMatch) {
+        return;
+      }
+
+      const areaName = this.formatAreaName(generatedMatch[1]);
+      if (SAFE_AREA_NAMES.has(normalizeAreaKey(areaName))) {
+        this.clearPendingInstanceExit();
+        return;
+      }
+
+      if (/^Map/i.test(generatedMatch[1])) {
+        const pendingExit = this.pendingInstanceExitData;
+        this.clearPendingInstanceExit();
+        this.handleMapExit(pendingExit);
+        return;
+      }
+
+      this.clearPendingInstanceExit();
+      return;
+    }
+
+    const areaName = enteredMatch[1].trim();
+    if (SAFE_AREA_NAMES.has(normalizeAreaKey(areaName))) {
+      this.clearPendingInstanceExit();
+      return;
+    }
+
+    this.clearPendingInstanceExit();
+  }
+
   /**
    * Handle map entry
    */
   handleMapEnter(data) {
+    this.clearPendingInstanceExit();
     this.currentMap = data.mapName;
     this.mapStartTime = Date.now();
 
@@ -334,6 +412,8 @@ class LogParser extends EventEmitter {
     if (!this.currentMap) {
       return; // Do nothing when there is no active map.
     }
+
+    this.clearPendingInstanceExit();
 
     const exitData = {
       mapName: this.currentMap,
