@@ -130,6 +130,24 @@
     };
   }
 
+  function getStartMapPromptSummary(startMapPrompt) {
+    if (!startMapPrompt || typeof startMapPrompt !== 'object') {
+      return null;
+    }
+
+    const mapName = normalizeString(startMapPrompt.mapName ?? startMapPrompt.map_name, 'Unknown Map');
+    const farmType = normalizeString(startMapPrompt.farmType ?? startMapPrompt.farmTypeLabel);
+    const league = normalizeString(startMapPrompt.league);
+    const poeVersion = normalizeString(startMapPrompt.poeVersion ?? startMapPrompt.gameVersion);
+
+    return {
+      mapName,
+      farmType,
+      league,
+      poeVersion
+    };
+  }
+
   function createPrimaryLine(characterSummary) {
     if (!characterSummary) {
       return 'Character sync needed';
@@ -141,7 +159,7 @@
     ].filter(Boolean).join(SEPARATOR) || 'Character sync needed';
   }
 
-  function deriveOverlayState({ enabled = false, character, runtime, session, now = Date.now() } = {}) {
+  function deriveOverlayState({ enabled = false, character, runtime, session, startMapPrompt, now = Date.now() } = {}) {
     const sessionSummary = getActiveSessionSummary(session, now);
     if (enabled !== true && !sessionSummary) {
       return {
@@ -164,6 +182,23 @@
         primaryLine: sessionSummary.mapName,
         secondaryLine: contextLine || 'Active map session',
         metaLine: `elapsed ${formatDuration(sessionSummary.elapsedSeconds)}`
+      };
+    }
+
+    const startMapPromptSummary = getStartMapPromptSummary(startMapPrompt);
+    if (startMapPromptSummary && !sessionSummary) {
+      const contextLine = [
+        startMapPromptSummary.farmType || 'Choose farm type',
+        startMapPromptSummary.poeVersion ? startMapPromptSummary.poeVersion.replace(/^poe/i, 'PoE ') : null,
+        startMapPromptSummary.league
+      ].filter(Boolean).join(SEPARATOR);
+
+      return {
+        visibility: 'visible',
+        mode: 'start-map-prompt',
+        primaryLine: startMapPromptSummary.mapName,
+        secondaryLine: contextLine || 'Confirm detected map',
+        metaLine: 'confirm map start'
       };
     }
 

@@ -98,7 +98,7 @@
   function normalizeRuntimeState(state) {
     return {
       visibility: state.visibility || 'waiting',
-      mode: 'runtime',
+      mode: state.mode === 'start-map-prompt' ? 'start-map-prompt' : 'runtime',
       tone: 'neutral',
       primaryLine: state.primaryLine || 'Waiting for game',
       secondaryLine: state.secondaryLine || 'Waiting for runtime session',
@@ -195,7 +195,9 @@
       elements.card.hidden = visibility === 'hidden' && !isExitingMapResult;
     }
 
-    setText(elements.kickerLabel, mode === 'map-result' ? 'Map Result' : 'Juice Journal');
+    setText(elements.kickerLabel, mode === 'map-result'
+      ? 'Map Result'
+      : (mode === 'start-map-prompt' ? 'Start Map' : 'Juice Journal'));
     setText(elements.primary, state.primaryLine);
     setText(elements.secondary, state.secondaryLine);
     setText(elements.meta, state.metaLine);

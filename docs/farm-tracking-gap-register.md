@@ -25,7 +25,7 @@ Keep the remaining farm tracking work visible and testable. This file separates 
 | PoE2 profit | Planned | PoE2 stash/OCR profit is not production-ready. Zero-profit map result persistence works. | Need a reliable loot source or clearly scoped OCR fallback before profit can be trusted. |
 | Farm type selection | Partial | User can choose a game-version-aware trackable farm type at map start. PoE1 and PoE2 selectors are filtered by supported map-session farms. | Needs mechanic-specific result fields and separate lifecycle support for non-map farms. |
 | Adaptive profit display | Ready | Profit display can convert chaos into Divine or Mirror using synced per-game rates. | Needs visual QA in dashboard, sessions, stash result, and overlay after live price sync. |
-| In-game overlay | Partial | Runtime and map-result overlay plumbing exists through Overwolf overlay when available, with Electron fallback. | Needs real fullscreen-borderless smoke, drag in/out polish, and reviewer evidence. |
+| In-game overlay | Partial | Runtime, map-result, and detected Start Map prompt overlay plumbing exists through Overwolf overlay when available, with Electron fallback. | Needs real fullscreen-borderless smoke, drag in/out polish, interactive prompt validation, and reviewer evidence. |
 
 ## PoE1 Farm Type Coverage
 
@@ -69,7 +69,7 @@ Keep the remaining farm tracking work visible and testable. This file separates 
 | Completed map result card | Partial | Confirm result card receives farm type, map name, elapsed time, and adaptive profit formatting. |
 | Drag in/out motion | Partial | Current map-result animation is right-side slide in/out. Needs gameplay UX tuning. |
 | Pin/dismiss controls | Partial | Controls exist; pointer passthrough behavior needs real in-game validation. |
-| PoE2 auto-start prompt | Partial | Map entry can open Start Map modal in the desktop app. Needs an in-game overlay prompt path if reviewers expect no alt-tab. |
+| PoE2 auto-start prompt | Partial | Map entry now sends a Start Map prompt to the in-game overlay before opening the authoritative desktop Start Map modal. | Needs true in-game farm-type selection and confirm/cancel once Overwolf input behavior is validated. |
 | Review evidence | Planned | Capture screenshots/video from a packaged or reviewer-equivalent build. |
 
 ## Data Sources
@@ -84,10 +84,10 @@ Keep the remaining farm tracking work visible and testable. This file separates 
 
 ## Next Implementation Slices
 
-1. Build an in-game Start Map overlay prompt path so PoE2 map entry does not require the user to alt-tab to the desktop window.
-2. Add a PoE2 result smoke scenario: enter map, choose farm type, leave side area, exit map, persist result, show Last Map Result.
-3. Add visual QA screenshots for adaptive profit display in dashboard, sessions, stash result, and overlay.
-4. Decide the PoE2 profit source strategy: official stash/account route, OCR fallback, or explicitly zero-profit runtime tracking until a reliable source exists.
+1. Add a PoE2 result smoke scenario: enter map, choose farm type, leave side area, exit map, persist result, show Last Map Result.
+2. Add visual QA screenshots for adaptive profit display in dashboard, sessions, stash result, and overlay.
+3. Decide the PoE2 profit source strategy: official stash/account route, OCR fallback, or explicitly zero-profit runtime tracking until a reliable source exists.
+4. Upgrade the Start Map prompt from an in-game notice to a true in-game farm-type selector and confirm/cancel flow after Overwolf input behavior is validated.
 
 ## Completed Implementation Slices
 
@@ -95,3 +95,4 @@ Keep the remaining farm tracking work visible and testable. This file separates 
 | --- | --- | --- |
 | Game-version-aware farm taxonomy | Ready | `farmTypeModel` filters trackable farms by PoE1/PoE2, dashboard and Start Map selectors use active game context, and unsupported selections are cleared on game-version sync. |
 | PoE2 side-area parser fixtures | Ready | `logParser` keeps Abyssal Depths inside the active map and ignores Trial of the Sekhemas / Trial of Chaos entries when no map is active. |
+| Start-map overlay prompt shell | Ready | `overlayStateModel`, renderer map-entry handling, and main overlay state now surface detected map/farm context in the in-game overlay while the desktop modal remains the authoritative input path. |

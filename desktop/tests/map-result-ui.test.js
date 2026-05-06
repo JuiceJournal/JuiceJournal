@@ -716,6 +716,64 @@ test('map-entered events prompt for a session with the detected map instead of s
   assert.deepEqual(startCalls, [{ defaultMapName: 'Tower', source: 'map-detected' }]);
 });
 
+test('map-entered events show an in-game start-map overlay prompt before opening the desktop modal', async () => {
+  const overlayPrompts = [];
+  const startCalls = [];
+  const context = loadFunctions(['handleMapEnteredEvent'], {
+    state: {
+      currentSession: null,
+      settings: {
+        autoStartSession: true
+      },
+      farmType: {
+        selectedFarmTypeId: 'breach'
+      }
+    },
+    setRuntimeSessionState: () => {},
+    showToast: () => {},
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe2',
+      league: 'Fate of the Vaal',
+      farmTypeId: 'breach',
+      label: 'PoE 2 - Fate of the Vaal'
+    }),
+    getFarmTypeModel: () => ({
+      getFarmTypeById: (id) => (id === 'breach' ? { id: 'breach', label: 'Breach' } : null)
+    }),
+    window: {
+      t: (key, values = {}) => values.mapName ? `${key}:${values.mapName}` : key,
+      electronAPI: {
+        showStartMapPromptOverlay: async (payload) => {
+          overlayPrompts.push(payload);
+        },
+        hideStartMapPromptOverlay: async () => {
+          overlayPrompts.push({ hidden: true });
+        }
+      }
+    },
+    handleStartSession: async (options) => {
+      startCalls.push({ ...options });
+    }
+  });
+
+  await context.handleMapEnteredEvent({
+    mapName: 'Channel'
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(overlayPrompts)), [
+    {
+      mapName: 'Channel',
+      poeVersion: 'poe2',
+      league: 'Fate of the Vaal',
+      farmTypeId: 'breach',
+      farmType: 'Breach',
+      source: 'map-detected'
+    },
+    { hidden: true }
+  ]);
+  assert.deepEqual(startCalls, [{ defaultMapName: 'Channel', source: 'map-detected' }]);
+});
+
 test('session-ended events persist completed map results for automatic log exits', async () => {
   const listeners = {};
   const persistedResults = [];

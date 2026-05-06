@@ -2382,12 +2382,55 @@ async function handleMapEnteredEvent(data = {}) {
     : null;
 
   state.mapSessionPromptActive = true;
+  let startPromptOverlayShown = false;
   try {
+    if (window.electronAPI?.showStartMapPromptOverlay) {
+      try {
+        const trackerContext = typeof getSelectedTrackerContext === 'function'
+          ? getSelectedTrackerContext()
+          : {};
+        const farmTypeId = trackerContext?.farmTypeId || null;
+        let farmType = null;
+
+        if (farmTypeId && typeof getFarmTypeModel === 'function') {
+          const farmTypeModel = getFarmTypeModel();
+          if (typeof farmTypeModel.getFarmTypeById === 'function') {
+            farmType = farmTypeModel.getFarmTypeById(farmTypeId, {
+              poeVersion: trackerContext?.poeVersion
+            })?.label || null;
+          } else if (typeof farmTypeModel.listFarmTypes === 'function') {
+            farmType = farmTypeModel.listFarmTypes({
+              poeVersion: trackerContext?.poeVersion
+            }).find((entry) => entry.id === farmTypeId)?.label || null;
+          }
+        }
+
+        await window.electronAPI.showStartMapPromptOverlay({
+          mapName: detectedMapName || data.mapName || null,
+          poeVersion: trackerContext?.poeVersion || null,
+          league: trackerContext?.league || null,
+          farmTypeId,
+          farmType,
+          source: 'map-detected'
+        });
+        startPromptOverlayShown = true;
+      } catch (error) {
+        console.warn('Failed to show start-map overlay prompt', error);
+      }
+    }
+
     await handleStartSession({
       defaultMapName: detectedMapName,
       source: 'map-detected'
     });
   } finally {
+    if (startPromptOverlayShown && window.electronAPI?.hideStartMapPromptOverlay) {
+      try {
+        await window.electronAPI.hideStartMapPromptOverlay();
+      } catch (error) {
+        console.warn('Failed to hide start-map overlay prompt', error);
+      }
+    }
     state.mapSessionPromptActive = false;
   }
 }

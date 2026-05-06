@@ -288,6 +288,7 @@ let overlayWindow = null;
 let overlayCharacterState = null;
 let overlayRuntimeState = null;
 let overlayMapResultState = null;
+let overlayStartMapPromptState = null;
 let overlayMapResultDismissTimer = null;
 let lastActiveCharacterHint = null;
 let nativeGameInfoProducer = null;
@@ -2257,6 +2258,29 @@ function showMapResultOverlay(result, options = {}) {
   return updateOverlayWindow();
 }
 
+function showStartMapPromptOverlay(prompt = {}, options = {}) {
+  const normalizePromptText = (value, fallback = null) => {
+    const normalized = typeof value === 'string' ? value.trim() : '';
+    return normalized || fallback;
+  };
+
+  overlayStartMapPromptState = {
+    mapName: normalizePromptText(prompt.mapName, 'Unknown Map'),
+    farmType: normalizePromptText(prompt.farmType),
+    poeVersion: normalizePromptText(prompt.poeVersion || prompt.gameVersion),
+    league: normalizePromptText(prompt.league),
+    source: normalizePromptText(prompt.source, 'map-detected'),
+    createdAt: options.now ?? Date.now()
+  };
+
+  return updateOverlayWindow();
+}
+
+function hideStartMapPromptOverlay() {
+  overlayStartMapPromptState = null;
+  return updateOverlayWindow();
+}
+
 function toggleMapResultOverlayPin() {
   if (!overlayMapResultState?.result) {
     return updateOverlayWindow();
@@ -2319,6 +2343,7 @@ function buildOverlayState({ character = overlayCharacterState, runtimeSession =
     character,
     runtime: runtimeSession,
     session: getActiveSessionOverlayState(),
+    startMapPrompt: currentSession ? null : overlayStartMapPromptState,
     now: Date.now()
   });
 }
@@ -2665,6 +2690,7 @@ async function startNewSession(input = {}) {
     }
 
     currentSession = session;
+    overlayStartMapPromptState = null;
     if (typeof updateOverlayWindow === 'function') {
       updateOverlayWindow();
     }
@@ -3760,6 +3786,16 @@ function setupIPC() {
   ipcMain.handle('show-map-result-overlay', async (event, result, options = {}) => {
     assertDesktopUserAuthenticated();
     return showMapResultOverlay(result, options || {});
+  });
+
+  ipcMain.handle('show-start-map-prompt-overlay', async (event, prompt, options = {}) => {
+    assertDesktopUserAuthenticated();
+    return showStartMapPromptOverlay(prompt || {}, options || {});
+  });
+
+  ipcMain.handle('hide-start-map-prompt-overlay', async () => {
+    assertDesktopUserAuthenticated();
+    return hideStartMapPromptOverlay();
   });
 
   ipcMain.handle('show-runtime-overlay-preview', async (event, runtimeSession) => {

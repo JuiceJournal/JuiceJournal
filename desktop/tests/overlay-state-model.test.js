@@ -114,6 +114,26 @@ test('overlay state model shows active map session details even without GEP runt
   assert.equal(state.metaLine, 'elapsed 1m 10s');
 });
 
+test('overlay state model shows a start-map prompt for detected map entries', () => {
+  const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
+
+  const state = deriveOverlayState({
+    enabled: true,
+    startMapPrompt: {
+      mapName: 'Channel',
+      farmType: 'Breach',
+      poeVersion: 'poe2',
+      league: 'Fate of the Vaal'
+    }
+  });
+
+  assert.equal(state.visibility, 'visible');
+  assert.equal(state.mode, 'start-map-prompt');
+  assert.equal(state.primaryLine, 'Channel');
+  assert.equal(state.secondaryLine, 'Breach \u00b7 PoE 2 \u00b7 Fate of the Vaal');
+  assert.equal(state.metaLine, 'confirm map start');
+});
+
 test('overlay state model returns hidden state when overlay is disabled or omitted', () => {
   const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
 

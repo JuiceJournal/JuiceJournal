@@ -244,6 +244,49 @@ test('main session start forwards the selected farm type to api and queued paylo
   ]);
 });
 
+test('main start-map overlay prompt state can be shown and cleared independently of map results', () => {
+  const overlayUpdates = [];
+  const context = loadFunctions(['showStartMapPromptOverlay', 'hideStartMapPromptOverlay'], {
+    overlayStartMapPromptState: null,
+    updateOverlayWindow() {
+      overlayUpdates.push(JSON.parse(JSON.stringify(context.overlayStartMapPromptState)));
+      return { updated: true };
+    }
+  });
+
+  context.showStartMapPromptOverlay({
+    mapName: 'Channel',
+    farmType: 'Breach',
+    poeVersion: 'poe2',
+    league: 'Fate of the Vaal'
+  }, {
+    now: Date.parse('2026-05-06T12:00:00.000Z')
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(context.overlayStartMapPromptState)), {
+    mapName: 'Channel',
+    farmType: 'Breach',
+    poeVersion: 'poe2',
+    league: 'Fate of the Vaal',
+    source: 'map-detected',
+    createdAt: Date.parse('2026-05-06T12:00:00.000Z')
+  });
+
+  context.hideStartMapPromptOverlay();
+
+  assert.deepEqual(overlayUpdates, [
+    {
+      mapName: 'Channel',
+      farmType: 'Breach',
+      poeVersion: 'poe2',
+      league: 'Fate of the Vaal',
+      source: 'map-detected',
+      createdAt: Date.parse('2026-05-06T12:00:00.000Z')
+    },
+    null
+  ]);
+});
+
 test('main session start surfaces non-retryable api failures to the renderer', async () => {
   const notificationCalls = [];
   const context = loadFunctions(['normalizeStoredFarmTypeId', 'startNewSession'], {
