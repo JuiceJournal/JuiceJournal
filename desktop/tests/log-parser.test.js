@@ -59,6 +59,19 @@ test('log parser keeps PoE2 Abyssal Depths transitions inside the active map', (
   assert.equal(exits[0].location, 'Canal Hideout');
 });
 
+test('log parser ignores PoE2 trial side areas when no map is active', () => {
+  const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
+  const entries = [];
+
+  parser.on('mapEntered', (payload) => entries.push(payload));
+
+  parser.parseLine('2026/05/05 19:14:10 123456 abc [INFO Client 123] : You have entered Trial of the Sekhemas.');
+  parser.parseLine('2026/05/05 19:18:42 123456 abc [INFO Client 123] : You have entered Trial of Chaos.');
+  parser.parseLine('2026/05/05 19:21:08 123456 abc [INFO Client 123] : You have entered The Trial of Chaos.');
+
+  assert.deepEqual(entries, []);
+});
+
 test('log parser does not treat PoE2 safe social areas as map entries', () => {
   const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
   const entries = [];

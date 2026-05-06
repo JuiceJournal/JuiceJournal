@@ -2,7 +2,7 @@
 
 Status: active tracking document for PoE1, PoE2, and in-game overlay readiness.
 
-Last updated: 2026-05-05
+Last updated: 2026-05-06
 
 ## Goal
 
@@ -21,7 +21,7 @@ Keep the remaining farm tracking work visible and testable. This file separates 
 | --- | --- | --- | --- |
 | PoE1 map log detection | Partial | Client.txt map enter and exit events can drive map activity. | Needs full farm lifecycle validation across portal re-entry, inventory dump, and stash snapshot windows. |
 | PoE1 profit | Partial | Profit is stash-diff based after before/after snapshots. | Needs stronger UX around snapshot requirements and multi-map farm duration aggregation. |
-| PoE2 map log detection | Partial | Generated map-area logs and side-area transitions are parsed, including Abyssal Depths staying inside the parent map lifecycle. | Needs a broader side-area list and more real Client.txt samples from Steam and standalone clients. |
+| PoE2 map log detection | Partial | Generated map-area logs and side-area transitions are parsed. Abyssal Depths stays inside the parent map lifecycle, and known trial side areas are ignored as map starts. | Needs more real Client.txt samples from Steam and standalone clients for league-specific side areas. |
 | PoE2 profit | Planned | PoE2 stash/OCR profit is not production-ready. Zero-profit map result persistence works. | Need a reliable loot source or clearly scoped OCR fallback before profit can be trusted. |
 | Farm type selection | Partial | User can choose a game-version-aware trackable farm type at map start. PoE1 and PoE2 selectors are filtered by supported map-session farms. | Needs mechanic-specific result fields and separate lifecycle support for non-map farms. |
 | Adaptive profit display | Ready | Profit display can convert chaos into Divine or Mirror using synced per-game rates. | Needs visual QA in dashboard, sessions, stash result, and overlay after live price sync. |
@@ -51,7 +51,7 @@ Keep the remaining farm tracking work visible and testable. This file separates 
 
 | Farm Type | Status | Notes |
 | --- | --- | --- |
-| Abyss | Partial | Exists in selector. Abyssal Depths should remain part of the active map, not start a new map. |
+| Abyss | Partial | Exists in selector. Abyssal Depths remains part of the active map instead of starting a new map. |
 | Breach | Partial | Exists in selector. Needs real map smoke and result examples. |
 | Expedition | Partial | Exists in selector. Needs real map smoke and overlay copy validation. |
 | Ritual | Partial | Exists in selector. Needs real map smoke and result examples. |
@@ -84,14 +84,14 @@ Keep the remaining farm tracking work visible and testable. This file separates 
 
 ## Next Implementation Slices
 
-1. Add more PoE2 side-area fixtures from real Client.txt samples and lock them with parser tests.
-2. Build an in-game Start Map overlay prompt path so PoE2 map entry does not require the user to alt-tab to the desktop window.
-3. Add a PoE2 result smoke scenario: enter map, choose farm type, leave side area, exit map, persist result, show Last Map Result.
-4. Add visual QA screenshots for adaptive profit display in dashboard, sessions, stash result, and overlay.
-5. Decide the PoE2 profit source strategy: official stash/account route, OCR fallback, or explicitly zero-profit runtime tracking until a reliable source exists.
+1. Build an in-game Start Map overlay prompt path so PoE2 map entry does not require the user to alt-tab to the desktop window.
+2. Add a PoE2 result smoke scenario: enter map, choose farm type, leave side area, exit map, persist result, show Last Map Result.
+3. Add visual QA screenshots for adaptive profit display in dashboard, sessions, stash result, and overlay.
+4. Decide the PoE2 profit source strategy: official stash/account route, OCR fallback, or explicitly zero-profit runtime tracking until a reliable source exists.
 
 ## Completed Implementation Slices
 
 | Slice | Status | Evidence |
 | --- | --- | --- |
 | Game-version-aware farm taxonomy | Ready | `farmTypeModel` filters trackable farms by PoE1/PoE2, dashboard and Start Map selectors use active game context, and unsupported selections are cleared on game-version sync. |
+| PoE2 side-area parser fixtures | Ready | `logParser` keeps Abyssal Depths inside the active map and ignores Trial of the Sekhemas / Trial of Chaos entries when no map is active. |

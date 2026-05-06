@@ -33,14 +33,18 @@ const SAFE_AREA_NAMES = new Set([
 const POE2_SIDE_AREA_NAMES = new Set([
   'abyssal depth',
   'abyssal depths',
-  'the abyssal depths'
+  'the abyssal depths',
+  'trial of the sekhemas',
+  'the trial of the sekhemas',
+  'trial of chaos',
+  'the trial of chaos'
 ]);
 
 function normalizeAreaKey(value) {
   return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-function isPoe2SideAreaName(value) {
+function isPoe2NonMapAreaName(value) {
   return POE2_SIDE_AREA_NAMES.has(normalizeAreaKey(value));
 }
 
@@ -168,7 +172,7 @@ class LogParser extends EventEmitter {
           }
 
           const mapName = this.formatMapName(areaId);
-          if (this.poeVersion === 'poe2' && isPoe2SideAreaName(mapName)) {
+          if (this.poeVersion === 'poe2' && isPoe2NonMapAreaName(mapName)) {
             return null;
           }
 
@@ -189,13 +193,13 @@ class LogParser extends EventEmitter {
           const normalizedAreaName = normalizeAreaKey(areaName);
           const isSafeArea = SAFE_AREA_NAMES.has(normalizedAreaName);
           if (this.poeVersion === 'poe2') {
-            if (isSafeArea) {
+            if (isSafeArea || isPoe2NonMapAreaName(areaName)) {
               return null;
             }
 
             // PoE2 maps can contain side areas such as Abyssal Depths. While a map
             // is active, non-safe area transitions should not supersede the map.
-            if (this.currentMap || isPoe2SideAreaName(areaName)) {
+            if (this.currentMap) {
               return null;
             }
 
