@@ -150,6 +150,30 @@ test('overlay state model shows a start-map prompt for detected map entries', ()
   });
 });
 
+test('overlay state model keeps explicit start-map prompts visible when passive overlay is disabled', () => {
+  const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
+
+  const state = deriveOverlayState({
+    enabled: false,
+    startMapPrompt: {
+      mapName: 'Cliffside',
+      farmTypeId: 'abyss',
+      farmType: 'Abyss',
+      poeVersion: 'poe2',
+      league: 'Fate of the Vaal',
+      farmTypeOptions: [
+        { id: 'abyss', label: 'Abyss' },
+        { id: 'breach', label: 'Breach' }
+      ]
+    }
+  });
+
+  assert.equal(state.visibility, 'visible');
+  assert.equal(state.mode, 'start-map-prompt');
+  assert.equal(state.primaryLine, 'Cliffside');
+  assert.equal(state.secondaryLine, 'Abyss \u00b7 PoE 2 \u00b7 Fate of the Vaal');
+});
+
 test('overlay state model returns hidden state when overlay is disabled or omitted', () => {
   const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
 

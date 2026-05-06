@@ -56,6 +56,16 @@ test('overwolf overlay provider renders state through an in-game overlay window'
   };
   const createWindowCalls = [];
   const overlayApi = {
+    getActiveGameInfo() {
+      return {
+        gameWindowInfo: {
+          size: {
+            width: 1920,
+            height: 1080
+          }
+        }
+      };
+    },
     createWindow(options) {
       createWindowCalls.push(options);
       return Promise.resolve({
@@ -83,8 +93,11 @@ test('overwolf overlay provider renders state through an in-game overlay window'
   });
   assert.equal(createWindowCalls.length, 1);
   assert.equal(createWindowCalls[0].name, 'juice-journal-map-result-overlay');
-  assert.equal(createWindowCalls[0].gameTargeting, 'active-game');
-  assert.equal(createWindowCalls[0].clickThrough, true);
+  assert.equal(createWindowCalls[0].x, 1536);
+  assert.equal(createWindowCalls[0].y, 24);
+  assert.equal(createWindowCalls[0].zOrder, 'topMost');
+  assert.equal(createWindowCalls[0].strictToGameWindow, true);
+  assert.equal(createWindowCalls[0].passthrough, 'passThroughAndNotify');
   assert.deepEqual(calls, [
     ['loadFile', 'overlay.html'],
     ['showInactive'],
@@ -128,6 +141,16 @@ test('overwolf overlay provider opens start-map prompts as interactive in-game w
   const { createOverwolfOverlayProvider } = loadProviderModule();
   const createWindowCalls = [];
   const overlayApi = {
+    getActiveGameInfo() {
+      return {
+        gameWindowInfo: {
+          size: {
+            width: 2560,
+            height: 1440
+          }
+        }
+      };
+    },
     createWindow(options) {
       createWindowCalls.push(options);
       return Promise.resolve({
@@ -158,7 +181,9 @@ test('overwolf overlay provider opens start-map prompts as interactive in-game w
 
   assert.equal(createWindowCalls.length, 1);
   assert.equal(createWindowCalls[0].passthrough, 'noPassThrough');
-  assert.equal(createWindowCalls[0].clickThrough, false);
+  assert.equal(createWindowCalls[0].x, 2096);
+  assert.equal(createWindowCalls[0].zOrder, 'topMost');
+  assert.equal(createWindowCalls[0].strictToGameWindow, true);
   assert.equal(createWindowCalls[0].focusable, true);
   assert.ok(createWindowCalls[0].width >= 420);
   assert.ok(createWindowCalls[0].height >= 260);
@@ -172,6 +197,9 @@ test('main process prefers Overwolf in-game overlay and keeps Electron overlay a
   assert.match(source, /getOverwolfOverlayProvider/);
   assert.match(source, /renderOverwolfOverlayWindow/);
   assert.match(source, /isOverwolfOverlayAvailable/);
+  assert.match(source, /registerOverwolfOverlayGames/);
+  assert.match(source, /requestOverwolfOverlayInjectionForDetectedGame/);
+  assert.match(source, /event\.inject\(\)/);
   assert.match(source, /!overwolfAvailable/);
 });
 

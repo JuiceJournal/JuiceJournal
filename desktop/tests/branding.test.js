@@ -129,6 +129,15 @@ test('desktop development script requires OW-Electron for GEP runtime data', () 
   assert.equal(fs.existsSync(path.join(desktopDir, 'scripts', 'start-dev.js')), false);
 });
 
+test('desktop build includes the overlay preload script', () => {
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+
+  assert.ok(
+    packageJson.build.files.includes('overlay-preload.js'),
+    'Expected packaged Overwolf builds to include overlay-preload.js'
+  );
+});
+
 test('desktop window opens large enough to avoid default dashboard scrolling', () => {
   const mainProcess = fs.readFileSync(mainProcessPath, 'utf8');
 

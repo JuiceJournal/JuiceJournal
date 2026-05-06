@@ -1,4 +1,5 @@
 const DEFAULT_WINDOW_NAME = 'juice-journal-map-result-overlay';
+const OVERLAY_MARGIN = 24;
 const PASSIVE_PROFILE = 'passive';
 const INTERACTIVE_PROFILE = 'interactive';
 const WINDOW_PROFILES = {
@@ -101,22 +102,73 @@ function getProfileNameForState(state = {}) {
     : PASSIVE_PROFILE;
 }
 
-function createWindowOptions({ windowName, profile, preloadPath }) {
+function getActiveGameWindowSize(overlayApi) {
+  const activeGameInfo = typeof overlayApi?.getActiveGameInfo === 'function'
+    ? overlayApi.getActiveGameInfo()
+    : null;
+  const size = activeGameInfo?.gameWindowInfo?.size
+    || activeGameInfo?.gameWindowInfo?.clientSize
+    || activeGameInfo?.gameWindowInfo?.windowSize
+    || null;
+  const width = Number(size?.width);
+  const height = Number(size?.height);
+
+  return {
+    width: Number.isFinite(width) && width > 0 ? width : null,
+    height: Number.isFinite(height) && height > 0 ? height : null
+  };
+}
+
+function getWindowLayout({ overlayApi, profile }) {
   const profileOptions = WINDOW_PROFILES[profile] || WINDOW_PROFILES[PASSIVE_PROFILE];
+  const gameSize = getActiveGameWindowSize(overlayApi);
+  const width = profileOptions.width;
+  const height = profileOptions.height;
+
+  return {
+    width,
+    height,
+    x: Math.max(OVERLAY_MARGIN, (gameSize.width || 0) - width - OVERLAY_MARGIN),
+    y: OVERLAY_MARGIN
+  };
+}
+
+function applyWindowLayout(overlayWindow, layout) {
+  if (!overlayWindow || !layout) {
+    return;
+  }
+
+  if (typeof overlayWindow.setBounds === 'function') {
+    overlayWindow.setBounds(layout);
+    return;
+  }
+
+  if (typeof overlayWindow.setSize === 'function') {
+    overlayWindow.setSize(layout.width, layout.height);
+  }
+
+  if (typeof overlayWindow.setPosition === 'function') {
+    overlayWindow.setPosition(layout.x, layout.y);
+  }
+}
+
+function createWindowOptions({ overlayApi, windowName, profile, preloadPath }) {
+  const profileOptions = WINDOW_PROFILES[profile] || WINDOW_PROFILES[PASSIVE_PROFILE];
+  const layout = getWindowLayout({ overlayApi, profile });
   const windowOptions = {
     name: windowName,
-    width: profileOptions.width,
-    height: profileOptions.height,
-    x: 0,
-    y: 24,
+    width: layout.width,
+    height: layout.height,
+    x: layout.x,
+    y: layout.y,
     transparent: true,
-    frameless: true,
+    frame: false,
     resizable: false,
     show: false,
-    clickThrough: profileOptions.clickThrough,
     passthrough: profileOptions.passthrough,
+    zOrder: 'topMost',
+    strictToGameWindow: true,
     focusable: profileOptions.focusable,
-    gameTargeting: 'active-game',
     alwaysOnTop: true
   };
 
@@ -175,7 +227,7 @@ function createOverwolfOverlayProvider({
     }
 
     if (!createWindowPromise) {
-      const windowOptions = createWindowOptions({ windowName, profile, preloadPath });
+      const windowOptions = createWindowOptions({ overlayApi, windowName, profile, preloadPath });
 
       createWindowPromise = Promise.resolve(overlayApi.createWindow(windowOptions))
         .then((createdWindow) => {
@@ -222,6 +274,7 @@ function createOverwolfOverlayProvider({
     }
 
     const windowRef = await ensureWindow(getProfileNameForState(state));
+    applyWindowLayout(windowRef, getWindowLayout({ overlayApi, profile: getProfileNameForState(state) }));
     await showOverlayWindow(windowRef);
 
     const serializedState = JSON.stringify(state).replace(/</g, '\\u003c');

@@ -183,15 +183,6 @@
 
   function deriveOverlayState({ enabled = false, character, runtime, session, startMapPrompt, now = Date.now() } = {}) {
     const sessionSummary = getActiveSessionSummary(session, now);
-    if (enabled !== true && !sessionSummary) {
-      return {
-        visibility: 'hidden',
-        primaryLine: '',
-        secondaryLine: '',
-        metaLine: ''
-      };
-    }
-
     if (sessionSummary) {
       const contextLine = [
         sessionSummary.farmType || 'No farm type',
@@ -208,7 +199,7 @@
     }
 
     const startMapPromptSummary = getStartMapPromptSummary(startMapPrompt);
-    if (startMapPromptSummary && !sessionSummary) {
+    if (startMapPromptSummary) {
       const contextLine = [
         startMapPromptSummary.farmType || 'Choose farm type',
         startMapPromptSummary.poeVersion ? startMapPromptSummary.poeVersion.replace(/^poe/i, 'PoE ') : null,
@@ -222,6 +213,15 @@
         secondaryLine: contextLine || 'Confirm detected map',
         metaLine: 'confirm map start',
         startMapPrompt: startMapPromptSummary
+      };
+    }
+
+    if (enabled !== true) {
+      return {
+        visibility: 'hidden',
+        primaryLine: '',
+        secondaryLine: '',
+        metaLine: ''
       };
     }
 
