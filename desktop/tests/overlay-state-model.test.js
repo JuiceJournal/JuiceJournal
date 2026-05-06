@@ -121,9 +121,14 @@ test('overlay state model shows a start-map prompt for detected map entries', ()
     enabled: true,
     startMapPrompt: {
       mapName: 'Channel',
+      farmTypeId: 'breach',
       farmType: 'Breach',
       poeVersion: 'poe2',
-      league: 'Fate of the Vaal'
+      league: 'Fate of the Vaal',
+      farmTypeOptions: [
+        { id: 'breach', label: 'Breach' },
+        { id: 'expedition', label: 'Expedition' }
+      ]
     }
   });
 
@@ -132,6 +137,17 @@ test('overlay state model shows a start-map prompt for detected map entries', ()
   assert.equal(state.primaryLine, 'Channel');
   assert.equal(state.secondaryLine, 'Breach \u00b7 PoE 2 \u00b7 Fate of the Vaal');
   assert.equal(state.metaLine, 'confirm map start');
+  assert.deepEqual(JSON.parse(JSON.stringify(state.startMapPrompt)), {
+    mapName: 'Channel',
+    farmTypeId: 'breach',
+    farmType: 'Breach',
+    poeVersion: 'poe2',
+    league: 'Fate of the Vaal',
+    farmTypeOptions: [
+      { id: 'breach', label: 'Breach' },
+      { id: 'expedition', label: 'Expedition' }
+    ]
+  });
 });
 
 test('overlay state model returns hidden state when overlay is disabled or omitted', () => {

@@ -246,7 +246,12 @@ test('main session start forwards the selected farm type to api and queued paylo
 
 test('main start-map overlay prompt state can be shown and cleared independently of map results', () => {
   const overlayUpdates = [];
-  const context = loadFunctions(['showStartMapPromptOverlay', 'hideStartMapPromptOverlay'], {
+  const context = loadFunctions([
+    'normalizeStartMapPromptText',
+    'normalizeStartMapPromptFarmTypeOptions',
+    'showStartMapPromptOverlay',
+    'hideStartMapPromptOverlay'
+  ], {
     overlayStartMapPromptState: null,
     updateOverlayWindow() {
       overlayUpdates.push(JSON.parse(JSON.stringify(context.overlayStartMapPromptState)));
@@ -256,18 +261,28 @@ test('main start-map overlay prompt state can be shown and cleared independently
 
   context.showStartMapPromptOverlay({
     mapName: 'Channel',
+    farmTypeId: 'breach',
     farmType: 'Breach',
     poeVersion: 'poe2',
-    league: 'Fate of the Vaal'
+    league: 'Fate of the Vaal',
+    farmTypeOptions: [
+      { id: 'breach', label: 'Breach' },
+      { id: 'expedition', label: 'Expedition' }
+    ]
   }, {
     now: Date.parse('2026-05-06T12:00:00.000Z')
   });
 
   assert.deepEqual(JSON.parse(JSON.stringify(context.overlayStartMapPromptState)), {
     mapName: 'Channel',
+    farmTypeId: 'breach',
     farmType: 'Breach',
     poeVersion: 'poe2',
     league: 'Fate of the Vaal',
+    farmTypeOptions: [
+      { id: 'breach', label: 'Breach' },
+      { id: 'expedition', label: 'Expedition' }
+    ],
     source: 'map-detected',
     createdAt: Date.parse('2026-05-06T12:00:00.000Z')
   });
@@ -277,13 +292,74 @@ test('main start-map overlay prompt state can be shown and cleared independently
   assert.deepEqual(overlayUpdates, [
     {
       mapName: 'Channel',
+      farmTypeId: 'breach',
       farmType: 'Breach',
       poeVersion: 'poe2',
       league: 'Fate of the Vaal',
+      farmTypeOptions: [
+        { id: 'breach', label: 'Breach' },
+        { id: 'expedition', label: 'Expedition' }
+      ],
       source: 'map-detected',
       createdAt: Date.parse('2026-05-06T12:00:00.000Z')
     },
     null
+  ]);
+});
+
+test('main start-map overlay confirmation forwards the selected map details to the renderer', () => {
+  const sentEvents = [];
+  const overlayUpdates = [];
+  const context = loadFunctions([
+    'normalizeStartMapPromptText',
+    'normalizeStartMapPromptFarmTypeOptions',
+    'normalizeStartMapPromptResult',
+    'emitStartMapPromptOverlayResult',
+    'confirmStartMapPromptOverlay'
+  ], {
+    overlayStartMapPromptState: {
+      mapName: 'Channel',
+      farmTypeId: 'breach',
+      farmTypeOptions: [
+        { id: 'breach', label: 'Breach' },
+        { id: 'expedition', label: 'Expedition' }
+      ],
+      source: 'map-detected'
+    },
+    mainWindow: {
+      isDestroyed: () => false,
+      webContents: {
+        send(channel, payload) {
+          sentEvents.push([channel, JSON.parse(JSON.stringify(payload))]);
+        }
+      }
+    },
+    updateOverlayWindow() {
+      overlayUpdates.push(JSON.parse(JSON.stringify(context.overlayStartMapPromptState)));
+      return { updated: true };
+    }
+  });
+
+  const result = context.confirmStartMapPromptOverlay({
+    mapName: 'Channel',
+    farmTypeId: 'expedition'
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+    action: 'confirm',
+    mapName: 'Channel',
+    farmTypeId: 'expedition',
+    source: 'map-detected'
+  });
+  assert.equal(context.overlayStartMapPromptState, null);
+  assert.deepEqual(overlayUpdates, [null]);
+  assert.deepEqual(sentEvents, [
+    ['start-map-prompt-overlay-result', {
+      action: 'confirm',
+      mapName: 'Channel',
+      farmTypeId: 'expedition',
+      source: 'map-detected'
+    }]
   ]);
 });
 

@@ -1,4 +1,22 @@
 const DEFAULT_WINDOW_NAME = 'juice-journal-map-result-overlay';
+const PASSIVE_PROFILE = 'passive';
+const INTERACTIVE_PROFILE = 'interactive';
+const WINDOW_PROFILES = {
+  [PASSIVE_PROFILE]: {
+    width: 360,
+    height: 112,
+    clickThrough: true,
+    passthrough: 'passThroughAndNotify',
+    focusable: false
+  },
+  [INTERACTIVE_PROFILE]: {
+    width: 440,
+    height: 286,
+    clickThrough: false,
+    passthrough: 'noPassThrough',
+    focusable: true
+  }
+};
 
 function createStatus(available, reason = null) {
   return {
@@ -65,13 +83,66 @@ function hideOverlayWindow(overlayWindow) {
   return Promise.resolve(null);
 }
 
+function closeOverlayWindow(overlayWindow) {
+  if (typeof overlayWindow.destroy === 'function') {
+    return overlayWindow.destroy();
+  }
+
+  if (typeof overlayWindow.close === 'function') {
+    return overlayWindow.close();
+  }
+
+  return Promise.resolve(null);
+}
+
+function getProfileNameForState(state = {}) {
+  return state?.visibility !== 'hidden' && state?.mode === 'start-map-prompt'
+    ? INTERACTIVE_PROFILE
+    : PASSIVE_PROFILE;
+}
+
+function createWindowOptions({ windowName, profile, preloadPath }) {
+  const profileOptions = WINDOW_PROFILES[profile] || WINDOW_PROFILES[PASSIVE_PROFILE];
+  const windowOptions = {
+    name: windowName,
+    width: profileOptions.width,
+    height: profileOptions.height,
+    x: 0,
+    y: 24,
+    transparent: true,
+    frameless: true,
+    resizable: false,
+    show: false,
+    clickThrough: profileOptions.clickThrough,
+    passthrough: profileOptions.passthrough,
+    focusable: profileOptions.focusable,
+    gameTargeting: 'active-game',
+    alwaysOnTop: true
+  };
+
+  if (preloadPath) {
+    windowOptions.webPreferences = {
+      preload: preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false
+    };
+  }
+
+  return windowOptions;
+}
+
 function createOverwolfOverlayProvider({
   overlayApi = null,
   entryPath = '',
+  preloadPath = '',
   logger = console,
   windowName = DEFAULT_WINDOW_NAME
 } = {}) {
   let overlayWindow = null;
+  let overlayWindowProfile = null;
   let createWindowPromise = null;
 
   function isAvailable() {
@@ -86,8 +157,8 @@ function createOverwolfOverlayProvider({
     return createStatus(true);
   }
 
-  function ensureWindow() {
-    if (overlayWindow) {
+  async function ensureWindow(profile = PASSIVE_PROFILE) {
+    if (overlayWindow && overlayWindowProfile === profile) {
       return Promise.resolve(overlayWindow);
     }
 
@@ -95,21 +166,16 @@ function createOverwolfOverlayProvider({
       return Promise.reject(new Error('Overwolf overlay API is unavailable'));
     }
 
+    if (overlayWindow) {
+      const staleWindow = overlayWindow;
+      overlayWindow = null;
+      overlayWindowProfile = null;
+      await Promise.resolve(hideOverlayWindow(staleWindow)).catch(() => null);
+      await Promise.resolve(closeOverlayWindow(staleWindow)).catch(() => null);
+    }
+
     if (!createWindowPromise) {
-      const windowOptions = {
-        name: windowName,
-        width: 360,
-        height: 112,
-        x: 0,
-        y: 24,
-        transparent: true,
-        frameless: true,
-        resizable: false,
-        show: false,
-        clickThrough: true,
-        gameTargeting: 'active-game',
-        alwaysOnTop: true
-      };
+      const windowOptions = createWindowOptions({ windowName, profile, preloadPath });
 
       createWindowPromise = Promise.resolve(overlayApi.createWindow(windowOptions))
         .then((createdWindow) => {
@@ -119,10 +185,12 @@ function createOverwolfOverlayProvider({
           }
 
           overlayWindow = normalizedWindow;
+          overlayWindowProfile = profile;
           return Promise.resolve(loadOverlayEntry(overlayWindow, entryPath)).then(() => overlayWindow);
         })
         .catch((error) => {
           overlayWindow = null;
+          overlayWindowProfile = null;
           logger?.warn?.('[OverwolfOverlayProvider] Failed to create overlay window', error);
           throw error;
         })
@@ -143,15 +211,17 @@ function createOverwolfOverlayProvider({
       };
     }
 
-    const windowRef = await ensureWindow();
     if (state.visibility === 'hidden') {
-      await hideOverlayWindow(windowRef);
+      if (overlayWindow) {
+        await hideOverlayWindow(overlayWindow);
+      }
       return {
         handled: true,
         provider: 'overwolf'
       };
     }
 
+    const windowRef = await ensureWindow(getProfileNameForState(state));
     await showOverlayWindow(windowRef);
 
     const serializedState = JSON.stringify(state).replace(/</g, '\\u003c');

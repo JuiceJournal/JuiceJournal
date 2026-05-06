@@ -2385,12 +2385,14 @@ async function handleMapEnteredEvent(data = {}) {
   let startPromptOverlayShown = false;
   try {
     if (window.electronAPI?.showStartMapPromptOverlay) {
+      let stopWaitingForOverlayResult = () => {};
       try {
         const trackerContext = typeof getSelectedTrackerContext === 'function'
           ? getSelectedTrackerContext()
           : {};
         const farmTypeId = trackerContext?.farmTypeId || null;
         let farmType = null;
+        let farmTypeOptions = [];
 
         if (farmTypeId && typeof getFarmTypeModel === 'function') {
           const farmTypeModel = getFarmTypeModel();
@@ -2405,16 +2407,88 @@ async function handleMapEnteredEvent(data = {}) {
           }
         }
 
-        await window.electronAPI.showStartMapPromptOverlay({
+        if (typeof getFarmTypeModel === 'function') {
+          const farmTypeModel = getFarmTypeModel();
+          if (typeof farmTypeModel.listFarmTypes === 'function') {
+            farmTypeOptions = farmTypeModel.listFarmTypes({
+              poeVersion: trackerContext?.poeVersion
+            }).map((entry) => ({
+              id: entry.id,
+              label: entry.label
+            }));
+          }
+        }
+
+        const overlayResultPromise = typeof window.electronAPI?.onStartMapPromptOverlayResult === 'function'
+          ? new Promise((resolve) => {
+            let settled = false;
+            let timeoutId = null;
+            let unsubscribe = () => {};
+
+            const settle = (value) => {
+              if (settled) {
+                return;
+              }
+
+              settled = true;
+              if (timeoutId) {
+                clearTimeout(timeoutId);
+              }
+              unsubscribe();
+              resolve(value || null);
+            };
+
+            stopWaitingForOverlayResult = () => settle(null);
+            unsubscribe = window.electronAPI.onStartMapPromptOverlayResult((result) => {
+              settle(result);
+            }) || (() => {});
+
+            if (typeof setTimeout === 'function') {
+              timeoutId = setTimeout(() => settle(null), 90000);
+            }
+          })
+          : null;
+
+        const overlayState = await window.electronAPI.showStartMapPromptOverlay({
           mapName: detectedMapName || data.mapName || null,
           poeVersion: trackerContext?.poeVersion || null,
           league: trackerContext?.league || null,
           farmTypeId,
           farmType,
+          farmTypeOptions,
           source: 'map-detected'
         });
         startPromptOverlayShown = true;
+        const canUseInteractiveOverlay = overlayState?.visibility === 'visible'
+          && overlayState?.mode === 'start-map-prompt'
+          && typeof window.electronAPI?.onStartMapPromptOverlayResult === 'function';
+
+        if (canUseInteractiveOverlay) {
+          const overlayResult = await overlayResultPromise;
+
+          if (overlayResult?.action === 'confirm') {
+            const overlayMapName = typeof overlayResult.mapName === 'string' && overlayResult.mapName.trim()
+              ? overlayResult.mapName.trim()
+              : detectedMapName;
+            await handleStartSession({
+              defaultMapName: detectedMapName,
+              source: 'map-detected-overlay',
+              sessionDetails: {
+                mapName: overlayMapName,
+                farmTypeId: overlayResult.farmTypeId || null
+              }
+            });
+            return;
+          }
+
+          if (overlayResult?.action === 'cancel') {
+            return;
+          }
+        } else {
+          stopWaitingForOverlayResult();
+        }
       } catch (error) {
+        stopWaitingForOverlayResult();
         console.warn('Failed to show start-map overlay prompt', error);
       }
     }
@@ -3477,7 +3551,10 @@ function requestEndSessionConfirmation(session = state.currentSession) {
 async function handleStartSession(options = {}) {
   const trackerContext = getSelectedTrackerContext();
   const runtimeMapName = normalizeSessionMapName(options.defaultMapName) || getRuntimeSessionMapName();
-  const requestedSession = await requestMapSessionDetails({
+  const trustedSessionDetails = options.sessionDetails && typeof options.sessionDetails === 'object'
+    ? options.sessionDetails
+    : null;
+  const requestedSession = trustedSessionDetails || await requestMapSessionDetails({
     defaultName: runtimeMapName,
     trackerContext
   });

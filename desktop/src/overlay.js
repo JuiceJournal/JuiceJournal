@@ -8,7 +8,12 @@
     dismiss: document.querySelector('[data-overlay-dismiss]'),
     primary: document.querySelector('[data-overlay-primary]'),
     secondary: document.querySelector('[data-overlay-secondary]'),
-    meta: document.querySelector('[data-overlay-meta]')
+    meta: document.querySelector('[data-overlay-meta]'),
+    startForm: document.querySelector('[data-overlay-start-form]'),
+    startMapName: document.querySelector('[data-overlay-start-map-name]'),
+    startFarmType: document.querySelector('[data-overlay-start-farm-type]'),
+    startSubmit: document.querySelector('[data-overlay-start-submit]'),
+    startCancel: document.querySelector('[data-overlay-start-cancel]')
   };
   let passthroughEnabled = true;
   let lastRenderedMode = 'runtime';
@@ -96,14 +101,46 @@
   }
 
   function normalizeRuntimeState(state) {
+    const mode = state.mode === 'start-map-prompt' ? 'start-map-prompt' : 'runtime';
     return {
       visibility: state.visibility || 'waiting',
-      mode: state.mode === 'start-map-prompt' ? 'start-map-prompt' : 'runtime',
+      mode,
       tone: 'neutral',
       primaryLine: state.primaryLine || 'Waiting for game',
       secondaryLine: state.secondaryLine || 'Waiting for runtime session',
       metaLine: state.metaLine || '',
-      pinned: false
+      pinned: false,
+      startMapPrompt: mode === 'start-map-prompt' ? normalizeStartMapPrompt(state) : null
+    };
+  }
+
+  function normalizeFarmTypeOptions(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') {
+          return null;
+        }
+
+        const id = String(entry.id || '').trim();
+        const label = String(entry.label || id).trim();
+        return id ? { id, label } : null;
+      })
+      .filter(Boolean);
+  }
+
+  function normalizeStartMapPrompt(state) {
+    const prompt = state?.startMapPrompt && typeof state.startMapPrompt === 'object'
+      ? state.startMapPrompt
+      : {};
+
+    return {
+      mapName: String(prompt.mapName || state.primaryLine || 'Unknown Map').trim() || 'Unknown Map',
+      farmTypeId: String(prompt.farmTypeId || '').trim(),
+      farmTypeOptions: normalizeFarmTypeOptions(prompt.farmTypeOptions)
     };
   }
 
@@ -143,7 +180,17 @@
     }
   }
 
+  function isStartMapPromptVisible() {
+    return elements.card?.dataset.overlayMode === 'start-map-prompt'
+      && elements.card?.dataset.overlayState !== 'hidden';
+  }
+
   function syncInteractivePassthrough(event) {
+    if (isStartMapPromptVisible()) {
+      setPointerPassthrough(false);
+      return;
+    }
+
     if (!elements.pin || elements.pin.hidden) {
       setPointerPassthrough(true);
       return;
@@ -201,6 +248,7 @@
     setText(elements.primary, state.primaryLine);
     setText(elements.secondary, state.secondaryLine);
     setText(elements.meta, state.metaLine);
+    renderStartMapPromptControls(state);
     if (elements.pin) {
       const showPin = mode === 'map-result' && visibility !== 'hidden';
       elements.pin.hidden = !showPin;
@@ -209,7 +257,7 @@
         elements.dismiss.hidden = !showPin;
       }
       if (!showPin) {
-        setPointerPassthrough(true);
+        setPointerPassthrough(mode === 'start-map-prompt' && visibility !== 'hidden' ? false : true);
       } else {
         void syncCursorPassthroughFromMain();
       }
@@ -217,6 +265,63 @@
 
     lastRenderedMode = mode;
     return state;
+  }
+
+  function renderStartMapPromptControls(state) {
+    if (!elements.startForm) {
+      return;
+    }
+
+    const showForm = state.mode === 'start-map-prompt' && state.visibility !== 'hidden';
+    elements.startForm.hidden = !showForm;
+    if (!showForm) {
+      return;
+    }
+
+    const prompt = state.startMapPrompt || {};
+    if (elements.startMapName && document.activeElement !== elements.startMapName) {
+      elements.startMapName.value = prompt.mapName || state.primaryLine || 'Unknown Map';
+    }
+
+    if (elements.startFarmType) {
+      const farmTypeOptions = normalizeFarmTypeOptions(prompt.farmTypeOptions);
+      const selectedFarmTypeId = farmTypeOptions.some((entry) => entry.id === prompt.farmTypeId)
+        ? prompt.farmTypeId
+        : '';
+      elements.startFarmType.innerHTML = [
+        '<option value="">No farm type</option>',
+        ...farmTypeOptions.map((entry) => `<option value="${escapeAttribute(entry.id)}">${escapeHTML(entry.label)}</option>`)
+      ].join('');
+      elements.startFarmType.value = selectedFarmTypeId;
+    }
+  }
+
+  function escapeHTML(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function escapeAttribute(value) {
+    return escapeHTML(value);
+  }
+
+  function getStartMapPromptPayload() {
+    return {
+      mapName: String(elements.startMapName?.value || '').trim() || 'Unknown Map',
+      farmTypeId: String(elements.startFarmType?.value || '').trim() || null
+    };
+  }
+
+  function setStartMapPromptBusy(busy) {
+    [elements.startMapName, elements.startFarmType, elements.startSubmit, elements.startCancel]
+      .filter(Boolean)
+      .forEach((element) => {
+        element.disabled = busy;
+      });
   }
 
   root.JuiceOverlay = {
@@ -231,7 +336,7 @@
 
   root.addEventListener('mousemove', syncInteractivePassthrough);
   root.addEventListener('mouseleave', () => {
-    setPointerPassthrough(true);
+    setPointerPassthrough(isStartMapPromptVisible() ? false : true);
   });
 
   if (elements.pin) {
@@ -262,6 +367,37 @@
       } finally {
         elements.dismiss.disabled = false;
         setPointerPassthrough(true);
+      }
+    });
+  }
+
+  if (elements.startForm) {
+    elements.startForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (typeof root.electronAPI?.confirmStartMapPromptOverlay !== 'function') {
+        return;
+      }
+
+      setStartMapPromptBusy(true);
+      try {
+        await root.electronAPI.confirmStartMapPromptOverlay(getStartMapPromptPayload());
+      } finally {
+        setStartMapPromptBusy(false);
+      }
+    });
+  }
+
+  if (elements.startCancel) {
+    elements.startCancel.addEventListener('click', async () => {
+      if (typeof root.electronAPI?.cancelStartMapPromptOverlay !== 'function') {
+        return;
+      }
+
+      setStartMapPromptBusy(true);
+      try {
+        await root.electronAPI.cancelStartMapPromptOverlay();
+      } finally {
+        setStartMapPromptBusy(false);
       }
     });
   }

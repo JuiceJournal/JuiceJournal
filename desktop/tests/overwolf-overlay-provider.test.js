@@ -124,6 +124,47 @@ test('overwolf overlay provider hides the in-game overlay when state becomes hid
   assert.deepEqual(calls, ['showInactive', 'hide']);
 });
 
+test('overwolf overlay provider opens start-map prompts as interactive in-game windows', async () => {
+  const { createOverwolfOverlayProvider } = loadProviderModule();
+  const createWindowCalls = [];
+  const overlayApi = {
+    createWindow(options) {
+      createWindowCalls.push(options);
+      return Promise.resolve({
+        window: {
+          loadFile: () => Promise.resolve(),
+          executeJavaScript: () => Promise.resolve(),
+          showInactive: () => Promise.resolve(),
+          hide: () => Promise.resolve()
+        }
+      });
+    }
+  };
+  const provider = createOverwolfOverlayProvider({
+    overlayApi,
+    entryPath: path.join('desktop', 'src', 'overlay.html'),
+    preloadPath: path.join('desktop', 'overlay-preload.js')
+  });
+
+  await provider.renderState({
+    visibility: 'visible',
+    mode: 'start-map-prompt',
+    startMapPrompt: {
+      mapName: 'Channel',
+      farmTypeId: 'breach',
+      farmTypeOptions: [{ id: 'breach', label: 'Breach' }]
+    }
+  });
+
+  assert.equal(createWindowCalls.length, 1);
+  assert.equal(createWindowCalls[0].passthrough, 'noPassThrough');
+  assert.equal(createWindowCalls[0].clickThrough, false);
+  assert.equal(createWindowCalls[0].focusable, true);
+  assert.ok(createWindowCalls[0].width >= 420);
+  assert.ok(createWindowCalls[0].height >= 260);
+  assert.match(createWindowCalls[0].webPreferences.preload, /overlay-preload\.js$/);
+});
+
 test('main process prefers Overwolf in-game overlay and keeps Electron overlay as fallback', () => {
   const source = fs.readFileSync(mainProcessPath, 'utf8');
 
@@ -151,4 +192,16 @@ test('overlay card loads and uses adaptive profit currency formatting for map re
   assert.match(overlayJs, /formatSignedProfit/);
   assert.match(overlayJs, /profitCurrencyModel/);
   assert.match(overlayJs, /profitCurrencyRates/);
+});
+
+test('overlay card contains interactive start-map controls', () => {
+  const html = fs.readFileSync(overlayHtmlPath, 'utf8');
+  const overlayJs = fs.readFileSync(overlayJsPath, 'utf8');
+
+  assert.match(html, /data-overlay-start-form/);
+  assert.match(html, /data-overlay-start-map-name/);
+  assert.match(html, /data-overlay-start-farm-type/);
+  assert.match(html, /data-overlay-start-submit/);
+  assert.match(overlayJs, /confirmStartMapPromptOverlay/);
+  assert.match(overlayJs, /cancelStartMapPromptOverlay/);
 });

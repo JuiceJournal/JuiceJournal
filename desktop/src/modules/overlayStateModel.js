@@ -13,6 +13,24 @@
     return normalized || fallback;
   }
 
+  function normalizeFarmTypeOptions(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') {
+          return null;
+        }
+
+        const id = normalizeString(entry.id);
+        const label = normalizeString(entry.label, id);
+        return id ? { id, label } : null;
+      })
+      .filter(Boolean);
+  }
+
   function normalizeSeconds(value) {
     const seconds = Number(value ?? 0);
     return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 0;
@@ -136,15 +154,19 @@
     }
 
     const mapName = normalizeString(startMapPrompt.mapName ?? startMapPrompt.map_name, 'Unknown Map');
+    const farmTypeId = normalizeString(startMapPrompt.farmTypeId ?? startMapPrompt.farm_type_id);
     const farmType = normalizeString(startMapPrompt.farmType ?? startMapPrompt.farmTypeLabel);
     const league = normalizeString(startMapPrompt.league);
     const poeVersion = normalizeString(startMapPrompt.poeVersion ?? startMapPrompt.gameVersion);
+    const farmTypeOptions = normalizeFarmTypeOptions(startMapPrompt.farmTypeOptions);
 
     return {
       mapName,
+      farmTypeId,
       farmType,
       league,
-      poeVersion
+      poeVersion,
+      farmTypeOptions
     };
   }
 
@@ -198,7 +220,8 @@
         mode: 'start-map-prompt',
         primaryLine: startMapPromptSummary.mapName,
         secondaryLine: contextLine || 'Confirm detected map',
-        metaLine: 'confirm map start'
+        metaLine: 'confirm map start',
+        startMapPrompt: startMapPromptSummary
       };
     }
 

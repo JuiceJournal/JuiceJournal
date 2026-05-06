@@ -527,6 +527,60 @@ test('starting a map session opens the branded modal with detected map name and 
   assert.deepEqual(activeFarmTypeCalls, ['expedition']);
 });
 
+test('starting a map session can use trusted overlay details without opening the desktop modal', async () => {
+  const startSessionCalls = [];
+  let modalRequested = false;
+  const context = loadFunctions(['normalizeSessionMapName', 'getRuntimeSessionMapName', 'handleStartSession'], {
+    state: {
+      runtimeSession: {
+        summary: {
+          currentAreaName: 'Dunes Map'
+        }
+      }
+    },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        startSession: async (payload) => {
+          startSessionCalls.push(payload);
+          return { id: 'session-1' };
+        },
+        setActiveFarmType: async () => {}
+      }
+    },
+    requestMapSessionDetails: async () => {
+      modalRequested = true;
+      return null;
+    },
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe2',
+      league: 'Fate of the Vaal',
+      farmTypeId: 'breach',
+      label: 'PoE 2 - Fate of the Vaal'
+    }),
+    updateActiveSessionUI: () => {},
+    refreshTrackerData: async () => {},
+    showToast: () => {},
+    getUserFacingErrorMessage: () => 'error'
+  });
+
+  await context.handleStartSession({
+    sessionDetails: {
+      mapName: 'Channel',
+      farmTypeId: 'expedition'
+    },
+    source: 'map-detected-overlay'
+  });
+
+  assert.equal(modalRequested, false);
+  assert.deepEqual(startSessionCalls.map((payload) => ({ ...payload })), [{
+    mapName: 'Channel',
+    poeVersion: 'poe2',
+    league: 'Fate of the Vaal',
+    farmTypeId: 'expedition'
+  }]);
+});
+
 test('start map modal farm selector uses the tracker context PoE version', () => {
   const calls = [];
   const elements = {
@@ -738,7 +792,11 @@ test('map-entered events show an in-game start-map overlay prompt before opening
       label: 'PoE 2 - Fate of the Vaal'
     }),
     getFarmTypeModel: () => ({
-      getFarmTypeById: (id) => (id === 'breach' ? { id: 'breach', label: 'Breach' } : null)
+      getFarmTypeById: (id) => (id === 'breach' ? { id: 'breach', label: 'Breach' } : null),
+      listFarmTypes: () => [
+        { id: 'breach', label: 'Breach' },
+        { id: 'expedition', label: 'Expedition' }
+      ]
     }),
     window: {
       t: (key, values = {}) => values.mapName ? `${key}:${values.mapName}` : key,
@@ -767,11 +825,89 @@ test('map-entered events show an in-game start-map overlay prompt before opening
       league: 'Fate of the Vaal',
       farmTypeId: 'breach',
       farmType: 'Breach',
+      farmTypeOptions: [
+        { id: 'breach', label: 'Breach' },
+        { id: 'expedition', label: 'Expedition' }
+      ],
       source: 'map-detected'
     },
     { hidden: true }
   ]);
   assert.deepEqual(startCalls, [{ defaultMapName: 'Channel', source: 'map-detected' }]);
+});
+
+test('map-entered events can start a session from the in-game start-map overlay selection', async () => {
+  const overlayPrompts = [];
+  const startCalls = [];
+  let overlayResultHandler = null;
+  const context = loadFunctions(['handleMapEnteredEvent'], {
+    state: {
+      currentSession: null,
+      settings: {
+        autoStartSession: true
+      },
+      farmType: {
+        selectedFarmTypeId: 'breach'
+      }
+    },
+    setRuntimeSessionState: () => {},
+    showToast: () => {},
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe2',
+      league: 'Fate of the Vaal',
+      farmTypeId: 'breach',
+      label: 'PoE 2 - Fate of the Vaal'
+    }),
+    getFarmTypeModel: () => ({
+      getFarmTypeById: (id) => (id === 'breach' ? { id: 'breach', label: 'Breach' } : null),
+      listFarmTypes: () => [
+        { id: 'breach', label: 'Breach' },
+        { id: 'expedition', label: 'Expedition' }
+      ]
+    }),
+    window: {
+      t: (key, values = {}) => values.mapName ? `${key}:${values.mapName}` : key,
+      electronAPI: {
+        showStartMapPromptOverlay: async (payload) => {
+          overlayPrompts.push(payload);
+          queueMicrotask(() => {
+            overlayResultHandler?.({
+              action: 'confirm',
+              mapName: 'Channel',
+              farmTypeId: 'expedition'
+            });
+          });
+          return { visibility: 'visible', mode: 'start-map-prompt' };
+        },
+        hideStartMapPromptOverlay: async () => {
+          overlayPrompts.push({ hidden: true });
+        },
+        onStartMapPromptOverlayResult: (callback) => {
+          overlayResultHandler = callback;
+          return () => {
+            overlayResultHandler = null;
+          };
+        }
+      }
+    },
+    handleStartSession: async (options) => {
+      startCalls.push({ ...options });
+    }
+  });
+
+  await context.handleMapEnteredEvent({
+    mapName: 'Channel'
+  });
+
+  assert.equal(overlayPrompts.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(startCalls)), [{
+    defaultMapName: 'Channel',
+    source: 'map-detected-overlay',
+    sessionDetails: {
+      mapName: 'Channel',
+      farmTypeId: 'expedition'
+    }
+  }]);
 });
 
 test('session-ended events persist completed map results for automatic log exits', async () => {

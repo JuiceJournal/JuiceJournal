@@ -126,6 +126,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAppUpdateStateChanged: (callback) => {
     ipcRenderer.on('app-update-state-changed', (event, data) => callback(data));
   },
+  onStartMapPromptOverlayResult: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('start-map-prompt-overlay-result', listener);
+    return () => ipcRenderer.removeListener('start-map-prompt-overlay-result', listener);
+  },
   getLastActiveCharacterHint: () => ipcRenderer.invoke('get-last-active-character-hint'),
 
   // Dinleyicileri temizle (sadece izin verilen kanallar)
@@ -135,7 +140,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'loot-added', 'pending-loot-updated', 'pending-sync-updated',
       'audit-trail-updated', 'navigate', 'stash-snapshot-taken',
       'profit-calculated', 'game-version-changed', 'game-closed',
-      'active-character-hint', 'app-update-state-changed'
+      'active-character-hint', 'app-update-state-changed',
+      'start-map-prompt-overlay-result'
     ];
     if (channel && ALLOWED_CHANNELS.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);

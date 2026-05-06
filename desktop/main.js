@@ -988,6 +988,7 @@ function getOverwolfOverlayProvider() {
     overwolfOverlayProvider = createOverwolfOverlayProvider({
       overlayApi,
       entryPath: path.join(__dirname, 'src', 'overlay.html'),
+      preloadPath: path.join(__dirname, 'overlay-preload.js'),
       logger: console
     });
   }
@@ -2110,11 +2111,12 @@ function createMainWindow() {
   });
 }
 
-function getOverlayWindowBounds() {
+function getOverlayWindowBounds(overlayState = {}) {
   const display = screen.getPrimaryDisplay();
   const workArea = display.workArea || display.bounds;
-  const width = 360;
-  const height = 112;
+  const isInteractivePrompt = overlayState.mode === 'start-map-prompt';
+  const width = isInteractivePrompt ? 440 : 360;
+  const height = isInteractivePrompt ? 286 : 112;
 
   return {
     width,
@@ -2145,7 +2147,7 @@ function createOverlayWindow() {
     alwaysOnTop: true,
     backgroundColor: '#00000000',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'overlay-preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -2258,22 +2260,83 @@ function showMapResultOverlay(result, options = {}) {
   return updateOverlayWindow();
 }
 
-function showStartMapPromptOverlay(prompt = {}, options = {}) {
-  const normalizePromptText = (value, fallback = null) => {
-    const normalized = typeof value === 'string' ? value.trim() : '';
-    return normalized || fallback;
-  };
+function normalizeStartMapPromptText(value, fallback = null) {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return normalized || fallback;
+}
 
+function normalizeStartMapPromptFarmTypeOptions(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+
+      const id = normalizeStartMapPromptText(entry.id);
+      const label = normalizeStartMapPromptText(entry.label, id);
+      return id ? { id, label } : null;
+    })
+    .filter(Boolean);
+}
+
+function showStartMapPromptOverlay(prompt = {}, options = {}) {
   overlayStartMapPromptState = {
-    mapName: normalizePromptText(prompt.mapName, 'Unknown Map'),
-    farmType: normalizePromptText(prompt.farmType),
-    poeVersion: normalizePromptText(prompt.poeVersion || prompt.gameVersion),
-    league: normalizePromptText(prompt.league),
-    source: normalizePromptText(prompt.source, 'map-detected'),
+    mapName: normalizeStartMapPromptText(prompt.mapName, 'Unknown Map'),
+    farmTypeId: normalizeStartMapPromptText(prompt.farmTypeId || prompt.farm_type_id),
+    farmType: normalizeStartMapPromptText(prompt.farmType),
+    poeVersion: normalizeStartMapPromptText(prompt.poeVersion || prompt.gameVersion),
+    league: normalizeStartMapPromptText(prompt.league),
+    farmTypeOptions: normalizeStartMapPromptFarmTypeOptions(prompt.farmTypeOptions),
+    source: normalizeStartMapPromptText(prompt.source, 'map-detected'),
     createdAt: options.now ?? Date.now()
   };
 
   return updateOverlayWindow();
+}
+
+function normalizeStartMapPromptResult(payload = {}, promptState = overlayStartMapPromptState, action = 'confirm') {
+  const currentPrompt = promptState && typeof promptState === 'object' ? promptState : {};
+  const mapName = normalizeStartMapPromptText(payload.mapName, currentPrompt.mapName || 'Unknown Map');
+  const requestedFarmTypeId = normalizeStartMapPromptText(payload.farmTypeId || payload.farm_type_id);
+  const supportedFarmTypeIds = new Set(
+    normalizeStartMapPromptFarmTypeOptions(currentPrompt.farmTypeOptions).map((entry) => entry.id)
+  );
+  const farmTypeId = requestedFarmTypeId && (!supportedFarmTypeIds.size || supportedFarmTypeIds.has(requestedFarmTypeId))
+    ? requestedFarmTypeId
+    : null;
+
+  return {
+    action,
+    mapName,
+    farmTypeId,
+    source: currentPrompt.source || 'overlay'
+  };
+}
+
+function emitStartMapPromptOverlayResult(result) {
+  if (mainWindow && (typeof mainWindow.isDestroyed !== 'function' || !mainWindow.isDestroyed())) {
+    mainWindow.webContents.send('start-map-prompt-overlay-result', result);
+  }
+
+  return result;
+}
+
+function confirmStartMapPromptOverlay(payload = {}) {
+  const result = normalizeStartMapPromptResult(payload, overlayStartMapPromptState, 'confirm');
+  overlayStartMapPromptState = null;
+  updateOverlayWindow();
+  return emitStartMapPromptOverlayResult(result);
+}
+
+function cancelStartMapPromptOverlay() {
+  const result = normalizeStartMapPromptResult({}, overlayStartMapPromptState, 'cancel');
+  overlayStartMapPromptState = null;
+  updateOverlayWindow();
+  return emitStartMapPromptOverlayResult(result);
 }
 
 function hideStartMapPromptOverlay() {
@@ -2372,7 +2435,12 @@ function applyOverlayWindowVisibility(overlayState) {
     return;
   }
 
-  overlayWindow.setBounds(getOverlayWindowBounds());
+  const interactive = overlayState.mode === 'start-map-prompt';
+  if (typeof overlayWindow.setFocusable === 'function') {
+    overlayWindow.setFocusable(interactive);
+  }
+  overlayWindow.setIgnoreMouseEvents(!interactive, { forward: true });
+  overlayWindow.setBounds(getOverlayWindowBounds(overlayState));
   if (!overlayWindow.isVisible()) {
     overlayWindow.showInactive();
   }
@@ -3832,6 +3900,16 @@ function setupIPC() {
   ipcMain.handle('hide-start-map-prompt-overlay', async () => {
     assertDesktopUserAuthenticated();
     return hideStartMapPromptOverlay();
+  });
+
+  ipcMain.handle('confirm-start-map-prompt-overlay', async (event, payload = {}) => {
+    assertDesktopUserAuthenticated();
+    return confirmStartMapPromptOverlay(payload || {});
+  });
+
+  ipcMain.handle('cancel-start-map-prompt-overlay', async () => {
+    assertDesktopUserAuthenticated();
+    return cancelStartMapPromptOverlay();
   });
 
   ipcMain.handle('show-runtime-overlay-preview', async (event, runtimeSession) => {
