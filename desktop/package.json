@@ -16,6 +16,7 @@
     "bench:desktop": "node --expose-gc scripts/bench-desktop.js",
     "test:e2e": "playwright test",
     "test:smoke": "playwright test e2e/settings-smoke.spec.js e2e/overlay-smoke.spec.js",
+    "test:visual-qa": "playwright test e2e/adaptive-profit-visual-qa.spec.js",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "pack": "electron-builder --dir",
