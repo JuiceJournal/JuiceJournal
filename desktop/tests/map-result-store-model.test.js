@@ -515,12 +515,86 @@ test('poe1 stash profit calculation ends the active session after persisting the
     'renderProfitReport',
     'persistMapResultHistory',
     ['endSession', {
+      sessionId: 'session-3',
+      mapName: null,
+      startedAt: null,
       totalLootChaos: 50,
       profitChaos: 44,
       durationSeconds: 60
     }]
   ]);
   assert.equal(context.elements.calculateProfitBtn.disabled, false);
+});
+
+test('renderer hydrates persisted poe1 snapshots for a restarted active session', async () => {
+  const state = {
+    currentSession: {
+      id: 'session-1',
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      mapType: 'breach'
+    },
+    account: {
+      summary: { league: 'Mirage' }
+    },
+    farmType: {
+      selectedFarmTypeId: 'breach'
+    }
+  };
+  const stashState = {
+    beforeSnapshotId: null,
+    afterSnapshotId: null,
+    beforeSnapshot: null,
+    afterSnapshot: null,
+    mapResultContext: null
+  };
+  const calls = [];
+  const context = loadFunctions([
+    'buildCurrentMapResultContext',
+    'isActiveSessionPoe1',
+    'hydratePoe1StashSnapshotsForSession',
+    'hasActivePoe1StashBaseline'
+  ], {
+    state,
+    stashState,
+    normalizeCompletedSessionPoeVersion: (value) => value,
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      farmTypeId: 'breach'
+    }),
+    window: {
+      electronAPI: {
+        async calculateSessionProfitFromSnapshots(options) {
+          calls.push(options);
+          return {
+            beforeSnapshotId: 'before-id',
+            afterSnapshotId: 'after-id',
+            beforeSnapshot: { items: [], timestamp: 1, league: 'Mirage' },
+            afterSnapshot: { items: [], timestamp: 2, league: 'Mirage' },
+            report: { summary: { netProfitChaos: 10, totalItemChanges: 1 } }
+          };
+        }
+      }
+    },
+    updateStashTrackerStatus: () => calls.push('updateStashTrackerStatus')
+  });
+
+  const report = await context.hydratePoe1StashSnapshotsForSession(state.currentSession);
+
+  assert.equal(report.summary.netProfitChaos, 10);
+  assert.equal(stashState.beforeSnapshotId, 'before-id');
+  assert.equal(stashState.afterSnapshotId, 'after-id');
+  assert.equal(stashState.mapResultContext.runtimeSession, null);
+  assert.equal(context.hasActivePoe1StashBaseline(), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
+    {
+      sessionId: 'session-1',
+      league: 'Mirage',
+      poeVersion: 'poe1'
+    },
+    'updateStashTrackerStatus'
+  ]);
 });
 
 test('poe1 after snapshot retries when the first stash API read has no changes', async () => {
@@ -844,6 +918,10 @@ test('desktop preload exposes map-result persistence bridge methods', () => {
 
   assert.match(source, /saveMapResult:\s*\(result\)\s*=>\s*ipcRenderer\.invoke\('save-map-result',\s*result\)/);
   assert.match(source, /getMapResults:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('get-map-results'\)/);
+  assert.match(
+    source,
+    /calculateSessionProfitFromSnapshots:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\('calculate-session-profit-from-snapshots',\s*options\)/
+  );
 });
 
 test('desktop preload passes end-session completion options through IPC', () => {

@@ -805,6 +805,170 @@ function saveMapResultHistory(result) {
   return nextResults;
 }
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
+}
+
+function normalizePersistedSnapshotForDesktop(snapshot, context = {}) {
+  if (!snapshot) {
+    return null;
+  }
+
+  const takenAt = snapshot.takenAt || snapshot.taken_at || snapshot.createdAt || snapshot.created_at || null;
+  const timestamp = takenAt ? new Date(takenAt).getTime() : Date.now();
+  const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+  const totalChaos = Number(snapshot.totalChaosValue ?? snapshot.total_chaos_value ?? snapshot.totalChaos ?? 0) || 0;
+  const divinePrice = Number(priceService?.getChaosValue?.('Divine Orb') || 0) || 1;
+
+  return {
+    id: snapshot.id || null,
+    tabs: Array.isArray(snapshot.tabs) ? snapshot.tabs : [],
+    items,
+    timestamp,
+    league: snapshot.league || context.league,
+    poeVersion: snapshot.poeVersion || snapshot.poe_version || context.poeVersion,
+    totalChaos,
+    totalDivine: totalChaos / divinePrice,
+    divinePrice,
+    source: 'backend'
+  };
+}
+
+function normalizeBackendDiffEntry(entry = {}, quantityDelta = null) {
+  const quantity = Number(quantityDelta ?? entry.quantityDelta ?? entry.quantity ?? 0) || 0;
+  const totalChaosValue = Number(entry.totalChaosValue ?? entry.chaosValueDelta ?? 0) || 0;
+
+  return {
+    name: entry.name || entry.typeLine || 'Unknown Item',
+    category: entry.category || 'other',
+    icon: entry.icon || null,
+    beforeQuantity: Number(entry.quantityBefore ?? 0) || 0,
+    afterQuantity: Number(entry.quantityAfter ?? entry.quantity ?? 0) || 0,
+    quantityDiff: quantity,
+    chaosValue: Number(entry.chaosValue ?? 0) || 0,
+    totalChaosValue: Math.abs(totalChaosValue)
+  };
+}
+
+function normalizeBackendSnapshotDiffReport(diff = {}) {
+  const gained = [];
+  const lost = [];
+
+  (Array.isArray(diff.added) ? diff.added : []).forEach((entry) => {
+    gained.push(normalizeBackendDiffEntry(entry, Number(entry.quantity || 0) || 0));
+  });
+
+  (Array.isArray(diff.removed) ? diff.removed : []).forEach((entry) => {
+    lost.push(normalizeBackendDiffEntry(entry, -(Number(entry.quantity || 0) || 0)));
+  });
+
+  (Array.isArray(diff.changed) ? diff.changed : []).forEach((entry) => {
+    const quantityDelta = Number(entry.quantityDelta || 0);
+    if (quantityDelta > 0) {
+      gained.push(normalizeBackendDiffEntry(entry, quantityDelta));
+    } else if (quantityDelta < 0) {
+      lost.push(normalizeBackendDiffEntry(entry, quantityDelta));
+    }
+  });
+
+  const totalGained = gained.reduce((sum, entry) => sum + Number(entry.totalChaosValue || 0), 0);
+  const totalLost = lost.reduce((sum, entry) => sum + Number(entry.totalChaosValue || 0), 0);
+  const netProfit = Number(diff.chaosValueDelta ?? (totalGained - totalLost)) || 0;
+  const divinePrice = priceService ? (priceService.getChaosValue('Divine Orb') || 1) : 1;
+
+  return {
+    gained: gained.sort((a, b) => b.totalChaosValue - a.totalChaosValue),
+    lost: lost.sort((a, b) => b.totalChaosValue - a.totalChaosValue),
+    summary: {
+      totalGainedChaos: totalGained,
+      totalLostChaos: totalLost,
+      netProfitChaos: netProfit,
+      netProfitDivine: netProfit / divinePrice,
+      divinePrice,
+      gainedItemCount: gained.length,
+      lostItemCount: lost.length,
+      totalItemChanges: gained.length + lost.length
+    },
+    categoryBreakdown: {}
+  };
+}
+
+async function getLatestPersistedStashSnapshot(sessionId, kind) {
+  if (!apiClient?.token || typeof apiClient.listPoeStashSnapshots !== 'function') {
+    return null;
+  }
+
+  const response = await apiClient.listPoeStashSnapshots({
+    sessionId,
+    kind,
+    limit: 1
+  });
+  const snapshots = Array.isArray(response?.snapshots) ? response.snapshots : [];
+  return snapshots[0] || null;
+}
+
+async function loadPersistedStashSnapshot(snapshotId, context = {}) {
+  if (!snapshotId || !apiClient?.token || typeof apiClient.getPoeStashSnapshot !== 'function') {
+    return null;
+  }
+
+  const response = await apiClient.getPoeStashSnapshot(snapshotId);
+  return normalizePersistedSnapshotForDesktop(response?.snapshot || response, context);
+}
+
+async function calculateSessionProfitFromPersistedSnapshots(options = {}) {
+  assertDesktopUserAuthenticated();
+
+  const sessionId = options.sessionId || options.id || null;
+  if (!isUuid(sessionId)) {
+    throw new Error('A valid session ID is required to calculate persisted stash profit');
+  }
+
+  const [beforeIndex, afterIndex] = await Promise.all([
+    getLatestPersistedStashSnapshot(sessionId, 'before'),
+    getLatestPersistedStashSnapshot(sessionId, 'after')
+  ]);
+
+  if (!beforeIndex) {
+    throw new Error('Before snapshot not found for this session');
+  }
+  if (!afterIndex) {
+    throw new Error('After snapshot not found for this session');
+  }
+
+  const context = {
+    league: afterIndex.league || beforeIndex.league || options.league,
+    poeVersion: afterIndex.poeVersion || afterIndex.poe_version || beforeIndex.poeVersion || beforeIndex.poe_version || options.poeVersion
+  };
+  const [beforeSnapshot, afterSnapshot, diffResponse] = await Promise.all([
+    loadPersistedStashSnapshot(beforeIndex.id, context),
+    loadPersistedStashSnapshot(afterIndex.id, context),
+    apiClient.diffPoeStashSnapshots({
+      beforeSnapshotId: beforeIndex.id,
+      afterSnapshotId: afterIndex.id
+    })
+  ]);
+
+  if (!beforeSnapshot || !afterSnapshot) {
+    throw new Error('Unable to load persisted stash snapshots for this session');
+  }
+
+  if (stashAnalyzer) {
+    stashAnalyzer.saveSnapshot(beforeIndex.id, beforeSnapshot);
+    stashAnalyzer.saveSnapshot(afterIndex.id, afterSnapshot);
+  }
+
+  const report = normalizeBackendSnapshotDiffReport(diffResponse?.diff || diffResponse);
+
+  return {
+    beforeSnapshotId: beforeIndex.id,
+    afterSnapshotId: afterIndex.id,
+    beforeSnapshot,
+    afterSnapshot,
+    report
+  };
+}
+
 function emitPendingSyncState() {
   if (!mainWindow) return;
   mainWindow.webContents.send('pending-sync-updated', {
@@ -3036,12 +3200,26 @@ function shouldAutoEndSessionOnMapExit(session = {}) {
  */
 async function endCurrentSession(options = {}) {
   try {
-    if (!currentSession) return;
-    let session = currentSession;
+    const requestedSessionId = options.sessionId || options.id || null;
+    if (!currentSession) {
+      try {
+        await getCurrentSessionFromBackend();
+      } catch {
+        currentSession = null;
+      }
+    }
+
+    if (!currentSession && !requestedSessionId) return;
+    let session = currentSession || {
+      id: requestedSessionId,
+      mapName: options.mapName || t('unknownMap'),
+      startedAt: options.startedAt || options.started_at || null,
+      localOnly: false
+    };
     let queued = false;
     const endedAt = options.endedAt || new Date().toISOString();
     const explicitDurationSeconds = Number(options.durationSeconds);
-    const startedAtMs = Date.parse(currentSession.startedAt || currentSession.started_at);
+    const startedAtMs = Date.parse(session.startedAt || session.started_at);
     const endedAtMs = Date.parse(endedAt);
     const durationSeconds = Number.isFinite(explicitDurationSeconds) && explicitDurationSeconds > 0
       ? Math.round(explicitDurationSeconds)
@@ -3063,28 +3241,28 @@ async function endCurrentSession(options = {}) {
       completionPayload.profitChaos = profitChaos;
     }
 
-    if (currentSession.localOnly) {
+    if (session.localOnly) {
       queuePendingSessionAction({
         type: 'sessionEnd',
-        sessionId: currentSession.id,
+        sessionId: session.id,
         ...completionPayload
       });
       setQueuedCurrentSession(null);
       queued = true;
       session = {
-        ...currentSession,
+        ...session,
         ...completionPayload,
         status: 'completed'
       };
-      appendAuditTrail('auditSessionEndQueued', { mapName: currentSession.mapName }, 'warning');
+      appendAuditTrail('auditSessionEndQueued', { mapName: session.mapName }, 'warning');
     } else {
       try {
-        session = await apiClient.endSession(currentSession.id, completionPayload);
+        session = await apiClient.endSession(session.id, completionPayload);
         session = {
           ...session,
           ...completionPayload
         };
-        appendAuditTrail('auditSessionEnded', { mapName: currentSession.mapName });
+        appendAuditTrail('auditSessionEnded', { mapName: session.mapName });
       } catch (error) {
         if (!isRetryableApiError(error)) {
           throw error;
@@ -3092,16 +3270,16 @@ async function endCurrentSession(options = {}) {
 
         queuePendingSessionAction({
           type: 'sessionEnd',
-          sessionId: currentSession.id,
+          sessionId: session.id,
           ...completionPayload
         });
         session = {
-          ...currentSession,
+          ...session,
           ...completionPayload,
           status: 'completed'
         };
         queued = true;
-        appendAuditTrail('auditSessionEndQueued', { mapName: currentSession.mapName }, 'warning');
+        appendAuditTrail('auditSessionEndQueued', { mapName: session.mapName }, 'warning');
       }
     }
 
@@ -3125,6 +3303,7 @@ async function endCurrentSession(options = {}) {
     return queued ? { ...session, queued: true } : session;
   } catch (error) {
     showNotification(t('notificationError'), t('sessionEndFailed'));
+    throw toRendererError(error, t('sessionEndFailed'));
   }
 }
 
@@ -4199,7 +4378,20 @@ function setupIPC() {
   ipcMain.handle('calculate-profit', async (event, beforeId, afterId) => {
     try {
       assertDesktopUserAuthenticated();
-      const report = stashAnalyzer.diffSnapshots(beforeId, afterId, priceService);
+      let report = null;
+      try {
+        report = stashAnalyzer.diffSnapshots(beforeId, afterId, priceService);
+      } catch (error) {
+        if (!isUuid(beforeId) || !isUuid(afterId) || typeof apiClient?.diffPoeStashSnapshots !== 'function') {
+          throw error;
+        }
+
+        const response = await apiClient.diffPoeStashSnapshots({
+          beforeSnapshotId: beforeId,
+          afterSnapshotId: afterId
+        });
+        report = normalizeBackendSnapshotDiffReport(response?.diff || response);
+      }
 
       if (mainWindow) {
         mainWindow.webContents.send('profit-calculated', report);
@@ -4208,6 +4400,14 @@ function setupIPC() {
       return report;
     } catch (error) {
       throw toRendererError(error, 'Profit calculation failed');
+    }
+  });
+
+  ipcMain.handle('calculate-session-profit-from-snapshots', async (event, options = {}) => {
+    try {
+      return await calculateSessionProfitFromPersistedSnapshots(options);
+    } catch (error) {
+      throw toRendererError(error, 'Persisted stash profit calculation failed');
     }
   });
 

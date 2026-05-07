@@ -224,6 +224,22 @@ class APIClient {
   }
 
   /**
+   * List backend-managed Path of Exile stash snapshots.
+   */
+  async listPoeStashSnapshots(params = {}) {
+    const response = await this.client.get('/api/poe/snapshots', { params });
+    return response.data;
+  }
+
+  /**
+   * Load a backend-managed Path of Exile stash snapshot including item data.
+   */
+  async getPoeStashSnapshot(snapshotId) {
+    const response = await this.client.get(`/api/poe/snapshots/${snapshotId}`);
+    return response.data;
+  }
+
+  /**
    * Diff two backend-managed Path of Exile stash snapshots.
    */
   async diffPoeStashSnapshots(data = {}) {

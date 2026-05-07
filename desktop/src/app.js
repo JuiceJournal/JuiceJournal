@@ -3160,6 +3160,9 @@ function buildSessionCompletionPayloadFromMapResult(mapResult = {}) {
     durationSeconds = state.currentSession ? getLiveDuration(state.currentSession) : 0;
   }
   const payload = {
+    sessionId: mapResult.sessionId || state.currentSession?.id || null,
+    mapName: state.currentSession?.mapName || mapResult.mapName || null,
+    startedAt: state.currentSession?.startedAt || state.currentSession?.started_at || null,
     totalLootChaos,
     profitChaos
   };
@@ -4448,6 +4451,40 @@ async function takeAfterSnapshotWithStashRefreshRetry(session = state.currentSes
   return report;
 }
 
+async function hydratePoe1StashSnapshotsForSession(session = state.currentSession) {
+  if (
+    !session
+    || !isActiveSessionPoe1(session)
+    || typeof window.electronAPI?.calculateSessionProfitFromSnapshots !== 'function'
+  ) {
+    return null;
+  }
+
+  try {
+    const result = await window.electronAPI.calculateSessionProfitFromSnapshots({
+      sessionId: session.id,
+      league: session.league,
+      poeVersion: session.poeVersion
+    });
+
+    if (!result?.beforeSnapshotId || !result?.afterSnapshotId || !result?.beforeSnapshot || !result?.afterSnapshot) {
+      return null;
+    }
+
+    stashState.beforeSnapshotId = result.beforeSnapshotId;
+    stashState.beforeSnapshot = result.beforeSnapshot;
+    stashState.afterSnapshotId = result.afterSnapshotId;
+    stashState.afterSnapshot = result.afterSnapshot;
+    stashState.mapResultContext = buildCurrentMapResultContext();
+    updateStashTrackerStatus();
+
+    return result.report || null;
+  } catch (error) {
+    console.warn('Unable to hydrate persisted PoE1 stash snapshots for session completion', error);
+    return null;
+  }
+}
+
 function buildFallbackMapResultForSession(session = state.currentSession) {
   if (!session) {
     return null;
@@ -4504,6 +4541,9 @@ async function completePoe1SessionWithoutStashProfit(session = state.currentSess
     }
 
     const result = await window.electronAPI.endSession({
+      sessionId: session.id,
+      mapName: session.mapName || fallbackResult?.farmType || null,
+      startedAt: session.startedAt || session.started_at || null,
       totalLootChaos: 0,
       profitChaos: 0,
       durationSeconds: Math.max(1, Math.round(getLiveDuration(session)))
@@ -4541,6 +4581,10 @@ async function completePoe1SessionWithStashProfit() {
   await waitForPendingBeforeSnapshotForSession(state.currentSession);
 
   if (!hasActivePoe1StashBaseline()) {
+    await hydratePoe1StashSnapshotsForSession(state.currentSession);
+  }
+
+  if (!hasActivePoe1StashBaseline()) {
     showToast(
       window.t('stash.profitTracker'),
       'A before-stash baseline is required before ending this PoE 1 map. The session is still active.',
@@ -4552,7 +4596,10 @@ async function completePoe1SessionWithStashProfit() {
   const previousSession = state.currentSession;
 
   try {
-    const report = await takeAfterSnapshotWithStashRefreshRetry(previousSession);
+    let report = await takeAfterSnapshotWithStashRefreshRetry(previousSession);
+    if (isEmptyProfitReport(report)) {
+      report = await hydratePoe1StashSnapshotsForSession(previousSession) || report;
+    }
     stashState.lastMapResult = deriveCurrentMapResult(report);
 
     if (stashState.lastMapResult) {

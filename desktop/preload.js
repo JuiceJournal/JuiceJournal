@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getProfitCurrencyRates: (options) => ipcRenderer.invoke('get-profit-currency-rates', options),
   takeStashSnapshot: (options) => ipcRenderer.invoke('take-stash-snapshot', options),
   calculateProfit: (beforeId, afterId) => ipcRenderer.invoke('calculate-profit', beforeId, afterId),
+  calculateSessionProfitFromSnapshots: (options) => ipcRenderer.invoke('calculate-session-profit-from-snapshots', options),
   saveMapResult: (result) => ipcRenderer.invoke('save-map-result', result),
   getMapResults: () => ipcRenderer.invoke('get-map-results'),
   showMapResultOverlay: (result, options) => ipcRenderer.invoke('show-map-result-overlay', result, options),

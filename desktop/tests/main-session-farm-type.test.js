@@ -463,6 +463,62 @@ test('main local session end adds completed metadata for PoE2 zero-profit result
   assert.equal(context.currentSession, null);
 });
 
+test('main session end can target a backend session id after process state is lost', async () => {
+  const apiCalls = [];
+  const messages = [];
+  const context = loadFunctions(['endCurrentSession'], {
+    currentSession: null,
+    getCurrentSessionFromBackend: async () => null,
+    apiClient: {
+      async endSession(sessionId, payload) {
+        apiCalls.push([sessionId, { ...payload }]);
+        return {
+          id: sessionId,
+          mapName: 'Dunes Map',
+          status: 'completed',
+          profitChaos: payload.profitChaos,
+          totalLootChaos: payload.totalLootChaos
+        };
+      }
+    },
+    isRetryableApiError: () => false,
+    appendAuditTrail() {},
+    showNotification() {},
+    t: (key) => key,
+    updateOverlayWindow() {},
+    mainWindow: {
+      webContents: {
+        send(channel, payload) {
+          messages.push({ channel, payload: JSON.parse(JSON.stringify(payload)) });
+        }
+      }
+    }
+  });
+
+  const result = await context.endCurrentSession({
+    sessionId: 'session-remote-1',
+    mapName: 'Dunes Map',
+    startedAt: '2026-05-06T12:00:00.000Z',
+    endedAt: '2026-05-06T12:04:00.000Z',
+    totalLootChaos: 12,
+    profitChaos: 12
+  });
+
+  assert.equal(result.id, 'session-remote-1');
+  assert.equal(result.status, 'completed');
+  assert.deepEqual(apiCalls, [[
+    'session-remote-1',
+    {
+      endedAt: '2026-05-06T12:04:00.000Z',
+      durationSeconds: 240,
+      totalLootChaos: 12,
+      profitChaos: 12
+    }
+  ]]);
+  assert.equal(messages[0].channel, 'session-ended');
+  assert.equal(context.currentSession, null);
+});
+
 test('main keeps zero-loot PoE1 sessions open on map exit for stash diff completion', () => {
   const context = loadFunctions(['normalizePoeVersion', 'getSessionValueNumber', 'shouldAutoEndSessionOnMapExit']);
 
