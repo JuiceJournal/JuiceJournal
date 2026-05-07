@@ -3714,8 +3714,8 @@ async function handleStartSession(options = {}) {
     if (session) {
       state.currentSession = session;
       updateActiveSessionUI();
-      if (typeof takeAutomaticBeforeSnapshotForSession === 'function') {
-        await takeAutomaticBeforeSnapshotForSession(session);
+      if (typeof scheduleAutomaticBeforeSnapshotForSession === 'function') {
+        scheduleAutomaticBeforeSnapshotForSession(session);
       }
       await refreshTrackerData({ includeSessions: true });
       showToast(
@@ -4316,6 +4316,87 @@ async function takeAutomaticBeforeSnapshotForSession(session = state.currentSess
   }
 }
 
+function scheduleAutomaticBeforeSnapshotForSession(session = state.currentSession) {
+  if (!session || !isActiveSessionPoe1(session) || !isStashTrackingEnabled()) {
+    return Promise.resolve(false);
+  }
+
+  if (stashState.beforeSnapshotId && stashState.mapResultContext?.runtimeSession?.sessionId === session.id) {
+    return Promise.resolve(true);
+  }
+
+  if (stashState.beforeSnapshotPromise && stashState.beforeSnapshotSessionId === session.id) {
+    return stashState.beforeSnapshotPromise;
+  }
+
+  const baselinePromise = takeAutomaticBeforeSnapshotForSession(session);
+  stashState.beforeSnapshotPromise = baselinePromise;
+  stashState.beforeSnapshotSessionId = session.id;
+
+  baselinePromise.finally(() => {
+    if (stashState.beforeSnapshotPromise === baselinePromise) {
+      stashState.beforeSnapshotPromise = null;
+      stashState.beforeSnapshotSessionId = null;
+    }
+  });
+
+  return baselinePromise;
+}
+
+async function waitForPendingBeforeSnapshotForSession(session = state.currentSession) {
+  if (
+    session
+    && stashState.beforeSnapshotPromise
+    && stashState.beforeSnapshotSessionId === session.id
+  ) {
+    await stashState.beforeSnapshotPromise;
+  }
+
+  return hasActivePoe1StashBaseline();
+}
+
+function isEmptyProfitReport(report) {
+  const summary = report?.summary || {};
+  const totalItemChanges = Number(summary.totalItemChanges
+    ?? ((Array.isArray(report?.gained) ? report.gained.length : 0)
+      + (Array.isArray(report?.lost) ? report.lost.length : 0)));
+  const netProfitChaos = Number(summary.netProfitChaos || 0);
+
+  return totalItemChanges === 0 && netProfitChaos === 0;
+}
+
+function waitForStashSnapshotRetryDelay(delayMs = 3500) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, Number(delayMs) || 0));
+  });
+}
+
+async function takeAfterSnapshotWithStashRefreshRetry(session = state.currentSession) {
+  const maxAttempts = 3;
+  let report = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    await takeStashSnapshotForCurrentRun('after', session);
+    report = await window.electronAPI.calculateProfit(
+      stashState.beforeSnapshotId,
+      stashState.afterSnapshotId
+    );
+
+    if (!isEmptyProfitReport(report) || attempt >= maxAttempts) {
+      return report;
+    }
+
+    showToast(
+      window.t('stash.profitTracker'),
+      'No stash changes detected yet. Waiting for the Path of Exile stash API to refresh...',
+      'info'
+    );
+    await waitForStashSnapshotRetryDelay();
+  }
+
+  return report;
+}
+
 async function completePoe1SessionWithStashProfit() {
   if (!state.currentSession || !isActiveSessionPoe1(state.currentSession)) {
     return false;
@@ -4325,6 +4406,8 @@ async function completePoe1SessionWithStashProfit() {
     showStashUnavailableToast();
     return false;
   }
+
+  await waitForPendingBeforeSnapshotForSession(state.currentSession);
 
   if (!hasActivePoe1StashBaseline()) {
     showToast(
@@ -4338,11 +4421,7 @@ async function completePoe1SessionWithStashProfit() {
   const previousSession = state.currentSession;
 
   try {
-    await takeStashSnapshotForCurrentRun('after', previousSession);
-    const report = await window.electronAPI.calculateProfit(
-      stashState.beforeSnapshotId,
-      stashState.afterSnapshotId
-    );
+    const report = await takeAfterSnapshotWithStashRefreshRetry(previousSession);
     stashState.lastMapResult = deriveCurrentMapResult(report);
 
     if (stashState.lastMapResult) {
@@ -4543,7 +4622,9 @@ const stashState = {
   afterSnapshot: null,
   mapResultContext: null,
   lastMapResult: null,
-  pricesSynced: false
+  pricesSynced: false,
+  beforeSnapshotPromise: null,
+  beforeSnapshotSessionId: null
 };
 
 function buildCurrentMapResultContext() {

@@ -523,6 +523,69 @@ test('poe1 stash profit calculation ends the active session after persisting the
   assert.equal(context.elements.calculateProfitBtn.disabled, false);
 });
 
+test('poe1 after snapshot retries when the first stash API read has no changes', async () => {
+  const calls = [];
+  let snapshotAttempts = 0;
+  const context = loadFunctions([
+    'isEmptyProfitReport',
+    'waitForStashSnapshotRetryDelay',
+    'takeAfterSnapshotWithStashRefreshRetry'
+  ], {
+    stashState: {
+      beforeSnapshotId: 'before',
+      afterSnapshotId: null
+    },
+    takeStashSnapshotForCurrentRun: async (type) => {
+      snapshotAttempts += 1;
+      calls.push(['snapshot', type, snapshotAttempts]);
+    },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        async calculateProfit() {
+          calls.push(['calculateProfit', snapshotAttempts]);
+          if (snapshotAttempts === 1) {
+            return {
+              summary: {
+                totalItemChanges: 0,
+                netProfitChaos: 0
+              }
+            };
+          }
+
+          return {
+            gained: [{ name: 'Chaos Orb', quantityDiff: 5, totalChaosValue: 5 }],
+            summary: {
+              totalItemChanges: 1,
+              totalGainedChaos: 5,
+              totalLostChaos: 0,
+              netProfitChaos: 5
+            }
+          };
+        }
+      }
+    },
+    showToast: (...args) => calls.push(['showToast', args[0], args[2]]),
+    setTimeout: (callback) => {
+      calls.push('retryDelay');
+      callback();
+      return 1;
+    }
+  });
+
+  const report = await context.takeAfterSnapshotWithStashRefreshRetry({ id: 'session-1' });
+
+  assert.equal(report.summary.netProfitChaos, 5);
+  assert.deepEqual(calls, [
+    ['snapshot', 'after', 1],
+    ['calculateProfit', 1],
+    ['showToast', 'stash.profitTracker', 'info'],
+    'retryDelay',
+    ['snapshot', 'after', 2],
+    ['calculateProfit', 2]
+  ]);
+});
+
 test('main map-result history is stored per desktop user', () => {
   const writes = [];
   const context = loadMainFunctions(['getMapResultsStoreKey', 'getStoredMapResults', 'saveMapResultHistory'], {

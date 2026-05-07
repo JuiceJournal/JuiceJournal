@@ -657,6 +657,58 @@ test('starting a map session does not rely on unsupported renderer prompt', asyn
   }]);
 });
 
+test('starting a poe1 map session schedules baseline snapshot without blocking session start', async () => {
+  const calls = [];
+  let baselineResolve;
+  const baselinePromise = new Promise((resolve) => {
+    baselineResolve = resolve;
+  });
+  const context = loadFunctions(['normalizeSessionMapName', 'getRuntimeSessionMapName', 'handleStartSession'], {
+    state: {
+      runtimeSession: null,
+      currentSession: null
+    },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        startSession: async (payload) => {
+          calls.push(['startSession', payload.mapName]);
+          return { id: 'session-1', mapName: payload.mapName, poeVersion: 'poe1' };
+        }
+      }
+    },
+    requestMapSessionDetails: async () => ({
+      mapName: 'Dunes Map',
+      farmTypeId: 'breach'
+    }),
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      farmTypeId: 'breach',
+      label: 'PoE 1 - Mirage'
+    }),
+    scheduleAutomaticBeforeSnapshotForSession: (session) => {
+      calls.push(['scheduleBaseline', session.id]);
+      return baselinePromise;
+    },
+    updateActiveSessionUI: () => calls.push('updateActiveSessionUI'),
+    refreshTrackerData: async () => calls.push('refreshTrackerData'),
+    showToast: () => calls.push('showToast'),
+    getUserFacingErrorMessage: () => 'error'
+  });
+
+  await context.handleStartSession();
+  baselineResolve(true);
+
+  assert.deepEqual(calls, [
+    ['startSession', 'Dunes Map'],
+    'updateActiveSessionUI',
+    ['scheduleBaseline', 'session-1'],
+    'refreshTrackerData',
+    'showToast'
+  ]);
+});
+
 test('starting a map session uses the branded modal when runtime map name is missing', async () => {
   const startSessionCalls = [];
   const context = loadFunctions(['normalizeSessionMapName', 'getRuntimeSessionMapName', 'handleStartSession'], {
