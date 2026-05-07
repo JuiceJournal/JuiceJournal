@@ -644,6 +644,111 @@ test('poe1 after snapshot retries transient snapshot failures before calculating
   ]);
 });
 
+test('poe1 after snapshot uses the last available after snapshot when refresh keeps timing out', async () => {
+  const calls = [];
+  const context = loadFunctions([
+    'isEmptyProfitReport',
+    'waitForStashSnapshotRetryDelay',
+    'takeStashSnapshotForCurrentRunWithRetry',
+    'takeAfterSnapshotWithStashRefreshRetry'
+  ], {
+    stashState: {
+      beforeSnapshotId: 'before',
+      afterSnapshotId: 'after-existing'
+    },
+    takeStashSnapshotForCurrentRun: async (type) => {
+      calls.push(['snapshot', type]);
+      throw new Error('The request timed out');
+    },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        async calculateProfit(beforeId, afterId) {
+          calls.push(['calculateProfit', beforeId, afterId]);
+          return {
+            summary: {
+              totalItemChanges: 1,
+              netProfitChaos: 5
+            }
+          };
+        }
+      }
+    },
+    console: {
+      warn: (...args) => calls.push(['warn', args[0]])
+    },
+    showToast: (...args) => calls.push(['showToast', args[0], args[2]]),
+    setTimeout: (callback) => {
+      calls.push('retryDelay');
+      callback();
+      return 1;
+    }
+  });
+
+  const report = await context.takeAfterSnapshotWithStashRefreshRetry({ id: 'session-1' });
+
+  assert.equal(report.summary.netProfitChaos, 5);
+  assert.deepEqual(calls, [
+    ['snapshot', 'after'],
+    ['showToast', 'stash.profitTracker', 'info'],
+    'retryDelay',
+    ['snapshot', 'after'],
+    ['warn', 'Using the last available after-stash snapshot after refresh failed'],
+    ['showToast', 'stash.profitTracker', 'warning'],
+    ['calculateProfit', 'before', 'after-existing']
+  ]);
+});
+
+test('poe1 fallback map result preserves enough data to close a run without stash profit', () => {
+  const context = loadFunctions(['normalizeCompletedSessionPoeVersion', 'buildFallbackMapResultForSession'], {
+    state: {
+      account: {
+        accountName: 'Account',
+        summary: {
+          id: 'char-1',
+          name: 'Mapper',
+          league: 'Mirage'
+        }
+      },
+      farmType: {
+        selectedFarmTypeId: 'breach'
+      }
+    },
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      farmTypeId: 'breach'
+    }),
+    getFarmTypeModel: () => ({
+      listFarmTypes: () => [{ id: 'breach', label: 'Breach' }]
+    }),
+    getLiveDuration: () => 95,
+    Date: class extends Date {
+      constructor(...args) {
+        return args.length ? super(...args) : new global.Date('2026-05-07T12:00:00.000Z');
+      }
+
+      static now() {
+        return new global.Date('2026-05-07T12:00:00.000Z').getTime();
+      }
+    }
+  });
+
+  const result = context.buildFallbackMapResultForSession({
+    id: 'session-1',
+    poeVersion: 'poe1',
+    league: 'Mirage',
+    mapType: 'breach'
+  });
+
+  assert.equal(result.sessionId, 'session-1');
+  assert.equal(result.farmType, 'Breach');
+  assert.equal(result.durationSeconds, 95);
+  assert.equal(result.netProfit, 0);
+  assert.equal(result.profitUnavailable, true);
+  assert.match(result.id, /^fallback-session-1-\d+$/);
+});
+
 test('main map-result history is stored per desktop user', () => {
   const writes = [];
   const context = loadMainFunctions(['getMapResultsStoreKey', 'getStoredMapResults', 'saveMapResultHistory'], {

@@ -4389,6 +4389,7 @@ async function takeStashSnapshotForCurrentRunWithRetry(type, session = state.cur
       lastError = error;
 
       if (attempt >= maxAttempts) {
+        error.stashSnapshotFailed = true;
         throw error;
       }
 
@@ -4409,10 +4410,24 @@ async function takeAfterSnapshotWithStashRefreshRetry(session = state.currentSes
   let report = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    await takeStashSnapshotForCurrentRunWithRetry('after', session, {
-      maxAttempts: 2,
-      delayMs: 2500
-    });
+    try {
+      await takeStashSnapshotForCurrentRunWithRetry('after', session, {
+        maxAttempts: 2,
+        delayMs: 2500
+      });
+    } catch (error) {
+      if (!stashState.afterSnapshotId) {
+        throw error;
+      }
+
+      console.warn('Using the last available after-stash snapshot after refresh failed', error);
+      showToast(
+        window.t('stash.profitTracker'),
+        'Stash refresh timed out. Using the latest available snapshot to complete the map.',
+        'warning'
+      );
+    }
+
     report = await window.electronAPI.calculateProfit(
       stashState.beforeSnapshotId,
       stashState.afterSnapshotId
@@ -4431,6 +4446,86 @@ async function takeAfterSnapshotWithStashRefreshRetry(session = state.currentSes
   }
 
   return report;
+}
+
+function buildFallbackMapResultForSession(session = state.currentSession) {
+  if (!session) {
+    return null;
+  }
+
+  const trackerContext = typeof getSelectedTrackerContext === 'function'
+    ? getSelectedTrackerContext()
+    : {};
+  const { listFarmTypes } = getFarmTypeModel();
+  const farmTypeId = session.farmTypeId
+    || session.mapType
+    || state.farmType?.selectedFarmTypeId
+    || trackerContext.farmTypeId
+    || null;
+  const farmType = listFarmTypes().find((entry) => entry.id === farmTypeId) || null;
+  const characterSummary = state.account?.summary || {};
+  const poeVersion = normalizeCompletedSessionPoeVersion(session.poeVersion ?? session.poe_version)
+    || trackerContext.poeVersion
+    || 'poe1';
+
+  return {
+    id: `fallback-${session.id || 'session'}-${Date.now()}`,
+    sessionId: session.id || null,
+    characterId: characterSummary.id || null,
+    characterName: characterSummary.name || null,
+    accountName: state.account?.accountName || null,
+    poeVersion,
+    league: session.league || trackerContext.league || characterSummary.league || null,
+    farmType: farmType?.label || session.mapType || 'Unknown farm type',
+    durationSeconds: getLiveDuration(session),
+    inputValue: 0,
+    outputValue: 0,
+    netProfit: 0,
+    profitState: 'neutral',
+    topInputs: [],
+    topOutputs: [],
+    profitUnavailable: true,
+    createdAt: new Date().toISOString()
+  };
+}
+
+async function completePoe1SessionWithoutStashProfit(session = state.currentSession, error = null) {
+  if (!session || !isActiveSessionPoe1(session)) {
+    return false;
+  }
+
+  console.warn('Completing PoE1 session without stash profit after snapshot failure', error);
+  const fallbackResult = buildFallbackMapResultForSession(session);
+  stashState.lastMapResult = fallbackResult;
+
+  try {
+    if (fallbackResult) {
+      await persistMapResultHistory(fallbackResult);
+    }
+
+    const result = await window.electronAPI.endSession({
+      totalLootChaos: 0,
+      profitChaos: 0,
+      durationSeconds: Math.max(1, Math.round(getLiveDuration(session)))
+    });
+
+    state.currentSession = null;
+    updateActiveSessionUI();
+    await refreshTrackerData({ includeSessions: true });
+    showToast(
+      window.t('stash.profitTracker'),
+      'Stash refresh failed, so the map was completed without profit data.',
+      'warning'
+    );
+    if (result?.queued) {
+      showToast(window.t('dashboard.activeSession'), window.t('toast.sessionEndQueued'), 'warning');
+    }
+
+    return true;
+  } catch (completionError) {
+    console.warn('Failed to complete PoE1 session without stash profit', completionError);
+    return false;
+  }
 }
 
 async function completePoe1SessionWithStashProfit() {
@@ -4508,6 +4603,13 @@ async function completePoe1SessionWithStashProfit() {
 
     return true;
   } catch (error) {
+    if (error?.stashSnapshotFailed) {
+      const completedWithoutProfit = await completePoe1SessionWithoutStashProfit(previousSession, error);
+      if (completedWithoutProfit) {
+        return true;
+      }
+    }
+
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.profitFailed'), 'error');
     return false;
   }
