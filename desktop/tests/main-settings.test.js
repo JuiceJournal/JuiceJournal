@@ -814,6 +814,87 @@ test('runtime game detection starts the native game info producer for poe2', () 
   ]);
 });
 
+test('runtime game detection starts the native game info producer for poe1', async () => {
+  const starts = [];
+  const capturedProducerOptions = [];
+  const gep = { name: 'gep' };
+  const storeState = {
+    lastDetectedPoeVersion: 'poe2',
+    poeVersion: 'poe1',
+    poePath: null
+  };
+  const context = loadFunctions([
+    'emitActiveCharacterHint',
+    'getNativeGameInfoGameId',
+    'getNativeGameInfoProducer',
+    'stopNativeGameInfoProducer',
+    'syncNativeGameInfoProducer'
+  ], {
+    store: {
+      get(key) {
+        return storeState[key];
+      },
+      set(key, value) {
+        storeState[key] = value;
+      }
+    },
+    GameDetector: {
+      findLogPath() {
+        return null;
+      }
+    },
+    fs: {
+      existsSync() {
+        return false;
+      }
+    },
+    priceService: null,
+    logParser: {
+      isRunning: true
+    },
+    nativeGameInfoProducerBinding: null,
+    nativeGameInfoProducer: null,
+    app: {
+      overwolf: {
+        packages: {
+          gep
+        }
+      }
+    },
+    createNativeGameInfoProducer(options) {
+      capturedProducerOptions.push(options);
+      return {
+        start: async (payload) => {
+          starts.push(payload);
+          return true;
+        },
+        stop: async () => true
+      };
+    },
+    mainWindow: {
+      webContents: {
+        send() {}
+      }
+    }
+  });
+
+  const started = await context.syncNativeGameInfoProducer({
+    detectedVersion: 'poe1',
+    gameId: context.getNativeGameInfoGameId('poe1')
+  });
+
+  assert.equal(started, true);
+  assert.equal(capturedProducerOptions.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(starts)), [{
+    poeVersion: 'poe1',
+    gameId: 7212
+  }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.nativeGameInfoProducerBinding)), {
+    detectedVersion: 'poe1',
+    gameId: 7212
+  });
+});
+
 test('runtime game detection does not restart the native game info producer when the mapping is unchanged', async () => {
   const starts = [];
   const context = loadFunctions([
@@ -859,48 +940,16 @@ test('runtime game detection does not restart the native game info producer when
   });
 });
 
-test('runtime game detection stops the native game info producer when the detected game has no native mapping', () => {
+test('runtime game detection stops the native game info producer when the detected game has no native mapping', async () => {
   let stopCalls = 0;
   const messages = [];
-  const storeState = {
-    lastDetectedPoeVersion: 'poe2',
-    poeVersion: 'poe1',
-    poePath: null
-  };
   const context = loadFunctions([
     'emitActiveCharacterHint',
     'clearNativeActiveCharacterHint',
     'getNativeGameInfoGameId',
     'stopNativeGameInfoProducer',
-    'syncNativeGameInfoProducer',
-    'applyGameVersion'
+    'syncNativeGameInfoProducer'
   ], {
-    store: {
-      get(key) {
-        return storeState[key];
-      },
-      set(key, value) {
-        storeState[key] = value;
-      }
-    },
-    GameDetector: {
-      findLogPath() {
-        return null;
-      }
-    },
-    fs: {
-      existsSync() {
-        return false;
-      }
-    },
-    priceService: null,
-    logParser: {
-      isRunning: true
-    },
-    nativeGameInfoProducerBinding: {
-      detectedVersion: 'poe2',
-      gameId: 24886
-    },
     nativeGameInfoProducer: {
       stop() {
         stopCalls += 1;
@@ -923,23 +972,18 @@ test('runtime game detection stops the native game info producer when the detect
     }
   });
 
-  context.applyGameVersion('poe1');
+  const result = await context.syncNativeGameInfoProducer({
+    detectedVersion: 'unknown',
+    gameId: null
+  });
 
+  assert.equal(result, true);
   assert.equal(stopCalls, 1);
   assert.equal(context.lastActiveCharacterHint, null);
   assert.deepEqual(JSON.parse(JSON.stringify(messages)), [
     {
       channel: 'active-character-hint',
       payload: null
-    },
-    {
-      channel: 'game-version-changed',
-      payload: {
-        version: 'poe1',
-        settingsVersion: 'poe1',
-        lastDetectedVersion: 'poe1',
-        logPath: null
-      }
     }
   ]);
 });
