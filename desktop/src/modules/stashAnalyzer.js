@@ -102,7 +102,10 @@ class StashAnalyzer {
       if (diff === 0) continue;
 
       const itemInfo = afterEntry || beforeEntry;
-      const chaosValue = priceService ? priceService.getChaosValue(itemInfo.name) : 0;
+      const snapshotChaosValue = Number(itemInfo.chaosValue);
+      const chaosValue = Number.isFinite(snapshotChaosValue) && snapshotChaosValue >= 0
+        ? snapshotChaosValue
+        : (priceService ? priceService.getChaosValue(itemInfo.name) : 0);
 
       const entry = {
         name: itemInfo.name,
@@ -160,12 +163,16 @@ class StashAnalyzer {
       const existing = map.get(key);
       if (existing) {
         existing.quantity += item.quantity || 1;
+        if (Number.isFinite(Number(item.chaosValue)) && Number(item.chaosValue) > 0) {
+          existing.chaosValue = Number(item.chaosValue);
+        }
       } else {
         map.set(key, {
           name: item.baseType || item.typeLine || item.name,
           category: item.category || 'other',
           icon: item.icon,
-          quantity: item.quantity || 1
+          quantity: item.quantity || 1,
+          chaosValue: Number.isFinite(Number(item.chaosValue)) ? Number(item.chaosValue) : null
         });
       }
     }

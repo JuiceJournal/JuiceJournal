@@ -482,6 +482,27 @@ test('map result model stays aligned with stash analyzer quantity-diff semantics
   assert.equal(result.netProfit, report.summary.netProfitChaos);
 });
 
+test('stash analyzer preserves priced backend snapshot values without a local price cache', () => {
+  const analyzer = new StashAnalyzer();
+  const priceService = {
+    getChaosValue() {
+      return 0;
+    }
+  };
+  const beforeItems = [
+    { baseType: 'Divine Orb', category: 'currency', quantity: 1, chaosValue: 120, totalChaosValue: 120 }
+  ];
+  const afterItems = [
+    { baseType: 'Divine Orb', category: 'currency', quantity: 2, chaosValue: 120, totalChaosValue: 240 }
+  ];
+
+  const report = analyzer.diffItems(beforeItems, afterItems, priceService);
+
+  assert.equal(report.summary.totalGainedChaos, 120);
+  assert.equal(report.summary.netProfitChaos, 120);
+  assert.equal(report.gained[0].chaosValue, 120);
+});
+
 test('map result model matches stash analyzer when snapshot item casing differs', () => {
   const deriveMapResult = getMapResultModelExport('deriveMapResult');
   const analyzer = new StashAnalyzer();

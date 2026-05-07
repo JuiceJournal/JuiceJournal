@@ -213,6 +213,26 @@ class APIClient {
     return response.data;
   }
 
+  /**
+   * Take a backend-managed Path of Exile stash snapshot.
+   */
+  async takePoeStashSnapshot(data = {}) {
+    const response = await this.client.post('/api/poe/snapshots', data, {
+      timeout: 120000
+    });
+    return response.data;
+  }
+
+  /**
+   * Diff two backend-managed Path of Exile stash snapshots.
+   */
+  async diffPoeStashSnapshots(data = {}) {
+    const response = await this.client.post('/api/poe/snapshots/diff', data, {
+      timeout: 60000
+    });
+    return response.data;
+  }
+
   extractAuthCookie(response) {
     const cookies = response?.headers?.['set-cookie'];
     if (!Array.isArray(cookies)) {

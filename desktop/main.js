@@ -4089,25 +4089,81 @@ function setupIPC() {
     }
   });
 
+  function normalizeBackendSnapshotForDesktop(snapshot, context = {}) {
+    if (!snapshot) {
+      return null;
+    }
+
+    const takenAt = snapshot.takenAt || snapshot.taken_at || snapshot.createdAt || snapshot.created_at || null;
+    const timestamp = takenAt ? new Date(takenAt).getTime() : Date.now();
+    const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+    const totalChaos = Number(snapshot.totalChaosValue ?? snapshot.total_chaos_value ?? snapshot.totalChaos ?? 0) || 0;
+    const divinePrice = Number(priceService?.getChaosValue?.('Divine Orb') || 0) || 1;
+
+    return {
+      id: snapshot.id || null,
+      tabs: Array.isArray(snapshot.tabs) ? snapshot.tabs : [],
+      items,
+      timestamp,
+      league: snapshot.league || context.league,
+      poeVersion: snapshot.poeVersion || snapshot.poe_version || context.poeVersion,
+      totalChaos,
+      totalDivine: totalChaos / divinePrice,
+      divinePrice,
+      source: 'backend'
+    };
+  }
+
+  async function takeBackendStashSnapshot(options = {}, context = {}) {
+    if (!apiClient?.token || typeof apiClient.takePoeStashSnapshot !== 'function') {
+      return null;
+    }
+
+    const response = await apiClient.takePoeStashSnapshot({
+      league: context.league,
+      poeVersion: context.poeVersion,
+      tabIds: options.tabIds,
+      allTabs: options.allTabs,
+      label: options.label,
+      kind: options.kind,
+      sessionId: options.sessionId
+    });
+
+    return normalizeBackendSnapshotForDesktop(response?.snapshot || response, context);
+  }
+
+  async function takeDesktopStashSnapshot(options = {}, context = {}) {
+    if (!poeApiClient.isAuthenticated()) {
+      const backendSnapshot = await takeBackendStashSnapshot(options, context);
+      if (backendSnapshot) {
+        return backendSnapshot;
+      }
+
+      throw new Error(t('poeNotLinked'));
+    }
+
+    const snapshot = await poeApiClient.takeStashSnapshot(context.league, {
+      tabIds: options.tabIds,
+      allTabs: options.allTabs
+    });
+
+    // Price the items
+    const priced = priceService.priceItems(snapshot.items);
+    snapshot.items = priced.items;
+    snapshot.totalChaos = priced.totalChaos;
+    snapshot.totalDivine = priced.totalDivine;
+    snapshot.divinePrice = priced.divinePrice;
+    snapshot.source = 'desktop';
+
+    return snapshot;
+  }
+
   // Take a stash snapshot
   ipcMain.handle('take-stash-snapshot', async (event, options = {}) => {
     try {
       assertDesktopUserAuthenticated();
-      if (!poeApiClient.isAuthenticated()) {
-        throw new Error(t('poeNotLinked'));
-      }
-      const { league } = resolveLeagueContext(options);
-      const snapshot = await poeApiClient.takeStashSnapshot(league, {
-        tabIds: options.tabIds,
-        allTabs: options.allTabs
-      });
-
-      // Price the items
-      const priced = priceService.priceItems(snapshot.items);
-      snapshot.items = priced.items;
-      snapshot.totalChaos = priced.totalChaos;
-      snapshot.totalDivine = priced.totalDivine;
-      snapshot.divinePrice = priced.divinePrice;
+      const { activeVersion: poeVersion, league } = resolveLeagueContext(options);
+      const snapshot = await takeDesktopStashSnapshot(options, { poeVersion, league });
 
       // Save the snapshot
       const snapshotId = options.snapshotId || `snap_${Date.now()}`;

@@ -4258,7 +4258,13 @@ async function takeStashSnapshotForCurrentRun(type, session = state.currentSessi
   }
 
   const snapshotId = `${type}:${session.id}:${Date.now()}`;
-  const result = await window.electronAPI.takeStashSnapshot({ snapshotId });
+  const result = await window.electronAPI.takeStashSnapshot({
+    snapshotId,
+    kind: type,
+    sessionId: session.id,
+    league: session.league,
+    poeVersion: session.poeVersion
+  });
   const nextContext = buildCurrentMapResultContext();
 
   if (type === 'before') {
