@@ -529,6 +529,7 @@ test('poe1 after snapshot retries when the first stash API read has no changes',
   const context = loadFunctions([
     'isEmptyProfitReport',
     'waitForStashSnapshotRetryDelay',
+    'takeStashSnapshotForCurrentRunWithRetry',
     'takeAfterSnapshotWithStashRefreshRetry'
   ], {
     stashState: {
@@ -579,6 +580,63 @@ test('poe1 after snapshot retries when the first stash API read has no changes',
   assert.deepEqual(calls, [
     ['snapshot', 'after', 1],
     ['calculateProfit', 1],
+    ['showToast', 'stash.profitTracker', 'info'],
+    'retryDelay',
+    ['snapshot', 'after', 2],
+    ['calculateProfit', 2]
+  ]);
+});
+
+test('poe1 after snapshot retries transient snapshot failures before calculating profit', async () => {
+  const calls = [];
+  let snapshotAttempts = 0;
+  const context = loadFunctions([
+    'isEmptyProfitReport',
+    'waitForStashSnapshotRetryDelay',
+    'takeStashSnapshotForCurrentRunWithRetry',
+    'takeAfterSnapshotWithStashRefreshRetry'
+  ], {
+    stashState: {
+      beforeSnapshotId: 'before',
+      afterSnapshotId: null
+    },
+    takeStashSnapshotForCurrentRun: async (type) => {
+      snapshotAttempts += 1;
+      calls.push(['snapshot', type, snapshotAttempts]);
+      if (snapshotAttempts === 1) {
+        throw new Error('GGG stash API is not ready');
+      }
+    },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        async calculateProfit() {
+          calls.push(['calculateProfit', snapshotAttempts]);
+          return {
+            gained: [{ name: 'Chaos Orb', quantityDiff: 5, totalChaosValue: 5 }],
+            summary: {
+              totalItemChanges: 1,
+              totalGainedChaos: 5,
+              totalLostChaos: 0,
+              netProfitChaos: 5
+            }
+          };
+        }
+      }
+    },
+    showToast: (...args) => calls.push(['showToast', args[0], args[2]]),
+    setTimeout: (callback) => {
+      calls.push('retryDelay');
+      callback();
+      return 1;
+    }
+  });
+
+  const report = await context.takeAfterSnapshotWithStashRefreshRetry({ id: 'session-1' });
+
+  assert.equal(report.summary.netProfitChaos, 5);
+  assert.deepEqual(calls, [
+    ['snapshot', 'after', 1],
     ['showToast', 'stash.profitTracker', 'info'],
     'retryDelay',
     ['snapshot', 'after', 2],
@@ -689,6 +747,15 @@ test('desktop preload passes end-session completion options through IPC', () => 
   assert.match(source, /endSession:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\('end-session',\s*options\)/);
 });
 
+test('desktop preload passes dashboard stats context through IPC', () => {
+  const source = fs.readFileSync(preloadJsPath, 'utf8');
+
+  assert.match(
+    source,
+    /getDashboardStats:\s*\(context\)\s*=>\s*ipcRenderer\.invoke\('get-dashboard-stats',\s*context\)/
+  );
+});
+
 test('desktop preload exposes adaptive profit currency rate lookup', () => {
   const source = fs.readFileSync(preloadJsPath, 'utf8');
 
@@ -712,6 +779,14 @@ test('desktop main process forwards end-session completion options to session co
   assert.match(source, /return\s+await\s+endCurrentSession\(options\)/);
   assert.match(source, /totalLootChaos/);
   assert.match(source, /profitChaos/);
+});
+
+test('desktop main process resolves dashboard stats from renderer tracker context', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+
+  assert.match(source, /ipcMain\.handle\('get-dashboard-stats',\s*async\s*\(event,\s*context\s*=\s*\{\}\)\s*=>/);
+  assert.match(source, /const\s+trackerContext\s*=\s*getTrackerContextDefaults\(context\)/);
+  assert.match(source, /apiClient\.getPersonalStats\('daily',\s*trackerContext\)/);
 });
 
 test('desktop main process registers adaptive profit currency rate IPC handler', () => {

@@ -962,6 +962,130 @@ test('map-entered events can start a session from the in-game start-map overlay 
   }]);
 });
 
+test('map-entered events fall back to the desktop modal when the in-game prompt is not answered quickly', async () => {
+  const overlayPrompts = [];
+  const startCalls = [];
+  let overlayResultHandler = null;
+  const context = loadFunctions(['handleMapEnteredEvent'], {
+    state: {
+      currentSession: null,
+      settings: {
+        autoStartSession: true
+      },
+      farmType: {
+        selectedFarmTypeId: 'breach'
+      }
+    },
+    setRuntimeSessionState: () => {},
+    showToast: () => {},
+    setTimeout: (callback) => {
+      callback();
+      return 1;
+    },
+    clearTimeout: () => {},
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      farmTypeId: 'breach',
+      label: 'PoE 1 - Mirage'
+    }),
+    getFarmTypeModel: () => ({
+      getFarmTypeById: (id) => (id === 'breach' ? { id: 'breach', label: 'Breach' } : null),
+      listFarmTypes: () => [
+        { id: 'breach', label: 'Breach' },
+        { id: 'expedition', label: 'Expedition' }
+      ]
+    }),
+    window: {
+      t: (key, values = {}) => values.mapName ? `${key}:${values.mapName}` : key,
+      electronAPI: {
+        showStartMapPromptOverlay: async (payload) => {
+          overlayPrompts.push(payload);
+          return { visibility: 'visible', mode: 'start-map-prompt' };
+        },
+        hideStartMapPromptOverlay: async () => {
+          overlayPrompts.push({ hidden: true });
+        },
+        onStartMapPromptOverlayResult: (callback) => {
+          overlayResultHandler = callback;
+          return () => {
+            overlayResultHandler = null;
+          };
+        }
+      }
+    },
+    handleStartSession: async (options) => {
+      startCalls.push({ ...options });
+    }
+  });
+
+  await context.handleMapEnteredEvent({
+    mapName: 'Dunes Map'
+  });
+
+  assert.equal(overlayResultHandler, null);
+  assert.deepEqual(JSON.parse(JSON.stringify(overlayPrompts)), [
+    {
+      mapName: 'Dunes Map',
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      farmTypeId: 'breach',
+      farmType: 'Breach',
+      farmTypeOptions: [
+        { id: 'breach', label: 'Breach' },
+        { id: 'expedition', label: 'Expedition' }
+      ],
+      source: 'map-detected'
+    },
+    { hidden: true }
+  ]);
+  assert.deepEqual(startCalls, [{ defaultMapName: 'Dunes Map', source: 'map-detected' }]);
+});
+
+test('dashboard summary requests stats for the active character league', async () => {
+  const dashboardRequests = [];
+  const context = loadFunctions(['loadDashboardStats'], {
+    state: {
+      currentUser: { id: 'user-1' },
+      settings: { poeVersion: 'poe1' }
+    },
+    elements: {
+      todaySessions: { textContent: '' },
+      todayProfit: { textContent: '', innerHTML: '' },
+      todayAvg: { textContent: '', innerHTML: '' }
+    },
+    getSelectedTrackerContext: () => ({
+      poeVersion: 'poe1',
+      league: 'Mirage'
+    }),
+    profitCurrencyHTML: (value) => `${value} chaos`,
+    window: {
+      electronAPI: {
+        getDashboardStats: async (contextPayload) => {
+          dashboardRequests.push(contextPayload);
+          return {
+            summary: {
+              totalSessions: 1,
+              totalProfit: 39.9,
+              avgProfitPerMap: 39.9
+            }
+          };
+        }
+      }
+    },
+    resetDashboardSummary: () => {
+      throw new Error('summary should not reset');
+    }
+  });
+
+  await context.loadDashboardStats();
+
+  assert.deepEqual(JSON.parse(JSON.stringify(dashboardRequests)), [{ poeVersion: 'poe1', league: 'Mirage' }]);
+  assert.equal(context.elements.todaySessions.textContent, '1');
+  assert.equal(context.elements.todayProfit.innerHTML, '39.9 chaos');
+  assert.equal(context.elements.todayAvg.innerHTML, '39.9 chaos');
+});
+
 test('session-ended events persist completed map results for automatic log exits', async () => {
   const listeners = {};
   const persistedResults = [];

@@ -2444,7 +2444,7 @@ async function handleMapEnteredEvent(data = {}) {
             }) || (() => {});
 
             if (typeof setTimeout === 'function') {
-              timeoutId = setTimeout(() => settle(null), 90000);
+              timeoutId = setTimeout(() => settle(null), 2500);
             }
           })
           : null;
@@ -3924,7 +3924,13 @@ async function loadDashboardStats() {
   elements.todayAvg.textContent = '...';
 
   try {
-    const response = await window.electronAPI.getDashboardStats();
+    const trackerContext = typeof getSelectedTrackerContext === 'function'
+      ? getSelectedTrackerContext()
+      : {};
+    const response = await window.electronAPI.getDashboardStats({
+      poeVersion: trackerContext.poeVersion,
+      league: trackerContext.league
+    });
     const summary = response?.summary || {};
     const totalSessions = parseInt(summary.totalSessions || 0, 10);
     const totalProfit = parseFloat(summary.totalProfit || 0);
@@ -4371,12 +4377,42 @@ function waitForStashSnapshotRetryDelay(delayMs = 3500) {
   });
 }
 
+async function takeStashSnapshotForCurrentRunWithRetry(type, session = state.currentSession, options = {}) {
+  const maxAttempts = Math.max(1, Number(options.maxAttempts) || 1);
+  const delayMs = Math.max(0, Number(options.delayMs) || 0);
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await takeStashSnapshotForCurrentRun(type, session);
+    } catch (error) {
+      lastError = error;
+
+      if (attempt >= maxAttempts) {
+        throw error;
+      }
+
+      showToast(
+        window.t('stash.profitTracker'),
+        'Stash snapshot is not ready yet. Retrying before completing the map...',
+        'info'
+      );
+      await waitForStashSnapshotRetryDelay(delayMs);
+    }
+  }
+
+  throw lastError || new Error('Failed to take stash snapshot');
+}
+
 async function takeAfterSnapshotWithStashRefreshRetry(session = state.currentSession) {
   const maxAttempts = 3;
   let report = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    await takeStashSnapshotForCurrentRun('after', session);
+    await takeStashSnapshotForCurrentRunWithRetry('after', session, {
+      maxAttempts: 2,
+      delayMs: 2500
+    });
     report = await window.electronAPI.calculateProfit(
       stashState.beforeSnapshotId,
       stashState.afterSnapshotId

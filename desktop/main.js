@@ -3674,8 +3674,8 @@ function setupIPC() {
     }
   });
 
-  ipcMain.handle('get-dashboard-stats', async () => {
-    const trackerContext = getTrackerContextDefaults();
+  ipcMain.handle('get-dashboard-stats', async (event, context = {}) => {
+    const trackerContext = getTrackerContextDefaults(context);
     try {
       return await apiClient.getPersonalStats('daily', trackerContext);
     } catch (error) {

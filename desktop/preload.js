@@ -40,7 +40,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSessionDetails: (sessionId) => ipcRenderer.invoke('get-session-details', sessionId),
   updateSessionDetails: (sessionId, payload) => ipcRenderer.invoke('update-session-details', sessionId, payload),
   getSessions: (params) => ipcRenderer.invoke('get-sessions', params),
-  getDashboardStats: () => ipcRenderer.invoke('get-dashboard-stats'),
+  getDashboardStats: (context) => ipcRenderer.invoke('get-dashboard-stats', context),
 
   // Loot islemleri
   addLoot: (data) => ipcRenderer.invoke('add-loot', data),
