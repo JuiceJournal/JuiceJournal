@@ -72,6 +72,15 @@ test('normalizeNativeInfoPayload returns a high-confidence hint', () => {
   });
 });
 
+test('getRequiredFeaturesForVersion returns PoE1 feature set', () => {
+  const getRequiredFeaturesForVersion = getNativeGameInfoProducerModelExport('getRequiredFeaturesForVersion');
+
+  assert.deepEqual(
+    getRequiredFeaturesForVersion('poe1'),
+    ['gep_internal', 'me', 'match_info', 'game_info']
+  );
+});
+
 test('normalizeNativeInfoPayload carries class and ascendancy fields when GEP provides them', () => {
   const normalizeNativeInfoPayload = getNativeGameInfoProducerModelExport('normalizeNativeInfoPayload');
 
@@ -124,6 +133,36 @@ test('normalizeNativeInfoPayload strips wrapping quotes and reads nested league 
     league: 'Fate of the Vaal',
     level: 96,
     experience: null,
+    confidence: 'high'
+  });
+});
+
+test('normalizeNativeInfoPayload returns PoE1 character hints with character_experience', () => {
+  const normalizeNativeInfoPayload = getNativeGameInfoProducerModelExport('normalizeNativeInfoPayload');
+
+  const hint = normalizeNativeInfoPayload({
+    poeVersion: ' PoE 1 ',
+    info: {
+      me: {
+        character_name: '"JaylenBaliston"',
+        character_class: 'Templar',
+        character_ascendancy_name: 'Hierophant',
+        character_level: '96',
+        character_experience: '987654321',
+        character_league: 'Mirage'
+      }
+    }
+  });
+
+  assert.deepEqual(hint, {
+    source: 'native-info',
+    poeVersion: 'poe1',
+    characterName: 'JaylenBaliston',
+    className: 'Templar',
+    ascendancy: 'Hierophant',
+    league: 'Mirage',
+    level: 96,
+    experience: 987654321,
     confidence: 'high'
   });
 });
@@ -199,7 +238,10 @@ test('poeVersion normalization trims and lowercases across exported behaviors', 
     getRequiredFeaturesForVersion('  PoE2  '),
     ['gep_internal', 'me', 'match_info']
   );
-  assert.deepEqual(getRequiredFeaturesForVersion(' PoE 1 '), []);
+  assert.deepEqual(
+    getRequiredFeaturesForVersion(' PoE 1 '),
+    ['gep_internal', 'me', 'match_info', 'game_info']
+  );
 
   const hint = normalizeNativeInfoPayload({
     poeVersion: '  PoE2  ',

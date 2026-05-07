@@ -334,6 +334,52 @@ test('renderer applies an unmatched native character as the active runtime chara
   assert.equal(renderCalls, 1);
 });
 
+test('renderer applies a high-confidence native poe1 character hint', () => {
+  let renderCalls = 0;
+  let overlayRefreshCalls = 0;
+  const context = loadFunctions(['applyNativeCharacterHint'], {
+    state: {
+      detectedGameVersion: 'poe1',
+      settings: { poeVersion: 'poe1' },
+      account: {
+        activePoeVersion: 'poe1',
+        charactersByGame: {
+          poe1: [
+            { id: 'char-old', name: 'OldWitch', className: 'Witch', league: 'Mirage', poeVersion: 'poe1' },
+            { id: 'char-templar', name: 'JaylenBaliston', className: 'Templar', league: 'Mirage', poeVersion: 'poe1' }
+          ]
+        },
+        summary: { status: 'ready', name: 'OldWitch' }
+      }
+    },
+    renderCharacterSummaryCard() {
+      renderCalls += 1;
+    },
+    refreshRendererOverlayState() {
+      overlayRefreshCalls += 1;
+    },
+    clearActiveCharacterRefreshTimers() {}
+  });
+
+  const result = context.applyNativeCharacterHint({
+    source: 'native-game-info',
+    poeVersion: 'poe1',
+    characterName: 'JaylenBaliston',
+    className: 'Templar',
+    level: 36,
+    league: 'Mirage',
+    confidence: 'high'
+  });
+
+  assert.equal(result, true);
+  assert.equal(context.state.account.selectedCharacter.id, 'char-templar');
+  assert.equal(context.state.account.summary.name, 'JaylenBaliston');
+  assert.equal(context.state.account.summary.className, 'Templar');
+  assert.equal(context.state.account.summary.league, 'Mirage');
+  assert.equal(renderCalls, 1);
+  assert.equal(overlayRefreshCalls, 1);
+});
+
 test('renderer ignores a high-confidence native hint for a different game version', () => {
   let renderCalls = 0;
   const context = loadFunctions(['applyNativeCharacterHint'], {

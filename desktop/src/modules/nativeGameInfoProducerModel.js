@@ -6,6 +6,7 @@
 
   root.nativeGameInfoProducerModel = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createNativeGameInfoProducerModel() {
+  const POE1_REQUIRED_FEATURES = ['gep_internal', 'me', 'match_info', 'game_info'];
   const POE2_REQUIRED_FEATURES = ['gep_internal', 'me', 'match_info'];
 
   function stripWrappingQuotes(value) {
@@ -75,7 +76,11 @@
   }
 
   function normalizePoeVersion(value) {
-    const normalized = normalizeString(value).toLowerCase();
+    const normalized = normalizeString(value).toLowerCase().replace(/\s+/g, '');
+
+    if (normalized === 'poe1' || normalized === 'pathofexile1') {
+      return 'poe1';
+    }
 
     if (normalized === 'poe2') {
       return 'poe2';
@@ -85,6 +90,10 @@
   }
 
   function getRequiredFeaturesForVersion(poeVersion) {
+    if (normalizePoeVersion(poeVersion) === 'poe1') {
+      return [...POE1_REQUIRED_FEATURES];
+    }
+
     if (normalizePoeVersion(poeVersion) === 'poe2') {
       return [...POE2_REQUIRED_FEATURES];
     }
@@ -128,7 +137,7 @@
       poeVersion: normalizedPoeVersion,
       characterName,
       level: normalizeNumber(me?.character_level),
-      experience: normalizeNumber(me?.character_exp),
+      experience: normalizeNumber(me?.character_exp ?? me?.character_experience),
       confidence: 'high'
     };
 

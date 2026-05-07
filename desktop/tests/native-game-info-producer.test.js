@@ -168,6 +168,62 @@ test('producer emits a high-confidence hint after immediate getInfo and subscrib
   ]);
 });
 
+test('producer starts PoE1 native info and emits character hints', async () => {
+  const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
+  const emitted = [];
+  const setRequiredFeaturesCalls = [];
+  const gep = {
+    async setRequiredFeatures(gameId, features) {
+      setRequiredFeaturesCalls.push({ gameId, features });
+    },
+    async getInfo(gameId) {
+      assert.equal(gameId, 7212);
+
+      return {
+        me: {
+          character_name: 'JaylenBaliston',
+          character_class: 'Templar',
+          character_level: '36',
+          character_experience: '123456789',
+          character_league: 'Mirage'
+        }
+      };
+    },
+    on() {},
+    removeListener() {}
+  };
+
+  const producer = createNativeGameInfoProducer({
+    gep,
+    emitHint: hint => emitted.push(hint)
+  });
+
+  const started = await producer.start({
+    poeVersion: 'poe1',
+    gameId: 7212
+  });
+
+  assert.equal(started, true);
+  assert.deepEqual(setRequiredFeaturesCalls, [
+    {
+      gameId: 7212,
+      features: ['gep_internal', 'me', 'match_info', 'game_info']
+    }
+  ]);
+  assert.deepEqual(emitted, [
+    {
+      source: 'native-info',
+      poeVersion: 'poe1',
+      characterName: 'JaylenBaliston',
+      className: 'Templar',
+      league: 'Mirage',
+      level: 36,
+      experience: 123456789,
+      confidence: 'high'
+    }
+  ]);
+});
+
 test('producer enables matching game-detected events before relying on info updates', async () => {
   const createNativeGameInfoProducer = getCreateNativeGameInfoProducer();
   const listeners = new Map();
