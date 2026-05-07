@@ -25,6 +25,9 @@ const SAFE_AREA_NAMES = new Set([
   "lilly's hideout",
   'kingsmarch',
   'canal hideout',
+  'forest hideout',
+  'lush hideout',
+  'karui shores',
   'ziggurat refuge',
   'the ziggurat refuge',
   'clearfell encampment'
@@ -48,6 +51,11 @@ function isPoe2NonMapAreaName(value) {
   return POE2_SIDE_AREA_NAMES.has(normalizeAreaKey(value));
 }
 
+function isSafeAreaName(value) {
+  const normalized = normalizeAreaKey(value);
+  return SAFE_AREA_NAMES.has(normalized) || normalized === 'hideout' || normalized.endsWith(' hideout');
+}
+
 class LogParser extends EventEmitter {
   constructor(logPath, options = {}) {
     super();
@@ -67,6 +75,7 @@ class LogParser extends EventEmitter {
     // Map state
     this.currentMap = null;
     this.mapStartTime = null;
+    this.currentMapIdentity = null;
   }
 
   /**
@@ -163,7 +172,9 @@ class LogParser extends EventEmitter {
    * Parse a single line
    */
   parseLine(line) {
-    this.reconcilePendingInstanceExit(line);
+    if (this.reconcilePendingInstanceExit(line)) {
+      return;
+    }
 
     // Detect map entry.
     // Example: 2023/12/25 15:30:45 ***** MAP LOADING : Maps/Dunes_01.tbw
@@ -188,6 +199,7 @@ class LogParser extends EventEmitter {
             type: 'map_entered',
             mapName,
             mapTier: parseInt(match[1]),
+            mapIdentity: this.extractMapIdentity(line, areaId),
             timestamp: this.extractTimestamp(line),
             raw: line
           };
@@ -199,7 +211,7 @@ class LogParser extends EventEmitter {
         handler: (match) => {
           const areaName = match[1].trim();
           const normalizedAreaName = normalizeAreaKey(areaName);
-          const isSafeArea = SAFE_AREA_NAMES.has(normalizedAreaName);
+          const isSafeArea = isSafeAreaName(normalizedAreaName);
           if (this.poeVersion === 'poe2') {
             if (isSafeArea || isPoe2NonMapAreaName(areaName)) {
               return null;
@@ -244,7 +256,7 @@ class LogParser extends EventEmitter {
         regex: /Generating level \d+ area "([^"]+)"/i,
         handler: (match) => {
           const areaName = this.formatAreaName(match[1]);
-          if (!SAFE_AREA_NAMES.has(areaName.toLowerCase())) {
+          if (!isSafeAreaName(areaName)) {
             return null;
           }
 
@@ -261,7 +273,7 @@ class LogParser extends EventEmitter {
         regex: /You have entered ([^\.]+)\./i,
         handler: (match) => {
           const areaName = match[1].trim();
-          if (!SAFE_AREA_NAMES.has(normalizeAreaKey(areaName))) {
+          if (!isSafeAreaName(areaName)) {
             return null;
           }
 
@@ -354,54 +366,91 @@ class LogParser extends EventEmitter {
 
   reconcilePendingInstanceExit(line) {
     if (!this.pendingInstanceExitData) {
-      return;
+      return false;
     }
 
     const enteredMatch = line.match(/You have entered ([^\.]+)\./i);
     if (!enteredMatch) {
       const generatedMatch = line.match(/Generating level \d+ area "([^"]+)"/i);
       if (!generatedMatch) {
-        return;
+        return false;
       }
 
       const areaName = this.formatAreaName(generatedMatch[1]);
-      if (SAFE_AREA_NAMES.has(normalizeAreaKey(areaName))) {
+      if (isSafeAreaName(areaName)) {
         this.clearPendingInstanceExit();
-        return;
+        return false;
       }
 
       if (/^Map/i.test(generatedMatch[1])) {
+        const nextIdentity = this.extractMapIdentity(line, generatedMatch[1]);
+        if (this.isSameMapIdentity(nextIdentity)) {
+          this.clearPendingInstanceExit();
+          return true;
+        }
+
         const pendingExit = this.pendingInstanceExitData;
         this.clearPendingInstanceExit();
         this.handleMapExit(pendingExit);
-        return;
+        return false;
       }
 
       this.clearPendingInstanceExit();
-      return;
+      return false;
     }
 
     const areaName = enteredMatch[1].trim();
-    if (SAFE_AREA_NAMES.has(normalizeAreaKey(areaName))) {
+    if (isSafeAreaName(areaName)) {
       this.clearPendingInstanceExit();
-      return;
+      return false;
     }
 
     this.clearPendingInstanceExit();
+    return false;
+  }
+
+  extractMapIdentity(line, areaId) {
+    const normalizedAreaId = String(areaId || '').trim().toLowerCase();
+    const seedMatch = String(line || '').match(/\bwith seed\s+(\d+)/i);
+    return {
+      areaId: normalizedAreaId,
+      seed: seedMatch ? seedMatch[1] : null
+    };
+  }
+
+  isSameMapIdentity(nextIdentity) {
+    if (!this.currentMapIdentity || !nextIdentity) {
+      return false;
+    }
+
+    if (this.currentMapIdentity.areaId !== nextIdentity.areaId) {
+      return false;
+    }
+
+    return !this.currentMapIdentity.seed
+      || !nextIdentity.seed
+      || this.currentMapIdentity.seed === nextIdentity.seed;
   }
 
   /**
    * Handle map entry
    */
   handleMapEnter(data) {
+    if (data.mapIdentity && this.isSameMapIdentity(data.mapIdentity)) {
+      this.clearPendingInstanceExit();
+      return;
+    }
+
     this.clearPendingInstanceExit();
     this.currentMap = data.mapName;
     this.mapStartTime = Date.now();
+    this.currentMapIdentity = data.mapIdentity || null;
 
     this.emit('mapEntered', {
       mapName: data.mapName,
       mapTier: data.mapTier,
-      timestamp: data.timestamp
+      timestamp: data.timestamp,
+      source: data.source || null
     });
   }
 
@@ -427,13 +476,17 @@ class LogParser extends EventEmitter {
     // Reset the map state.
     this.currentMap = null;
     this.mapStartTime = null;
+    this.currentMapIdentity = null;
   }
 
   /**
    * Format the map name
    */
   formatMapName(rawName) {
-    const name = this.formatAreaName(rawName);
+    const mapAreaName = this.poeVersion === 'poe1'
+      ? String(rawName || '').replace(/^MapWorlds/i, 'Map')
+      : rawName;
+    const name = this.formatAreaName(mapAreaName);
 
     if (this.poeVersion === 'poe2') {
       return name;
@@ -473,6 +526,79 @@ class LogParser extends EventEmitter {
       return new Date(match[1].replace(/\//g, '-'));
     }
     return new Date();
+  }
+
+  isRecentTimestamp(timestamp, { now = new Date(), maxAgeMs = 30 * 60 * 1000 } = {}) {
+    const timestampMs = timestamp instanceof Date ? timestamp.getTime() : Date.parse(timestamp);
+    const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
+
+    if (!Number.isFinite(timestampMs) || !Number.isFinite(nowMs)) {
+      return false;
+    }
+
+    return timestampMs <= nowMs && (nowMs - timestampMs) <= maxAgeMs;
+  }
+
+  bootstrapFromRecentLines(lines = [], options = {}) {
+    if (!Array.isArray(lines) || lines.length === 0) {
+      return false;
+    }
+
+    const probe = new LogParser(this.logPath, {
+      poeVersion: this.poeVersion,
+      instanceExitDelayMs: 0
+    });
+    let lastEntry = null;
+
+    probe.on('mapEntered', (payload) => {
+      lastEntry = payload;
+    });
+
+    for (const line of lines) {
+      if (String(line || '').trim()) {
+        probe.parseLine(String(line).trim());
+      }
+    }
+
+    if (!probe.currentMap || !lastEntry) {
+      return false;
+    }
+
+    if (!this.isRecentTimestamp(lastEntry.timestamp, options)) {
+      return false;
+    }
+
+    this.handleMapEnter({
+      ...lastEntry,
+      mapName: probe.currentMap,
+      mapIdentity: probe.currentMapIdentity,
+      source: 'log_bootstrap'
+    });
+
+    return true;
+  }
+
+  bootstrapFromTail(options = {}) {
+    if (!fs.existsSync(this.logPath)) {
+      return false;
+    }
+
+    const maxBytes = Math.max(1, Number(options.maxBytes) || 256 * 1024);
+    const stats = fs.statSync(this.logPath);
+    const start = Math.max(0, stats.size - maxBytes);
+    const buffer = Buffer.alloc(stats.size - start);
+    const fd = fs.openSync(this.logPath, 'r');
+
+    try {
+      fs.readSync(fd, buffer, 0, buffer.length, start);
+    } finally {
+      fs.closeSync(fd);
+    }
+
+    return this.bootstrapFromRecentLines(
+      buffer.toString().split(/\r?\n/).filter(Boolean),
+      options
+    );
   }
 
   /**

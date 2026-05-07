@@ -141,6 +141,75 @@ test('log parser keeps PoE1 league side instances inside the active map', async 
   assert.equal(exits[0].location, 'Canal Hideout');
 });
 
+test('log parser keeps PoE1 same-seed map re-entry inside the active map', async () => {
+  const parser = new LogParser('Client.txt', {
+    poeVersion: 'poe1',
+    instanceExitDelayMs: 20
+  });
+  const entries = [];
+  const exits = [];
+
+  parser.on('mapEntered', (payload) => entries.push(payload));
+  parser.on('mapExited', (payload) => exits.push(payload));
+
+  parser.parseLine('2026/05/07 09:31:30 123456 abc [INFO Client 123] : Generating level 83 area "MapWorldsDunes" with seed 3809657038');
+  parser.parseLine('2026/05/07 09:31:30 123456 abc [INFO Client 123] : You have entered Dunes.');
+  parser.parseLine('2026/05/07 09:35:17 123456 abc [INFO Client 123] : Connecting to instance server...');
+  parser.parseLine('2026/05/07 09:35:17 123456 abc [INFO Client 123] : Generating level 83 area "MapWorldsDunes" with seed 3809657038');
+  parser.parseLine('2026/05/07 09:35:18 123456 abc [INFO Client 123] : You have entered Dunes.');
+  await wait(30);
+
+  assert.deepEqual(entries.map((entry) => entry.mapName), ['Dunes Map']);
+  assert.equal(exits.length, 0);
+  assert.equal(parser.getCurrentMap().mapName, 'Dunes Map');
+
+  parser.parseLine('2026/05/07 09:36:37 123456 abc [INFO Client 123] : Generating level 60 area "HideoutForest" with seed 1');
+  parser.parseLine('2026/05/07 09:36:38 123456 abc [INFO Client 123] : You have entered Lush Hideout.');
+
+  assert.equal(exits.length, 1);
+  assert.equal(exits[0].mapName, 'Dunes Map');
+});
+
+test('log parser bootstraps one PoE1 map-entered event when startup tail is inside a map', () => {
+  const parser = new LogParser('Client.txt', { poeVersion: 'poe1' });
+  const entries = [];
+
+  parser.on('mapEntered', (payload) => entries.push(payload));
+
+  const didBootstrap = parser.bootstrapFromRecentLines([
+    '2026/05/07 09:31:30 123456 abc [INFO Client 123] : Generating level 83 area "MapWorldsDunes" with seed 3809657038',
+    '2026/05/07 09:31:30 123456 abc [INFO Client 123] : You have entered Dunes.'
+  ], {
+    now: new Date('2026-05-07T06:32:00.000Z'),
+    maxAgeMs: 5 * 60 * 1000
+  });
+
+  assert.equal(didBootstrap, true);
+  assert.deepEqual(entries.map((entry) => entry.mapName), ['Dunes Map']);
+  assert.equal(entries[0].source, 'log_bootstrap');
+  assert.equal(parser.getCurrentMap().mapName, 'Dunes Map');
+});
+
+test('log parser does not bootstrap PoE1 map prompt when startup tail ends in hideout', () => {
+  const parser = new LogParser('Client.txt', { poeVersion: 'poe1' });
+  const entries = [];
+
+  parser.on('mapEntered', (payload) => entries.push(payload));
+
+  const didBootstrap = parser.bootstrapFromRecentLines([
+    '2026/05/07 09:31:30 123456 abc [INFO Client 123] : Generating level 83 area "MapWorldsDunes" with seed 3809657038',
+    '2026/05/07 09:36:37 123456 abc [INFO Client 123] : Generating level 60 area "HideoutForest" with seed 1',
+    '2026/05/07 09:36:38 123456 abc [INFO Client 123] : You have entered Lush Hideout.'
+  ], {
+    now: new Date('2026-05-07T06:37:00.000Z'),
+    maxAgeMs: 5 * 60 * 1000
+  });
+
+  assert.equal(didBootstrap, false);
+  assert.deepEqual(entries, []);
+  assert.equal(parser.getCurrentMap().mapName, null);
+});
+
 test('log parser still exits PoE1 maps on unresolved instance changes after debounce', async () => {
   const parser = new LogParser('Client.txt', {
     poeVersion: 'poe1',
