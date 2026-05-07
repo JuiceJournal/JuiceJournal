@@ -29,6 +29,42 @@ function resolveSessionFarmTypeId(payload = {}) {
   return normalizeOptionalText(payload.farmTypeId ?? payload.mapType, 50);
 }
 
+function resolveSessionCompletionTotals(payload = {}) {
+  const hasTotalLoot = Object.prototype.hasOwnProperty.call(payload, 'totalLootChaos')
+    && payload.totalLootChaos !== null
+    && payload.totalLootChaos !== undefined
+    && payload.totalLootChaos !== '';
+  const hasProfit = Object.prototype.hasOwnProperty.call(payload, 'profitChaos')
+    && payload.profitChaos !== null
+    && payload.profitChaos !== undefined
+    && payload.profitChaos !== '';
+
+  if (!hasTotalLoot && !hasProfit) {
+    return null;
+  }
+
+  if (!hasTotalLoot || !hasProfit) {
+    throw Object.assign(new Error('Both totalLootChaos and profitChaos are required for session completion totals'), {
+      status: 400,
+      errorCode: 'SESSION_COMPLETION_TOTALS_INCOMPLETE'
+    });
+  }
+
+  const totalLootChaos = Number(payload.totalLootChaos);
+  const profitChaos = Number(payload.profitChaos);
+  if (!Number.isFinite(totalLootChaos) || totalLootChaos < 0 || !Number.isFinite(profitChaos)) {
+    throw Object.assign(new Error('Session completion totals are invalid'), {
+      status: 400,
+      errorCode: 'SESSION_COMPLETION_TOTALS_INVALID'
+    });
+  }
+
+  return {
+    totalLootChaos,
+    profitChaos
+  };
+}
+
 const MAX_CLIENT_TIMESTAMP_SKEW_MS = 5 * 60 * 1000;
 const MAX_CLIENT_BACKDATE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -385,6 +421,8 @@ router.put('/:id/end',
   [
     param('id').isUUID().withMessage('Enter a valid session ID'),
     body('endedAt').optional().isISO8601().withMessage('Enter a valid end time'),
+    body('totalLootChaos').optional({ nullable: true }).isFloat({ min: 0 }),
+    body('profitChaos').optional({ nullable: true }).isFloat(),
     handleValidationErrors
   ],
   async (req, res) => {
@@ -406,8 +444,9 @@ router.put('/:id/end',
         field: 'endedAt',
         minDate: session.startedAt
       });
+      const completionTotals = resolveSessionCompletionTotals(req.body);
 
-      await session.complete(finalEndedAt || null);
+      await session.complete(finalEndedAt || null, completionTotals);
 
       // Broadcast via WebSocket.
       if (req.app.broadcast) {

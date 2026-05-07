@@ -195,12 +195,23 @@ module.exports = (sequelize, DataTypes) => {
     return this.profitChaos;
   };
 
-  Session.prototype.complete = async function (endedAtOverride = null) {
+  Session.prototype.complete = async function (endedAtOverride = null, completionTotals = null) {
     this.status = 'completed';
     this.endedAt = endedAtOverride ? new Date(endedAtOverride) : new Date();
 
     if (this.startedAt) {
       this.durationSec = Math.floor((this.endedAt - this.startedAt) / 1000);
+    }
+
+    if (
+      completionTotals
+      && Number.isFinite(Number(completionTotals.totalLootChaos))
+      && Number.isFinite(Number(completionTotals.profitChaos))
+    ) {
+      this.totalLootChaos = Number(completionTotals.totalLootChaos);
+      this.profitChaos = Number(completionTotals.profitChaos);
+      await this.save();
+      return this;
     }
 
     await this.calculateProfit();

@@ -3139,11 +3139,36 @@ async function completeCurrentSessionAfterStashProfit(mapResult = {}) {
   }
 
   try {
-    return await window.electronAPI.endSession();
+    return await window.electronAPI.endSession(buildSessionCompletionPayloadFromMapResult(mapResult));
   } catch (error) {
     console.warn('Failed to end PoE1 session after stash profit calculation', error);
     return null;
   }
+}
+
+function buildSessionCompletionPayloadFromMapResult(mapResult = {}) {
+  const totalLootChaos = getSessionNumber(
+    mapResult.totalLootChaos ?? mapResult.outputValue ?? mapResult.totalLootValue,
+    0
+  );
+  const profitChaos = getSessionNumber(
+    mapResult.profitChaos ?? mapResult.netProfit,
+    totalLootChaos
+  );
+  let durationSeconds = getSessionNumber(mapResult.durationSeconds, NaN);
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    durationSeconds = state.currentSession ? getLiveDuration(state.currentSession) : 0;
+  }
+  const payload = {
+    totalLootChaos,
+    profitChaos
+  };
+
+  if (durationSeconds > 0) {
+    payload.durationSeconds = Math.round(durationSeconds);
+  }
+
+  return payload;
 }
 
 async function loadMapResultHistory() {
@@ -3689,6 +3714,9 @@ async function handleStartSession(options = {}) {
     if (session) {
       state.currentSession = session;
       updateActiveSessionUI();
+      if (typeof takeAutomaticBeforeSnapshotForSession === 'function') {
+        await takeAutomaticBeforeSnapshotForSession(session);
+      }
       await refreshTrackerData({ includeSessions: true });
       showToast(
         window.t('dashboard.activeSession'),
@@ -3709,6 +3737,11 @@ async function handleEndSession() {
   if (!state.currentSession) return;
 
   if (!await requestEndSessionConfirmation(state.currentSession)) return;
+
+  if (typeof completePoe1SessionWithStashProfit === 'function' && isActiveSessionPoe1(state.currentSession)) {
+    await completePoe1SessionWithStashProfit();
+    return;
+  }
 
   const previousSession = state.currentSession;
   const completedAt = new Date().toISOString();
@@ -4171,6 +4204,191 @@ async function handleCheckForAppUpdate() {
     renderAppUpdateState();
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'settings.updateError'), 'error');
+  }
+}
+
+function isActiveSessionPoe1(session = state.currentSession) {
+  const poeVersion = normalizeCompletedSessionPoeVersion(session?.poeVersion ?? session?.poe_version)
+    || getSelectedTrackerContext().poeVersion
+    || state.settings?.poeVersion
+    || 'poe1';
+  return poeVersion === 'poe1';
+}
+
+function hasActivePoe1StashBaseline() {
+  if (!state.currentSession || !stashState.beforeSnapshotId || !stashState.beforeSnapshot) {
+    return false;
+  }
+
+  const baselineSessionId = stashState.mapResultContext?.runtimeSession?.sessionId || null;
+  return !baselineSessionId || baselineSessionId === state.currentSession.id;
+}
+
+async function syncPricesForCurrentStashRun(session = state.currentSession) {
+  if (stashState.pricesSynced) {
+    return true;
+  }
+
+  if (typeof window.electronAPI?.syncPrices !== 'function') {
+    return false;
+  }
+
+  const league = session?.league || getResolvedActiveLeague();
+  const result = await window.electronAPI.syncPrices({ league });
+  stashState.pricesSynced = true;
+  if (elements.priceItemCount && Number(result?.itemCount || 0) > 0) {
+    elements.priceItemCount.textContent = `${result.itemCount} items`;
+  }
+  if (typeof refreshProfitCurrencyRates === 'function') {
+    await refreshProfitCurrencyRates(session?.poeVersion || getSelectedTrackerContext().poeVersion, league);
+  }
+
+  return true;
+}
+
+async function takeStashSnapshotForCurrentRun(type, session = state.currentSession) {
+  if (!session || !isStashTrackingEnabled()) {
+    return null;
+  }
+
+  try {
+    await syncPricesForCurrentStashRun(session);
+  } catch (error) {
+    console.warn('Proceeding with stash snapshot after price sync failed', error);
+  }
+
+  const snapshotId = `${type}:${session.id}:${Date.now()}`;
+  const result = await window.electronAPI.takeStashSnapshot({ snapshotId });
+  const nextContext = buildCurrentMapResultContext();
+
+  if (type === 'before') {
+    stashState.beforeSnapshotId = snapshotId;
+    stashState.beforeSnapshot = result;
+    stashState.afterSnapshotId = null;
+    stashState.afterSnapshot = null;
+    stashState.lastMapResult = null;
+    stashState.mapResultContext = nextContext;
+    if (elements.takeAfterSnapshotBtn) {
+      elements.takeAfterSnapshotBtn.disabled = false;
+    }
+  } else {
+    stashState.afterSnapshotId = snapshotId;
+    stashState.afterSnapshot = result;
+    stashState.mapResultContext = {
+      ...(stashState.mapResultContext || nextContext),
+      runtimeSession: mergeMapResultRuntimeSession(
+        stashState.mapResultContext?.runtimeSession || null,
+        nextContext.runtimeSession || null
+      )
+    };
+  }
+
+  updateStashTrackerStatus();
+  return result;
+}
+
+async function takeAutomaticBeforeSnapshotForSession(session = state.currentSession) {
+  if (!session || !isActiveSessionPoe1(session) || !isStashTrackingEnabled()) {
+    return false;
+  }
+
+  if (stashState.beforeSnapshotId && stashState.mapResultContext?.runtimeSession?.sessionId === session.id) {
+    return true;
+  }
+
+  try {
+    await takeStashSnapshotForCurrentRun('before', session);
+    return true;
+  } catch (error) {
+    console.warn('Failed to create automatic PoE1 before-stash baseline', error);
+    showToast(
+      window.t('stash.profitTracker'),
+      'Unable to create the before-stash baseline for this PoE 1 map. Profit cannot be calculated until a baseline exists.',
+      'warning'
+    );
+    return false;
+  }
+}
+
+async function completePoe1SessionWithStashProfit() {
+  if (!state.currentSession || !isActiveSessionPoe1(state.currentSession)) {
+    return false;
+  }
+
+  if (!isStashTrackingEnabled()) {
+    showStashUnavailableToast();
+    return false;
+  }
+
+  if (!hasActivePoe1StashBaseline()) {
+    showToast(
+      window.t('stash.profitTracker'),
+      'A before-stash baseline is required before ending this PoE 1 map. The session is still active.',
+      'warning'
+    );
+    return false;
+  }
+
+  const previousSession = state.currentSession;
+
+  try {
+    await takeStashSnapshotForCurrentRun('after', previousSession);
+    const report = await window.electronAPI.calculateProfit(
+      stashState.beforeSnapshotId,
+      stashState.afterSnapshotId
+    );
+    stashState.lastMapResult = deriveCurrentMapResult(report);
+
+    if (stashState.lastMapResult) {
+      const trackerContext = typeof getSelectedTrackerContext === 'function'
+        ? getSelectedTrackerContext()
+        : {};
+      const liveDuration = getLiveDuration(previousSession);
+      const rates = typeof refreshProfitCurrencyRates === 'function'
+        ? await refreshProfitCurrencyRates(
+          stashState.lastMapResult.poeVersion || trackerContext.poeVersion,
+          stashState.lastMapResult.league || trackerContext.league
+        )
+        : null;
+      stashState.lastMapResult = {
+        ...stashState.lastMapResult,
+        durationSeconds: Number(stashState.lastMapResult.durationSeconds || 0) > 0
+          ? stashState.lastMapResult.durationSeconds
+          : liveDuration,
+        profitCurrencyRates: rates
+      };
+    }
+
+    renderProfitReport(report);
+
+    if (!stashState.lastMapResult || Number(stashState.lastMapResult.durationSeconds || 0) <= 0) {
+      throw new Error('Unable to derive a completed map result from the stash diff');
+    }
+
+    if (typeof window.electronAPI?.showMapResultOverlay === 'function') {
+      try {
+        await window.electronAPI.showMapResultOverlay(stashState.lastMapResult);
+      } catch (error) {
+        console.warn('Failed to show map result overlay', error);
+      }
+    }
+
+    await persistMapResultHistory(stashState.lastMapResult);
+    const result = await window.electronAPI.endSession(
+      buildSessionCompletionPayloadFromMapResult(stashState.lastMapResult)
+    );
+
+    state.currentSession = null;
+    updateActiveSessionUI();
+    await refreshTrackerData({ includeSessions: true });
+    if (result?.queued) {
+      showToast(window.t('dashboard.activeSession'), window.t('toast.sessionEndQueued'), 'warning');
+    }
+
+    return true;
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.profitFailed'), 'error');
+    return false;
   }
 }
 

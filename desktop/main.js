@@ -3052,6 +3052,13 @@ async function endCurrentSession(options = {}) {
       completionPayload.durationSeconds = durationSeconds;
     }
 
+    const totalLootChaos = Number(options.totalLootChaos);
+    const profitChaos = Number(options.profitChaos);
+    if (Number.isFinite(totalLootChaos) && totalLootChaos >= 0 && Number.isFinite(profitChaos)) {
+      completionPayload.totalLootChaos = totalLootChaos;
+      completionPayload.profitChaos = profitChaos;
+    }
+
     if (currentSession.localOnly) {
       queuePendingSessionAction({
         type: 'sessionEnd',
@@ -3260,6 +3267,13 @@ function setupLogParser() {
   });
 
   logParser.start();
+  try {
+    logParser.bootstrapFromTail({
+      maxAgeMs: 10 * 60 * 1000
+    });
+  } catch (error) {
+    console.warn('Failed to bootstrap map state from Client.txt tail', error);
+  }
 }
 
 /**
@@ -3610,8 +3624,8 @@ function setupIPC() {
   });
 
   // End a session.
-  ipcMain.handle('end-session', async () => {
-    return await endCurrentSession();
+  ipcMain.handle('end-session', async (event, options = {}) => {
+    return await endCurrentSession(options);
   });
 
   // Get the active session.

@@ -190,3 +190,36 @@ test('backend session start validation accepts nullable optional map context fro
     /body\('mapType'\)\.optional\(\{\s*nullable:\s*true\s*\}\)\.trim\(\)\.isLength\(\{\s*max:\s*50\s*\}\)/
   );
 });
+
+test('backend session end route accepts stash-diff completion totals', () => {
+  const source = fs.readFileSync(routePath, 'utf8');
+
+  assert.match(
+    source,
+    /body\('totalLootChaos'\)\.optional\(\{\s*nullable:\s*true\s*\}\)\.isFloat\(\{\s*min:\s*0\s*\}\)/
+  );
+  assert.match(
+    source,
+    /body\('profitChaos'\)\.optional\(\{\s*nullable:\s*true\s*\}\)\.isFloat\(\)/
+  );
+  assert.match(source, /resolveSessionCompletionTotals\(req\.body\)/);
+  assert.match(source, /session\.complete\(finalEndedAt\s*\|\|\s*null,\s*completionTotals\)/);
+});
+
+test('backend session route resolves computed zero and negative profit totals', () => {
+  const context = loadFunctions(['resolveSessionCompletionTotals']);
+
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(context.resolveSessionCompletionTotals({ totalLootChaos: '0', profitChaos: '0' }))),
+    { totalLootChaos: 0, profitChaos: 0 }
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(context.resolveSessionCompletionTotals({ totalLootChaos: '120.5', profitChaos: '-10.25' }))),
+    { totalLootChaos: 120.5, profitChaos: -10.25 }
+  );
+  assert.equal(context.resolveSessionCompletionTotals({}), null);
+  assert.throws(
+    () => context.resolveSessionCompletionTotals({ totalLootChaos: '10' }),
+    /Both totalLootChaos and profitChaos are required/
+  );
+});

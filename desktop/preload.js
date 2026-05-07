@@ -33,7 +33,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Session islemleri
   startSession: (data) => ipcRenderer.invoke('start-session', data),
-  endSession: () => ipcRenderer.invoke('end-session'),
+  endSession: (options) => ipcRenderer.invoke('end-session', options),
   getCurrentSession: () => ipcRenderer.invoke('get-current-session'),
   getActiveFarmType: () => ipcRenderer.invoke('get-active-farm-type'),
   setActiveFarmType: (farmTypeId) => ipcRenderer.invoke('set-active-farm-type', farmTypeId),

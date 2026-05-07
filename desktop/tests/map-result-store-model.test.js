@@ -318,7 +318,7 @@ test('renderer creates a completed map result directly from an ended session', (
   assert.equal(result.characterName, 'JaylenBaliston');
 });
 
-test('ending a zero-profit PoE1 map session waits for stash diff before persisting a result', async () => {
+test('ending a PoE1 map session routes through stash diff completion instead of plain zero-complete', async () => {
   const persisted = [];
   const calls = [];
   const state = {
@@ -341,6 +341,7 @@ test('ending a zero-profit PoE1 map session waits for stash diff before persisti
     'hasCompletedSessionValue',
     'shouldPersistCompletedSessionMapResult',
     'persistCompletedSessionMapResult',
+    'isActiveSessionPoe1',
     'handleEndSession'
   ], {
     state,
@@ -349,6 +350,7 @@ test('ending a zero-profit PoE1 map session waits for stash diff before persisti
       t: (key) => key,
       electronAPI: {
         async endSession() {
+          calls.push('endSession');
           return {
             id: 'session-2',
             mapName: 'Unknown Map',
@@ -373,6 +375,10 @@ test('ending a zero-profit PoE1 map session waits for stash diff before persisti
       farmTypeId: 'ritual'
     }),
     normalizePoeVersion: (value) => value,
+    completePoe1SessionWithStashProfit: async () => {
+      calls.push('completePoe1SessionWithStashProfit');
+      return false;
+    },
     persistMapResultHistory: async (result) => {
       persisted.push(result);
       return [result];
@@ -385,9 +391,9 @@ test('ending a zero-profit PoE1 map session waits for stash diff before persisti
 
   await context.handleEndSession();
 
-  assert.equal(state.currentSession, null);
+  assert.equal(state.currentSession.id, 'session-2');
   assert.equal(persisted.length, 0);
-  assert.deepEqual(calls, ['updateActiveSessionUI', 'refreshTrackerData']);
+  assert.deepEqual(calls, ['completePoe1SessionWithStashProfit']);
 });
 
 test('renderer history loader keeps startup alive when map-result history is unavailable', async () => {
@@ -458,7 +464,9 @@ test('poe1 stash profit calculation ends the active session after persisting the
   };
   const context = loadFunctions([
     'normalizeCompletedSessionPoeVersion',
+    'getSessionNumber',
     'shouldEndSessionAfterStashProfit',
+    'buildSessionCompletionPayloadFromMapResult',
     'completeCurrentSessionAfterStashProfit',
     'handleCalculateProfit'
   ], {
@@ -480,7 +488,7 @@ test('poe1 stash profit calculation ends the active session after persisting the
           return { summary: { netProfitChaos: 44 } };
         },
         async endSession() {
-          calls.push('endSession');
+          calls.push(['endSession', arguments[0]]);
           return { id: 'session-3', status: 'completed' };
         }
       }
@@ -489,6 +497,8 @@ test('poe1 stash profit calculation ends the active session after persisting the
     deriveCurrentMapResult: () => ({
       id: 'map-result-1',
       durationSeconds: 60,
+      totalLootValue: 50,
+      netProfit: 44,
       poeVersion: 'poe1',
       league: 'Mirage'
     }),
@@ -500,11 +510,15 @@ test('poe1 stash profit calculation ends the active session after persisting the
 
   await context.handleCalculateProfit();
 
-  assert.deepEqual(calls, [
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
     'calculateProfit',
     'renderProfitReport',
     'persistMapResultHistory',
-    'endSession'
+    ['endSession', {
+      totalLootChaos: 50,
+      profitChaos: 44,
+      durationSeconds: 60
+    }]
   ]);
   assert.equal(context.elements.calculateProfitBtn.disabled, false);
 });
@@ -606,6 +620,12 @@ test('desktop preload exposes map-result persistence bridge methods', () => {
   assert.match(source, /getMapResults:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('get-map-results'\)/);
 });
 
+test('desktop preload passes end-session completion options through IPC', () => {
+  const source = fs.readFileSync(preloadJsPath, 'utf8');
+
+  assert.match(source, /endSession:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\('end-session',\s*options\)/);
+});
+
 test('desktop preload exposes adaptive profit currency rate lookup', () => {
   const source = fs.readFileSync(preloadJsPath, 'utf8');
 
@@ -620,6 +640,15 @@ test('desktop main process registers map-result save and list IPC handlers', () 
 
   assert.match(source, /ipcMain\.handle\('save-map-result'/);
   assert.match(source, /ipcMain\.handle\('get-map-results'/);
+});
+
+test('desktop main process forwards end-session completion options to session completion', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+
+  assert.match(source, /ipcMain\.handle\('end-session',\s*async\s*\(event,\s*options\s*=\s*\{\}\)\s*=>/);
+  assert.match(source, /return\s+await\s+endCurrentSession\(options\)/);
+  assert.match(source, /totalLootChaos/);
+  assert.match(source, /profitChaos/);
 });
 
 test('desktop main process registers adaptive profit currency rate IPC handler', () => {
