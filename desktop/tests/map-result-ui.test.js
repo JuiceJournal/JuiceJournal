@@ -1202,6 +1202,7 @@ test('poe2 result smoke persists zero-profit map result and projects it into Las
     'shouldPersistCompletedSessionMapResult',
     'persistCompletedSessionMapResult',
     'persistMapResultHistory',
+    'formatMapResultProfitHTML',
     'renderLatestMapResult',
     'setupIPCListeners'
   ], {
@@ -1326,7 +1327,7 @@ test('renderer shows an empty last map result state when no completed result exi
       innerHTML: '123c'
     }
   };
-  const context = loadFunctions(['renderLatestMapResult'], {
+  const context = loadFunctions(['formatMapResultProfitHTML', 'renderLatestMapResult'], {
     elements,
     state: {
       mapResults: []
@@ -1364,7 +1365,7 @@ test('renderer keeps the last map result card empty when the latest result has n
       innerHTML: '123c'
     }
   };
-  const context = loadFunctions(['renderLatestMapResult'], {
+  const context = loadFunctions(['formatMapResultProfitHTML', 'renderLatestMapResult'], {
     elements,
     state: {
       mapResults: [
@@ -1414,6 +1415,7 @@ test('renderer skips stale zero-value PoE1 lifecycle results in the latest map c
     'normalizeCompletedSessionPoeVersion',
     'isPoe1ZeroLifecycleResult',
     'isDisplayableMapResult',
+    'formatMapResultProfitHTML',
     'renderLatestMapResult'
   ], {
     elements,
@@ -1475,7 +1477,7 @@ test('renderer projects only the latest map result into the dashboard card', () 
       innerHTML: ''
     }
   };
-  const context = loadFunctions(['renderLatestMapResult'], {
+  const context = loadFunctions(['formatMapResultProfitHTML', 'renderLatestMapResult'], {
     elements,
     state: {
       mapResults: [
@@ -1505,6 +1507,49 @@ test('renderer projects only the latest map result into the dashboard card', () 
   assert.equal(elements.lastMapResultProfit.innerHTML, 'profit:127:chaos:16:poe2');
 });
 
+test('renderer shows unavailable profit results as not calculated', () => {
+  const elements = {
+    lastMapResultCard: {
+      dataset: {
+        resultState: 'empty'
+      }
+    },
+    lastMapResultFarmType: {
+      textContent: ''
+    },
+    lastMapResultDuration: {
+      textContent: ''
+    },
+    lastMapResultProfit: {
+      innerHTML: ''
+    }
+  };
+  const context = loadFunctions(['formatMapResultProfitHTML', 'renderLatestMapResult'], {
+    elements,
+    state: {
+      mapResults: [
+        {
+          farmType: 'Breach',
+          durationSeconds: 240,
+          netProfit: 0,
+          poeVersion: 'poe1',
+          profitUnavailable: true
+        }
+      ]
+    },
+    formatDuration: (seconds) => `duration:${seconds}`,
+    currencyHTML: () => {
+      throw new Error('currencyHTML should not be called for unavailable profit');
+    }
+  });
+
+  context.renderLatestMapResult();
+
+  assert.equal(elements.lastMapResultCard.dataset.resultState, 'ready');
+  assert.equal(elements.lastMapResultFarmType.textContent, 'Breach');
+  assert.equal(elements.lastMapResultProfit.innerHTML, '<span class="profit-unavailable">Not calculated</span>');
+});
+
 test('renderer map result history keeps persisted ordering and populates farm-type filter options', () => {
   const filterCalls = [];
   const elements = {
@@ -1516,7 +1561,7 @@ test('renderer map result history keeps persisted ordering and populates farm-ty
       innerHTML: ''
     }
   };
-  const context = loadFunctions(['renderMapResultHistory'], {
+  const context = loadFunctions(['formatMapResultProfitHTML', 'renderMapResultHistory'], {
     elements,
     state: {
       settings: {
@@ -1596,7 +1641,7 @@ test('renderer map result history applies the selected farm-type filter through 
       innerHTML: ''
     }
   };
-  const context = loadFunctions(['renderMapResultHistory'], {
+  const context = loadFunctions(['formatMapResultProfitHTML', 'renderMapResultHistory'], {
     elements,
     state: {
       settings: {
@@ -1669,7 +1714,7 @@ test('renderer map result history ignores incomplete results before applying far
       innerHTML: ''
     }
   };
-  const context = loadFunctions(['renderMapResultHistory'], {
+  const context = loadFunctions(['formatMapResultProfitHTML', 'renderMapResultHistory'], {
     elements,
     state: {
       settings: {

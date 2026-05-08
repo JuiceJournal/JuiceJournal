@@ -1421,6 +1421,12 @@ body {
   color: var(--text-bright);
 }
 
+.profit-unavailable {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+}
+
 /* Recent Loot Card */
 .recent-loot-card {
   grid-column: 2;

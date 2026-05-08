@@ -519,6 +519,186 @@ test('main session end can target a backend session id after process state is lo
   assert.equal(context.currentSession, null);
 });
 
+test('main shutdown finalizer closes an active session without profit data when calculation is unavailable', async () => {
+  const calls = [];
+  const context = loadFunctions([
+    'normalizePoeVersion',
+    'normalizeStoredFarmTypeId',
+    'resolveFarmTypeLabel',
+    'getSessionValueNumber',
+    'getSessionNumberValue',
+    'isUuid',
+    'buildSessionShutdownMapResult',
+    'withTimeout',
+    'resolveShutdownSessionCompletion',
+    'endCurrentSession',
+    'finalizeActiveSessionOnShutdown'
+  ], {
+    currentSession: {
+      id: 'session-shutdown-1',
+      mapName: 'Dunes Map',
+      mapType: 'breach',
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      startedAt: '2026-05-06T12:00:00.000Z',
+      localOnly: false
+    },
+    calculateSessionProfitFromPersistedSnapshots: async () => {
+      throw new Error('snapshot timeout');
+    },
+    listFarmTypes: () => [{ id: 'breach', label: 'Breach' }],
+    getActiveFarmTypeId: () => 'breach',
+    saveMapResultHistory(result) {
+      calls.push(['saveMapResultHistory', JSON.parse(JSON.stringify(result))]);
+      return [result];
+    },
+    apiClient: {
+      async endSession(sessionId, payload) {
+        calls.push(['endSession', sessionId, { ...payload }]);
+        return {
+          id: sessionId,
+          status: 'completed',
+          profitChaos: payload.profitChaos,
+          totalLootChaos: payload.totalLootChaos
+        };
+      }
+    },
+    isRetryableApiError: () => false,
+    appendAuditTrail() {},
+    showNotification() {},
+    t: (key) => key,
+    updateOverlayWindow() {},
+    mainWindow: null,
+    Date: class extends Date {
+      constructor(...args) {
+        return args.length ? super(...args) : new global.Date('2026-05-06T12:04:00.000Z');
+      }
+
+      static now() {
+        return new global.Date('2026-05-06T12:04:00.000Z').getTime();
+      }
+
+      static parse(value) {
+        return global.Date.parse(value);
+      }
+    },
+    console: {
+      log() {},
+      warn() {}
+    },
+    setTimeout: (callback) => {
+      callback();
+      return 1;
+    },
+    clearTimeout() {}
+  });
+
+  const result = await context.finalizeActiveSessionOnShutdown();
+
+  assert.equal(result.status, 'completed');
+  assert.equal(result.profitChaos, 0);
+  assert.equal(calls[0][0], 'saveMapResultHistory');
+  assert.equal(calls[0][1].sessionId, 'session-shutdown-1');
+  assert.equal(calls[0][1].farmType, 'Breach');
+  assert.equal(calls[0][1].profitUnavailable, true);
+  assert.equal(calls[0][1].durationSeconds, 240);
+  assert.deepEqual(calls[1], ['endSession', 'session-shutdown-1', {
+    endedAt: '2026-05-06T12:04:00.000Z',
+    durationSeconds: 240,
+    totalLootChaos: 0,
+    profitChaos: 0
+  }]);
+});
+
+test('main shutdown finalizer stores calculated persisted profit before closing', async () => {
+  const calls = [];
+  const context = loadFunctions([
+    'normalizePoeVersion',
+    'normalizeStoredFarmTypeId',
+    'resolveFarmTypeLabel',
+    'getSessionValueNumber',
+    'getSessionNumberValue',
+    'isUuid',
+    'buildSessionShutdownMapResult',
+    'withTimeout',
+    'resolveShutdownSessionCompletion',
+    'endCurrentSession',
+    'finalizeActiveSessionOnShutdown'
+  ], {
+    currentSession: {
+      id: 'session-shutdown-2',
+      mapName: 'Dunes Map',
+      mapType: 'breach',
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      startedAt: '2026-05-06T12:00:00.000Z',
+      localOnly: false
+    },
+    calculateSessionProfitFromPersistedSnapshots: async () => ({
+      report: {
+        summary: {
+          totalGainedChaos: 40,
+          totalLostChaos: 5,
+          netProfitChaos: 35
+        }
+      }
+    }),
+    listFarmTypes: () => [{ id: 'breach', label: 'Breach' }],
+    getActiveFarmTypeId: () => 'breach',
+    saveMapResultHistory(result) {
+      calls.push(['saveMapResultHistory', JSON.parse(JSON.stringify(result))]);
+      return [result];
+    },
+    apiClient: {
+      async endSession(sessionId, payload) {
+        calls.push(['endSession', sessionId, { ...payload }]);
+        return {
+          id: sessionId,
+          status: 'completed',
+          profitChaos: payload.profitChaos,
+          totalLootChaos: payload.totalLootChaos
+        };
+      }
+    },
+    isRetryableApiError: () => false,
+    appendAuditTrail() {},
+    showNotification() {},
+    t: (key) => key,
+    updateOverlayWindow() {},
+    mainWindow: null,
+    Date: class extends Date {
+      constructor(...args) {
+        return args.length ? super(...args) : new global.Date('2026-05-06T12:04:00.000Z');
+      }
+
+      static now() {
+        return new global.Date('2026-05-06T12:04:00.000Z').getTime();
+      }
+
+      static parse(value) {
+        return global.Date.parse(value);
+      }
+    },
+    setTimeout,
+    clearTimeout
+  });
+
+  const result = await context.finalizeActiveSessionOnShutdown();
+
+  assert.equal(result.status, 'completed');
+  assert.equal(result.profitChaos, 35);
+  assert.equal(calls[0][1].profitUnavailable, false);
+  assert.equal(calls[0][1].inputValue, 5);
+  assert.equal(calls[0][1].outputValue, 40);
+  assert.equal(calls[0][1].netProfit, 35);
+  assert.deepEqual(calls[1], ['endSession', 'session-shutdown-2', {
+    endedAt: '2026-05-06T12:04:00.000Z',
+    durationSeconds: 240,
+    totalLootChaos: 40,
+    profitChaos: 35
+  }]);
+});
+
 test('main keeps zero-loot PoE1 sessions open on map exit for stash diff completion', () => {
   const context = loadFunctions(['normalizePoeVersion', 'getSessionValueNumber', 'shouldAutoEndSessionOnMapExit']);
 

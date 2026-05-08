@@ -3228,6 +3228,22 @@ function resetDashboardSummary() {
   elements.todayAvg.innerHTML = formatProfit(0, 18, state.settings.poeVersion || 'poe1');
 }
 
+function formatMapResultProfitHTML(result = {}, iconSize = 16) {
+  if (result?.profitUnavailable) {
+    return '<span class="profit-unavailable">Not calculated</span>';
+  }
+
+  const formatProfit = typeof profitCurrencyHTML === 'function'
+    ? profitCurrencyHTML
+    : (value, size, poeVersion) => currencyHTML(value, 'chaos', size, poeVersion);
+
+  return formatProfit(
+    result?.netProfit || 0,
+    iconSize,
+    result?.poeVersion || state.settings?.poeVersion || 'poe1'
+  );
+}
+
 function renderLatestMapResult() {
   if (
     !elements.lastMapResultCard
@@ -3257,14 +3273,7 @@ function renderLatestMapResult() {
   elements.lastMapResultCard.dataset.resultState = 'ready';
   elements.lastMapResultFarmType.textContent = latest.farmType || 'Unknown farm type';
   elements.lastMapResultDuration.textContent = formatDuration(latest.durationSeconds || 0);
-  const formatProfit = typeof profitCurrencyHTML === 'function'
-    ? profitCurrencyHTML
-    : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
-  elements.lastMapResultProfit.innerHTML = formatProfit(
-    latest.netProfit || 0,
-    16,
-    latest.poeVersion || state.settings?.poeVersion || 'poe1'
-  );
+  elements.lastMapResultProfit.innerHTML = formatMapResultProfitHTML(latest, 16);
 }
 
 function isPoe1ZeroLifecycleResult(result = {}) {
@@ -3335,9 +3344,6 @@ function renderMapResultHistory() {
     return;
   }
 
-  const formatProfit = typeof profitCurrencyHTML === 'function'
-    ? profitCurrencyHTML
-    : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
   elements.mapResultHistory.innerHTML = filteredResults.map((result) => `
     <article class="map-result-history-item" data-result-id="${escapeHTML(result?.id || '')}">
       <div class="map-result-history-main">
@@ -3345,11 +3351,7 @@ function renderMapResultHistory() {
         <span>${formatDuration(Number(result?.durationSeconds || 0))}</span>
       </div>
       <div class="map-result-history-meta">
-        <span class="map-result-history-profit">${formatProfit(
-          result?.netProfit || 0,
-          14,
-          result?.poeVersion || state.settings?.poeVersion || 'poe1'
-        )}</span>
+        <span class="map-result-history-profit">${formatMapResultProfitHTML(result, 14)}</span>
         <span>${escapeHTML(result?.createdAt ? timeAgo(result.createdAt) : 'Just now')}</span>
       </div>
     </article>

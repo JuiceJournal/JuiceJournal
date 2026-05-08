@@ -805,6 +805,18 @@ function saveMapResultHistory(result) {
   return nextResults;
 }
 
+function getSessionNumberValue(session = {}, ...fields) {
+  for (const field of fields) {
+    const value = session[field];
+    const normalized = Number(value);
+    if (Number.isFinite(normalized)) {
+      return normalized;
+    }
+  }
+
+  return 0;
+}
+
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
@@ -891,6 +903,57 @@ function normalizeBackendSnapshotDiffReport(diff = {}) {
     },
     categoryBreakdown: {}
   };
+}
+
+function buildSessionShutdownMapResult(session = {}, options = {}) {
+  const now = new Date();
+  const endedAt = options.endedAt || now.toISOString();
+  const startedAt = Date.parse(session.startedAt || session.started_at);
+  const endedAtMs = Date.parse(endedAt);
+  const durationSeconds = Number.isFinite(Number(options.durationSeconds)) && Number(options.durationSeconds) > 0
+    ? Math.round(Number(options.durationSeconds))
+    : (Number.isFinite(startedAt) && Number.isFinite(endedAtMs) && endedAtMs >= startedAt
+      ? Math.max(1, Math.round((endedAtMs - startedAt) / 1000))
+      : 1);
+  const report = options.report || {};
+  const summary = report.summary || {};
+  const netProfit = Number.isFinite(Number(options.profitChaos))
+    ? Number(options.profitChaos)
+    : (Number.isFinite(Number(summary.netProfitChaos)) ? Number(summary.netProfitChaos) : 0);
+  const outputValue = Number.isFinite(Number(options.totalLootChaos))
+    ? Number(options.totalLootChaos)
+    : (Number.isFinite(Number(summary.totalGainedChaos)) ? Number(summary.totalGainedChaos) : Math.max(0, netProfit));
+  const inputValue = Number.isFinite(Number(summary.totalLostChaos)) ? Number(summary.totalLostChaos) : 0;
+  const farmTypeId = session.farmTypeId || session.mapType || session.map_type || getActiveFarmTypeId();
+
+  return {
+    id: `shutdown-${session.id || 'session'}-${Date.parse(endedAt) || Date.now()}`,
+    sessionId: session.id || null,
+    characterId: null,
+    characterName: null,
+    accountName: null,
+    poeVersion: normalizePoeVersion(session.poeVersion ?? session.poe_version) || 'poe1',
+    league: session.league || null,
+    farmType: resolveFarmTypeLabel(farmTypeId) || session.mapName || session.map_name || 'Unknown farm type',
+    durationSeconds,
+    inputValue,
+    outputValue,
+    netProfit,
+    profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral',
+    topInputs: [],
+    topOutputs: [],
+    profitUnavailable: Boolean(options.profitUnavailable),
+    createdAt: endedAt
+  };
+}
+
+function withTimeout(promise, timeoutMs, message = 'Operation timed out') {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(message)), Math.max(1, Number(timeoutMs) || 1));
+    Promise.resolve(promise)
+      .then(resolve, reject)
+      .finally(() => clearTimeout(timeout));
+  });
 }
 
 async function getLatestPersistedStashSnapshot(sessionId, kind) {
@@ -3195,6 +3258,97 @@ function shouldAutoEndSessionOnMapExit(session = {}) {
   return totalLootChaos !== 0 || profitChaos !== 0;
 }
 
+async function resolveShutdownSessionCompletion(session = {}) {
+  const poeVersion = normalizePoeVersion(session.poeVersion ?? session.poe_version) || 'poe1';
+
+  if (poeVersion === 'poe1') {
+    try {
+      const persistedProfit = await withTimeout(
+        calculateSessionProfitFromPersistedSnapshots({
+          sessionId: session.id,
+          league: session.league,
+          poeVersion
+        }),
+        8000,
+        'Timed out while calculating shutdown stash profit'
+      );
+      const report = persistedProfit?.report || null;
+      const summary = report?.summary || {};
+      const totalLootChaos = Number(summary.totalGainedChaos);
+      const profitChaos = Number(summary.netProfitChaos);
+
+      if (report && Number.isFinite(totalLootChaos) && Number.isFinite(profitChaos)) {
+        return {
+          totalLootChaos: Math.max(0, totalLootChaos),
+          profitChaos,
+          report,
+          profitUnavailable: false
+        };
+      }
+    } catch (error) {
+      console.warn('Unable to calculate PoE1 profit during shutdown; closing session without profit data', error);
+    }
+  }
+
+  return {
+    totalLootChaos: 0,
+    profitChaos: 0,
+    report: null,
+    profitUnavailable: true
+  };
+}
+
+async function finalizeActiveSessionOnShutdown() {
+  let session = currentSession || null;
+
+  if (!session) {
+    try {
+      session = await getCurrentSessionFromBackend();
+    } catch (error) {
+      console.warn('Unable to load active session during shutdown', error);
+      session = null;
+    }
+  }
+
+  if (!session?.id) {
+    return null;
+  }
+
+  const endedAt = new Date().toISOString();
+  const startedAtMs = Date.parse(session.startedAt || session.started_at);
+  const endedAtMs = Date.parse(endedAt);
+  const durationSeconds = Number.isFinite(startedAtMs) && Number.isFinite(endedAtMs) && endedAtMs >= startedAtMs
+    ? Math.max(1, Math.round((endedAtMs - startedAtMs) / 1000))
+    : 1;
+  const completion = await resolveShutdownSessionCompletion(session);
+  const mapResult = buildSessionShutdownMapResult(session, {
+    ...completion,
+    endedAt,
+    durationSeconds
+  });
+
+  saveMapResultHistory(mapResult);
+
+  const completedSession = await endCurrentSession({
+    sessionId: session.id,
+    mapName: session.mapName || session.map_name,
+    startedAt: session.startedAt || session.started_at,
+    endedAt,
+    durationSeconds,
+    totalLootChaos: completion.totalLootChaos,
+    profitChaos: completion.profitChaos
+  });
+
+  return completedSession || {
+    ...session,
+    status: 'completed',
+    endedAt,
+    durationSeconds,
+    totalLootChaos: completion.totalLootChaos,
+    profitChaos: completion.profitChaos
+  };
+}
+
 /**
  * Mevcut session'i bitir
  */
@@ -4640,5 +4794,29 @@ function handleAppWillQuit() {
     pendingLootFlushInterval = null;
   }
 }
+
+let isFinalizingQuitSession = false;
+let didFinalizeQuitSession = false;
+
+app.on('before-quit', (event) => {
+  app.isQuiting = true;
+
+  if (didFinalizeQuitSession || isFinalizingQuitSession) {
+    return;
+  }
+
+  event.preventDefault();
+  isFinalizingQuitSession = true;
+
+  finalizeActiveSessionOnShutdown()
+    .catch((error) => {
+      console.warn('Failed to finalize active session before quit', error);
+    })
+    .finally(() => {
+      didFinalizeQuitSession = true;
+      isFinalizingQuitSession = false;
+      app.quit();
+    });
+});
 
 app.on('will-quit', handleAppWillQuit);
