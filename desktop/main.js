@@ -678,6 +678,7 @@ function isRetryableApiError(error) {
   const status = error?.status || null;
   return code === 'SERVER_UNAVAILABLE'
     || code === 'REQUEST_TIMEOUT'
+    || (code === 'AUTH_TOKEN_REQUIRED' && Boolean(getCurrentUserId()))
     || status === null
     || status >= 500;
 }

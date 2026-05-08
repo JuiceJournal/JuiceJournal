@@ -3780,9 +3780,17 @@ async function loadCurrentSession() {
     const session = await window.electronAPI.getCurrentSession();
     state.currentSession = session;
     updateActiveSessionUI();
+    return session;
   } catch (error) {
+    if (state.currentSession) {
+      console.warn('Keeping the active session visible after current-session refresh failed', error);
+      updateActiveSessionUI();
+      return state.currentSession;
+    }
+
     state.currentSession = null;
     updateActiveSessionUI();
+    return null;
   }
 }
 
@@ -4587,11 +4595,16 @@ async function completePoe1SessionWithStashProfit() {
   }
 
   if (!hasActivePoe1StashBaseline()) {
-    showToast(
-      window.t('stash.profitTracker'),
-      'A before-stash baseline is required before ending this PoE 1 map. The session is still active.',
-      'warning'
+    const completedWithoutProfit = await completePoe1SessionWithoutStashProfit(
+      state.currentSession,
+      new Error('Missing before-stash baseline')
     );
+
+    if (completedWithoutProfit) {
+      return true;
+    }
+
+    showToast(window.t('toast.error'), window.t('stash.profitFailed'), 'error');
     return false;
   }
 

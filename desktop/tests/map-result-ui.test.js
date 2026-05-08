@@ -709,6 +709,71 @@ test('starting a poe1 map session schedules baseline snapshot without blocking s
   ]);
 });
 
+test('renderer keeps an active session visible when current-session refresh fails', async () => {
+  const calls = [];
+  const state = {
+    currentSession: {
+      id: 'session-1',
+      mapName: 'Dunes Map',
+      poeVersion: 'poe1'
+    }
+  };
+  const context = loadFunctions(['loadCurrentSession'], {
+    state,
+    window: {
+      electronAPI: {
+        async getCurrentSession() {
+          throw Object.assign(new Error('Authorization token is required'), {
+            code: 'AUTH_TOKEN_REQUIRED'
+          });
+        }
+      }
+    },
+    updateActiveSessionUI: () => calls.push('updateActiveSessionUI'),
+    console: {
+      warn() {}
+    }
+  });
+
+  const result = await context.loadCurrentSession();
+
+  assert.equal(result.id, 'session-1');
+  assert.equal(state.currentSession.id, 'session-1');
+  assert.deepEqual(calls, ['updateActiveSessionUI']);
+});
+
+test('poe1 end session falls back to not-calculated completion when baseline is missing', async () => {
+  const calls = [];
+  const state = {
+    currentSession: {
+      id: 'session-1',
+      mapName: 'Dunes Map',
+      poeVersion: 'poe1'
+    }
+  };
+  const context = loadFunctions(['completePoe1SessionWithStashProfit'], {
+    state,
+    window: {
+      t: (key) => key
+    },
+    isActiveSessionPoe1: () => true,
+    isStashTrackingEnabled: () => true,
+    waitForPendingBeforeSnapshotForSession: async () => false,
+    hasActivePoe1StashBaseline: () => false,
+    hydratePoe1StashSnapshotsForSession: async () => null,
+    completePoe1SessionWithoutStashProfit: async (session, error) => {
+      calls.push(['completeWithoutProfit', session.id, error.message]);
+      return true;
+    },
+    showToast: (...args) => calls.push(['showToast', ...args])
+  });
+
+  const result = await context.completePoe1SessionWithStashProfit();
+
+  assert.equal(result, true);
+  assert.deepEqual(calls, [['completeWithoutProfit', 'session-1', 'Missing before-stash baseline']]);
+});
+
 test('starting a map session uses the branded modal when runtime map name is missing', async () => {
   const startSessionCalls = [];
   const context = loadFunctions(['normalizeSessionMapName', 'getRuntimeSessionMapName', 'handleStartSession'], {

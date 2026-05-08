@@ -519,6 +519,62 @@ test('main session end can target a backend session id after process state is lo
   assert.equal(context.currentSession, null);
 });
 
+test('main session end queues a targeted backend session when auth must be refreshed', async () => {
+  const queuedActions = [];
+  const messages = [];
+  const context = loadFunctions(['endCurrentSession'], {
+    currentSession: null,
+    getCurrentSessionFromBackend: async () => null,
+    apiClient: {
+      async endSession() {
+        throw {
+          status: 401,
+          code: 'AUTH_TOKEN_REQUIRED',
+          message: 'Authorization token is required'
+        };
+      }
+    },
+    isRetryableApiError: () => true,
+    queuePendingSessionAction(action) {
+      queuedActions.push(JSON.parse(JSON.stringify(action)));
+    },
+    appendAuditTrail() {},
+    showNotification() {},
+    t: (key) => key,
+    updateOverlayWindow() {},
+    mainWindow: {
+      webContents: {
+        send(channel, payload) {
+          messages.push({ channel, payload: JSON.parse(JSON.stringify(payload)) });
+        }
+      }
+    }
+  });
+
+  const result = await context.endCurrentSession({
+    sessionId: 'session-remote-2',
+    mapName: 'Dunes Map',
+    startedAt: '2026-05-06T12:00:00.000Z',
+    endedAt: '2026-05-06T12:04:00.000Z',
+    totalLootChaos: 0,
+    profitChaos: 0
+  });
+
+  assert.equal(result.id, 'session-remote-2');
+  assert.equal(result.status, 'completed');
+  assert.equal(result.queued, true);
+  assert.deepEqual(queuedActions, [{
+    type: 'sessionEnd',
+    sessionId: 'session-remote-2',
+    endedAt: '2026-05-06T12:04:00.000Z',
+    durationSeconds: 240,
+    totalLootChaos: 0,
+    profitChaos: 0
+  }]);
+  assert.equal(messages[0].channel, 'session-ended');
+  assert.equal(context.currentSession, null);
+});
+
 test('main shutdown finalizer closes an active session without profit data when calculation is unavailable', async () => {
   const calls = [];
   const context = loadFunctions([
