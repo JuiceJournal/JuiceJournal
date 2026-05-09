@@ -5,17 +5,26 @@
 
 import axios from 'axios';
 
-let API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+export function resolveApiUrl() {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
 
-if (
-  typeof process !== 'undefined' &&
-  process.env.NODE_ENV === 'production' &&
-  !API_URL.startsWith('https://')
-) {
-  console.warn(
-    `[api] NEXT_PUBLIC_API_URL must use https:// in production, got: ${API_URL}`
-  );
+  if (process.env.NODE_ENV === 'production') {
+    if (!envUrl) {
+      throw new Error(
+        'NEXT_PUBLIC_API_URL environment variable is required in production.'
+      );
+    }
+    if (!envUrl.startsWith('https://')) {
+      throw new Error(
+        `NEXT_PUBLIC_API_URL must use https:// in production, got: ${envUrl}`
+      );
+    }
+  }
+
+  return (envUrl || 'http://localhost:3001').replace(/\/+$/, '');
 }
+
+const API_URL = resolveApiUrl();
 const LEGACY_TOKEN_KEY = 'token';
 
 const API_ERROR_MESSAGE_MAP = {

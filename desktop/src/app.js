@@ -1870,6 +1870,48 @@ function currencyHTML(value, type = 'chaos', iconSize = 18, poeVersion = state.s
   return `<span class="currency-value">${formatted} <img src="${imgPath}" class="currency-icon" width="${iconSize}" height="${iconSize}" alt="${type}" draggable="false"></span>`;
 }
 
+function normalizeSafeImageSrc(src) {
+  if (typeof src !== 'string') {
+    return '';
+  }
+
+  const trimmed = src.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  if (/^assets\/[a-z0-9/_ .-]+\.(png|jpg|jpeg|webp|svg)$/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  try {
+    const candidate = trimmed.startsWith('//') ? `https:${trimmed}` : trimmed;
+    const parsed = new URL(candidate, window.location.href);
+    return parsed.protocol === 'https:' ? parsed.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function createCurrencyValueElement(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1') {
+  const num = parseFloat(value);
+  const formatted = isNaN(num) ? '0' : (type === 'divine' || type === 'mirror' ? num.toFixed(2) : num.toFixed(1));
+  const span = document.createElement('span');
+  span.className = 'currency-value';
+  span.append(`${formatted} `);
+
+  const img = document.createElement('img');
+  img.src = normalizeSafeImageSrc(getCurrencyAssetPath(type, poeVersion)) || getCurrencyAssetPath(type, poeVersion);
+  img.className = 'currency-icon';
+  img.width = iconSize;
+  img.height = iconSize;
+  img.alt = type;
+  img.draggable = false;
+  span.appendChild(img);
+
+  return span;
+}
+
 function normalizeProfitPoeVersion(poeVersion) {
   if (typeof normalizePoeVersion === 'function') {
     return normalizePoeVersion(poeVersion) || 'poe1';
@@ -4203,10 +4245,16 @@ async function handleTestConnection() {
 function showToast(title, message, type = 'info') {
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
-  toast.innerHTML = `
-    <div class="toast-title">${escapeHTML(title)}</div>
-    <div class="toast-message">${escapeHTML(message)}</div>
-  `;
+
+  const titleElement = document.createElement('div');
+  titleElement.className = 'toast-title';
+  titleElement.textContent = title == null ? '' : String(title);
+
+  const messageElement = document.createElement('div');
+  messageElement.className = 'toast-message';
+  messageElement.textContent = message == null ? '' : String(message);
+
+  toast.append(titleElement, messageElement);
 
   elements.toastContainer.appendChild(toast);
 
@@ -5698,8 +5746,18 @@ async function loadCurrencyPrices() {
       footer.textContent = `${count} items` + (updated ? ` · Last synced: ${timeAgo(updated)}` : '');
     }
   } catch (error) {
-    tbody.innerHTML = `<tr><td colspan="7" class="currency-empty">${getUserFacingErrorMessage(error, 'currency.loadError')}</td></tr>`;
+    renderCurrencyEmptyRow(tbody, getUserFacingErrorMessage(error, 'currency.loadError'));
   }
+}
+
+function renderCurrencyEmptyRow(tbody, message) {
+  const row = document.createElement('tr');
+  const cell = document.createElement('td');
+  cell.colSpan = 7;
+  cell.className = 'currency-empty';
+  cell.textContent = message == null ? '' : String(message);
+  row.appendChild(cell);
+  tbody.replaceChildren(row);
 }
 
 function renderCurrencyTable() {
@@ -5718,33 +5776,81 @@ function renderCurrencyTable() {
   });
 
   if (sorted.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="currency-empty">${window.t('currency.noData')}</td></tr>`;
+    renderCurrencyEmptyRow(tbody, window.t('currency.noData'));
     return;
   }
 
-  tbody.innerHTML = sorted.map((item, i) => {
-    const icon = item.iconUrl
-      ? `<img src="${item.iconUrl}" class="currency-row-icon" loading="lazy">`
-      : '<div class="currency-row-icon-placeholder"></div>';
+  const fragment = document.createDocumentFragment();
+  sorted.forEach((item, i) => {
     const chaos = parseFloat(item.chaosValue) || 0;
     const divine = parseFloat(item.divineValue);
-    const spark = renderSparklineSVG(item.sparklineData);
-    return `<tr>
-      <td class="currency-td-num">${i + 1}</td>
-      <td class="currency-td-icon">${icon}</td>
-      <td class="currency-td-name">${escapeHTML(item.itemName)}</td>
-      <td class="currency-td-type"><span class="currency-type-badge">${item.itemType || '-'}</span></td>
-      <td class="currency-td-chaos">${currencyHTML(chaos, 'chaos', 18, currencyState.poeVersion)}</td>
-      <td class="currency-td-divine">${divine ? currencyHTML(divine, 'divine', 18, currencyState.poeVersion) : '<span class="text-muted">-</span>'}</td>
-      <td class="currency-td-trend">${spark}</td>
-    </tr>`;
-  }).join('');
+
+    const row = document.createElement('tr');
+
+    const numberCell = document.createElement('td');
+    numberCell.className = 'currency-td-num';
+    numberCell.textContent = String(i + 1);
+
+    const iconCell = document.createElement('td');
+    iconCell.className = 'currency-td-icon';
+    const safeIconUrl = normalizeSafeImageSrc(item.iconUrl);
+    if (safeIconUrl) {
+      const icon = document.createElement('img');
+      icon.src = safeIconUrl;
+      icon.className = 'currency-row-icon';
+      icon.loading = 'lazy';
+      icon.alt = item.itemName ? `${item.itemName} icon` : 'Currency icon';
+      iconCell.appendChild(icon);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'currency-row-icon-placeholder';
+      iconCell.appendChild(placeholder);
+    }
+
+    const nameCell = document.createElement('td');
+    nameCell.className = 'currency-td-name';
+    nameCell.textContent = item.itemName || '';
+
+    const typeCell = document.createElement('td');
+    typeCell.className = 'currency-td-type';
+    const typeBadge = document.createElement('span');
+    typeBadge.className = 'currency-type-badge';
+    typeBadge.textContent = item.itemType || '-';
+    typeCell.appendChild(typeBadge);
+
+    const chaosCell = document.createElement('td');
+    chaosCell.className = 'currency-td-chaos';
+    chaosCell.appendChild(createCurrencyValueElement(chaos, 'chaos', 18, currencyState.poeVersion));
+
+    const divineCell = document.createElement('td');
+    divineCell.className = 'currency-td-divine';
+    if (Number.isFinite(divine) && divine > 0) {
+      divineCell.appendChild(createCurrencyValueElement(divine, 'divine', 18, currencyState.poeVersion));
+    } else {
+      const muted = document.createElement('span');
+      muted.className = 'text-muted';
+      muted.textContent = '-';
+      divineCell.appendChild(muted);
+    }
+
+    const trendCell = document.createElement('td');
+    trendCell.className = 'currency-td-trend';
+    const spark = createSparklineElement(item.sparklineData);
+    if (spark) {
+      trendCell.appendChild(spark);
+    }
+
+    row.append(numberCell, iconCell, nameCell, typeCell, chaosCell, divineCell, trendCell);
+    fragment.appendChild(row);
+  });
+
+  tbody.replaceChildren(fragment);
 }
 
-function renderSparklineSVG(sparkData) {
-  if (!sparkData || !sparkData.data || sparkData.data.length < 2) return '';
-  const values = sparkData.data.filter(v => v !== null);
-  if (values.length < 2) return '';
+function createSparklineElement(sparkData) {
+  if (!sparkData || !Array.isArray(sparkData.data) || sparkData.data.length < 2) return null;
+  const values = sparkData.data.map((value) => Number(value)).filter(Number.isFinite);
+  if (values.length < 2) return null;
 
   const w = 70, h = 20, pad = 2;
   const min = Math.min(...values), max = Math.max(...values);
@@ -5756,7 +5862,20 @@ function renderSparklineSVG(sparkData) {
   }).join(' ');
 
   const color = values[values.length - 1] >= values[0] ? '#3ddc84' : '#ff5252';
-  return `<svg width="${w}" height="${h}"><polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', String(w));
+  svg.setAttribute('height', String(h));
+
+  const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+  polyline.setAttribute('points', points);
+  polyline.setAttribute('fill', 'none');
+  polyline.setAttribute('stroke', color);
+  polyline.setAttribute('stroke-width', '1.5');
+  polyline.setAttribute('stroke-linecap', 'round');
+  polyline.setAttribute('stroke-linejoin', 'round');
+  svg.appendChild(polyline);
+
+  return svg;
 }
 
 const _escapeDiv = document.createElement('div');

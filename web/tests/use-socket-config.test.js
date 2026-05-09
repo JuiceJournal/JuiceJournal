@@ -8,6 +8,8 @@ const hookPath = path.join(__dirname, '..', 'src', 'hooks', 'useSocket.js');
 test('useSocket fails closed in production when NEXT_PUBLIC_WS_URL is not wss', () => {
   const source = fs.readFileSync(hookPath, 'utf8');
 
+  assert.match(source, /if \(!envUrl\) \{/);
+  assert.match(source, /NEXT_PUBLIC_WS_URL environment variable is required in production\./);
   assert.match(source, /if \(!envUrl\.startsWith\('wss:\/\/'\)\) \{/);
   assert.match(source, /throw new Error\(/);
   assert.doesNotMatch(source, /console\.error\(\s*`\[useSocket\] NEXT_PUBLIC_WS_URL must use wss:\/\//);

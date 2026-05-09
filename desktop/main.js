@@ -17,6 +17,7 @@ const fs = require('fs');
 const net = require('net');
 const os = require('os');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { execFile } = require('child_process');
 const Store = require('electron-store');
 
@@ -67,6 +68,19 @@ const WINDOWS_APP_ICON_PATH = path.join(__dirname, 'src', 'assets', 'icon.ico');
 const APP_ICON_PATH = process.platform === 'win32'
   ? WINDOWS_APP_ICON_PATH
   : path.join(__dirname, 'src', 'assets', 'icon.png');
+const TRUSTED_RENDERER_FILES = Object.freeze({
+  main: 'index.html',
+  overlay: 'overlay.html'
+});
+const IPC_RENDERER_SCOPES = Object.freeze({
+  'toggle-map-result-overlay-pin': ['main', 'overlay'],
+  'dismiss-map-result-overlay': ['main', 'overlay'],
+  'get-overlay-cursor-position': ['main', 'overlay'],
+  'set-overlay-pointer-passthrough': ['main', 'overlay'],
+  'confirm-start-map-prompt-overlay': ['overlay'],
+  'cancel-start-map-prompt-overlay': ['overlay']
+});
+let validatedIpcHandleInstalled = false;
 
 function applyWindowsAppIdentity() {
   if (process.platform === 'win32') {
@@ -2505,6 +2519,74 @@ function createWindowIcon() {
   return image.isEmpty() ? APP_ICON_PATH : image;
 }
 
+function getTrustedRendererUrl(entryFile) {
+  return pathToFileURL(path.join(__dirname, 'src', entryFile)).toString();
+}
+
+function hardenWindowNavigation(windowRef, entryFile) {
+  const allowedUrl = getTrustedRendererUrl(entryFile);
+
+  windowRef.webContents.on('will-navigate', (event, url) => {
+    if (url !== allowedUrl) {
+      event.preventDefault();
+    }
+  });
+
+  windowRef.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+}
+
+function getRendererWindow(kind) {
+  return kind === 'overlay' ? overlayWindow : mainWindow;
+}
+
+function getAllowedIpcRendererKinds(channel) {
+  return IPC_RENDERER_SCOPES[channel] || ['main'];
+}
+
+function isTrustedRenderer(event, kind) {
+  const sender = event?.sender;
+  const frame = event?.senderFrame;
+  const windowRef = getRendererWindow(kind);
+  const entryFile = TRUSTED_RENDERER_FILES[kind];
+
+  if (!sender || !frame || !windowRef || !entryFile || windowRef.isDestroyed?.()) {
+    return false;
+  }
+
+  if (sender !== windowRef.webContents || frame !== sender.mainFrame) {
+    return false;
+  }
+
+  return frame.url === getTrustedRendererUrl(entryFile);
+}
+
+function assertTrustedIpcSender(event, allowedKinds, channel = 'unknown') {
+  const allowed = Array.isArray(allowedKinds) ? allowedKinds : [allowedKinds];
+  if (!allowed.some((kind) => isTrustedRenderer(event, kind))) {
+    throw new Error(`Unauthorized IPC sender for ${channel}`);
+  }
+}
+
+function createValidatedIpcHandler(channel, allowedKinds, handler) {
+  return async (event, ...args) => {
+    assertTrustedIpcSender(event, allowedKinds, channel);
+    return await handler(event, ...args);
+  };
+}
+
+function installValidatedIpcHandle() {
+  if (validatedIpcHandleInstalled) {
+    return;
+  }
+
+  const rawHandle = ipcMain.handle.bind(ipcMain);
+  ipcMain.handle = (channel, handler) => rawHandle(
+    channel,
+    createValidatedIpcHandler(channel, getAllowedIpcRendererKinds(channel), handler)
+  );
+  validatedIpcHandleInstalled = true;
+}
+
 /**
  * Create the main window.
  */
@@ -2529,6 +2611,7 @@ function createMainWindow() {
     title: APP_NAME
   });
   mainWindow.setIcon(createWindowIcon());
+  hardenWindowNavigation(mainWindow, TRUSTED_RENDERER_FILES.main);
 
   // Load the dashboard shell.
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
@@ -2607,6 +2690,7 @@ function createOverlayWindow() {
 
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
   overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+  hardenWindowNavigation(overlayWindow, TRUSTED_RENDERER_FILES.overlay);
   overlayWindow.loadFile(path.join(__dirname, 'src', 'overlay.html'));
   overlayWindow.webContents.once('did-finish-load', () => {
     updateOverlayWindow();
@@ -3846,6 +3930,8 @@ function persistDesktopAuthSession(authCookie) {
  * IPC handler'lari tanimla
  */
 function setupIPC() {
+  installValidatedIpcHandle();
+
   // Window controls
   ipcMain.handle('window-minimize', () => {
     if (mainWindow) mainWindow.minimize();
