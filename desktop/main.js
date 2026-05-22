@@ -221,7 +221,7 @@ const store = new Store({
     poeVersion: 'poe1',
     scanHotkey: DEFAULT_SCAN_HOTKEY,
     stashScanHotkey: DEFAULT_STASH_SCAN_HOTKEY,
-    overlayEnabled: false,
+    overlayEnabled: true,
     currentUserId: null,
     pendingSessionActions: [],
     pendingLootActions: [],

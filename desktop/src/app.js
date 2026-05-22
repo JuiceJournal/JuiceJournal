@@ -167,6 +167,7 @@ const elements = {
   apiUrl: document.getElementById('api-url'),
   poePath: document.getElementById('poe-path'),
   autoStartSession: document.getElementById('auto-start-session'),
+  overlayEnabled: document.getElementById('overlay-enabled'),
   enableNotifications: document.getElementById('enable-notifications'),
   soundNotifications: document.getElementById('sound-notifications'),
   defaultLeague: document.getElementById('default-league'),
@@ -1619,6 +1620,7 @@ function applySettingsDraftToDom(settingsDraft = {}) {
   if (elements.apiUrl) elements.apiUrl.value = completeSettingsDraft.apiUrl || '';
   if (elements.poePath) elements.poePath.value = completeSettingsDraft.poePath || '';
   if (elements.autoStartSession) elements.autoStartSession.checked = Boolean(completeSettingsDraft.autoStartSession);
+  if (elements.overlayEnabled) elements.overlayEnabled.checked = completeSettingsDraft.overlayEnabled === true;
   if (elements.enableNotifications) elements.enableNotifications.checked = completeSettingsDraft.notifications !== false;
   if (elements.soundNotifications) elements.soundNotifications.checked = Boolean(completeSettingsDraft.soundNotifications);
   if (elements.scanHotkey) elements.scanHotkey.value = completeSettingsDraft.scanHotkey;
@@ -4133,6 +4135,7 @@ async function handleSaveSettings() {
     apiUrl: elements.apiUrl.value,
     poePath: elements.poePath.value,
     autoStartSession: elements.autoStartSession.checked,
+    overlayEnabled: elements.overlayEnabled ? elements.overlayEnabled.checked : false,
     notifications: elements.enableNotifications.checked,
     soundNotifications: elements.soundNotifications ? elements.soundNotifications.checked : false,
     language: elements.globalLanguage ? elements.globalLanguage.value : 'en',

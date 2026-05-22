@@ -10,6 +10,7 @@
     apiUrl: 'http://localhost:3001',
     poePath: '',
     autoStartSession: true,
+    overlayEnabled: false,
     notifications: true,
     soundNotifications: false,
     language: 'en',
