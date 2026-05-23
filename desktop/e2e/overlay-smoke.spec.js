@@ -556,13 +556,13 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     });
 
     await expect(overlayWindow.locator('main[data-overlay-mode="map-result"]')).toBeVisible();
-    await expect(overlayWindow.locator('[data-overlay-kicker]')).toContainText('Map Result');
+    await expect(overlayWindow.locator('[data-overlay-kicker-label]')).toContainText('Map Complete');
     await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText('Ritual');
     await expect(overlayWindow.locator('[data-overlay-secondary]')).toContainText('Divine Orb');
     await expect(overlayWindow.locator('[data-overlay-pin]')).toHaveAttribute('aria-pressed', 'false');
 
     await expect(overlayWindow.locator('main[data-overlay-mode="runtime"]')).toBeVisible({ timeout: 2000 });
-    await expect(overlayWindow.locator('[data-overlay-kicker]')).toContainText('Juice Journal');
+    await expect(overlayWindow.locator('[data-overlay-kicker-label]')).toContainText('Juice Journal');
 
     await showMapResultOverlay(page, {
       id: 'map-result-smoke-2',
