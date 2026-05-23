@@ -103,6 +103,25 @@ const POE1_SYNC_TYPES = [
   'BaseType'
 ];
 
+const POE1_CURRENCY_OVERVIEW_TYPES = new Set([
+  'Currency',
+  'Fragment',
+  'Scarab',
+  'DivinationCard',
+  'Essence',
+  'Oil',
+  'Fossil',
+  'Resonator',
+  'Catalyst',
+  'DeliriumOrb',
+  'Tattoo',
+  'Omen',
+  'Artifact',
+  'DjinnCoin',
+  'Runegraft',
+  'AllflameEmber'
+]);
+
 // PoE 2 sync tipleri (all use exchange API — plural names required)
 const POE2_SYNC_TYPES = [
   'Currency', 'Fragments', 'UncutGems', 'SoulCores',
@@ -124,6 +143,10 @@ function getTypeMapping(poeVersion) {
 
 function getDefaultSyncTypes(poeVersion) {
   return poeVersion === 'poe2' ? POE2_SYNC_TYPES : POE1_SYNC_TYPES;
+}
+
+function usesPoe1CurrencyOverview(type) {
+  return POE1_CURRENCY_OVERVIEW_TYPES.has(type);
 }
 
 function getLineChaosValue(line = {}) {
@@ -518,11 +541,16 @@ const normalizeCurrencyData = (data, type, poeVersion = 'poe1', options = {}) =>
     // PoE 1 format
     const divineToChaos = options.divineToChaos || getPoe1DivineToChaos(data);
     data.lines.forEach(line => {
+      const name = line.currencyTypeName || line.name;
+      if (!name) {
+        return;
+      }
+
       const itemType = typeMapping[type] || 'currency';
       const chaosValue = getLineChaosValue(line);
 
       items.push({
-        name: line.currencyTypeName || line.name,
+        name,
         type: itemType,
         chaosValue,
         divineValue: getPoe1DivineValue(line, divineToChaos),
@@ -562,13 +590,19 @@ const normalizeItemData = (data, type, poeVersion = 'poe1', options = {}) => {
   }
 
   data.lines.forEach(line => {
+    if (!line.name) {
+      return;
+    }
+
     const itemType = typeMapping[type] || 'other';
 
-    let chaosValue = line.chaosValue || 0;
-    let divineValue = line.divineValue || null;
+    let chaosValue = getLineChaosValue(line);
+    let divineValue = Number(line.divineValue);
+    divineValue = Number.isFinite(divineValue) && divineValue > 0 ? divineValue : null;
 
-    if (!chaosValue && line.exaltedValue) {
-      chaosValue = line.exaltedValue * 15;
+    const exaltedValue = Number(line.exaltedValue);
+    if (!chaosValue && Number.isFinite(exaltedValue) && exaltedValue > 0) {
+      chaosValue = exaltedValue * 15;
     }
 
     if (!divineValue && poeVersion === 'poe1' && options.divineToChaos) {
@@ -599,8 +633,8 @@ const syncPricesByType = async (league, type, poeVersion = 'poe1', options = {})
       : options.divineToChaos;
     const normalizationOptions = divineToChaos ? { divineToChaos } : {};
 
-    // PoE 2: all types use exchange API; PoE 1: Currency/Fragment use currencyoverview, rest use itemoverview
-    if (poeVersion === 'poe2' || type === 'Currency' || type === 'Fragment') {
+    // PoE 2: all types use exchange API; PoE 1 market categories are split across currency/item overview endpoints.
+    if (poeVersion === 'poe2' || usesPoe1CurrencyOverview(type)) {
       const data = await getCurrencyOverview(league, type, poeVersion);
       items = normalizeCurrencyData(data, type, poeVersion, normalizationOptions);
     } else {
@@ -808,6 +842,7 @@ module.exports = {
   getPoe1DivineToChaos,
   getPoe1DivineToChaosForLeague,
   getDefaultSyncTypes,
+  usesPoe1CurrencyOverview,
   getActiveLeagues,
   getPoe2IndexState
 };

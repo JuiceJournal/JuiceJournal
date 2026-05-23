@@ -20,16 +20,19 @@
 
 // ─── Static poe.ninja API type lists (fallback) ──────────────────
 
-const POE1_CURRENCY_TYPES = ['Currency', 'Fragment'];
+const POE1_CURRENCY_TYPES = [
+  'Currency', 'Fragment', 'Scarab', 'DivinationCard', 'Essence',
+  'Oil', 'Fossil', 'Resonator', 'Catalyst', 'DeliriumOrb',
+  'Tattoo', 'Omen', 'Artifact', 'DjinnCoin', 'Runegraft', 'AllflameEmber'
+];
 const POE1_ITEM_TYPES = [
-  'Oil', 'Scarab', 'Fossil', 'Resonator', 'Essence',
-  'DivinationCard', 'SkillGem', 'UniqueMap', 'Map',
+  'SkillGem', 'UniqueMap', 'Map',
   'UniqueJewel', 'UniqueFlask', 'UniqueWeapon', 'UniqueArmour',
-  'UniqueAccessory', 'Beast', 'DeliriumOrb', 'Omen',
+  'UniqueAccessory', 'Beast',
   'ClusterJewel', 'ForbiddenJewel', 'ShrineBelt', 'UniqueTincture',
-  'Invitation', 'ValdoMap', 'Memory', 'Coffin', 'AllflameEmber',
-  'Incubator', 'Catalyst', 'Vial', 'BlightedMap', 'BlightRavagedMap',
-  'UniqueRelic', 'Tattoo', 'Runegraft', 'Artifact', 'DjinnCoin', 'Wombgift', 'BaseType'
+  'Invitation', 'ValdoMap', 'Memory', 'Coffin',
+  'Incubator', 'Vial', 'BlightedMap', 'BlightRavagedMap',
+  'UniqueRelic', 'Wombgift', 'BaseType'
 ];
 
 const POE2_CURRENCY_TYPES = [

@@ -6,7 +6,8 @@ const {
   normalizeItemData,
   normalizeExchangeData,
   getExchangeDivineToChaos,
-  getPoe1DivineToChaos
+  getPoe1DivineToChaos,
+  usesPoe1CurrencyOverview
 } = require('../services/poeNinjaService');
 
 test('poe1 currency normalization derives divine values from the current league Divine Orb price', () => {
@@ -59,6 +60,91 @@ test('poe1 non-currency normalizers reuse the supplied league divine rate', () =
 
   assert.equal(fragment.divineValue, 2);
   assert.equal(item.divineValue, 3);
+});
+
+test('poe1 currency normalization skips nameless rows and keeps malformed rates finite', () => {
+  const data = {
+    lines: [
+      {
+        currencyTypeName: 'Divine Orb',
+        chaosEquivalent: 120
+      },
+      {
+        chaosEquivalent: 99
+      },
+      {
+        currencyTypeName: 'Broken Rate',
+        chaosEquivalent: 'not-a-number'
+      }
+    ]
+  };
+
+  const items = normalizeCurrencyData(data, 'Currency', 'poe1');
+  const broken = items.find(item => item.name === 'Broken Rate');
+
+  assert.deepEqual(items.map(item => item.name), ['Divine Orb', 'Broken Rate']);
+  assert.equal(broken.chaosValue, 0);
+  assert.equal(broken.divineValue, null);
+  assert.ok(items.every(item => Number.isFinite(item.chaosValue)));
+  assert.ok(items.every(item => item.divineValue === null || Number.isFinite(item.divineValue)));
+});
+
+test('poe1 item normalization skips nameless rows and keeps malformed rates finite', () => {
+  const data = {
+    lines: [
+      {
+        name: 'Priced Unique',
+        chaosValue: 240
+      },
+      {
+        chaosValue: 50
+      },
+      {
+        name: 'Broken Unique',
+        chaosValue: Number.NaN
+      }
+    ]
+  };
+
+  const items = normalizeItemData(data, 'UniqueJewel', 'poe1', {
+    divineToChaos: 120
+  });
+  const broken = items.find(item => item.name === 'Broken Unique');
+
+  assert.deepEqual(items.map(item => item.name), ['Priced Unique', 'Broken Unique']);
+  assert.equal(broken.chaosValue, 0);
+  assert.equal(broken.divineValue, null);
+  assert.ok(items.every(item => Number.isFinite(item.chaosValue)));
+  assert.ok(items.every(item => item.divineValue === null || Number.isFinite(item.divineValue)));
+});
+
+test('poe1 sync routes exchange-like farm loot categories through currency overview', () => {
+  const currencyOverviewTypes = [
+    'Currency',
+    'Fragment',
+    'Scarab',
+    'DivinationCard',
+    'Essence',
+    'Oil',
+    'Fossil',
+    'Resonator',
+    'Catalyst',
+    'DeliriumOrb',
+    'Tattoo',
+    'Omen',
+    'Artifact',
+    'DjinnCoin',
+    'Runegraft',
+    'AllflameEmber'
+  ];
+
+  for (const type of currencyOverviewTypes) {
+    assert.equal(usesPoe1CurrencyOverview(type), true, `${type} should use currency overview`);
+  }
+
+  assert.equal(usesPoe1CurrencyOverview('Map'), false);
+  assert.equal(usesPoe1CurrencyOverview('UniqueMap'), false);
+  assert.equal(usesPoe1CurrencyOverview('BaseType'), false);
 });
 
 test('poe1 exchange normalization treats primaryValue as chaos and derives adaptive divine values', () => {

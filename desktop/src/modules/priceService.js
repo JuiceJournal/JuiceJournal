@@ -3,20 +3,81 @@
  * Fetches currency and item prices from poe.ninja
  * Caches prices to avoid hammering the API (12 req / 5 min limit)
  *
- * PoE1: https://poe.ninja/api/data/{currencyoverview|itemoverview}?league=X&type=Y
+ * PoE1: https://poe.ninja/poe1/api/economy/stash/current/{currency|item}/overview?league=X&type=Y
  * PoE2: https://poe.ninja/poe2/api/economy/currencyexchange/overview?leagueName=X&overviewName=Y
  */
 
 const axios = require('axios');
 const registry = require('./currencyRegistry');
 
-const POE1_BASE = 'https://poe.ninja/api/data';
+const POE1_CURRENCY_URL = 'https://poe.ninja/poe1/api/economy/stash/current/currency/overview';
+const POE1_ITEM_URL = 'https://poe.ninja/poe1/api/economy/stash/current/item/overview';
 const POE2_BASE = 'https://poe.ninja/poe2/api/economy';
 
 // Cache duration: 10 minutes
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_CACHE_SIZE = 5000;
 const MAX_PRICE_MAP_SIZE = 10000;
+
+function toPriceNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : 0;
+}
+
+function roundPriceValue(value, precision = 6) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  const multiplier = 10 ** precision;
+  return Math.round(value * multiplier) / multiplier;
+}
+
+function getPoe1CurrencyName(line = {}) {
+  return line.currencyTypeName || line.name || line.id || null;
+}
+
+function getPoe1LineChaosValue(line = {}) {
+  return toPriceNumber(line.chaosEquivalent ?? line.chaosValue);
+}
+
+function getPoe1DivineToChaos(data = {}) {
+  const divineLine = data.lines?.find(line =>
+    String(getPoe1CurrencyName(line) || '').toLowerCase() === 'divine orb'
+  );
+  const divineToChaos = getPoe1LineChaosValue(divineLine);
+  return divineToChaos > 0 ? divineToChaos : null;
+}
+
+function getPoe1LineDivineValue(line = {}, divineToChaos = null) {
+  const explicitDivine = toPriceNumber(line.divineEquivalent ?? line.divineValue);
+  if (explicitDivine > 0) {
+    return roundPriceValue(explicitDivine);
+  }
+
+  const chaosValue = getPoe1LineChaosValue(line);
+  if (!chaosValue || !divineToChaos) {
+    return null;
+  }
+
+  return roundPriceValue(chaosValue / divineToChaos);
+}
+
+function getSparklineData(line = {}) {
+  if (Array.isArray(line.receiveSparkLine?.data)) {
+    return line.receiveSparkLine.data;
+  }
+
+  if (Array.isArray(line.sparkline?.data)) {
+    return line.sparkline.data;
+  }
+
+  return Array.isArray(line.sparkline) ? line.sparkline : [];
+}
+
+function normalizeLookupKey(value) {
+  return String(value || '').toLowerCase().trim();
+}
 
 class PriceService {
   constructor() {
@@ -54,7 +115,7 @@ class PriceService {
 
     const url = this.poeVersion === 'poe2'
       ? `${POE2_BASE}/currencyexchange/overview`
-      : `${POE1_BASE}/currencyoverview`;
+      : POE1_CURRENCY_URL;
 
     const params = this.poeVersion === 'poe2'
       ? { leagueName: league, overviewName: type }
@@ -78,7 +139,7 @@ class PriceService {
       return cached.data;
     }
 
-    const url = `${POE1_BASE}/itemoverview`;
+    const url = POE1_ITEM_URL;
     const response = await this.client.get(url, { params: { league, type } });
     const data = response.data;
 
@@ -173,21 +234,28 @@ class PriceService {
       const detailsMap = new Map();
       if (data.currencyDetails) {
         for (const d of data.currencyDetails) {
-          detailsMap.set(d.name, d);
+          if (d.name) {
+            detailsMap.set(d.name.toLowerCase().trim(), d);
+          }
         }
       }
+      const divineToChaos = getPoe1DivineToChaos(data);
       if (data.lines) {
         for (const line of data.lines) {
-          const details = detailsMap.get(line.currencyTypeName);
+          const name = getPoe1CurrencyName(line);
+          if (!name) continue;
+          const details = detailsMap.get(name.toLowerCase().trim());
+          const chaosValue = getPoe1LineChaosValue(line);
           const entry = {
-            chaosValue: line.chaosEquivalent || 0,
+            chaosValue,
+            divineValue: getPoe1LineDivineValue(line, divineToChaos),
             category: type.toLowerCase(),
-            icon: details?.icon || null,
+            icon: line.icon || details?.icon || null,
             tradeId: details?.tradeId || null,
-            sparkline: line.receiveSparkLine?.data || []
+            sparkline: getSparklineData(line)
           };
-          this._addPrice(line.currencyTypeName, entry);
-          registryBatch.push({ name: line.currencyTypeName, ...entry });
+          this._addPrice(name, entry);
+          registryBatch.push({ name, ...entry });
         }
       }
     }
@@ -219,7 +287,10 @@ class PriceService {
   }
 
   _addPrice(name, data) {
-    const key = name.toLowerCase().trim();
+    const key = normalizeLookupKey(name);
+    if (!key) {
+      return;
+    }
     this._enforcePriceMapLimit();
     this.priceMap.set(key, { name, ...data });
   }
@@ -251,7 +322,12 @@ class PriceService {
    * @returns {number} chaos value, or 0 if unknown
    */
   getChaosValue(itemName) {
-    const entry = this.priceMap.get(itemName.toLowerCase().trim());
+    const key = normalizeLookupKey(itemName);
+    if (!key) {
+      return 0;
+    }
+
+    const entry = this.priceMap.get(key);
     return entry?.chaosValue || 0;
   }
 
@@ -261,7 +337,8 @@ class PriceService {
    * @returns {Object|null}
    */
   getPriceInfo(itemName) {
-    return this.priceMap.get(itemName.toLowerCase().trim()) || null;
+    const key = normalizeLookupKey(itemName);
+    return key ? this.priceMap.get(key) || null : null;
   }
 
   /**
