@@ -1111,32 +1111,19 @@ function getOverwolfOverlayInjectionCandidates(gameId, activeGame) {
   return [...new Set(candidates.filter((candidate) => Number.isFinite(candidate) && candidate > 0))];
 }
 
-function clearOverwolfOverlayInjectionRetry() {
-  if (!overwolfOverlayInjectionRetryTimer) {
-    return false;
-  }
-
-  clearTimeout(overwolfOverlayInjectionRetryTimer);
-  overwolfOverlayInjectionRetryTimer = null;
-  return true;
-}
-
-function scheduleOverwolfOverlayInjectionRetry(detectedVersion, delayMs = 2_000) {
-  clearOverwolfOverlayInjectionRetry();
-
-  overwolfOverlayInjectionRetryTimer = setTimeout(() => {
-    overwolfOverlayInjectionRetryTimer = null;
+function scheduleOverwolfOverlayInjectionRetry(detectedVersion) {
+  const provider = getOverwolfOverlayProvider();
+  return provider.scheduleInjectionRetry(() => {
     requestOverwolfOverlayInjectionForDetectedGame({
       detectedVersion,
       retry: true
     });
-  }, delayMs);
+  });
+}
 
-  if (typeof overwolfOverlayInjectionRetryTimer.unref === 'function') {
-    overwolfOverlayInjectionRetryTimer.unref();
-  }
-
-  return true;
+function clearOverwolfOverlayInjectionRetry() {
+  const provider = getOverwolfOverlayProvider();
+  return provider.resetInjectionRetry();
 }
 
 function registerOverwolfOverlayEvents(overlayApi) {
@@ -1163,6 +1150,12 @@ function registerOverwolfOverlayEvents(overlayApi) {
       if (typeof event?.dismiss === 'function') {
         event.dismiss();
       }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('runtime-event', {
+          type: 'overlay-elevation-mismatch',
+          game: gameName
+        });
+      }
       return;
     }
 
@@ -1176,6 +1169,9 @@ function registerOverwolfOverlayEvents(overlayApi) {
     if (isOverwolfOverlayGameInfo(gameInfo)) {
       console.info(`[OverwolfOverlay] Game injected ${gameInfo?.name || gameInfo?.id || 'unknown'}`);
       clearOverwolfOverlayInjectionRetry();
+      const provider = getOverwolfOverlayProvider();
+      provider.setInjectionState(provider.INJECTION_STATES.INJECTED);
+      provider.flushRenderQueue((queuedState) => renderOverwolfOverlayWindow(queuedState));
       updateOverlayWindow();
     }
   });
@@ -1183,6 +1179,14 @@ function registerOverwolfOverlayEvents(overlayApi) {
   overlayApi.on('game-injection-error', (gameInfo, error) => {
     if (isOverwolfOverlayGameInfo(gameInfo)) {
       console.warn('[OverwolfOverlay] Game injection failed', error, gameInfo);
+      const provider = getOverwolfOverlayProvider();
+      provider.setInjectionState(provider.INJECTION_STATES.FAILED);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('runtime-event', {
+          type: 'overlay-injection-failed',
+          game: gameInfo?.name || 'unknown'
+        });
+      }
     }
   });
 
@@ -3000,7 +3004,12 @@ function updateOverlayWindow({ character, runtimeSession } = {}) {
     if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
       overlayWindow.hide();
     }
-
+    const provider = getOverwolfOverlayProvider();
+    if (provider.getInjectionState() !== provider.INJECTION_STATES.INJECTED && overlayState.visibility !== 'hidden') {
+      provider.queueRender(overlayState);
+      return overlayState;
+    }
+    provider.flushRenderQueue((queuedState) => renderOverwolfOverlayWindow(queuedState));
     renderOverwolfOverlayWindow(overlayState).catch(() => { });
     return overlayState;
   }
@@ -3794,10 +3803,8 @@ function applyGameVersion(version, options = {}) {
   syncNativeGameInfoProducer({
     detectedVersion: version
   });
-  if (typeof requestOverwolfOverlayInjectionForDetectedGame === 'function') {
-    requestOverwolfOverlayInjectionForDetectedGame({
-      detectedVersion: version
-    });
+  if (typeof isOverwolfOverlayAvailable === 'function' && isOverwolfOverlayAvailable()) {
+    requestOverwolfOverlayInjectionForDetectedGame({ detectedVersion: version }).catch(() => {});
   }
 
   // Notify renderer to update UI (icons, labels, etc.)
