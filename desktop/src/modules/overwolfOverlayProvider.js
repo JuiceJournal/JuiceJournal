@@ -197,6 +197,11 @@ function createOverwolfOverlayProvider({
   let overlayWindowProfile = null;
   let createWindowPromise = null;
 
+  const MAX_RETRY_ATTEMPTS = 5;
+  const BASE_RETRY_DELAY_MS = 2000;
+  let injectionRetryCount = 0;
+  let injectionRetryTimer = null;
+
   function isAvailable() {
     return Boolean(overlayApi && typeof overlayApi.createWindow === 'function');
   }
@@ -207,6 +212,59 @@ function createOverwolfOverlayProvider({
     }
 
     return createStatus(true);
+  }
+
+  function clearInjectionRetry() {
+    if (injectionRetryTimer) {
+      clearTimeout(injectionRetryTimer);
+      injectionRetryTimer = null;
+    }
+  }
+
+  function scheduleInjectionRetry(retryFn) {
+    clearInjectionRetry();
+    if (injectionRetryCount >= MAX_RETRY_ATTEMPTS) {
+      return false;
+    }
+    const delay = BASE_RETRY_DELAY_MS * Math.pow(2, injectionRetryCount);
+    injectionRetryTimer = setTimeout(() => {
+      injectionRetryTimer = null;
+      injectionRetryCount += 1;
+      retryFn();
+    }, delay);
+    return true;
+  }
+
+  function resetInjectionRetry() {
+    clearInjectionRetry();
+    injectionRetryCount = 0;
+  }
+
+  const INJECTION_STATES = Object.freeze({ IDLE: 'idle', INJECTING: 'injecting', INJECTED: 'injected', FAILED: 'failed' });
+  let injectionState = INJECTION_STATES.IDLE;
+
+  function getInjectionState() { return injectionState; }
+
+  function setInjectionState(state) {
+    injectionState = state;
+    if (state === INJECTION_STATES.INJECTED) {
+      resetInjectionRetry();
+    }
+  }
+
+  let pendingRenderState = null;
+
+  function queueRender(state) {
+    pendingRenderState = state;
+  }
+
+  function flushRenderQueue(renderFn) {
+    if (pendingRenderState) {
+      const state = pendingRenderState;
+      pendingRenderState = null;
+      return renderFn(state);
+    }
+    return Promise.resolve(null);
   }
 
   async function ensureWindow(profile = PASSIVE_PROFILE) {
@@ -301,7 +359,14 @@ function createOverwolfOverlayProvider({
     isAvailable,
     getStatus,
     renderState,
-    hide
+    hide,
+    scheduleInjectionRetry,
+    resetInjectionRetry,
+    getInjectionState,
+    setInjectionState,
+    queueRender,
+    flushRenderQueue,
+    INJECTION_STATES
   };
 }
 

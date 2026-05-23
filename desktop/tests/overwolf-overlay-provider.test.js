@@ -233,3 +233,64 @@ test('overlay card contains interactive start-map controls', () => {
   assert.match(overlayJs, /confirmStartMapPromptOverlay/);
   assert.match(overlayJs, /cancelStartMapPromptOverlay/);
 });
+
+test('overwolf overlay provider retries injection with exponential backoff up to max attempts', async () => {
+  const { createOverwolfOverlayProvider } = loadProviderModule();
+  const provider = createOverwolfOverlayProvider({
+    overlayApi: {
+      createWindow: () => Promise.resolve({ showInactive: () => {}, executeJavaScript: () => Promise.resolve(), loadFile: () => Promise.resolve() }),
+      getActiveGameInfo: () => null
+    },
+    entryPath: '/fake/overlay.html',
+    preloadPath: '/fake/preload.js'
+  });
+
+  let retryFn = null;
+  const originalSetTimeout = globalThis.setTimeout;
+  let timeoutCallCount = 0;
+  const scheduleCalls = [];
+  globalThis.setTimeout = (fn, delay) => {
+    timeoutCallCount++;
+    scheduleCalls.push({ call: timeoutCallCount, delay });
+    retryFn = fn;
+    return { unref: () => {} };
+  };
+
+  // First attempt: 2s delay
+  provider.scheduleInjectionRetry(() => scheduleCalls.push({ retry: 1 }));
+  assert.equal(scheduleCalls[0].delay, 2000);
+  // Execute the retry then schedule next
+  retryFn();
+  assert.equal(scheduleCalls[1].retry, 1);
+
+  // Second attempt: 4s delay
+  provider.scheduleInjectionRetry(() => scheduleCalls.push({ retry: 2 }));
+  assert.equal(scheduleCalls[2].delay, 4000);
+
+  // Third: 8s
+  retryFn();
+  provider.scheduleInjectionRetry(() => scheduleCalls.push({ retry: 3 }));
+  assert.equal(scheduleCalls[4].delay, 8000);
+
+  // Fourth: 16s
+  retryFn();
+  provider.scheduleInjectionRetry(() => scheduleCalls.push({ retry: 4 }));
+  assert.equal(scheduleCalls[6].delay, 16000);
+
+  // Fifth: 32s
+  retryFn();
+  provider.scheduleInjectionRetry(() => scheduleCalls.push({ retry: 5 }));
+  assert.equal(scheduleCalls[8].delay, 32000);
+
+  // Sixth attempt should be rejected
+  retryFn();
+  const result = provider.scheduleInjectionRetry(() => scheduleCalls.push({ retry: 6 }));
+  assert.equal(result, false);
+
+  // Reset clears count
+  provider.resetInjectionRetry();
+  const afterReset = provider.scheduleInjectionRetry(() => scheduleCalls.push({ retry: 'after-reset' }));
+  assert.equal(afterReset, true);
+
+  globalThis.setTimeout = originalSetTimeout;
+});
