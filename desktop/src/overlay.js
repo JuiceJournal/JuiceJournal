@@ -1,8 +1,6 @@
 (function initializeOverlay(root) {
-  const elements = {
-    html: document.documentElement,
+  var el = {
     card: document.querySelector('[data-overlay-state]'),
-    kicker: document.querySelector('[data-overlay-kicker]'),
     kickerLabel: document.querySelector('[data-overlay-kicker-label]'),
     pin: document.querySelector('[data-overlay-pin]'),
     dismiss: document.querySelector('[data-overlay-dismiss]'),
@@ -15,397 +13,237 @@
     startSubmit: document.querySelector('[data-overlay-start-submit]'),
     startCancel: document.querySelector('[data-overlay-start-cancel]')
   };
-  let passthroughEnabled = true;
-  let lastRenderedMode = 'runtime';
 
-  function getOverlayModel() {
-    return root.overlayStateModel || null;
-  }
-
-  function getProfitCurrencyModel() {
-    return root.profitCurrencyModel || null;
-  }
-
-  function isDerivedOverlayState(value) {
-    return value && typeof value === 'object' && typeof value.visibility === 'string';
-  }
-
-  function deriveState(input) {
-    if (isDerivedOverlayState(input)) {
-      return input;
-    }
-
-    const model = getOverlayModel();
-    if (model && typeof model.deriveOverlayState === 'function') {
-      return model.deriveOverlayState(input || {});
-    }
-
-    return {
-      visibility: 'waiting',
-      primaryLine: 'Waiting for game',
-      secondaryLine: 'Waiting for runtime session',
-      metaLine: ''
-    };
-  }
-
-  function formatSignedChaos(value) {
-    const normalized = Number(value ?? 0);
-    const rounded = Math.round(normalized);
-    const prefix = rounded > 0 ? '+' : rounded < 0 ? '-' : '';
-    return `${prefix}${Math.abs(rounded)}c`;
-  }
-
-  function formatSignedProfit(value, profitCurrencyRates = {}) {
-    const model = getProfitCurrencyModel();
-    if (model && typeof model.formatProfitCurrencyText === 'function') {
-      return model.formatProfitCurrencyText(value, profitCurrencyRates, { signed: true });
-    }
-
-    return formatSignedChaos(value);
-  }
-
-  function formatDuration(seconds) {
-    const normalized = Math.max(0, Number(seconds ?? 0) || 0);
-    if (!normalized) {
-      return '';
-    }
-
-    const minutes = Math.floor(normalized / 60);
-    const remainingSeconds = normalized % 60;
-    if (!minutes) {
-      return `${remainingSeconds}s`;
-    }
-
-    return `${minutes}m ${String(remainingSeconds).padStart(2, '0')}s`;
-  }
-
-  function buildMapResultLines(state) {
-    const result = state?.mapResult?.result || {};
-    const profitCurrencyRates = result.profitCurrencyRates
-      || result.currencyRates
-      || state?.mapResult?.profitCurrencyRates
-      || {};
-    const topOutput = Array.isArray(result.topOutputs) && result.topOutputs.length > 0
-      ? result.topOutputs[0]
-      : null;
-
-    return {
-      primaryLine: [result.farmType || 'Completed Map', formatSignedProfit(result.netProfit, profitCurrencyRates)].filter(Boolean).join(' / '),
-      secondaryLine: topOutput
-        ? `${topOutput.label || 'Top output'} ${formatSignedProfit(topOutput.valueDelta, profitCurrencyRates)}`
-        : 'Completed map result',
-      metaLine: formatDuration(result.durationSeconds),
-      tone: state?.mapResult?.tone || 'neutral',
-      pinned: state?.mapResult?.pinned === true
-    };
-  }
-
-  function normalizeRuntimeState(state) {
-    const mode = state.mode === 'start-map-prompt' ? 'start-map-prompt' : 'runtime';
-    return {
-      visibility: state.visibility || 'waiting',
-      mode,
-      tone: 'neutral',
-      primaryLine: state.primaryLine || 'Waiting for game',
-      secondaryLine: state.secondaryLine || 'Waiting for runtime session',
-      metaLine: state.metaLine || '',
-      pinned: false,
-      startMapPrompt: mode === 'start-map-prompt' ? normalizeStartMapPrompt(state) : null
-    };
-  }
-
-  function normalizeFarmTypeOptions(value) {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-
-    return value
-      .map((entry) => {
-        if (!entry || typeof entry !== 'object') {
-          return null;
-        }
-
-        const id = String(entry.id || '').trim();
-        const label = String(entry.label || id).trim();
-        return id ? { id, label } : null;
-      })
-      .filter(Boolean);
-  }
-
-  function normalizeStartMapPrompt(state) {
-    const prompt = state?.startMapPrompt && typeof state.startMapPrompt === 'object'
-      ? state.startMapPrompt
-      : {};
-
-    return {
-      mapName: String(prompt.mapName || state.primaryLine || 'Unknown Map').trim() || 'Unknown Map',
-      farmTypeId: String(prompt.farmTypeId || '').trim(),
-      farmTypeOptions: normalizeFarmTypeOptions(prompt.farmTypeOptions)
-    };
-  }
-
-  function normalizeRenderedState(input) {
-    const state = deriveState(input);
-    if (state?.mode === 'map-result' && state?.mapResult?.result) {
-      const lines = buildMapResultLines(state);
-      return {
-        visibility: state.visibility || 'visible',
-        mode: 'map-result',
-        tone: lines.tone,
-        primaryLine: lines.primaryLine,
-        secondaryLine: lines.secondaryLine,
-        metaLine: lines.metaLine,
-        pinned: lines.pinned
-      };
-    }
-
-    return normalizeRuntimeState(state);
-  }
+  var passthroughEnabled = true;
+  var lastRenderedMode = 'runtime';
+  var animFrameId = null;
 
   function setText(element, value) {
-    if (element) {
-      element.textContent = value || '';
-    }
+    if (element) { element.textContent = value || ''; }
+  }
+
+  function escapeHTML(value) {
+    return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   function setPointerPassthrough(ignore) {
-    const nextValue = ignore !== false;
-    if (passthroughEnabled === nextValue) {
-      return;
-    }
-
+    var nextValue = ignore !== false;
+    if (passthroughEnabled === nextValue) return;
     passthroughEnabled = nextValue;
-    if (typeof root.electronAPI?.setOverlayPointerPassthrough === 'function') {
-      root.electronAPI.setOverlayPointerPassthrough(nextValue).catch(() => { });
+    if (typeof root.electronAPI && typeof root.electronAPI.setOverlayPointerPassthrough === 'function') {
+      root.electronAPI.setOverlayPointerPassthrough(nextValue).catch(function () {});
     }
   }
 
-  function isStartMapPromptVisible() {
-    return elements.card?.dataset.overlayMode === 'start-map-prompt'
-      && elements.card?.dataset.overlayState !== 'hidden';
+  function normalizeFarmTypeOptions(value) {
+    if (!Array.isArray(value)) return [];
+    return value.map(function (entry) {
+      if (!entry || typeof entry !== 'object') return null;
+      var id = String(entry.id || '').trim();
+      return id ? { id: id, label: String(entry.label || id).trim() } : null;
+    }).filter(Boolean);
   }
 
-  function syncInteractivePassthrough(event) {
-    if (isStartMapPromptVisible()) {
-      setPointerPassthrough(false);
-      return;
+  function formatSignedProfit(value, rates) {
+    var model = root.profitCurrencyModel;
+    if (model && typeof model.formatProfitCurrencyText === 'function') {
+      return model.formatProfitCurrencyText(value, rates || {}, { signed: true });
     }
-
-    if (!elements.pin || elements.pin.hidden) {
-      setPointerPassthrough(true);
-      return;
-    }
-
-    const actionElements = [elements.pin, elements.dismiss].filter(Boolean).filter((element) => !element.hidden);
-    const isHoveringAction = actionElements.some((element) => {
-      const rect = element.getBoundingClientRect();
-      return event.clientX >= rect.left
-        && event.clientX <= rect.right
-        && event.clientY >= rect.top
-        && event.clientY <= rect.bottom;
-    });
-
-    setPointerPassthrough(!isHoveringAction);
+    var rounded = Math.round(Number(value || 0));
+    var prefix = rounded > 0 ? '+' : rounded < 0 ? '-' : '';
+    return prefix + Math.abs(rounded) + 'c';
   }
 
-  async function syncCursorPassthroughFromMain() {
-    if (typeof root.electronAPI?.getOverlayCursorPosition !== 'function') {
-      return;
-    }
+  function formatDuration(seconds) {
+    var s = Math.max(0, Number(seconds || 0) | 0);
+    if (!s) return '';
+    var m = (s / 60) | 0;
+    var sec = s % 60;
+    return m ? m + 'm ' + (sec < 10 ? '0' : '') + sec + 's' : sec + 's';
+  }
 
-    try {
-      const position = await root.electronAPI.getOverlayCursorPosition();
-      if (position) {
-        syncInteractivePassthrough(position);
-      }
-    } catch {
-      // Ignore overlay hover sync failures.
+  function deriveState(input) {
+    if (input && typeof input === 'object' && typeof input.visibility === 'string') return input;
+    var model = root.overlayStateModel;
+    if (model && typeof model.deriveOverlayState === 'function') {
+      return model.deriveOverlayState(input || {});
+    }
+    return { visibility: 'waiting', primaryLine: 'Waiting for game', secondaryLine: 'Waiting for runtime session', metaLine: '' };
+  }
+
+  /* ── Mode: Runtime / Waiting ── */
+  function renderRuntimeMode(state) {
+    setText(el.kickerLabel, 'Juice Journal');
+    setText(el.primary, state.primaryLine || 'Waiting for game');
+    setText(el.secondary, state.secondaryLine || '');
+    setText(el.meta, state.metaLine || '');
+  }
+
+  /* ── Mode: Map Result ── */
+  function renderMapResultMode(state) {
+    var result = (state.mapResult && state.mapResult.result) || {};
+    var rates = result.profitCurrencyRates || result.currencyRates || (state.mapResult && state.mapResult.profitCurrencyRates) || {};
+    var topOutput = Array.isArray(result.topOutputs) && result.topOutputs.length > 0 ? result.topOutputs[0] : null;
+    setText(el.kickerLabel, 'Map Complete');
+    setText(el.primary, (result.farmType || 'Completed Map') + '  ' + formatSignedProfit(result.netProfit, rates));
+    setText(el.secondary, topOutput ? (topOutput.label || '') + ' ' + formatSignedProfit(topOutput.valueDelta, rates) : 'Completed map result');
+    setText(el.meta, formatDuration(result.durationSeconds));
+  }
+
+  /* ── Mode: Start Map Prompt ── */
+  function renderStartMapPrompt(state) {
+    var prompt = (state.startMapPrompt && typeof state.startMapPrompt === 'object') ? state.startMapPrompt : {};
+    setText(el.kickerLabel, 'New Map');
+    setText(el.primary, prompt.mapName || state.primaryLine || 'Unknown Map');
+    var ctxParts = [prompt.farmType || 'Choose farm type'];
+    if (prompt.poeVersion) ctxParts.push(prompt.poeVersion.replace(/^poe/i, 'PoE '));
+    if (prompt.league) ctxParts.push(prompt.league);
+    setText(el.secondary, ctxParts.filter(Boolean).join(' \u00b7 '));
+    setText(el.meta, 'confirm map start');
+  }
+
+  function renderStartMapForm(state) {
+    if (!el.startForm) return;
+    var showForm = state.mode === 'start-map-prompt' && state.visibility !== 'hidden';
+    el.startForm.hidden = !showForm;
+    if (!showForm) return;
+    var prompt = (state.startMapPrompt && typeof state.startMapPrompt === 'object') ? state.startMapPrompt : {};
+    if (el.startMapName && document.activeElement !== el.startMapName) {
+      el.startMapName.value = prompt.mapName || state.primaryLine || 'Unknown Map';
+    }
+    if (el.startFarmType) {
+      var opts = normalizeFarmTypeOptions(prompt.farmTypeOptions);
+      var selId = opts.some(function (e) { return e.id === prompt.farmTypeId; }) ? prompt.farmTypeId : '';
+      el.startFarmType.innerHTML = '<option value="">No farm type</option>' +
+        opts.map(function (e) { return '<option value="' + escapeHTML(e.id) + '">' + escapeHTML(e.label) + '</option>'; }).join('');
+      el.startFarmType.value = selId;
     }
   }
 
+  function clearExitingAnimation() {
+    if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+    if (el.card) el.card.setAttribute('data-overlay-exiting', 'false');
+  }
+
+  /* ── Main render ── */
   function renderState(input) {
-    const state = normalizeRenderedState(input);
-    const visibility = state.visibility || 'waiting';
-    const mode = state.mode || 'runtime';
-    const isExitingMapResult = visibility === 'hidden' && lastRenderedMode === 'map-result';
+    var state = deriveState(input);
+    var visibility = state.visibility || 'waiting';
+    var mode = state.mode || 'runtime';
+    var tone = (state.mapResult && state.mapResult.tone) || state.tone || 'neutral';
+    var isExiting = visibility === 'hidden' && lastRenderedMode === 'map-result';
 
-    if (elements.html) {
-      elements.html.dataset.overlayVisibility = visibility;
-      elements.html.dataset.overlayMode = mode;
-    }
+    clearExitingAnimation();
 
-    if (elements.card) {
-      elements.card.dataset.overlayState = visibility;
-      elements.card.dataset.overlayMode = mode;
-      elements.card.dataset.overlayTone = state.tone || 'neutral';
-      elements.card.setAttribute('data-overlay-exiting', isExitingMapResult ? 'true' : 'false');
-      elements.card.hidden = visibility === 'hidden' && !isExitingMapResult;
-    }
+    if (el.card) {
+      el.card.dataset.overlayState = visibility;
+      el.card.dataset.overlayMode = mode;
+      el.card.dataset.overlayTone = tone;
 
-    setText(elements.kickerLabel, mode === 'map-result'
-      ? 'Map Result'
-      : (mode === 'start-map-prompt' ? 'Start Map' : 'Juice Journal'));
-    setText(elements.primary, state.primaryLine);
-    setText(elements.secondary, state.secondaryLine);
-    setText(elements.meta, state.metaLine);
-    renderStartMapPromptControls(state);
-    if (elements.pin) {
-      const showPin = mode === 'map-result' && visibility !== 'hidden';
-      elements.pin.hidden = !showPin;
-      elements.pin.setAttribute('aria-pressed', showPin && state.pinned ? 'true' : 'false');
-      if (elements.dismiss) {
-        elements.dismiss.hidden = !showPin;
+      if (isExiting) {
+        el.card.setAttribute('data-overlay-exiting', 'true');
+        animFrameId = requestAnimationFrame(function () {
+          animFrameId = requestAnimationFrame(function () {
+            el.card.hidden = true;
+            el.card.setAttribute('data-overlay-exiting', 'false');
+          });
+        });
+      } else {
+        el.card.hidden = visibility === 'hidden';
       }
+    }
+
+    if (mode === 'map-result') {
+      renderMapResultMode(state);
+    } else if (mode === 'start-map-prompt') {
+      renderStartMapPrompt(state);
+    } else {
+      renderRuntimeMode(state);
+    }
+
+    renderStartMapForm(state);
+
+    if (el.pin) {
+      var showPin = mode === 'map-result' && visibility !== 'hidden';
+      el.pin.hidden = !showPin;
+      el.pin.setAttribute('aria-pressed', showPin && (state.mapResult && state.mapResult.pinned) ? 'true' : 'false');
+      if (el.dismiss) el.dismiss.hidden = !showPin;
       if (!showPin) {
         setPointerPassthrough(mode === 'start-map-prompt' && visibility !== 'hidden' ? false : true);
-      } else {
-        void syncCursorPassthroughFromMain();
       }
     }
 
     lastRenderedMode = mode;
-    return state;
   }
 
-  function renderStartMapPromptControls(state) {
-    if (!elements.startForm) {
-      return;
-    }
-
-    const showForm = state.mode === 'start-map-prompt' && state.visibility !== 'hidden';
-    elements.startForm.hidden = !showForm;
-    if (!showForm) {
-      return;
-    }
-
-    const prompt = state.startMapPrompt || {};
-    if (elements.startMapName && document.activeElement !== elements.startMapName) {
-      elements.startMapName.value = prompt.mapName || state.primaryLine || 'Unknown Map';
-    }
-
-    if (elements.startFarmType) {
-      const farmTypeOptions = normalizeFarmTypeOptions(prompt.farmTypeOptions);
-      const selectedFarmTypeId = farmTypeOptions.some((entry) => entry.id === prompt.farmTypeId)
-        ? prompt.farmTypeId
-        : '';
-      elements.startFarmType.innerHTML = [
-        '<option value="">No farm type</option>',
-        ...farmTypeOptions.map((entry) => `<option value="${escapeAttribute(entry.id)}">${escapeHTML(entry.label)}</option>`)
-      ].join('');
-      elements.startFarmType.value = selectedFarmTypeId;
-    }
-  }
-
-  function escapeHTML(value) {
-    return String(value || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  function escapeAttribute(value) {
-    return escapeHTML(value);
-  }
-
+  /* ── IPC helpers ── */
   function getStartMapPromptPayload() {
     return {
-      mapName: String(elements.startMapName?.value || '').trim() || 'Unknown Map',
-      farmTypeId: String(elements.startFarmType?.value || '').trim() || null
+      mapName: String(el.startMapName ? el.startMapName.value : '').trim() || 'Unknown Map',
+      farmTypeId: String(el.startFarmType ? el.startFarmType.value : '').trim() || null
     };
   }
 
   function setStartMapPromptBusy(busy) {
-    [elements.startMapName, elements.startFarmType, elements.startSubmit, elements.startCancel]
-      .filter(Boolean)
-      .forEach((element) => {
-        element.disabled = busy;
-      });
+    [el.startMapName, el.startFarmType, el.startSubmit, el.startCancel].filter(Boolean).forEach(function (e) { e.disabled = busy; });
   }
 
-  root.JuiceOverlay = {
-    renderState
-  };
-
-  root.addEventListener('message', (event) => {
-    if (event.data?.type === 'juice-journal-overlay-state') {
-      renderState(event.data.payload);
-    }
-  });
-
-  root.addEventListener('mousemove', syncInteractivePassthrough);
-  root.addEventListener('mouseleave', () => {
-    setPointerPassthrough(isStartMapPromptVisible() ? false : true);
-  });
-
-  if (elements.pin) {
-    elements.pin.addEventListener('click', async () => {
-      if (typeof root.electronAPI?.toggleMapResultOverlayPin !== 'function') {
-        return;
-      }
-
-      elements.pin.disabled = true;
-      try {
-        await root.electronAPI.toggleMapResultOverlayPin();
-      } finally {
-        elements.pin.disabled = false;
-        setPointerPassthrough(true);
-      }
+  /* ── Event bindings ── */
+  if (el.pin) {
+    el.pin.addEventListener('click', function () {
+      if (typeof root.electronAPI === 'undefined' || typeof root.electronAPI.toggleMapResultOverlayPin !== 'function') return;
+      el.pin.disabled = true;
+      root.electronAPI.toggleMapResultOverlayPin().finally(function () { el.pin.disabled = false; setPointerPassthrough(true); });
     });
   }
 
-  if (elements.dismiss) {
-    elements.dismiss.addEventListener('click', async () => {
-      if (typeof root.electronAPI?.dismissMapResultOverlay !== 'function') {
-        return;
-      }
-
-      elements.dismiss.disabled = true;
-      try {
-        await root.electronAPI.dismissMapResultOverlay();
-      } finally {
-        elements.dismiss.disabled = false;
-        setPointerPassthrough(true);
-      }
+  if (el.dismiss) {
+    el.dismiss.addEventListener('click', function () {
+      if (typeof root.electronAPI === 'undefined' || typeof root.electronAPI.dismissMapResultOverlay !== 'function') return;
+      el.dismiss.disabled = true;
+      root.electronAPI.dismissMapResultOverlay().finally(function () { el.dismiss.disabled = false; setPointerPassthrough(true); });
     });
   }
 
-  if (elements.startForm) {
-    elements.startForm.addEventListener('submit', async (event) => {
+  if (el.startForm) {
+    el.startForm.addEventListener('submit', function (event) {
       event.preventDefault();
-      if (typeof root.electronAPI?.confirmStartMapPromptOverlay !== 'function') {
-        return;
-      }
-
+      if (typeof root.electronAPI === 'undefined' || typeof root.electronAPI.confirmStartMapPromptOverlay !== 'function') return;
       setStartMapPromptBusy(true);
-      try {
-        await root.electronAPI.confirmStartMapPromptOverlay(getStartMapPromptPayload());
-      } finally {
-        setStartMapPromptBusy(false);
-      }
+      root.electronAPI.confirmStartMapPromptOverlay(getStartMapPromptPayload()).finally(function () { setStartMapPromptBusy(false); });
     });
   }
 
-  if (elements.startCancel) {
-    elements.startCancel.addEventListener('click', async () => {
-      if (typeof root.electronAPI?.cancelStartMapPromptOverlay !== 'function') {
-        return;
-      }
-
+  if (el.startCancel) {
+    el.startCancel.addEventListener('click', function () {
+      if (typeof root.electronAPI === 'undefined' || typeof root.electronAPI.cancelStartMapPromptOverlay !== 'function') return;
       setStartMapPromptBusy(true);
-      try {
-        await root.electronAPI.cancelStartMapPromptOverlay();
-      } finally {
-        setStartMapPromptBusy(false);
-      }
+      root.electronAPI.cancelStartMapPromptOverlay().finally(function () { setStartMapPromptBusy(false); });
     });
   }
+
+  /* ── Pointer passthrough ── */
+  root.addEventListener('mousemove', function (event) {
+    var isInteractive = el.card && el.card.dataset.overlayMode === 'start-map-prompt' && el.card.dataset.overlayState !== 'hidden';
+    if (isInteractive) { setPointerPassthrough(false); return; }
+    if (!el.pin || el.pin.hidden) { setPointerPassthrough(true); return; }
+    var btns = [el.pin, el.dismiss].filter(Boolean).filter(function (b) { return !b.hidden; });
+    var hovering = btns.some(function (b) {
+      var r = b.getBoundingClientRect();
+      return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+    });
+    setPointerPassthrough(!hovering);
+  });
+
+  root.addEventListener('mouseleave', function () {
+    setPointerPassthrough(true);
+  });
+
+  /* ── Public API ── */
+  root.JuiceOverlay = { renderState: renderState };
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      renderState(root.__JUICE_OVERLAY_INITIAL_STATE__ || null);
-    }, { once: true });
+    document.addEventListener('DOMContentLoaded', function () { renderState(root.__JUICE_OVERLAY_INITIAL_STATE__ || null); }, { once: true });
   } else {
     renderState(root.__JUICE_OVERLAY_INITIAL_STATE__ || null);
   }

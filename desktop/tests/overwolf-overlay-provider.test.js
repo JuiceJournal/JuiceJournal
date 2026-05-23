@@ -207,8 +207,8 @@ test('overlay card supports map-result slide in and slide out states', () => {
   const html = fs.readFileSync(overlayHtmlPath, 'utf8');
   const overlayJs = fs.readFileSync(overlayJsPath, 'utf8');
 
-  assert.match(html, /slideInFromRight/);
-  assert.match(html, /slideOutToRight/);
+  assert.match(html, /jj-slide-in/);
+  assert.match(html, /jj-slide-out/);
   assert.match(overlayJs, /data-overlay-exiting/);
 });
 
