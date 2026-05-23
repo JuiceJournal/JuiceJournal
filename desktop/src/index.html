@@ -523,27 +523,36 @@
               <button id="currency-sync-btn" class="btn btn-primary btn-small" data-i18n="currency.sync">Sync</button>
             </div>
           </div>
-          <div id="currency-type-filter" class="currency-type-tabs"></div>
         </div>
-        <div class="currency-table-wrap">
-          <table class="currency-table">
-            <thead>
-              <tr>
-                <th class="currency-th-num">#</th>
-                <th class="currency-th-icon"></th>
-                <th class="currency-th-name sortable" data-sort="itemName" data-i18n="currency.name">Name</th>
-                <th class="currency-th-type" data-i18n="currency.type">Type</th>
-                <th class="currency-th-chaos sortable active" data-sort="chaosValue">Chaos</th>
-                <th class="currency-th-divine sortable" data-sort="divineValue">Divine</th>
-                <th class="currency-th-trend" data-i18n="currency.trend">Trend</th>
-              </tr>
-            </thead>
-            <tbody id="currency-table-body">
-              <tr><td colspan="7" class="currency-empty" data-i18n="currency.noData">No price data. Click Sync to fetch.</td></tr>
-            </tbody>
-          </table>
+        <div class="currency-market-layout">
+          <div class="currency-type-panel" aria-label="Currency categories" data-i18n-aria="currency.categoriesAria">
+            <div class="currency-type-panel-header">
+              <span class="currency-panel-kicker" data-i18n="currency.marketIndex">Market Index</span>
+            </div>
+            <div id="currency-type-filter" class="currency-type-tabs"></div>
+          </div>
+          <div class="currency-market-main">
+            <div class="currency-table-wrap">
+              <table class="currency-table">
+                <thead>
+                  <tr>
+                    <th class="currency-th-num">#</th>
+                    <th class="currency-th-icon"></th>
+                    <th class="currency-th-name sortable" data-sort="itemName" data-i18n="currency.name">Name</th>
+                    <th class="currency-th-type" data-i18n="currency.type">Type</th>
+                    <th class="currency-th-chaos sortable active" data-sort="chaosValue">Chaos</th>
+                    <th class="currency-th-divine sortable" data-sort="divineValue">Divine</th>
+                    <th class="currency-th-trend" data-i18n="currency.trend">Trend</th>
+                  </tr>
+                </thead>
+                <tbody id="currency-table-body">
+                  <tr><td colspan="7" class="currency-empty" data-i18n="currency.noData">No price data. Click Sync to fetch.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="currency-footer" id="currency-footer"></div>
+          </div>
         </div>
-        <div class="currency-footer" id="currency-footer"></div>
       </section>
 
       <!-- Settings Page -->
