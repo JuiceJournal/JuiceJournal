@@ -35,7 +35,7 @@ const {
   clearRuntimeSessionState,
   cloneRuntimeSessionState
 } = require('./src/modules/runtimeSessionModel');
-const { appendMapResult } = require('./src/modules/mapResultStoreModel');
+const { appendMapResult, normalizeMapResultForLedger } = require('./src/modules/mapResultStoreModel');
 const { deriveMapResultOverlayState } = require('./src/modules/mapResultOverlayModel');
 const { deriveOverlayState } = require('./src/modules/overlayStateModel');
 const { listFarmTypes } = require('./src/modules/farmTypeModel');
@@ -815,7 +815,8 @@ function saveMapResultHistory(result) {
     return [];
   }
 
-  const nextResults = appendMapResult(getStoredMapResults(), result, { maxResults: 100 });
+  const normalizedResult = normalizeMapResultForLedger(result);
+  const nextResults = appendMapResult(getStoredMapResults(), normalizedResult, { maxResults: 100 });
   store.set(storeKey, nextResults);
   return nextResults;
 }

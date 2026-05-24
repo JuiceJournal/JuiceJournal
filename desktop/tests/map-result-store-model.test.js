@@ -244,6 +244,41 @@ test('map result store model filters results by farm type when requested', () =>
   );
 });
 
+test('map result store model normalizes calculated runs for the local ledger', () => {
+  const normalizeMapResultForLedger = getStoreModelExport('normalizeMapResultForLedger');
+
+  const result = normalizeMapResultForLedger(
+    {
+      id: 'result-1',
+      netProfit: 42,
+      mapName: 'Dunes Map'
+    },
+    { now: () => '2026-05-24T10:00:00.000Z' }
+  );
+
+  assert.equal(result.localRunId, 'result-1');
+  assert.equal(result.calculationStatus, 'calculated');
+  assert.equal(result.profitChaos, 42);
+  assert.equal(result.createdAt, '2026-05-24T10:00:00.000Z');
+  assert.equal(result.source, 'desktop');
+});
+
+test('map result store model separates computed zero from unavailable profit', () => {
+  const normalizeMapResultForLedger = getStoreModelExport('normalizeMapResultForLedger');
+
+  const zeroResult = normalizeMapResultForLedger({ id: 'zero-1', netProfit: 0 });
+  const unavailableResult = normalizeMapResultForLedger({
+    id: 'missing-1',
+    netProfit: 0,
+    profitUnavailable: true
+  });
+
+  assert.equal(zeroResult.calculationStatus, 'zeroCalculated');
+  assert.equal(zeroResult.profitChaos, 0);
+  assert.equal(unavailableResult.calculationStatus, 'notCalculated');
+  assert.equal(unavailableResult.profitChaos, null);
+});
+
 test('renderer saves the latest map result and stores returned history in state', async () => {
   const state = {
     mapResults: []
@@ -836,14 +871,15 @@ test('main map-result history is stored per desktop user', () => {
         writes.push([key, value]);
       }
     },
-    appendMapResult: (existing, next) => [next, ...existing]
+    appendMapResult: (existing, next) => [next, ...existing],
+    normalizeMapResultForLedger: (result) => ({ ...result, localRunId: result.id, calculationStatus: 'calculated' })
   });
 
   const results = context.saveMapResultHistory({ id: 'new-1' });
 
   assert.equal(context.getMapResultsStoreKey(), 'mapResults:user-2');
-  assert.deepEqual(results, [{ id: 'new-1' }, { id: 'old-1' }]);
-  assert.deepEqual(writes, [['mapResults:user-2', [{ id: 'new-1' }, { id: 'old-1' }]]]);
+  assert.deepEqual(results, [{ id: 'new-1', localRunId: 'new-1', calculationStatus: 'calculated' }, { id: 'old-1' }]);
+  assert.deepEqual(writes, [['mapResults:user-2', [{ id: 'new-1', localRunId: 'new-1', calculationStatus: 'calculated' }, { id: 'old-1' }]]]);
 });
 
 test('after-snapshot context merge preserves an existing session id when runtime updates omit it', async () => {
