@@ -303,7 +303,9 @@ test('map result model derives normalized inputs outputs and net profit from sna
     characterSummary: {
       id: 'char-1',
       name: 'MapRunner',
-      league: 'Fate of the Vaal'
+      league: 'Fate of the Vaal',
+      className: 'Druid',
+      ascendancy: 'Shaman'
     },
     accountName: 'KocaGyVeMasha',
     poeVersion: 'poe2'
@@ -314,6 +316,8 @@ test('map result model derives normalized inputs outputs and net profit from sna
   assert.equal(result.sessionId, 'runtime-1');
   assert.equal(result.characterId, 'char-1');
   assert.equal(result.characterName, 'MapRunner');
+  assert.equal(result.characterClass, 'Druid');
+  assert.equal(result.ascendancy, 'Shaman');
   assert.equal(result.accountName, 'KocaGyVeMasha');
   assert.equal(result.poeVersion, 'poe2');
   assert.equal(result.league, 'Fate of the Vaal');
@@ -559,6 +563,13 @@ test('map result model prefers canonical profit report totals when provided', ()
         totalGainedChaos: 120,
         totalLostChaos: 24,
         netProfitChaos: 96
+      },
+      categoryBreakdown: {
+        currency: {
+          gained: 120,
+          lost: 24,
+          net: 96
+        }
       }
     }
   });
@@ -580,6 +591,9 @@ test('map result model prefers canonical profit report totals when provided', ()
     valueDelta: 24,
     currencyCode: 'chaos'
   }]);
+  assert.deepEqual(result.lootCategoryBreakdown, {
+    currency: { gainedChaos: 120, lostChaos: 24, netChaos: 96 }
+  });
 });
 
 test('map result model is deterministic for the same snapshot inputs', () => {

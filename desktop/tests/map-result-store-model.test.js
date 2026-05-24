@@ -251,7 +251,21 @@ test('map result store model normalizes calculated runs for the local ledger', (
     {
       id: 'result-1',
       netProfit: 42,
-      mapName: 'Dunes Map'
+      mapName: 'Dunes Map',
+      topOutputs: [
+        { label: 'Divine Orb', quantityDelta: 2, valueDelta: 240 },
+        { label: 'Low Value', quantityDelta: 1, valueDelta: 0 }
+      ],
+      lootCategoryBreakdown: {
+        currency: { gainedChaos: 260, lostChaos: 10, netChaos: 250 }
+      },
+      profitCurrencyRates: {
+        divineChaos: 120,
+        mirrorChaos: 300000,
+        syncedAt: '2026-05-24T09:59:00.000Z'
+      },
+      characterClass: 'Witch',
+      ascendancy: 'Necromancer'
     },
     { now: () => '2026-05-24T10:00:00.000Z' }
   );
@@ -261,6 +275,18 @@ test('map result store model normalizes calculated runs for the local ledger', (
   assert.equal(result.profitChaos, 42);
   assert.equal(result.createdAt, '2026-05-24T10:00:00.000Z');
   assert.equal(result.source, 'desktop');
+  assert.equal(result.publishState, 'local');
+  assert.deepEqual(result.topLootItems, [{ name: 'Divine Orb', quantity: 2, totalChaos: 240 }]);
+  assert.deepEqual(result.lootCategoryBreakdown, {
+    currency: { gainedChaos: 260, lostChaos: 10, netChaos: 250 }
+  });
+  assert.deepEqual(result.profitCurrencyRateSnapshot, {
+    chaosDivineRate: 120,
+    mirrorChaosRate: 300000,
+    syncedAt: '2026-05-24T09:59:00.000Z'
+  });
+  assert.equal(result.characterClass, 'Witch');
+  assert.equal(result.ascendancy, 'Necromancer');
 });
 
 test('map result store model separates computed zero from unavailable profit', () => {

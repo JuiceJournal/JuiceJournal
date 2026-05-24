@@ -137,6 +137,7 @@
       inputValue: Math.abs(normalizeNumber(summary.totalLostChaos, 0)),
       outputValue: Math.abs(normalizeNumber(summary.totalGainedChaos, 0)),
       netProfit: normalizeNumber(summary.netProfitChaos, 0),
+      lootCategoryBreakdown: normalizeCategoryBreakdown(profitReport.categoryBreakdown),
       topInputs: lost
         .map((entry) => normalizeReportEntry(entry))
         .sort((a, b) => b.valueDelta - a.valueDelta)
@@ -146,6 +147,24 @@
         .sort((a, b) => b.valueDelta - a.valueDelta)
         .slice(0, MAX_TOP_ITEMS)
     };
+  }
+
+  function normalizeCategoryBreakdown(categoryBreakdown = {}) {
+    if (!categoryBreakdown || typeof categoryBreakdown !== 'object' || Array.isArray(categoryBreakdown)) {
+      return {};
+    }
+
+    return Object.entries(categoryBreakdown).reduce((breakdown, [category, value]) => {
+      if (!category || !value || typeof value !== 'object') {
+        return breakdown;
+      }
+
+      const gainedChaos = normalizeNumber(value.gained, 0);
+      const lostChaos = normalizeNumber(value.lost, 0);
+      const netChaos = normalizeNumber(value.net, gainedChaos - lostChaos);
+      breakdown[category] = { gainedChaos, lostChaos, netChaos };
+      return breakdown;
+    }, {});
   }
 
   function createDeltaEntry(itemKey, sourceItem, quantityDelta, valueDelta) {
@@ -318,9 +337,10 @@
     let netProfit = 0;
     let topInputs = [];
     let topOutputs = [];
+    let lootCategoryBreakdown = {};
 
     if (profitReport && typeof profitReport === 'object') {
-      ({ inputValue, outputValue, netProfit, topInputs, topOutputs } = deriveProfitValuesFromReport(profitReport));
+      ({ inputValue, outputValue, netProfit, topInputs, topOutputs, lootCategoryBreakdown } = deriveProfitValuesFromReport(profitReport));
     } else {
       const beforeIndex = indexSnapshotItems(beforeSnapshot);
       const afterIndex = indexSnapshotItems(afterSnapshot);
@@ -375,6 +395,9 @@
       profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral',
       topInputs,
       topOutputs,
+      lootCategoryBreakdown,
+      characterClass: normalizeString(characterSummary?.className ?? characterSummary?.class),
+      ascendancy: normalizeString(characterSummary?.ascendancy),
       createdAt
     };
   }
