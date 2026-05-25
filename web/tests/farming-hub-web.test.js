@@ -15,6 +15,7 @@ test('web api client exposes Farming Hub public run endpoints', () => {
   assert.match(source, /export const farmingHubAPI = \{/);
   assert.match(source, /getRuns:\s*\(params\)\s*=>\s*apiClient\.get\('\/farming-hub\/runs'/);
   assert.match(source, /getRunById:\s*\(id\)\s*=>\s*apiClient\.get\(`\/farming-hub\/runs\/\$\{encodeURIComponent\(id\)\}`\)/);
+  assert.match(source, /toggleReaction:\s*\(id, reaction\)\s*=>\s*apiClient\.post\(`\/farming-hub\/runs\/\$\{encodeURIComponent\(id\)\}\/reactions`/);
 });
 
 test('authenticated navbar links to the Farming Hub browser', () => {
@@ -39,10 +40,25 @@ test('Farming Hub detail page renders public run maps and loot details', () => {
   const source = read('src/app/farming-hub/[id]/page.js');
 
   assert.match(source, /farmingHubAPI\.getRunById\(params\.id\)/);
+  assert.match(source, /farmingHubAPI\.toggleReaction\(params\.id, reaction\)/);
   assert.match(source, /run\.maps/);
   assert.match(source, /run\.topLoot/);
   assert.match(source, /run\.setupDescription/);
   assert.match(source, /run\.investmentKnown/);
+  assert.match(source, /<FarmRunReactions/);
+});
+
+test('Farming Hub list and detail expose community reaction signals', () => {
+  const tableSource = read('src/components/FarmRunTable.js');
+  const reactionSource = read('src/components/FarmRunReactions.js');
+
+  assert.match(tableSource, /farmingHub\.reactions\.title/);
+  assert.match(tableSource, /<FarmRunReactions run=\{run\} t=\{t\}/);
+  assert.match(reactionSource, /REACTION_TYPES/);
+  assert.match(reactionSource, /divine/);
+  assert.match(reactionSource, /holy/);
+  assert.match(reactionSource, /pog/);
+  assert.match(reactionSource, /viewerReactions/);
 });
 
 test('Farming Hub locale keys are defined in the English dictionary', () => {
@@ -54,7 +70,11 @@ test('Farming Hub locale keys are defined in the English dictionary', () => {
     'farmingHub.body',
     'farmingHub.table.run',
     'farmingHub.detailNotFound',
-    'farmingHub.topLoot'
+    'farmingHub.topLoot',
+    'farmingHub.reactions.title',
+    'farmingHub.reactions.divine',
+    'farmingHub.reactions.holy',
+    'farmingHub.reactions.pog'
   ].forEach((key) => {
     assert.match(source, new RegExp(`'${key}'`));
   });

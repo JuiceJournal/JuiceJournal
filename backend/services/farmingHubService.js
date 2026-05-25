@@ -1,8 +1,14 @@
 const { Op } = require('sequelize');
-const { PublishedFarmRun, User } = require('../models');
+const { FarmRunReaction, PublishedFarmRun, User } = require('../models');
 
 const ALLOWED_VISIBILITIES = new Set(['private', 'unlisted', 'public']);
 const PUBLIC_VISIBILITIES = ['public', 'unlisted'];
+const ALLOWED_REACTIONS = new Set(['divine', 'holy', 'pog']);
+const REACTION_SUMMARY_TEMPLATE = Object.freeze({
+  divine: 0,
+  holy: 0,
+  pog: 0
+});
 const CALCULATION_STATUSES = new Set(['calculated', 'zeroCalculated', 'partial', 'failed', 'notCalculated']);
 const MAX_SETUP_DESCRIPTION_LENGTH = 1200;
 const MAX_MAPS = 100;
@@ -42,6 +48,16 @@ function normalizeVisibility(value) {
 
 function normalizeCalculationStatus(value) {
   return CALCULATION_STATUSES.has(value) ? value : 'notCalculated';
+}
+
+function normalizeReaction(value) {
+  const reaction = normalizeText(value, 24);
+  if (!reaction) {
+    return null;
+  }
+
+  const normalized = reaction.toLowerCase();
+  return ALLOWED_REACTIONS.has(normalized) ? normalized : null;
 }
 
 function normalizePriceContext(value) {
@@ -110,6 +126,41 @@ function normalizeCharacter(value) {
   };
 }
 
+function getRunIncludes() {
+  return [
+    {
+      model: User,
+      as: 'user',
+      attributes: ['id', 'username']
+    },
+    {
+      model: FarmRunReaction,
+      as: 'reactions',
+      attributes: ['userId', 'reaction']
+    }
+  ];
+}
+
+function summarizeReactions(run, viewerUserId = null) {
+  const summary = { ...REACTION_SUMMARY_TEMPLATE };
+  const viewerReactions = [];
+  const reactions = Array.isArray(run.reactions) ? run.reactions : [];
+
+  reactions.forEach((entry) => {
+    const reaction = normalizeReaction(entry.reaction);
+    if (!reaction) {
+      return;
+    }
+
+    summary[reaction] += 1;
+    if (viewerUserId && entry.userId === viewerUserId) {
+      viewerReactions.push(reaction);
+    }
+  });
+
+  return { summary, viewerReactions };
+}
+
 function buildPublishedFarmRunAttributes(payload, userId) {
   const visibility = normalizeVisibility(payload.visibility);
   const calculationStatus = normalizeCalculationStatus(payload.calculationStatus);
@@ -140,7 +191,9 @@ function buildPublishedFarmRunAttributes(payload, userId) {
   };
 }
 
-function serializePublishedFarmRun(run, { includeDetails = false } = {}) {
+function serializePublishedFarmRun(run, { includeDetails = false, viewerUserId = null } = {}) {
+  const reactionState = summarizeReactions(run, viewerUserId);
+
   return {
     id: run.id,
     visibility: run.visibility,
@@ -164,6 +217,8 @@ function serializePublishedFarmRun(run, { includeDetails = false } = {}) {
       id: run.user.id,
       username: run.user.username
     } : null,
+    reactions: reactionState.summary,
+    viewerReactions: reactionState.viewerReactions,
     maps: includeDetails ? run.maps : undefined,
     breakdown: includeDetails ? run.breakdown : undefined,
     topLoot: includeDetails ? run.topLoot : undefined
@@ -179,11 +234,7 @@ async function createPublishedFarmRun(userId, payload) {
 async function loadPublishedFarmRunForOwner(id, userId) {
   return PublishedFarmRun.findOne({
     where: { id, userId },
-    include: [{
-      model: User,
-      as: 'user',
-      attributes: ['id', 'username']
-    }]
+    include: getRunIncludes()
   });
 }
 
@@ -203,11 +254,7 @@ async function loadVisiblePublishedFarmRun(id, userId = null) {
 
   return PublishedFarmRun.findOne({
     where,
-    include: [{
-      model: User,
-      as: 'user',
-      attributes: ['id', 'username']
-    }]
+    include: getRunIncludes()
   });
 }
 
@@ -240,15 +287,59 @@ async function loadPublicFarmRuns(filters = {}) {
 
   return PublishedFarmRun.findAll({
     where,
-    include: [{
-      model: User,
-      as: 'user',
-      attributes: ['id', 'username']
-    }],
+    include: getRunIncludes(),
     order: [['publishedAt', 'DESC'], ['createdAt', 'DESC']],
     limit,
     offset
   });
+}
+
+async function toggleFarmRunReaction(id, userId, reaction) {
+  const normalizedReaction = normalizeReaction(reaction);
+  if (!normalizedReaction) {
+    const error = new Error('Unsupported farm run reaction');
+    error.code = 'INVALID_REACTION';
+    throw error;
+  }
+
+  const run = await PublishedFarmRun.findOne({
+    where: {
+      id,
+      visibility: PUBLIC_VISIBILITIES
+    }
+  });
+  if (!run) {
+    return null;
+  }
+
+  const existing = await FarmRunReaction.findOne({
+    where: {
+      runId: id,
+      userId,
+      reaction: normalizedReaction
+    }
+  });
+
+  if (existing) {
+    await existing.destroy();
+    return {
+      selected: false,
+      reaction: normalizedReaction,
+      run: await loadVisiblePublishedFarmRun(id, userId)
+    };
+  }
+
+  await FarmRunReaction.create({
+    runId: id,
+    userId,
+    reaction: normalizedReaction
+  });
+
+  return {
+    selected: true,
+    reaction: normalizedReaction,
+    run: await loadVisiblePublishedFarmRun(id, userId)
+  };
 }
 
 async function updateFarmRunVisibility(id, userId, visibility) {
@@ -274,7 +365,9 @@ module.exports = {
   loadPublicFarmRuns,
   loadPublishedFarmRunForOwner,
   loadVisiblePublishedFarmRun,
+  normalizeReaction,
   normalizeText,
   serializePublishedFarmRun,
+  toggleFarmRunReaction,
   updateFarmRunVisibility
 };

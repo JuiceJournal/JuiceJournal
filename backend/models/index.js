@@ -16,6 +16,7 @@ const StrategySession = require('./StrategySession')(sequelize, DataTypes);
 const StrategyTag = require('./StrategyTag')(sequelize, DataTypes);
 const StashSnapshot = require('./StashSnapshot')(sequelize, DataTypes);
 const PublishedFarmRun = require('./PublishedFarmRun')(sequelize, DataTypes);
+const FarmRunReaction = require('./FarmRunReaction')(sequelize, DataTypes);
 
 // Define associations
 
@@ -46,6 +47,24 @@ User.hasMany(PublishedFarmRun, {
   onDelete: 'CASCADE'
 });
 PublishedFarmRun.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user'
+});
+PublishedFarmRun.hasMany(FarmRunReaction, {
+  foreignKey: 'runId',
+  as: 'reactions',
+  onDelete: 'CASCADE'
+});
+FarmRunReaction.belongsTo(PublishedFarmRun, {
+  foreignKey: 'runId',
+  as: 'run'
+});
+User.hasMany(FarmRunReaction, {
+  foreignKey: 'userId',
+  as: 'farmRunReactions',
+  onDelete: 'CASCADE'
+});
+FarmRunReaction.belongsTo(User, {
   foreignKey: 'userId',
   as: 'user'
 });
@@ -137,5 +156,6 @@ module.exports = {
   StrategySession,
   StrategyTag,
   StashSnapshot,
-  PublishedFarmRun
+  PublishedFarmRun,
+  FarmRunReaction
 };

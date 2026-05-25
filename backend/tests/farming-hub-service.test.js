@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const {
   buildPublishedFarmRunAttributes,
+  normalizeReaction,
   serializePublishedFarmRun
 } = require('../services/farmingHubService');
 
@@ -105,13 +106,20 @@ test('published farm run serializer hides heavy details from list responses', ()
     publishedAt: null,
     createdAt: null,
     user: { id: 'user-1', username: 'tester' },
+    reactions: [
+      { userId: 'user-1', reaction: 'divine' },
+      { userId: 'user-2', reaction: 'divine' },
+      { userId: 'user-2', reaction: 'pog' }
+    ],
     maps: [{ mapName: 'Dunes Map' }],
     breakdown: { currency: { netChaos: 39.9 } },
     topLoot: [{ name: 'Chaos Orb', totalChaos: 39.9 }]
   };
 
-  const listShape = serializePublishedFarmRun(run);
+  const listShape = serializePublishedFarmRun(run, { viewerUserId: 'user-1' });
   assert.equal(listShape.profitChaos, 39.9);
+  assert.deepEqual(listShape.reactions, { divine: 2, holy: 0, pog: 1 });
+  assert.deepEqual(listShape.viewerReactions, ['divine']);
   assert.equal(listShape.maps, undefined);
   assert.equal(listShape.breakdown, undefined);
   assert.equal(listShape.topLoot, undefined);
@@ -120,18 +128,29 @@ test('published farm run serializer hides heavy details from list responses', ()
   assert.deepEqual(detailShape.maps, [{ mapName: 'Dunes Map' }]);
 });
 
+test('farm run reactions only accept the supported community signals', () => {
+  assert.equal(normalizeReaction('Divine'), 'divine');
+  assert.equal(normalizeReaction('holy'), 'holy');
+  assert.equal(normalizeReaction('Pog'), 'pog');
+  assert.equal(normalizeReaction('mirror'), null);
+});
+
 test('farming hub API is mounted and keeps publish operations authenticated', () => {
   const serverSource = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   const routeSource = fs.readFileSync(path.join(__dirname, '..', 'routes', 'farmingHub.js'), 'utf8');
   const migrationSource = fs.readFileSync(path.join(__dirname, '..', 'migrations', '003_create_published_farm_runs.sql'), 'utf8');
+  const reactionMigrationSource = fs.readFileSync(path.join(__dirname, '..', 'migrations', '004_create_farm_run_reactions.sql'), 'utf8');
 
   assert.match(serverSource, /app\.use\('\/api\/farming-hub',\s*farmingHubRoutes\)/);
   assert.match(routeSource, /router\.post\('\/runs',\s*authenticate,/);
-  assert.match(routeSource, /router\.get\('\/runs',/);
+  assert.match(routeSource, /router\.get\('\/runs',\s*optionalAuth,/);
   assert.match(routeSource, /router\.get\('\/runs\/:id',\s*optionalAuth,/);
+  assert.match(routeSource, /router\.post\('\/runs\/:id\/reactions',\s*authenticate,/);
   assert.match(routeSource, /router\.patch\('\/runs\/:id\/visibility',\s*authenticate,/);
   assert.match(routeSource, /router\.delete\('\/runs\/:id',\s*authenticate,/);
   assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS published_farm_runs/);
+  assert.match(reactionMigrationSource, /CREATE TABLE IF NOT EXISTS farm_run_reactions/);
+  assert.match(reactionMigrationSource, /UNIQUE \(run_id, user_id, reaction\)/);
 });
 
 test('public farming hub list stays public-only and supports profit filters', () => {
@@ -142,4 +161,14 @@ test('public farming hub list stays public-only and supports profit filters', ()
   assert.match(serviceSource, /hasMaxProfitFilter/);
   assert.match(serviceSource, /Op\.gte/);
   assert.match(serviceSource, /Op\.lte/);
+});
+
+test('reaction toggles are limited to shared farm runs', () => {
+  const serviceSource = fs.readFileSync(path.join(__dirname, '..', 'services', 'farmingHubService.js'), 'utf8');
+
+  assert.match(serviceSource, /async function toggleFarmRunReaction/);
+  assert.match(serviceSource, /visibility:\s*PUBLIC_VISIBILITIES/);
+  assert.match(serviceSource, /FarmRunReaction\.findOne/);
+  assert.match(serviceSource, /existing\.destroy\(\)/);
+  assert.match(serviceSource, /FarmRunReaction\.create/);
 });

@@ -8,6 +8,7 @@ const {
   loadPublishedFarmRunForOwner,
   loadVisiblePublishedFarmRun,
   serializePublishedFarmRun,
+  toggleFarmRunReaction,
   updateFarmRunVisibility
 } = require('../services/farmingHubService');
 
@@ -72,6 +73,7 @@ router.post('/runs',
 );
 
 router.get('/runs',
+  optionalAuth,
   [
     query('poeVersion').optional().isIn(['poe1', 'poe2']),
     query('league').optional().trim().isLength({ min: 1, max: 60 }),
@@ -88,7 +90,7 @@ router.get('/runs',
       res.json({
         success: true,
         data: {
-          runs: runs.map((run) => serializePublishedFarmRun(run))
+          runs: runs.map((run) => serializePublishedFarmRun(run, { viewerUserId: req.userId || null }))
         },
         error: null
       });
@@ -125,7 +127,7 @@ router.get('/runs/mine',
       res.json({
         success: true,
         data: {
-          runs: runs.map((run) => serializePublishedFarmRun(run))
+          runs: runs.map((run) => serializePublishedFarmRun(run, { viewerUserId: req.userId }))
         },
         error: null
       });
@@ -151,12 +153,44 @@ router.get('/runs/:id',
       res.json({
         success: true,
         data: {
-          run: serializePublishedFarmRun(run, { includeDetails: true })
+          run: serializePublishedFarmRun(run, { includeDetails: true, viewerUserId: req.userId || null })
         },
         error: null
       });
     } catch (error) {
       errorResponse(res, 500, 'Failed to load farm run', 'FARM_RUN_LOAD_FAILED');
+    }
+  }
+);
+
+router.post('/runs/:id/reactions',
+  authenticate,
+  [
+    param('id').isUUID().withMessage('Valid farm run id is required'),
+    body('reaction').isIn(['divine', 'holy', 'pog']).withMessage('Valid reaction is required'),
+    handleValidationErrors
+  ],
+  async (req, res) => {
+    try {
+      const result = await toggleFarmRunReaction(req.params.id, req.userId, req.body.reaction);
+      if (!result) {
+        return errorResponse(res, 404, 'Farm run not found', 'FARM_RUN_NOT_FOUND');
+      }
+
+      res.json({
+        success: true,
+        data: {
+          selected: result.selected,
+          reaction: result.reaction,
+          run: serializePublishedFarmRun(result.run, { includeDetails: true, viewerUserId: req.userId })
+        },
+        error: null
+      });
+    } catch (error) {
+      if (error.code === 'INVALID_REACTION') {
+        return errorResponse(res, 400, 'Valid reaction is required', 'VALIDATION_ERROR');
+      }
+      errorResponse(res, 500, 'Failed to update farm run reaction', 'FARM_RUN_REACTION_FAILED');
     }
   }
 );

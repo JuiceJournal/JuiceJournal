@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { CurrencyValue } from '@/components/CurrencyIcon';
+import FarmRunReactions from '@/components/FarmRunReactions';
 import PoeChromeIcon from '@/components/PoeChromeIcon';
 import { formatDate, formatDuration, getPoeVersionLabel } from '@/lib/utils';
 
@@ -43,6 +44,7 @@ export default function FarmRunTable({ runs, t }) {
               <th className="px-4 py-4 text-center font-semibold">{t('common.runs')}</th>
               <th className="px-4 py-4 text-left font-semibold">{t('common.duration')}</th>
               <th className="px-4 py-4 text-left font-semibold">{t('common.author')}</th>
+              <th className="px-4 py-4 text-left font-semibold">{t('farmingHub.reactions.title')}</th>
               <th className="px-4 py-4 text-left font-semibold">{t('common.published')}</th>
               <th className="px-4 py-4 text-center font-semibold">{t('publicStrategies.table.details')}</th>
             </tr>
@@ -82,6 +84,9 @@ export default function FarmRunTable({ runs, t }) {
                     <PoeChromeIcon type="gate" size={14} className="text-poe-gold/80" />
                     <span>{run.publisherDisplayName || run.author?.username || t('common.none')}</span>
                   </div>
+                </td>
+                <td className="px-4 py-4 align-top">
+                  <FarmRunReactions run={run} t={t} />
                 </td>
                 <td className="px-4 py-4 text-sm text-stone-300">
                   {run.publishedAt ? formatDate(run.publishedAt) : t('common.none')}

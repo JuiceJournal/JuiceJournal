@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import Navbar from '@/components/Navbar';
 import PoeChromeIcon from '@/components/PoeChromeIcon';
 import { CurrencyValue } from '@/components/CurrencyIcon';
+import FarmRunReactions from '@/components/FarmRunReactions';
+import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { farmingHubAPI, getApiErrorMessage } from '@/lib/api';
 import { formatDate, formatDuration, getPoeVersionLabel } from '@/lib/utils';
@@ -16,8 +18,10 @@ function safeArray(value) {
 
 export default function FarmingHubDetailPage({ params }) {
   const { t } = useI18n();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [run, setRun] = useState(null);
+  const [busyReaction, setBusyReaction] = useState(null);
 
   useEffect(() => {
     loadRun();
@@ -33,6 +37,23 @@ export default function FarmingHubDetailPage({ params }) {
       setRun(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleReaction = async (reaction) => {
+    if (!user) {
+      toast.error(t('farmingHub.reactions.signIn'));
+      return;
+    }
+
+    try {
+      setBusyReaction(reaction);
+      const response = await farmingHubAPI.toggleReaction(params.id, reaction);
+      setRun(response.data?.run || run);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t('farmingHub.reactions.error')));
+    } finally {
+      setBusyReaction(null);
     }
   };
 
@@ -82,6 +103,17 @@ export default function FarmingHubDetailPage({ params }) {
                     <span className="context-chip border-poe-border bg-[rgba(255,255,255,0.03)] text-stone-300">
                       {run.investmentKnown ? t('farmingHub.investmentKnown') : t('farmingHub.investmentUnknown')}
                     </span>
+                  </div>
+
+                  <div className="mt-6 rounded-2xl border border-poe-border bg-[rgba(12,10,9,0.72)] p-4">
+                    <p className="section-kicker mb-3">{t('farmingHub.reactions.title')}</p>
+                    <FarmRunReactions
+                      run={run}
+                      t={t}
+                      interactive
+                      busyReaction={busyReaction}
+                      onToggle={toggleReaction}
+                    />
                   </div>
                 </div>
 

@@ -234,6 +234,7 @@ export const publicStrategyAPI = {
 export const farmingHubAPI = {
   getRuns: (params) => apiClient.get('/farming-hub/runs', { params }),
   getRunById: (id) => apiClient.get(`/farming-hub/runs/${encodeURIComponent(id)}`),
+  toggleReaction: (id, reaction) => apiClient.post(`/farming-hub/runs/${encodeURIComponent(id)}/reactions`, { reaction }),
 };
 
 export { clearLegacyAuthStorage };
