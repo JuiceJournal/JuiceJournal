@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "next": "15.5.15",
+    "next": "15.5.18",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "axios": "1.16.0",
@@ -26,7 +26,7 @@
   },
   "devDependencies": {
     "eslint": "^8.56.0",
-    "eslint-config-next": "15.5.15",
+    "eslint-config-next": "15.5.18",
     "@types/node": "^20.10.5",
     "@types/react": "^18.2.45",
     "typescript": "^5.3.3"
