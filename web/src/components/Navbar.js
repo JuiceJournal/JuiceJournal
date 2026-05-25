@@ -27,6 +27,7 @@ export default function Navbar() {
     { href: '/dashboard/strategies', label: t('nav.strategies'), icon: 'route' },
     { href: '/dashboard/currency', label: t('nav.currency'), icon: 'market' },
     { href: '/dashboard/leaderboard', label: t('nav.leaderboard'), icon: 'ladder' },
+    { href: '/farming-hub', label: t('nav.farmingHub'), icon: 'vault' },
     { href: '/strategies/public', label: t('nav.publicStrategies'), icon: 'gate' },
   ];
 

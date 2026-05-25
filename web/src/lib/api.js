@@ -231,5 +231,10 @@ export const publicStrategyAPI = {
   getBySlug: (slug, params) => apiClient.get(`/public/strategies/${encodeURIComponent(slug)}`, { params }),
 };
 
+export const farmingHubAPI = {
+  getRuns: (params) => apiClient.get('/farming-hub/runs', { params }),
+  getRunById: (id) => apiClient.get(`/farming-hub/runs/${encodeURIComponent(id)}`),
+};
+
 export { clearLegacyAuthStorage };
 export default apiClient;
