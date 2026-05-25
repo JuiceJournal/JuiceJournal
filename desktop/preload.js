@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   calculateSessionProfitFromSnapshots: (options) => ipcRenderer.invoke('calculate-session-profit-from-snapshots', options),
   saveMapResult: (result) => ipcRenderer.invoke('save-map-result', result),
   getMapResults: () => ipcRenderer.invoke('get-map-results'),
+  publishMapResults: (input) => ipcRenderer.invoke('publish-map-results', input),
   showMapResultOverlay: (result, options) => ipcRenderer.invoke('show-map-result-overlay', result, options),
   showStartMapPromptOverlay: (prompt, options) => ipcRenderer.invoke('show-start-map-prompt-overlay', prompt, options),
   hideStartMapPromptOverlay: () => ipcRenderer.invoke('hide-start-map-prompt-overlay'),

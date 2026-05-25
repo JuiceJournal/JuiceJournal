@@ -484,6 +484,38 @@ class APIClient {
     });
     return response.data;
   }
+
+  // ==================== FARMING HUB ====================
+
+  async publishFarmRun(data = {}) {
+    const response = await this.client.post('/api/farming-hub/runs', data);
+    return response.data?.run;
+  }
+
+  async getMyPublishedFarmRuns(params = {}) {
+    const response = await this.client.get('/api/farming-hub/runs/mine', { params });
+    return response.data?.runs || [];
+  }
+
+  async getPublicFarmRuns(params = {}) {
+    const response = await this.client.get('/api/farming-hub/runs', { params });
+    return response.data?.runs || [];
+  }
+
+  async getPublishedFarmRun(runId) {
+    const response = await this.client.get(`/api/farming-hub/runs/${runId}`);
+    return response.data?.run;
+  }
+
+  async updatePublishedFarmRunVisibility(runId, visibility) {
+    const response = await this.client.patch(`/api/farming-hub/runs/${runId}/visibility`, { visibility });
+    return response.data?.run;
+  }
+
+  async deletePublishedFarmRun(runId) {
+    const response = await this.client.delete(`/api/farming-hub/runs/${runId}`);
+    return response.data;
+  }
 }
 
 module.exports = APIClient;

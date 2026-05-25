@@ -37,6 +37,7 @@ const {
 } = require('./src/modules/runtimeSessionModel');
 const { appendMapResult, normalizeMapResultForLedger } = require('./src/modules/mapResultStoreModel');
 const { deriveMapResultOverlayState } = require('./src/modules/mapResultOverlayModel');
+const { buildFarmPublishPayload } = require('./src/modules/farmPublishPayloadModel');
 const { deriveOverlayState } = require('./src/modules/overlayStateModel');
 const { listFarmTypes } = require('./src/modules/farmTypeModel');
 const {
@@ -819,6 +820,97 @@ function saveMapResultHistory(result) {
   const nextResults = appendMapResult(getStoredMapResults(), normalizedResult, { maxResults: 100 });
   store.set(storeKey, nextResults);
   return nextResults;
+}
+
+function resolveMapResultsForPublish({ resultIds = [], results = [] } = {}) {
+  if (Array.isArray(results) && results.length > 0) {
+    return results.filter((result) => result && typeof result === 'object');
+  }
+
+  const requestedIds = new Set(
+    (Array.isArray(resultIds) ? resultIds : [resultIds])
+      .map((id) => (typeof id === 'string' ? id.trim() : ''))
+      .filter(Boolean)
+  );
+
+  if (requestedIds.size === 0) {
+    return [];
+  }
+
+  return getStoredMapResults().filter((result) => (
+    requestedIds.has(result?.id) || requestedIds.has(result?.localRunId)
+  ));
+}
+
+function markPublishedMapResults(sourceResults = [], publishedRun = {}) {
+  const storeKey = getMapResultsStoreKey();
+  if (!storeKey) {
+    return [];
+  }
+
+  const publishedIds = new Set(
+    sourceResults
+      .flatMap((result) => [result?.id, result?.localRunId])
+      .map((id) => (typeof id === 'string' ? id.trim() : ''))
+      .filter(Boolean)
+  );
+
+  if (publishedIds.size === 0) {
+    return getStoredMapResults();
+  }
+
+  const nextResults = getStoredMapResults().map((result) => {
+    if (!publishedIds.has(result?.id) && !publishedIds.has(result?.localRunId)) {
+      return result;
+    }
+
+    return {
+      ...result,
+      publishState: publishedRun.visibility === 'private' ? 'draft' : 'published',
+      publishedRunId: publishedRun.id || result.publishedRunId || null,
+      publishedAt: publishedRun.publishedAt || new Date().toISOString(),
+      publishedVisibility: publishedRun.visibility || 'private'
+    };
+  });
+
+  store.set(storeKey, nextResults);
+  return nextResults;
+}
+
+async function publishMapResultsToFarmingHub(input = {}) {
+  if (!apiClient?.token || typeof apiClient.publishFarmRun !== 'function') {
+    const error = new Error('Sign in before publishing farm runs');
+    error.code = 'AUTH_REQUIRED';
+    throw error;
+  }
+
+  const results = resolveMapResultsForPublish(input);
+  if (results.length === 0) {
+    const error = new Error('Select at least one local farm result to publish');
+    error.code = 'FARM_PUBLISH_EMPTY';
+    throw error;
+  }
+
+  const payload = buildFarmPublishPayload(results, input.options || {});
+  if (!payload) {
+    const error = new Error('Unable to build a publish payload for the selected farm results');
+    error.code = 'FARM_PUBLISH_PAYLOAD_INVALID';
+    throw error;
+  }
+
+  const publishedRun = await apiClient.publishFarmRun(payload);
+  if (!publishedRun?.id) {
+    const error = new Error('The farming hub did not return a published run id');
+    error.code = 'FARM_PUBLISH_RESPONSE_INVALID';
+    throw error;
+  }
+
+  const history = markPublishedMapResults(results, publishedRun || {});
+
+  return {
+    run: publishedRun,
+    history
+  };
 }
 
 function getSessionNumberValue(session = {}, ...fields) {
@@ -4733,6 +4825,15 @@ function setupIPC() {
   ipcMain.handle('get-map-results', async () => {
     assertDesktopUserAuthenticated();
     return getStoredMapResults();
+  });
+
+  ipcMain.handle('publish-map-results', async (event, input = {}) => {
+    try {
+      assertDesktopUserAuthenticated();
+      return await publishMapResultsToFarmingHub(input);
+    } catch (error) {
+      throw toRendererError(error, 'Failed to publish farm run');
+    }
   });
 
   // List stored snapshots
