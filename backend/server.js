@@ -33,6 +33,7 @@ const statsRoutes = require('./routes/stats');
 const strategyRoutes = require('./routes/strategies');
 const publicStrategyRoutes = require('./routes/publicStrategies');
 const poeRoutes = require('./routes/poe');
+const farmingHubRoutes = require('./routes/farmingHub');
 
 const app = express();
 const server = http.createServer(app);
@@ -200,6 +201,7 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/strategies', strategyRoutes);
 app.use('/api/public/strategies', publicStrategyRoutes);
 app.use('/api/poe', poeRoutes);
+app.use('/api/farming-hub', farmingHubRoutes);
 
 // 404 handler
 app.use((req, res) => {
