@@ -1368,6 +1368,15 @@ test('dashboard html includes a map result history card with a farm type filter'
   assert.match(html, /id="map-result-history"/);
 });
 
+test('dashboard html includes a branded farm publish modal', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+
+  assert.match(html, /id="farm-publish-modal"/);
+  assert.match(html, /id="farm-publish-visibility"/);
+  assert.match(html, /id="farm-publish-description"/);
+  assert.match(html, /id="farm-publish-investment-known"/);
+});
+
 test('end map button uses the shared visible icon wrapper', () => {
   const html = fs.readFileSync(indexHtmlPath, 'utf8');
 
@@ -1685,6 +1694,8 @@ test('renderer map result history keeps persisted ordering and populates farm-ty
   assert.match(elements.mapResultFilter.innerHTML, /All farms/);
   assert.match(elements.mapResultFilter.innerHTML, /value="Ritual"/);
   assert.match(elements.mapResultFilter.innerHTML, /value="Breach"/);
+  assert.match(elements.mapResultHistory.innerHTML, /map-result-publish-btn/);
+  assert.match(elements.mapResultHistory.innerHTML, />\s*Share\s*</);
   assert.ok(
     elements.mapResultHistory.innerHTML.indexOf('result-3') < elements.mapResultHistory.innerHTML.indexOf('result-2'),
     'expected newest persisted result to render before older entries'
@@ -1827,4 +1838,136 @@ test('renderer map result history ignores incomplete results before applying far
   }]);
   assert.match(elements.mapResultHistory.innerHTML, /result-complete/);
   assert.doesNotMatch(elements.mapResultHistory.innerHTML, /result-incomplete/);
+});
+
+test('renderer map result history marks published results as shared', () => {
+  const elements = {
+    mapResultFilter: {
+      value: '',
+      innerHTML: ''
+    },
+    mapResultHistory: {
+      innerHTML: ''
+    }
+  };
+  const context = loadFunctions([
+    'getMapResultPublishLabel',
+    'canPublishMapResult',
+    'formatMapResultProfitHTML',
+    'renderMapResultHistory'
+  ], {
+    elements,
+    state: {
+      settings: {
+        poeVersion: 'poe1'
+      },
+      mapResults: [
+        {
+          id: 'published-result',
+          farmType: 'Breach',
+          durationSeconds: 240,
+          netProfit: 88,
+          poeVersion: 'poe1',
+          publishState: 'published',
+          createdAt: '2026-04-12T08:30:00.000Z'
+        }
+      ]
+    },
+    escapeHTML: (value) => String(value),
+    formatDuration: (seconds) => `duration:${seconds}`,
+    currencyHTML: (value, type, iconSize, poeVersion) => `profit:${value}:${type}:${iconSize}:${poeVersion}`,
+    timeAgo: (value) => `ago:${value}`,
+    isDisplayableMapResult: (result) => Number(result?.durationSeconds || 0) > 0,
+    getMapResultStoreModel: () => ({
+      filterMapResults(results) {
+        return results;
+      }
+    })
+  });
+
+  context.renderMapResultHistory();
+
+  assert.match(elements.mapResultHistory.innerHTML, />Published</);
+  assert.match(elements.mapResultHistory.innerHTML, />\s*Shared\s*</);
+  assert.match(elements.mapResultHistory.innerHTML, /disabled/);
+});
+
+test('renderer publish handler calls desktop bridge and refreshes local history', async () => {
+  let publishPayload = null;
+  const toasts = [];
+  const context = loadFunctions([
+    'canPublishMapResult',
+    'findMapResultById',
+    'handleMapResultPublish'
+  ], {
+    state: {
+      currentUser: {
+        username: 'Esquetta'
+      },
+      mapResults: [
+        {
+          id: 'result-1',
+          localRunId: 'local-1',
+          farmType: 'Breach',
+          mapName: 'Dunes Map',
+          durationSeconds: 240,
+          netProfit: 88,
+          poeVersion: 'poe1'
+        }
+      ]
+    },
+    elements: {
+      farmPublishConfirmBtn: {
+        disabled: false
+      }
+    },
+    isDisplayableMapResult: (result) => Number(result?.durationSeconds || 0) > 0,
+    requestFarmPublishDetails: async () => ({
+      visibility: 'public',
+      setupDescription: 'Breach scarabs',
+      investmentKnown: false,
+      farmType: 'Breach',
+      publisherDisplayName: 'Esquetta'
+    }),
+    window: {
+      electronAPI: {
+        async publishMapResults(payload) {
+          publishPayload = payload;
+          return {
+            run: { id: 'published-1' },
+            history: [
+              {
+                id: 'result-1',
+                publishState: 'published',
+                publishedRunId: 'published-1'
+              }
+            ]
+          };
+        }
+      }
+    },
+    renderLatestMapResult() {},
+    renderMapResultHistory() {},
+    showToast(title, message, type) {
+      toasts.push({ title, message, type });
+    },
+    getUserFacingErrorMessage: () => 'publish failed'
+  });
+
+  await context.handleMapResultPublish('result-1');
+
+  assert.deepEqual(JSON.parse(JSON.stringify(publishPayload)), {
+    resultIds: ['result-1'],
+    options: {
+      visibility: 'public',
+      setupDescription: 'Breach scarabs',
+      investmentKnown: false,
+      farmType: 'Breach',
+      publisherDisplayName: 'Esquetta'
+    }
+  });
+  assert.equal(context.state.mapResults[0].publishState, 'published');
+  assert.deepEqual(toasts, [
+    { title: 'Farming Hub', message: 'Farm result published.', type: 'success' }
+  ]);
 });

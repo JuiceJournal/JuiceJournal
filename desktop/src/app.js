@@ -74,6 +74,7 @@ const ERROR_MESSAGE_KEY_MAP = {
   'Failed to update session details': 'errors.sessionUpdate',
   'Failed to start the session': 'errors.sessionStart',
   'Failed to end the session': 'errors.sessionEnd',
+  'Failed to publish farm run': 'errors.farmPublish',
   'No active session': 'errors.noActiveSession',
   'Failed to add loot': 'errors.lootAdd',
   'Failed to load recent loot': 'errors.lootRecent',
@@ -105,6 +106,14 @@ const elements = {
   mapSessionContext: document.getElementById('map-session-context'),
   mapSessionConfirmBtn: document.getElementById('map-session-confirm-btn'),
   mapSessionCancelBtn: document.getElementById('map-session-cancel-btn'),
+  farmPublishModal: document.getElementById('farm-publish-modal'),
+  farmPublishForm: document.getElementById('farm-publish-form'),
+  farmPublishSummary: document.getElementById('farm-publish-summary'),
+  farmPublishVisibility: document.getElementById('farm-publish-visibility'),
+  farmPublishDescription: document.getElementById('farm-publish-description'),
+  farmPublishInvestmentKnown: document.getElementById('farm-publish-investment-known'),
+  farmPublishConfirmBtn: document.getElementById('farm-publish-confirm-btn'),
+  farmPublishCancelBtn: document.getElementById('farm-publish-cancel-btn'),
 
   // Forms
   loginForm: document.getElementById('login-form'),
@@ -2127,6 +2136,9 @@ function setupEventListeners() {
   if (elements.mapResultFilter) {
     elements.mapResultFilter.addEventListener('change', renderMapResultHistory);
   }
+  if (elements.mapResultHistory) {
+    elements.mapResultHistory.addEventListener('click', handleMapResultHistoryClick);
+  }
   setupHotkeyCaptureFields();
 
   // PoE version switching
@@ -3347,6 +3359,22 @@ function isDisplayableMapResult(result = {}) {
   return Number(result?.durationSeconds || 0) > 0 && !isPoe1ZeroLifecycleResult(result);
 }
 
+function getMapResultPublishLabel(result = {}) {
+  if (result.publishState === 'published') {
+    return 'Published';
+  }
+
+  if (result.publishState === 'draft') {
+    return 'Draft';
+  }
+
+  return 'Local';
+}
+
+function canPublishMapResult(result = {}) {
+  return isDisplayableMapResult(result) && result.publishState !== 'published';
+}
+
 function renderMapResultHistory() {
   if (!elements.mapResultFilter || !elements.mapResultHistory) {
     return;
@@ -3388,18 +3416,170 @@ function renderMapResultHistory() {
     return;
   }
 
-  elements.mapResultHistory.innerHTML = filteredResults.map((result) => `
-    <article class="map-result-history-item" data-result-id="${escapeHTML(result?.id || '')}">
-      <div class="map-result-history-main">
-        <strong>${escapeHTML(result?.farmType || 'Unknown farm type')}</strong>
-        <span>${formatDuration(Number(result?.durationSeconds || 0))}</span>
-      </div>
-      <div class="map-result-history-meta">
-        <span class="map-result-history-profit">${formatMapResultProfitHTML(result, 14)}</span>
-        <span>${escapeHTML(result?.createdAt ? timeAgo(result.createdAt) : 'Just now')}</span>
-      </div>
-    </article>
-  `).join('');
+  elements.mapResultHistory.innerHTML = filteredResults.map((result) => {
+    const publishLabel = typeof getMapResultPublishLabel === 'function'
+      ? getMapResultPublishLabel(result)
+      : (result?.publishState || 'local');
+    const publishable = typeof canPublishMapResult === 'function'
+      ? canPublishMapResult(result)
+      : canDisplayMapResult(result);
+
+    return `
+      <article class="map-result-history-item" data-result-id="${escapeHTML(result?.id || '')}">
+        <div class="map-result-history-main">
+          <strong>${escapeHTML(result?.farmType || 'Unknown farm type')}</strong>
+          <span>${formatDuration(Number(result?.durationSeconds || 0))}</span>
+          <span class="map-result-publish-state" data-publish-state="${escapeHTML(result?.publishState || 'local')}">${escapeHTML(publishLabel)}</span>
+        </div>
+        <div class="map-result-history-meta">
+          <span class="map-result-history-profit">${formatMapResultProfitHTML(result, 14)}</span>
+          <span>${escapeHTML(result?.createdAt ? timeAgo(result.createdAt) : 'Just now')}</span>
+          <button type="button" class="map-result-publish-btn" data-result-id="${escapeHTML(result?.id || result?.localRunId || '')}" ${publishable ? '' : 'disabled'}>
+            ${escapeHTML(result?.publishState === 'published' ? 'Shared' : 'Share')}
+          </button>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+function findMapResultById(resultId) {
+  const normalizedId = typeof resultId === 'string' ? resultId.trim() : '';
+  if (!normalizedId || !Array.isArray(state.mapResults)) {
+    return null;
+  }
+
+  return state.mapResults.find((result) => result?.id === normalizedId || result?.localRunId === normalizedId) || null;
+}
+
+function requestFarmPublishDetails(result = {}) {
+  if (
+    !elements.farmPublishModal
+    || !elements.farmPublishForm
+    || !elements.farmPublishVisibility
+    || !elements.farmPublishDescription
+  ) {
+    return Promise.resolve({
+      visibility: 'public',
+      setupDescription: '',
+      investmentKnown: false,
+      farmType: result.farmType || null,
+      publisherDisplayName: state.currentUser?.username || null
+    });
+  }
+
+  const farmType = result.farmType || 'Unknown farm';
+  const mapName = result.mapName || 'Unknown Map';
+  if (elements.farmPublishSummary) {
+    elements.farmPublishSummary.textContent = `${farmType} · ${mapName}`;
+  }
+  elements.farmPublishVisibility.value = result.publishedVisibility || 'public';
+  elements.farmPublishDescription.value = result.setupDescription || '';
+  if (elements.farmPublishInvestmentKnown) {
+    elements.farmPublishInvestmentKnown.checked = result.investmentKnown === true;
+  }
+  elements.farmPublishModal.classList.remove('hidden');
+
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const cleanup = () => {
+      elements.farmPublishModal.classList.add('hidden');
+      elements.farmPublishForm.removeEventListener('submit', handleSubmit);
+      elements.farmPublishCancelBtn?.removeEventListener('click', handleCancel);
+      elements.farmPublishModal.removeEventListener('click', handleBackdropClick);
+      document.removeEventListener('keydown', handleKeydown);
+    };
+
+    const settle = (value) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    function handleSubmit(event) {
+      event.preventDefault();
+      settle({
+        visibility: elements.farmPublishVisibility.value || 'public',
+        setupDescription: elements.farmPublishDescription.value || '',
+        investmentKnown: elements.farmPublishInvestmentKnown?.checked === true,
+        farmType: result.farmType || null,
+        publisherDisplayName: state.currentUser?.username || null
+      });
+    }
+
+    function handleCancel() {
+      settle(null);
+    }
+
+    function handleBackdropClick(event) {
+      if (event.target === elements.farmPublishModal) {
+        settle(null);
+      }
+    }
+
+    function handleKeydown(event) {
+      if (event.key === 'Escape') {
+        settle(null);
+      }
+    }
+
+    elements.farmPublishForm.addEventListener('submit', handleSubmit);
+    elements.farmPublishCancelBtn?.addEventListener('click', handleCancel);
+    elements.farmPublishModal.addEventListener('click', handleBackdropClick);
+    document.addEventListener('keydown', handleKeydown);
+    requestAnimationFrame(() => elements.farmPublishVisibility.focus());
+  });
+}
+
+async function handleMapResultPublish(resultId) {
+  const result = findMapResultById(resultId);
+  if (!result || !canPublishMapResult(result)) {
+    return;
+  }
+
+  const options = await requestFarmPublishDetails(result);
+  if (!options) {
+    return;
+  }
+
+  try {
+    if (elements.farmPublishConfirmBtn) {
+      elements.farmPublishConfirmBtn.disabled = true;
+    }
+
+    const response = await window.electronAPI.publishMapResults({
+      resultIds: [result.id || result.localRunId],
+      options
+    });
+
+    if (Array.isArray(response?.history)) {
+      state.mapResults = response.history;
+    }
+
+    renderLatestMapResult();
+    renderMapResultHistory();
+    showToast('Farming Hub', 'Farm result published.', 'success');
+  } catch (error) {
+    showToast('Farming Hub', getUserFacingErrorMessage(error, 'errors.farmPublish'), 'error');
+  } finally {
+    if (elements.farmPublishConfirmBtn) {
+      elements.farmPublishConfirmBtn.disabled = false;
+    }
+  }
+}
+
+function handleMapResultHistoryClick(event) {
+  const button = event.target?.closest?.('.map-result-publish-btn');
+  if (!button || button.disabled) {
+    return;
+  }
+
+  void handleMapResultPublish(button.dataset.resultId);
 }
 
 let _refreshPending = null;

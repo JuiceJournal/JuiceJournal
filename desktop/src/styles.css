@@ -620,7 +620,8 @@ body {
 }
 
 #map-session-name-input,
-.map-session-select {
+.map-session-select,
+#farm-publish-description {
   width: 100%;
   padding: 0.85rem 0.95rem;
   border: 1px solid rgba(198, 161, 91, 0.32);
@@ -632,7 +633,8 @@ body {
 }
 
 #map-session-name-input:focus,
-.map-session-select:focus {
+.map-session-select:focus,
+#farm-publish-description:focus {
   outline: none;
   border-color: var(--gold-light);
   box-shadow:
@@ -641,6 +643,17 @@ body {
 }
 
 #map-session-name-input::placeholder {
+  color: rgba(176, 161, 140, 0.58);
+}
+
+#farm-publish-description {
+  min-height: 104px;
+  resize: vertical;
+  line-height: 1.45;
+  font-size: 0.9rem;
+}
+
+#farm-publish-description::placeholder {
   color: rgba(176, 161, 140, 0.58);
 }
 
@@ -662,6 +675,25 @@ body {
 
 .map-session-actions .btn {
   min-width: 128px;
+}
+
+.farm-publish-content {
+  width: min(560px, calc(100vw - 2rem));
+}
+
+.farm-publish-check {
+  position: relative;
+  z-index: 1;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.farm-publish-check input {
+  accent-color: var(--gold);
 }
 
 @keyframes modalBgIn { from { opacity: 0; } to { opacity: 1; } }
@@ -1411,6 +1443,26 @@ body {
   font-size: 0.78rem;
 }
 
+.map-result-publish-state {
+  width: fit-content;
+  padding: 0.18rem 0.48rem;
+  border: 1px solid rgba(198, 161, 91, 0.22);
+  border-radius: 999px;
+  background: rgba(198, 161, 91, 0.08);
+  color: var(--gold-light) !important;
+  font-family: var(--font-mono);
+  font-size: 0.68rem !important;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.map-result-publish-state[data-publish-state="published"] {
+  border-color: rgba(50, 185, 112, 0.36);
+  background: rgba(50, 185, 112, 0.1);
+  color: #72d89e !important;
+}
+
 .map-result-history-meta {
   align-items: flex-end;
   text-align: right;
@@ -1419,6 +1471,30 @@ body {
 
 .map-result-history-profit {
   color: var(--text-bright);
+}
+
+.map-result-publish-btn {
+  padding: 0.38rem 0.66rem;
+  border: 1px solid rgba(198, 161, 91, 0.28);
+  border-radius: 999px;
+  background: rgba(198, 161, 91, 0.08);
+  color: var(--gold-light);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.map-result-publish-btn:hover:not(:disabled) {
+  border-color: var(--gold-light);
+  background: rgba(198, 161, 91, 0.16);
+}
+
+.map-result-publish-btn:disabled {
+  cursor: default;
+  opacity: 0.58;
 }
 
 .profit-unavailable {

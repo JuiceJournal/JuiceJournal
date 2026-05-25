@@ -1005,6 +1005,7 @@ window.Translations = {
     'errors.sessionUpdate': 'Failed to update session details',
     'errors.sessionStart': 'Failed to start the session',
     'errors.sessionEnd': 'Failed to end the session',
+    'errors.farmPublish': 'Failed to publish farm run',
     'errors.noActiveSession': 'No active session',
     'errors.lootAdd': 'Failed to add loot',
     'errors.lootRecent': 'Failed to load recent loot',

@@ -160,6 +160,53 @@
       </div>
     </div>
 
+    <!-- Farm Publish Modal -->
+    <div id="farm-publish-modal" class="modal hidden farm-publish-modal" role="dialog" aria-modal="true" aria-labelledby="farm-publish-title">
+      <div class="modal-content map-session-content farm-publish-content">
+        <form id="farm-publish-form" class="map-session-form farm-publish-form">
+          <div class="map-session-orb" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/>
+              <path d="M4 8l8 4.5L20 8"/>
+              <path d="M12 12.5V21"/>
+            </svg>
+          </div>
+          <div class="map-session-copy">
+            <p class="modal-kicker">Farming Hub</p>
+            <h2 id="farm-publish-title">Share Farm Result</h2>
+            <p class="modal-subtitle compact">Publish the selected local run with only safe summary data. Add setup notes for scarabs, tablets, atlas tree, or missing costs.</p>
+          </div>
+          <div class="map-session-context">
+            <span>Selected run</span>
+            <strong id="farm-publish-summary">Unknown farm</strong>
+          </div>
+          <label class="map-session-label" for="farm-publish-visibility">Visibility</label>
+          <select id="farm-publish-visibility" class="map-session-select">
+            <option value="public">Public</option>
+            <option value="unlisted">Unlisted</option>
+            <option value="private">Private draft</option>
+          </select>
+          <label class="map-session-label" for="farm-publish-description">Setup notes</label>
+          <textarea id="farm-publish-description" maxlength="1200" placeholder="Optional: scarabs, tablets, atlas tree, investment notes, or anything GGG does not expose."></textarea>
+          <div class="farm-publish-check">
+            <input id="farm-publish-investment-known" type="checkbox">
+            <label for="farm-publish-investment-known">Investment is fully known</label>
+          </div>
+          <div class="map-session-actions">
+            <button id="farm-publish-cancel-btn" type="button" class="btn btn-secondary">Cancel</button>
+            <button id="farm-publish-confirm-btn" type="submit" class="btn btn-primary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/>
+                <path d="M12 12v5"/>
+                <path d="m8.5 10.2 3.5-2 3.5 2"/>
+              </svg>
+              <span>Publish</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Main Content -->
     <main class="main">
       <!-- Dashboard Page -->
