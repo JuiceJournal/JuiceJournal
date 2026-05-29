@@ -283,6 +283,83 @@ test('renderer fills hero banner artwork and meta fields from normalized account
   assert.equal(elements.characterGameVersion.textContent, 'PoE 2');
 });
 
+test('renderer keeps the last detected game character badge when no game is active', () => {
+  const elements = {
+    characterSummaryCard: { dataset: {} },
+    characterBanner: { dataset: {} },
+    characterBannerImage: {
+      src: '',
+      hidden: true,
+      alt: ''
+    },
+    characterPortrait: { dataset: {} },
+    characterPortraitImage: {
+      src: '',
+      hidden: true,
+      alt: ''
+    },
+    characterPortraitBadge: { textContent: '', style: {} },
+    characterName: { textContent: '' },
+    characterClass: { textContent: '' },
+    characterLevel: { textContent: '' },
+    characterLevelMeta: { textContent: '' },
+    characterLeague: { textContent: '' },
+    characterClassMeta: { textContent: '' },
+    characterAccount: { textContent: '' },
+    characterStatus: { textContent: '' },
+    characterGameVersion: { textContent: '' }
+  };
+  const context = loadFunctions(['renderCharacterSummaryCard'], {
+    elements,
+    state: {
+      currentUser: { username: 'FallbackUser' },
+      account: {
+        accountName: 'Esquetta#4179',
+        activePoeVersion: 'poe2',
+        summary: {
+          status: 'ready',
+          name: 'KocaAyVeMasha',
+          level: 96,
+          className: 'Druid',
+          ascendancy: 'Shaman',
+          league: 'Fate of the Vaal',
+          poeVersion: 'poe2'
+        }
+      },
+      detectedGameVersion: null,
+      settings: {
+        poeVersion: 'poe1',
+        lastDetectedPoeVersion: 'poe2'
+      }
+    },
+    window: {
+      location: {
+        href: 'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/index.html'
+      }
+    },
+    URL,
+    normalizePoeVersion: (value) => value === 'poe1' || value === 'poe2' ? value : null,
+    getCharacterVisualModel: () => ({
+      deriveCharacterVisual: () => ({
+        portraitKey: 'shaman',
+        bannerKey: 'shaman',
+        tone: 'ember',
+        badgeText: 'S',
+        classLabel: 'Shaman',
+        baseClassLabel: 'Druid',
+        portraitPath: 'assets/characters/poe2/shaman.png',
+        bannerPath: 'assets/characters/banners/poe2/shaman.jpg'
+      })
+    })
+  });
+
+  context.renderCharacterSummaryCard();
+
+  assert.equal(elements.characterGameVersion.textContent, 'PoE 2');
+  assert.equal(elements.characterName.textContent, 'KocaAyVeMasha');
+  assert.equal(elements.characterPortrait.dataset.characterPortrait, 'shaman');
+});
+
 test('renderer keeps hero text current when character art is unavailable', () => {
   const elements = {
     characterSummaryCard: { dataset: {} },

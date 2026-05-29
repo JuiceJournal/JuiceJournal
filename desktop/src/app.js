@@ -1456,7 +1456,11 @@ function renderCharacterSummaryCard() {
     elements.characterStatus.textContent = isReady ? 'Synced from Path of Exile' : 'Character sync needed';
   }
   if (elements.characterGameVersion) {
-    const version = normalizePoeVersion(state.detectedGameVersion)
+    const version = normalizePoeVersion(summary.poeVersion)
+      || normalizePoeVersion(account?.selectedCharacter?.poeVersion)
+      || normalizePoeVersion(account?.activePoeVersion)
+      || normalizePoeVersion(state.detectedGameVersion)
+      || normalizePoeVersion(state.settings?.lastDetectedPoeVersion)
       || normalizePoeVersion(state.settings?.poeVersion)
       || 'poe1';
     elements.characterGameVersion.textContent = version === 'poe2' ? 'PoE 2' : 'PoE 1';
@@ -2368,6 +2372,8 @@ function setupIPCListeners() {
       }
       clearActiveCharacterRefreshTimers();
       syncRendererGameContext(null);
+      refreshAccountStateFromCurrentUser();
+      renderCharacterSummaryCard();
     });
   }
 
@@ -2839,6 +2845,7 @@ function refreshAccountStateFromCurrentUser() {
   const poePayload = user?.poe || {};
   state.account = deriveAccountState({
     activePoeVersion: normalizePoeVersion(state.detectedGameVersion)
+      || normalizePoeVersion(state.settings?.lastDetectedPoeVersion)
       || normalizePoeVersion(state.settings?.poeVersion),
     accountName: user?.accountName
       || user?.poeAccountName
@@ -5440,6 +5447,8 @@ async function checkInitialGameStatus() {
       settingsVersion: status.settingsVersion || state.settings.poeVersion,
       lastDetectedVersion: status.lastDetectedVersion
     });
+    refreshAccountStateFromCurrentUser();
+    renderCharacterSummaryCard();
   } catch {
     // Ignore
   }

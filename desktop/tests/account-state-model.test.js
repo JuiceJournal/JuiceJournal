@@ -405,6 +405,52 @@ test('renderer setCurrentUser stores normalized account state for later dashboar
   assert.equal(persistedSettings[0].lastKnownAccountState.selectedCharacterByGame.poe2, 'cached-shaman');
 });
 
+test('renderer uses the last detected game for cached dashboard character when no game is active', () => {
+  const persistedSettings = [];
+  const state = {
+    settings: {
+      poeVersion: 'poe1',
+      lastDetectedPoeVersion: 'poe2',
+      lastKnownAccountState: {
+        accountName: 'CachedAccount',
+        selectedCharacterByGame: { poe2: 'cached-shaman' },
+        characters: [
+          { id: 'cached-ranger', name: 'CachedRanger', level: 94, class: 'Ranger', league: 'Mercenaries', poeVersion: 'poe1' },
+          { id: 'cached-shaman', name: 'CachedShaman', level: 96, class: 'Shaman', league: 'Fate of the Vaal', poeVersion: 'poe2' }
+        ]
+      }
+    },
+    detectedGameVersion: null
+  };
+  const context = loadFunctions(['persistLastKnownAccountState', 'refreshAccountStateFromCurrentUser', 'setCurrentUser'], {
+    state,
+    normalizePoeVersion: (value) => value === 'poe1' || value === 'poe2' ? value : null,
+    window: {
+      electronAPI: {
+        setSettings: async (settings) => {
+          persistedSettings.push(settings);
+        }
+      }
+    },
+    renderUserIdentity: () => {},
+    getAccountStateModel: () => ({
+      deriveAccountState: require('../src/modules/accountStateModel').deriveAccountState,
+      createAccountStateCache: require('../src/modules/accountStateModel').createAccountStateCache
+    })
+  });
+
+  context.setCurrentUser({
+    username: 'RangerMain',
+    accountName: 'KocaGyVeMasha',
+    characters: []
+  });
+
+  assert.equal(state.account.summary.name, 'CachedShaman');
+  assert.equal(state.account.summary.poeVersion, 'poe2');
+  assert.equal(state.account.selectedCharacter.id, 'cached-shaman');
+  assert.equal(persistedSettings.length, 1);
+});
+
 test('renderer logout clears normalized account state', async () => {
   const calls = [];
   const state = {

@@ -896,6 +896,62 @@ test('runtime game-version sync preserves the current settings version when the 
   }]));
 });
 
+test('runtime game-version sync reports no active game without falling back to poe1', () => {
+  const statusCalls = [];
+  const versionButtons = [
+    {
+      dataset: { version: 'poe1' },
+      classList: {
+        toggle: (className, isActive) => {
+          assert.equal(className, 'active');
+          versionButtons[0].active = isActive;
+        }
+      }
+    },
+    {
+      dataset: { version: 'poe2' },
+      classList: {
+        toggle: (className, isActive) => {
+          assert.equal(className, 'active');
+          versionButtons[1].active = isActive;
+        }
+      }
+    }
+  ];
+  const context = loadFunctions(['syncRendererGameContext'], {
+    normalizePoeVersion: (value) => value === 'poe1' || value === 'poe2' ? value : null,
+    state: {
+      detectedGameVersion: 'poe2',
+      settings: {
+        poeVersion: 'poe1',
+        lastDetectedPoeVersion: 'poe2',
+        poePath: ''
+      }
+    },
+    elements: {
+      versionBtns: versionButtons
+    },
+    syncDesktopCurrencyIcons: () => {},
+    loadSettingsLeagueOptions: async () => {},
+    updateGameStatusIndicator: (version) => {
+      statusCalls.push(version);
+    },
+    updateActiveLeagueFieldContext: () => {}
+  });
+
+  context.syncRendererGameContext(null, {
+    settingsVersion: 'poe1',
+    lastDetectedVersion: 'poe2'
+  });
+
+  assert.equal(context.state.detectedGameVersion, null);
+  assert.equal(context.state.settings.lastDetectedPoeVersion, 'poe2');
+  assert.equal(context.state.settings.poeVersion, 'poe1');
+  assert.deepEqual(statusCalls, [null]);
+  assert.equal(versionButtons[0].active, true);
+  assert.equal(versionButtons[1].active, false);
+});
+
 test('renderer disables stash dashboard controls when poe2 stash capability is unavailable', () => {
   const stashTrackerCard = createDatasetElement();
   const stashCapabilityUnavailable = {

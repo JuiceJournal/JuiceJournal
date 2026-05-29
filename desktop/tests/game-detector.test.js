@@ -3,6 +3,16 @@ const assert = require('node:assert/strict');
 
 const GameDetector = require('../src/modules/gameDetector');
 
+test('game detector returns no active game when no supported process is running', () => {
+  assert.equal(GameDetector.detectGameVersionFromProcesses([]), null);
+  assert.equal(
+    GameDetector.detectGameVersionFromProcesses([
+      { name: 'Discord.exe', executablePath: 'C:\\Users\\Player\\AppData\\Local\\Discord\\Discord.exe' }
+    ]),
+    null
+  );
+});
+
 test('game detector resolves standard PoE1 and PoE2 process names', () => {
   assert.equal(
     GameDetector.detectGameVersionFromProcesses([
