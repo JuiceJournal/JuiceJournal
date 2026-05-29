@@ -15,6 +15,13 @@ test('public home route is a real landing page instead of a login redirect', () 
   assert.match(source, /ShowroomClosingCta/);
 });
 
+test('public landing keeps the mock desktop content visually populated', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'ShowroomDesktopShowcase.js'), 'utf8');
+
+  assert.match(source, /ROUTE_SPREAD/);
+  assert.match(source, /showroom-route-spread/);
+});
+
 test('public navbar does not surface login or dashboard-first navigation', () => {
   const source = fs.readFileSync(navbarPath, 'utf8');
 

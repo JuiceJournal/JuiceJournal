@@ -7,7 +7,7 @@ export default function ShowroomHero() {
   const { t } = useI18n();
 
   return (
-    <section className="relative overflow-hidden px-4 pb-10 pt-12 sm:px-6 lg:px-8 lg:pb-16 lg:pt-20">
+    <section className="showroom-hero relative overflow-hidden px-4 pb-10 pt-12 sm:px-6 lg:px-8 lg:pb-16 lg:pt-20">
       <div className="showroom-embers" />
       <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
         <div className="relative z-[1]">
@@ -33,10 +33,29 @@ export default function ShowroomHero() {
 
         <div className="showroom-stage">
           <div className="showroom-stage-ring" />
+          <div className="showroom-hero-characters" aria-hidden="true">
+            <div className="showroom-character-silhouette showroom-character-silhouette-one" />
+            <div className="showroom-character-silhouette showroom-character-silhouette-two" />
+            <div className="showroom-loot-flare" />
+          </div>
           <div className="showroom-stage-panel">
             <div className="showroom-stage-label">
               <span className="context-chip border-sky-500/30 bg-sky-500/10 text-sky-200">PoE 1</span>
               <span className="context-chip border-amber-500/30 bg-amber-500/10 text-amber-200">PoE 2</span>
+            </div>
+            <div className="showroom-stage-map">
+              <div>
+                <span>{t('showroom.stageMapLabel')}</span>
+                <strong>{t('showroom.stageMapName')}</strong>
+              </div>
+              <div>
+                <span>{t('showroom.stageProfitLabel')}</span>
+                <strong>+287c</strong>
+              </div>
+              <div>
+                <span>{t('showroom.stagePaceLabel')}</span>
+                <strong>12m 48s</strong>
+              </div>
             </div>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <div className="showroom-character-card">

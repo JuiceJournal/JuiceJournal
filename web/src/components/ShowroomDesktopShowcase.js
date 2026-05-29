@@ -9,6 +9,13 @@ const POINTS = [
   { titleKey: 'showroom.showcasePointThreeTitle', bodyKey: 'showroom.showcasePointThreeBody', icon: 'atlas' },
 ];
 
+const ROUTE_SPREAD = [
+  { label: 'Breach', value: '42%', height: '72%' },
+  { label: 'Abyss', value: '28%', height: '54%' },
+  { label: 'Expedition', value: '18%', height: '38%' },
+  { label: 'Ritual', value: '12%', height: '26%' },
+];
+
 export default function ShowroomDesktopShowcase() {
   const { t } = useI18n();
 
@@ -37,11 +44,16 @@ export default function ShowroomDesktopShowcase() {
               </div>
               <div className="showroom-mock-card showroom-mock-card-wide">
                 <span className="showroom-mock-metric-label">{t('showroom.mockMetricThreeLabel')}</span>
-                <div className="showroom-mock-bars">
-                  <span />
-                  <span />
-                  <span />
-                  <span />
+                <div className="showroom-route-spread">
+                  {ROUTE_SPREAD.map((route) => (
+                    <div key={route.label} className="showroom-route-bar">
+                      <span style={{ height: route.height }} />
+                      <div>
+                        <strong>{route.label}</strong>
+                        <small>{route.value}</small>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

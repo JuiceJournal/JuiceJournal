@@ -27,7 +27,7 @@ export default function PublicNavbar() {
           </div>
         </Link>
 
-        <a href="#desktop-showcase" className="btn btn-primary">
+        <a href="#desktop-showcase" className="btn btn-primary hidden sm:inline-flex">
           <PoeChromeIcon type="gate" size={15} />
           <span>{t('showroom.primaryCta')}</span>
         </a>

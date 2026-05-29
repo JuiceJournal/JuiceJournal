@@ -25,6 +25,7 @@
       radial-gradient(circle at 85% 18%, rgba(198, 161, 91, 0.12), transparent 20%),
       linear-gradient(180deg, #171210 0%, #100d0b 42%, #090807 100%);
     min-height: 100vh;
+    overflow-x: hidden;
   }
 
   body::before {
@@ -106,7 +107,7 @@
   }
 
   .showroom-stage {
-    @apply relative min-h-[22rem];
+    @apply relative min-h-[24rem] min-w-0;
   }
 
   .showroom-stage-ring {
@@ -120,15 +121,38 @@
   }
 
   .showroom-stage-panel {
-    @apply relative z-[1] rounded-[2rem] border border-poe-border bg-[linear-gradient(180deg,rgba(24,20,17,0.95),rgba(13,11,9,0.98))] p-6 shadow-[0_30px_100px_rgba(0,0,0,0.36)];
+    @apply relative z-[1] min-w-0 overflow-hidden rounded-[2rem] border border-poe-border bg-[linear-gradient(180deg,rgba(24,20,17,0.9),rgba(13,11,9,0.98))] p-6 shadow-[0_30px_100px_rgba(0,0,0,0.36)];
+  }
+
+  .showroom-stage-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 18% 20%, rgba(198, 161, 91, 0.18), transparent 26%),
+      linear-gradient(120deg, rgba(94, 40, 29, 0.22), transparent 38%),
+      linear-gradient(270deg, rgba(0, 0, 0, 0.36), transparent 56%);
   }
 
   .showroom-stage-label {
-    @apply flex flex-wrap gap-2;
+    @apply relative z-[1] flex flex-wrap gap-2;
+  }
+
+  .showroom-stage-map {
+    @apply relative z-[1] mt-6 grid gap-3 rounded-2xl border border-poe-border/70 bg-[rgba(7,6,5,0.72)] p-4 sm:grid-cols-3;
+  }
+
+  .showroom-stage-map span {
+    @apply block text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-poe-mist;
+  }
+
+  .showroom-stage-map strong {
+    @apply mt-2 block font-display text-xl uppercase tracking-[0.08em] text-stone-100;
   }
 
   .showroom-character-card {
-    @apply rounded-2xl border border-poe-border/70 bg-[rgba(10,8,7,0.72)] p-5;
+    @apply relative z-[1] rounded-2xl border border-poe-border/70 bg-[rgba(10,8,7,0.72)] p-5;
   }
 
   .showroom-character-title,
@@ -185,12 +209,24 @@
     @apply mt-3 block font-display text-3xl uppercase tracking-[0.08em] text-poe-gold;
   }
 
-  .showroom-mock-bars {
-    @apply mt-4 grid grid-cols-4 gap-2;
+  .showroom-route-spread {
+    @apply mt-4 grid gap-3 sm:grid-cols-4;
   }
 
-  .showroom-mock-bars span {
-    @apply h-16 rounded-full bg-[linear-gradient(180deg,rgba(198,161,91,0.8),rgba(78,57,31,0.5))];
+  .showroom-route-bar {
+    @apply flex min-h-24 items-end gap-3 rounded-2xl border border-poe-border/60 bg-[rgba(8,7,6,0.62)] p-3;
+  }
+
+  .showroom-route-bar > span {
+    @apply block w-3 rounded-full bg-[linear-gradient(180deg,rgba(230,190,111,0.95),rgba(111,70,32,0.55))] shadow-[0_0_24px_rgba(198,161,91,0.22)];
+  }
+
+  .showroom-route-bar strong {
+    @apply block text-xs font-semibold uppercase tracking-[0.12em] text-stone-100;
+  }
+
+  .showroom-route-bar small {
+    @apply mt-1 block font-display text-lg text-poe-gold;
   }
 
   .showroom-feature-row {
@@ -241,13 +277,100 @@
   outline-offset: 2px;
 }
 
+.showroom-hero {
+  isolation: isolate;
+}
+
+.showroom-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 74% 28%, rgba(89, 117, 112, 0.18), transparent 18%),
+    linear-gradient(90deg, rgba(7, 6, 5, 0.22), rgba(71, 36, 26, 0.12), rgba(7, 6, 5, 0.5));
+}
+
 .showroom-embers {
   position: absolute;
   inset: 0;
+  z-index: 0;
   pointer-events: none;
   background:
     radial-gradient(circle at 18% 30%, rgba(182, 92, 44, 0.22), transparent 16%),
     radial-gradient(circle at 82% 24%, rgba(214, 180, 110, 0.14), transparent 18%),
     radial-gradient(circle at 62% 78%, rgba(117, 79, 46, 0.18), transparent 18%);
   opacity: 0.9;
+}
+
+.showroom-hero-characters {
+  position: absolute;
+  inset: -2rem -1rem 0 12%;
+  pointer-events: none;
+}
+
+.showroom-character-silhouette {
+  position: absolute;
+  bottom: 1.5rem;
+  width: 12rem;
+  height: 21rem;
+  border-radius: 45% 45% 18% 18%;
+  opacity: 0.72;
+  filter: drop-shadow(0 30px 40px rgba(0, 0, 0, 0.45));
+}
+
+.showroom-character-silhouette::before,
+.showroom-character-silhouette::after {
+  content: '';
+  position: absolute;
+  border-radius: 9999px;
+}
+
+.showroom-character-silhouette::before {
+  top: -2.3rem;
+  left: 50%;
+  width: 4.2rem;
+  height: 4.2rem;
+  transform: translateX(-50%);
+  background: radial-gradient(circle at 46% 35%, rgba(235, 206, 156, 0.9), rgba(92, 54, 36, 0.55) 52%, rgba(18, 12, 10, 0.9));
+}
+
+.showroom-character-silhouette::after {
+  inset: 14% 18% auto;
+  height: 9rem;
+  background: linear-gradient(180deg, rgba(198, 161, 91, 0.2), transparent);
+}
+
+.showroom-character-silhouette-one {
+  right: 27%;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(236, 178, 88, 0.24), transparent 26%),
+    linear-gradient(160deg, rgba(49, 33, 28, 0.92), rgba(10, 8, 7, 0.98));
+  transform: rotate(-7deg);
+}
+
+.showroom-character-silhouette-two {
+  right: 4%;
+  bottom: 0;
+  width: 10rem;
+  height: 18rem;
+  background:
+    radial-gradient(circle at 60% 12%, rgba(80, 129, 152, 0.24), transparent 24%),
+    linear-gradient(160deg, rgba(27, 37, 40, 0.92), rgba(8, 7, 7, 0.98));
+  transform: rotate(8deg);
+}
+
+.showroom-loot-flare {
+  position: absolute;
+  right: 2rem;
+  bottom: 2rem;
+  width: 16rem;
+  height: 5rem;
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle at 20% 50%, rgba(198, 161, 91, 0.42), transparent 12%),
+    radial-gradient(circle at 48% 42%, rgba(104, 164, 184, 0.25), transparent 14%),
+    radial-gradient(circle at 72% 58%, rgba(177, 63, 47, 0.3), transparent 16%);
+  filter: blur(1px);
 }
