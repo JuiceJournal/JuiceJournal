@@ -228,9 +228,9 @@
     const runtimeSummary = getRuntimeSummary(runtime);
     if (!runtimeSummary) {
       return {
-        visibility: 'waiting',
-        primaryLine: 'Waiting for game',
-        secondaryLine: 'Waiting for runtime session',
+        visibility: 'hidden',
+        primaryLine: '',
+        secondaryLine: '',
         metaLine: ''
       };
     }

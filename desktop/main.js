@@ -222,7 +222,7 @@ const store = new Store({
     poeVersion: 'poe1',
     scanHotkey: DEFAULT_SCAN_HOTKEY,
     stashScanHotkey: DEFAULT_STASH_SCAN_HOTKEY,
-    overlayEnabled: true,
+    overlayEnabled: false,
     currentUserId: null,
     pendingSessionActions: [],
     pendingLootActions: [],
@@ -3041,14 +3041,6 @@ function buildOverlayState({ character = overlayCharacterState, runtimeSession =
 }
 
 function ensureOverlayWindowForSettings() {
-  const overwolfAvailable = typeof isOverwolfOverlayAvailable === 'function'
-    ? isOverwolfOverlayAvailable()
-    : false;
-
-  if (isOverlayEnabled() && app.isReady() && !overwolfAvailable) {
-    createOverlayWindow();
-  }
-
   updateOverlayWindow();
 }
 
@@ -3105,6 +3097,13 @@ function updateOverlayWindow({ character, runtimeSession } = {}) {
     provider.flushRenderQueue((queuedState) => renderOverwolfOverlayWindow(queuedState));
     renderOverwolfOverlayWindow(overlayState).catch(() => { });
     return overlayState;
+  }
+
+  if (!overwolfAvailable && overlayState.visibility !== 'hidden' && (!overlayWindow || overlayWindow.isDestroyed())) {
+    const appReady = typeof app?.isReady === 'function' ? app.isReady() : true;
+    if (appReady) {
+      createOverlayWindow();
+    }
   }
 
   if (!overlayWindow || overlayWindow.isDestroyed()) {

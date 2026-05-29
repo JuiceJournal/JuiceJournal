@@ -296,7 +296,13 @@ test('main overlay setting is disabled by default when no explicit setting exist
   assert.equal(context.isOverlayEnabled(), false);
 });
 
-test('main overlay window guard skips creation when disabled and creates when enabled later', () => {
+test('main process store default keeps passive overlay disabled on startup', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+
+  assert.match(source, /overlayEnabled:\s*false/);
+});
+
+test('main overlay window guard defers creation to visible overlay state', () => {
   const calls = [];
   let overlayEnabled = false;
   const context = loadFunctions(['isOverlayEnabled', 'ensureOverlayWindowForSettings'], {
@@ -326,9 +332,71 @@ test('main overlay window guard skips creation when disabled and creates when en
 
   assert.deepEqual(calls, [
     ['updateOverlayWindow'],
+    ['updateOverlayWindow']
+  ]);
+});
+
+test('main overlay window is created lazily only when overlay state is visible', () => {
+  const calls = [];
+  const overlayWindow = {
+    isDestroyed: () => false,
+    webContents: {
+      executeJavaScript: () => {
+        calls.push(['executeJavaScript']);
+        return Promise.resolve();
+      }
+    }
+  };
+  let visible = false;
+  const context = loadFunctions(['buildOverlayState', 'updateOverlayWindow'], {
+    overlayMapResultState: null,
+    overlayStartMapPromptState: null,
+    overlayCharacterState: null,
+    overlayRuntimeState: null,
+    overlayWindow: null,
+    currentSession: null,
+    app: {
+      isReady() {
+        calls.push(['isReady']);
+        return true;
+      }
+    },
+    isOverlayEnabled() {
+      return true;
+    },
+    deriveMapResultOverlayState() {
+      return { visible: false };
+    },
+    deriveOverlayState() {
+      return visible
+        ? { visibility: 'visible', primaryLine: 'Tower', secondaryLine: 'Expedition', metaLine: '1m' }
+        : { visibility: 'hidden', primaryLine: '', secondaryLine: '', metaLine: '' };
+    },
+    isOverwolfOverlayAvailable() {
+      return false;
+    },
+    getActiveSessionOverlayState() {
+      return null;
+    },
+    createOverlayWindow() {
+      calls.push(['createOverlayWindow']);
+      context.overlayWindow = overlayWindow;
+      return overlayWindow;
+    },
+    applyOverlayWindowVisibility(overlayState) {
+      calls.push(['applyOverlayWindowVisibility', overlayState.visibility]);
+    }
+  });
+
+  context.updateOverlayWindow();
+  visible = true;
+  context.updateOverlayWindow();
+
+  assert.deepEqual(calls, [
     ['isReady'],
     ['createOverlayWindow'],
-    ['updateOverlayWindow']
+    ['applyOverlayWindowVisibility', 'visible'],
+    ['executeJavaScript']
   ]);
 });
 

@@ -82,14 +82,14 @@ test('overlay state model consumes normalized runtime session summary shape', ()
   assert.equal(state.metaLine, '125s \u00b7 session 725s');
 });
 
-test('overlay state model falls back to waiting state when runtime data is missing', () => {
+test('overlay state model stays hidden when runtime data is missing', () => {
   const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
 
   const state = deriveOverlayState({ enabled: true, character: null, runtime: null });
 
-  assert.equal(state.visibility, 'waiting');
-  assert.equal(state.primaryLine, 'Waiting for game');
-  assert.equal(state.secondaryLine, 'Waiting for runtime session');
+  assert.equal(state.visibility, 'hidden');
+  assert.equal(state.primaryLine, '');
+  assert.equal(state.secondaryLine, '');
 });
 
 test('overlay state model shows active map session details even without GEP runtime data', () => {
