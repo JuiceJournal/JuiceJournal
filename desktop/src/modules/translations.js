@@ -25,6 +25,7 @@ window.Translations = {
     // Navigation
     'nav.dashboard': 'Dashboard',
     'nav.sessions': "Session'lar",
+    'nav.farmingHub': 'Farming Hub',
     'nav.settings': 'Ayarlar',
 
     // User
@@ -110,6 +111,10 @@ window.Translations = {
     'sessions.analyticsItems': 'adet',
     'sessions.analyticsEntries': 'kayit',
     'sessions.analyticsValue': 'deger',
+
+    // Farming Hub
+    'farmingHub.title': 'Farming Hub',
+    'farmingHub.subtitle': 'Oyuncularin lokal ledger uzerinden paylastigi public runlar.',
 
     // Session info
     'session.map': 'Map',
@@ -419,6 +424,7 @@ window.Translations = {
   de: {
     'nav.dashboard': 'Ubersicht',
     'nav.sessions': 'Sitzungen',
+    'nav.farmingHub': 'Farming Hub',
     'nav.settings': 'Einstellungen',
     'user.guest': 'Gast',
     'user.logout': 'Abmelden',
@@ -449,6 +455,8 @@ window.Translations = {
     'dashboard.scanScreen': 'Bildschirm scannen',
     'dashboard.recentLoot': 'Letzter Loot',
     'sessions.title': 'Map-Sitzungen',
+    'farmingHub.title': 'Farming Hub',
+    'farmingHub.subtitle': 'Public runs shared by players from their local ledger.',
     'sessions.loading': 'Sitzungen werden geladen...',
     'sessions.loadError': 'Sitzungen konnten nicht geladen werden',
     'sessions.detailKicker': 'Laufdetails',
@@ -487,6 +495,7 @@ window.Translations = {
   fr: {
     'nav.dashboard': 'Tableau de bord',
     'nav.sessions': 'Sessions',
+    'nav.farmingHub': 'Farming Hub',
     'nav.settings': 'Parametres',
     'user.guest': 'Invite',
     'user.logout': 'Deconnexion',
@@ -515,6 +524,8 @@ window.Translations = {
     'dashboard.scanScreen': 'Scanner l ecran',
     'dashboard.recentLoot': 'Loot recent',
     'sessions.title': 'Sessions de map',
+    'farmingHub.title': 'Farming Hub',
+    'farmingHub.subtitle': 'Public runs shared by players from their local ledger.',
     'settings.title': 'Parametres',
     'settings.language': 'Langue',
     'settings.poeAccount': 'Compte Path of Exile',
@@ -536,6 +547,7 @@ window.Translations = {
   es: {
     'nav.dashboard': 'Panel',
     'nav.sessions': 'Sesiones',
+    'nav.farmingHub': 'Farming Hub',
     'nav.settings': 'Ajustes',
     'user.guest': 'Invitado',
     'user.logout': 'Cerrar sesion',
@@ -564,6 +576,8 @@ window.Translations = {
     'dashboard.scanScreen': 'Escanear pantalla',
     'dashboard.recentLoot': 'Loot reciente',
     'sessions.title': 'Sesiones de mapa',
+    'farmingHub.title': 'Farming Hub',
+    'farmingHub.subtitle': 'Public runs shared by players from their local ledger.',
     'settings.title': 'Ajustes',
     'settings.language': 'Idioma',
     'settings.poeAccount': 'Cuenta de Path of Exile',
@@ -585,6 +599,7 @@ window.Translations = {
   it: {
     'nav.dashboard': 'Dashboard',
     'nav.sessions': 'Sessioni',
+    'nav.farmingHub': 'Farming Hub',
     'nav.settings': 'Impostazioni',
     'user.guest': 'Ospite',
     'user.logout': 'Esci',
@@ -610,6 +625,8 @@ window.Translations = {
     'dashboard.profit': 'Profitto',
     'dashboard.scanScreen': 'Scansiona schermo',
     'sessions.title': 'Sessioni mappa',
+    'farmingHub.title': 'Farming Hub',
+    'farmingHub.subtitle': 'Public runs shared by players from their local ledger.',
     'settings.title': 'Impostazioni',
     'settings.language': 'Lingua',
     'settings.poeSignedOutMode': 'Accedi con il tuo account locale Juice Journal prima di avviare il collegamento a Path of Exile.',
@@ -622,6 +639,7 @@ window.Translations = {
   'pt-BR': {
     'nav.dashboard': 'Painel',
     'nav.sessions': 'Sessoes',
+    'nav.farmingHub': 'Farming Hub',
     'nav.settings': 'Configuracoes',
     'user.guest': 'Convidado',
     'user.logout': 'Sair',
@@ -646,6 +664,8 @@ window.Translations = {
     'dashboard.todaySummary': 'Resumo de hoje',
     'dashboard.profit': 'Lucro',
     'sessions.title': 'Sessoes de mapa',
+    'farmingHub.title': 'Farming Hub',
+    'farmingHub.subtitle': 'Public runs shared by players from their local ledger.',
     'settings.title': 'Configuracoes',
     'settings.language': 'Idioma',
     'settings.poeSignedOutMode': 'Entre com sua conta local do Juice Journal antes de iniciar a vinculacao do Path of Exile.',
@@ -658,6 +678,7 @@ window.Translations = {
   ru: {
     'nav.dashboard': 'Panel',
     'nav.sessions': 'Sessii',
+    'nav.farmingHub': 'Farming Hub',
     'nav.settings': 'Nastroiki',
     'user.guest': 'Gost',
     'user.logout': 'Vyiti',
@@ -682,6 +703,8 @@ window.Translations = {
     'dashboard.todaySummary': 'Svodka za segodnia',
     'dashboard.profit': 'Pribyl',
     'sessions.title': 'Sessii kart',
+    'farmingHub.title': 'Farming Hub',
+    'farmingHub.subtitle': 'Public runs shared by players from their local ledger.',
     'settings.title': 'Nastroiki',
     'settings.language': 'Iazyk',
     'settings.poeSignedOutMode': 'Voidite v lokalnyi akkaunt Juice Journal pered tem, kak nachat priviazku Path of Exile.',
@@ -694,7 +717,10 @@ window.Translations = {
   ja: {
     'nav.dashboard': 'Dashboard',
     'nav.sessions': 'Sessions',
+    'nav.farmingHub': 'Farming Hub',
     'nav.settings': 'Settings',
+    'farmingHub.title': 'Farming Hub',
+    'farmingHub.subtitle': 'Public runs shared by players from their local ledger.',
     'login.title': 'Sign In',
     'register.title': 'Create Account',
     'settings.language': 'Language',
@@ -704,7 +730,10 @@ window.Translations = {
   ko: {
     'nav.dashboard': 'Dashboard',
     'nav.sessions': 'Sessions',
+    'nav.farmingHub': 'Farming Hub',
     'nav.settings': 'Settings',
+    'farmingHub.title': 'Farming Hub',
+    'farmingHub.subtitle': 'Public runs shared by players from their local ledger.',
     'login.title': 'Sign In',
     'register.title': 'Create Account',
     'settings.language': 'Language',
@@ -714,7 +743,10 @@ window.Translations = {
   'zh-CN': {
     'nav.dashboard': 'Dashboard',
     'nav.sessions': 'Sessions',
+    'nav.farmingHub': 'Farming Hub',
     'nav.settings': 'Settings',
+    'farmingHub.title': 'Farming Hub',
+    'farmingHub.subtitle': 'Public runs shared by players from their local ledger.',
     'login.title': 'Sign In',
     'register.title': 'Create Account',
     'settings.language': 'Language',
@@ -724,7 +756,10 @@ window.Translations = {
   'zh-TW': {
     'nav.dashboard': 'Dashboard',
     'nav.sessions': 'Sessions',
+    'nav.farmingHub': 'Farming Hub',
     'nav.settings': 'Settings',
+    'farmingHub.title': 'Farming Hub',
+    'farmingHub.subtitle': 'Public runs shared by players from their local ledger.',
     'login.title': 'Sign In',
     'register.title': 'Create Account',
     'settings.language': 'Language',
@@ -735,6 +770,7 @@ window.Translations = {
     // Navigation
     'nav.dashboard': 'Dashboard',
     'nav.sessions': 'Sessions',
+    'nav.farmingHub': 'Farming Hub',
     'nav.settings': 'Settings',
 
     // User
@@ -820,6 +856,10 @@ window.Translations = {
     'sessions.analyticsItems': 'items',
     'sessions.analyticsEntries': 'entries',
     'sessions.analyticsValue': 'value',
+
+    // Farming Hub
+    'farmingHub.title': 'Farming Hub',
+    'farmingHub.subtitle': 'Public runs shared by players from their local ledger.',
 
     // Session info
     'session.map': 'Map',
