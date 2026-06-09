@@ -4,7 +4,7 @@
  * Caches prices to avoid hammering the API (12 req / 5 min limit)
  *
  * PoE1: https://poe.ninja/poe1/api/economy/stash/current/{currency|item}/overview?league=X&type=Y
- * PoE2: https://poe.ninja/poe2/api/economy/currencyexchange/overview?leagueName=X&overviewName=Y
+ * PoE2: https://poe.ninja/poe2/api/economy/exchange/{slug}/overview?league=X&type=Y
  */
 
 const axios = require('axios');
@@ -12,12 +12,14 @@ const registry = require('./currencyRegistry');
 
 const POE1_CURRENCY_URL = 'https://poe.ninja/poe1/api/economy/stash/current/currency/overview';
 const POE1_ITEM_URL = 'https://poe.ninja/poe1/api/economy/stash/current/item/overview';
-const POE2_BASE = 'https://poe.ninja/poe2/api/economy';
+const POE2_BASE_URL = 'https://poe.ninja/poe2/api';
+const POE2_INDEX_URL = 'https://poe.ninja/poe2/api/data/index-state';
 
 // Cache duration: 10 minutes
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_CACHE_SIZE = 5000;
 const MAX_PRICE_MAP_SIZE = 10000;
+const INDEX_CACHE_TTL_MS = 30 * 60 * 1000;
 
 function toPriceNumber(value) {
   const number = Number(value);
@@ -79,6 +81,53 @@ function normalizeLookupKey(value) {
   return String(value || '').toLowerCase().trim();
 }
 
+// ─── PoE2 league slug resolution ──────────────────────────────
+
+let poe2IndexCache = null;
+let poe2IndexCacheTime = 0;
+
+async function getPoe2IndexState(client) {
+  const now = Date.now();
+  if (poe2IndexCache && (now - poe2IndexCacheTime) < INDEX_CACHE_TTL_MS) {
+    return poe2IndexCache;
+  }
+
+  const response = await client.get(POE2_INDEX_URL);
+  poe2IndexCache = response.data;
+  poe2IndexCacheTime = now;
+  return poe2IndexCache;
+}
+
+async function getPoe2LeagueSlug(client, leagueName) {
+  const indexState = await getPoe2IndexState(client);
+  if (!indexState) return null;
+
+  const allLeagues = [
+    ...(indexState.economyLeagues || []),
+    ...(indexState.oldEconomyLeagues || [])
+  ];
+
+  const match = allLeagues.find(l =>
+    l.name.toLowerCase() === leagueName.toLowerCase() ||
+    (l.displayName && l.displayName.toLowerCase() === leagueName.toLowerCase())
+  );
+
+  return match?.url || null;
+}
+
+function getExchangeDivineToChaos(data) {
+  const primary = data?.core?.primary;
+  const rates = data?.core?.rates || {};
+
+  if (primary === 'chaos' && Number(rates.divine) > 0) {
+    return 1 / Number(rates.divine);
+  }
+  if (primary === 'divine' && Number(rates.chaos) > 0) {
+    return Number(rates.chaos);
+  }
+  return null;
+}
+
 class PriceService {
   constructor() {
     // price cache: key = `${league}:${type}` → { data, fetchedAt }
@@ -91,6 +140,7 @@ class PriceService {
     this.client = axios.create({
       timeout: 15000,
       headers: {
+        'Accept': 'application/json',
         'User-Agent': 'JuiceJournal/1.0'
       }
     });
@@ -104,7 +154,7 @@ class PriceService {
   // ─── Fetching ───────────────────────────────────────────────
 
   /**
-   * Fetch currency overview from poe.ninja (PoE1)
+   * Fetch currency overview from poe.ninja
    */
   async _fetchCurrencyOverview(league, type) {
     const cacheKey = `${league}:currency:${type}`;
@@ -113,13 +163,19 @@ class PriceService {
       return cached.data;
     }
 
-    const url = this.poeVersion === 'poe2'
-      ? `${POE2_BASE}/currencyexchange/overview`
-      : POE1_CURRENCY_URL;
+    let url, params;
 
-    const params = this.poeVersion === 'poe2'
-      ? { leagueName: league, overviewName: type }
-      : { league, type };
+    if (this.poeVersion === 'poe2') {
+      const slug = await getPoe2LeagueSlug(this.client, league);
+      if (!slug) {
+        throw new Error(`Unknown PoE2 league: ${league}`);
+      }
+      url = `${POE2_BASE_URL}/economy/exchange/${slug}/overview`;
+      params = { league, type };
+    } else {
+      url = POE1_CURRENCY_URL;
+      params = { league, type };
+    }
 
     const response = await this.client.get(url, { params });
     const data = response.data;
@@ -205,25 +261,44 @@ class PriceService {
     const registryBatch = [];
 
     if (this.poeVersion === 'poe2') {
-      // PoE2 format: { lines: [{ id, primaryValue }], items: [{ id, name, icon }] }
+      // PoE2 exchange API format:
+      //   lines: [{ id, primaryValue, ... }]
+      //   items: [{ id, name, image }]
+      //   core: { primary: "divine", secondary: "chaos", rates: { chaos: 31.94 } }
+      const divineToChaos = getExchangeDivineToChaos(data);
+      const primary = data?.core?.primary || 'divine';
+
       const itemMap = new Map();
       if (data.items) {
         for (const item of data.items) {
           itemMap.set(item.id, item);
         }
       }
+
       if (data.lines) {
         for (const line of data.lines) {
           const itemInfo = itemMap.get(line.id);
           if (!itemInfo) continue;
-          const chaosValue = line.primaryValue >= 1
-            ? line.primaryValue
-            : (1 / line.primaryValue);
+
+          const primaryValue = Number(line.primaryValue) || 0;
+          let chaosValue = 0;
+          let divineValue = null;
+
+          if (primary === 'chaos') {
+            chaosValue = primaryValue;
+            divineValue = divineToChaos ? roundPriceValue(chaosValue / divineToChaos) : null;
+          } else {
+            divineValue = roundPriceValue(primaryValue);
+            chaosValue = divineToChaos ? Math.round(primaryValue * divineToChaos * 100) / 100 : 0;
+          }
+
           const entry = {
             chaosValue,
+            divineValue,
             category: type.toLowerCase(),
-            icon: itemInfo.icon || null,
-            tradeId: itemInfo.tradeId || null
+            icon: itemInfo.image ? `https://web.poecdn.com${itemInfo.image}` : null,
+            tradeId: itemInfo.id || null,
+            sparkline: Array.isArray(line.sparkline?.data) ? line.sparkline.data : []
           };
           this._addPrice(itemInfo.name, entry);
           registryBatch.push({ name: itemInfo.name, ...entry });
