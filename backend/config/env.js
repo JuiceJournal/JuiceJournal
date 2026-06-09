@@ -76,6 +76,8 @@ module.exports = {
     intervalHours: parseInteger(process.env.PRICE_SYNC_INTERVAL, 1),
     minIntervalMs: parseInteger(process.env.PRICE_SYNC_MIN_INTERVAL_MS, 300000),
     defaultLeague: process.env.DEFAULT_LEAGUE || 'Mirage',
+    poe1DefaultLeague: process.env.POE1_DEFAULT_LEAGUE || process.env.DEFAULT_LEAGUE || 'Mirage',
+    poe2DefaultLeague: process.env.POE2_DEFAULT_LEAGUE || process.env.DEFAULT_LEAGUE || 'Runes of Aldur',
   },
   poe: {
     clientId: process.env.POE_CLIENT_ID || '',

@@ -26,7 +26,9 @@ const startPriceSync = (app, intervalHours = env.priceSync.intervalHours) => {
     try {
       for (const poeVersion of ['poe1', 'poe2']) {
         try {
-          const league = env.priceSync.defaultLeague;
+          const league = poeVersion === 'poe2'
+            ? env.priceSync.poe2DefaultLeague
+            : env.priceSync.poe1DefaultLeague;
           const results = await poeNinjaService.syncAllPrices(league, undefined, poeVersion);
           logger.info(`automatic price sync completed for ${poeVersion}`, {
             poeVersion,
@@ -65,7 +67,9 @@ const startPriceSync = (app, intervalHours = env.priceSync.intervalHours) => {
     try {
       for (const poeVersion of ['poe1', 'poe2']) {
         try {
-          const league = env.priceSync.defaultLeague;
+          const league = poeVersion === 'poe2'
+            ? env.priceSync.poe2DefaultLeague
+            : env.priceSync.poe1DefaultLeague;
           logger.info(`initial price sync started for ${poeVersion}`);
           await poeNinjaService.syncAllPrices(league, undefined, poeVersion);
           logger.info(`initial price sync completed for ${poeVersion}`);
