@@ -37,7 +37,7 @@ const POE1_ITEM_TYPES = [
 
 const POE2_CURRENCY_TYPES = [
   'Currency', 'Fragments', 'UncutGems', 'SoulCores',
-  'Idol', 'Runes', 'Essences', 'Expedition', 'Ultimatum'
+  'Idol', 'Runes', 'Essences', 'Expedition', 'Ultimatum', 'Vaal'
 ];
 const POE2_ITEM_TYPES = [];
 
@@ -48,7 +48,7 @@ const POE1_QUICK_SYNC = [
 ];
 const POE2_QUICK_SYNC = [
   'Currency', 'Fragments', 'Essences', 'Runes',
-  'UncutGems', 'SoulCores', 'Idol'
+  'UncutGems', 'SoulCores', 'Idol', 'Vaal'
 ];
 
 // ─── Static core currencies (always present, per version) ─────────
@@ -98,11 +98,32 @@ const CORE_CURRENCIES = {
     { name: 'Orb of Augmentation', category: 'currency', tradeId: 'aug' },
     { name: 'Orb of Transmutation', category: 'currency', tradeId: 'transmute' },
     { name: 'Orb of Annulment', category: 'currency', tradeId: 'annul' },
-    { name: "Arcanist's Etcher", category: 'currency', tradeId: 'arcanists-etcher' },
-    { name: "Artificer's Orb", category: 'currency', tradeId: 'artificers-orb' },
+    { name: "Arcanist's Etcher", category: 'currency', tradeId: 'etcher' },
+    { name: "Artificer's Orb", category: 'currency', tradeId: 'artificers' },
     { name: 'Mirror of Kalandra', category: 'currency', tradeId: 'mirror' },
     { name: 'Greater Jeweller Orb', category: 'currency', tradeId: 'greater-jewellers-orb' },
     { name: 'Perfect Jeweller Orb', category: 'currency', tradeId: 'perfect-jewellers-orb' },
+    { name: 'Lesser Jeweller Orb', category: 'currency', tradeId: 'lesser-jewellers-orb' },
+    { name: "Gemcutter's Prism", category: 'currency', tradeId: 'gcp' },
+    { name: "Glassblower's Bauble", category: 'currency', tradeId: 'bauble' },
+    { name: "Armourer's Scrap", category: 'currency', tradeId: 'scrap' },
+    { name: "Blacksmith's Whetstone", category: 'currency', tradeId: 'whetstone' },
+    { name: 'Chance Shard', category: 'currency', tradeId: 'chance-shard' },
+    { name: 'Regal Shard', category: 'currency', tradeId: 'regal-shard' },
+    { name: 'Fracturing Orb', category: 'currency', tradeId: 'fracturing-orb' },
+    { name: 'Greater Chaos Orb', category: 'currency', tradeId: 'greater-chaos-orb' },
+    { name: 'Greater Exalted Orb', category: 'currency', tradeId: 'greater-exalted-orb' },
+    { name: 'Perfect Chaos Orb', category: 'currency', tradeId: 'perfect-chaos-orb' },
+    { name: 'Perfect Exalted Orb', category: 'currency', tradeId: 'perfect-exalted-orb' },
+    { name: 'Greater Regal Orb', category: 'currency', tradeId: 'greater-regal-orb' },
+    { name: 'Perfect Regal Orb', category: 'currency', tradeId: 'perfect-regal-orb' },
+    { name: "Hinekora's Lock", category: 'currency', tradeId: 'hinekoras-lock' },
+    { name: 'Ancient Infuser', category: 'vaal', tradeId: 'ancient-infuser' },
+    { name: "Architect's Orb", category: 'vaal', tradeId: 'architects-orb' },
+    { name: 'Core Destabiliser', category: 'vaal', tradeId: 'core-destabiliser' },
+    { name: 'Crystallised Corruption', category: 'vaal', tradeId: 'crystallised-corruption' },
+    { name: 'Orb of Extraction', category: 'vaal', tradeId: 'orb-of-extraction' },
+    { name: 'Vaal Catalysing Infuser', category: 'vaal', tradeId: 'vaal-catalysing-infuser' },
   ]
 };
 
@@ -151,6 +172,8 @@ const CATEGORY_KEYWORDS = [
   { pattern: /\bomen\b/i, category: 'omen' },
   { pattern: /\bcoffin\b/i, category: 'coffin' },
   { pattern: /\ballflame\b/i, category: 'allflame' },
+  { pattern: /\binfuser\b/i, category: 'vaal' },
+  { pattern: /\bdestabiliser\b/i, category: 'vaal' },
 ];
 
 // ─── Registry Class ───────────────────────────────────────────────
