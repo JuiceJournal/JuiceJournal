@@ -16,6 +16,7 @@ const state = {
   activeLeagueOptions: {},
   leagueOptionsLoaded: false,
   sessions: [],
+  farmingHubRuns: [],
   mapResults: [],
   recentLoot: [],
   poeLink: null,
@@ -159,6 +160,10 @@ const elements = {
   // Sessions
   sessionsList: document.getElementById('sessions-list'),
   sessionFilter: document.getElementById('session-filter'),
+  sessionVersionFilter: document.getElementById('session-version-filter'),
+  sessionLeagueFilter: document.getElementById('session-league-filter'),
+  sessionFarmFilter: document.getElementById('session-farm-filter'),
+  sessionSearchFilter: document.getElementById('session-search-filter'),
   sessionDrawer: document.getElementById('session-detail-drawer'),
   sessionDrawerBackdrop: document.getElementById('session-drawer-backdrop'),
   sessionDrawerClose: document.getElementById('session-drawer-close'),
@@ -171,6 +176,14 @@ const elements = {
   sessionDrawerAnalytics: document.getElementById('session-drawer-analytics'),
   sessionDrawerLoot: document.getElementById('session-drawer-loot'),
   sessionDrawerLootCount: document.getElementById('session-drawer-loot-count'),
+
+  // Farming Hub
+  farmingHubList: document.getElementById('farming-hub-list'),
+  farmingHubVersionFilter: document.getElementById('farming-hub-version-filter'),
+  farmingHubLeagueFilter: document.getElementById('farming-hub-league-filter'),
+  farmingHubFarmFilter: document.getElementById('farming-hub-farm-filter'),
+  farmingHubMinProfitFilter: document.getElementById('farming-hub-min-profit-filter'),
+  farmingHubRefreshBtn: document.getElementById('farming-hub-refresh-btn'),
 
   // Settings
   apiUrl: document.getElementById('api-url'),
@@ -2092,9 +2105,18 @@ function setupEventListeners() {
 
   // Sessions filter
   elements.sessionFilter.addEventListener('change', loadSessions);
+  if (elements.sessionVersionFilter) elements.sessionVersionFilter.addEventListener('change', renderSessionsList);
+  if (elements.sessionLeagueFilter) elements.sessionLeagueFilter.addEventListener('change', renderSessionsList);
+  if (elements.sessionFarmFilter) elements.sessionFarmFilter.addEventListener('change', renderSessionsList);
+  if (elements.sessionSearchFilter) elements.sessionSearchFilter.addEventListener('input', renderSessionsList);
   if (elements.sessionDrawerClose) elements.sessionDrawerClose.addEventListener('click', closeSessionDrawer);
   if (elements.sessionDrawerBackdrop) elements.sessionDrawerBackdrop.addEventListener('click', closeSessionDrawer);
   if (elements.sessionDrawerSave) elements.sessionDrawerSave.addEventListener('click', handleSessionMetadataSave);
+  if (elements.farmingHubVersionFilter) elements.farmingHubVersionFilter.addEventListener('change', loadFarmingHubRuns);
+  if (elements.farmingHubLeagueFilter) elements.farmingHubLeagueFilter.addEventListener('change', loadFarmingHubRuns);
+  if (elements.farmingHubFarmFilter) elements.farmingHubFarmFilter.addEventListener('change', loadFarmingHubRuns);
+  if (elements.farmingHubMinProfitFilter) elements.farmingHubMinProfitFilter.addEventListener('change', loadFarmingHubRuns);
+  if (elements.farmingHubRefreshBtn) elements.farmingHubRefreshBtn.addEventListener('click', loadFarmingHubRuns);
 
   // Settings
   elements.saveSettingsBtn.addEventListener('click', handleSaveSettings);
@@ -2404,6 +2426,8 @@ function navigateTo(page) {
   // Sayfa ozel yuklemeler
   if (page === 'sessions') {
     loadSessions();
+  } else if (page === 'farming-hub') {
+    loadFarmingHubRuns();
   } else if (page === 'dashboard') {
     refreshTrackerData();
   } else if (page === 'currency') {
@@ -4133,6 +4157,7 @@ async function loadSessions() {
   const filter = elements.sessionFilter.value;
   if (!state.currentUser) {
     state.sessions = [];
+    populateSessionFilterOptions([]);
     renderSessionsList();
     return;
   }
@@ -4140,17 +4165,205 @@ async function loadSessions() {
   elements.sessionsList.innerHTML = `<p class="empty-state">${window.t('sessions.loading')}</p>`;
 
   try {
-    const params = { limit: 50 };
+    const params = { limit: 50, includeAllContexts: true };
     if (filter && filter !== 'all') {
       params.status = filter;
     }
 
     const response = await window.electronAPI.getSessions(params);
     state.sessions = response?.sessions || [];
+    populateSessionFilterOptions(state.sessions);
     renderSessionsList();
   } catch (error) {
     elements.sessionsList.innerHTML = `<p class="empty-state">${getUserFacingErrorMessage(error, 'sessions.loadError')}</p>`;
   }
+}
+
+function getFilterValue(element) {
+  return element?.value || 'all';
+}
+
+function getSearchFilterValue(element) {
+  return String(element?.value || '').trim().toLowerCase();
+}
+
+function getSessionFarmTypeId(session = {}) {
+  return session.farmTypeId || session.mapType || null;
+}
+
+function getSessionPoeVersion(session = {}) {
+  return normalizePoeVersion(session.poeVersion ?? session.poe_version) || 'poe1';
+}
+
+function getSessionFarmTypeLabel(session = {}) {
+  const farmTypeId = getSessionFarmTypeId(session);
+  if (!farmTypeId) {
+    return 'No farm type';
+  }
+
+  const poeVersion = getSessionPoeVersion(session);
+  const farmTypeModel = getFarmTypeModel();
+  const farmType = typeof farmTypeModel.getFarmTypeById === 'function'
+    ? (farmTypeModel.getFarmTypeById(farmTypeId, { poeVersion }) || farmTypeModel.getFarmTypeById(farmTypeId))
+    : farmTypeModel.listFarmTypes().find((entry) => entry.id === farmTypeId);
+
+  return farmType?.label || farmTypeId;
+}
+
+function populateSelectOptions(select, values, defaultValue, defaultLabel) {
+  if (!select) return;
+
+  const previousValue = select.value || defaultValue;
+  const uniqueValues = [...new Set(values.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+  select.innerHTML = [
+    `<option value="${escapeHTML(defaultValue)}">${escapeHTML(defaultLabel)}</option>`,
+    ...uniqueValues.map((value) => `<option value="${escapeHTML(value)}">${escapeHTML(value)}</option>`)
+  ].join('');
+  select.value = uniqueValues.includes(previousValue) ? previousValue : defaultValue;
+}
+
+function populateSessionFilterOptions(sessions = []) {
+  populateSelectOptions(
+    elements.sessionLeagueFilter,
+    sessions.map((session) => session.league || 'Standard'),
+    'all',
+    'All leagues'
+  );
+
+  populateSelectOptions(
+    elements.sessionFarmFilter,
+    sessions.map(getSessionFarmTypeLabel),
+    'all',
+    'All farms'
+  );
+}
+
+function getFilteredSessions() {
+  const versionFilter = getFilterValue(elements.sessionVersionFilter);
+  const leagueFilter = getFilterValue(elements.sessionLeagueFilter);
+  const farmFilter = getFilterValue(elements.sessionFarmFilter);
+  const searchFilter = getSearchFilterValue(elements.sessionSearchFilter);
+
+  return state.sessions.filter((session) => {
+    const poeVersion = getSessionPoeVersion(session);
+    const league = session.league || 'Standard';
+    const farmTypeLabel = getSessionFarmTypeLabel(session);
+    const searchableText = [
+      session.mapName,
+      league,
+      farmTypeLabel,
+      session.strategyTag,
+      session.notes
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    if (versionFilter !== 'all' && poeVersion !== versionFilter) {
+      return false;
+    }
+    if (leagueFilter !== 'all' && league !== leagueFilter) {
+      return false;
+    }
+    if (farmFilter !== 'all' && farmTypeLabel !== farmFilter) {
+      return false;
+    }
+
+    return !searchFilter || searchableText.includes(searchFilter);
+  });
+}
+
+function populateFarmingHubFarmOptions() {
+  const select = elements.farmingHubFarmFilter;
+  if (!select) return;
+
+  const previousValue = select.value || 'all';
+  const versionFilter = getFilterValue(elements.farmingHubVersionFilter);
+  const farmTypes = getFarmTypeModel().listFarmTypes(versionFilter === 'all' ? {} : { poeVersion: versionFilter });
+  const runFarmTypes = state.farmingHubRuns.map((run) => run.farmType).filter(Boolean);
+  const optionLabels = [...new Set([...farmTypes.map((farmType) => farmType.label), ...runFarmTypes])];
+
+  populateSelectOptions(select, optionLabels, 'all', 'All farms');
+  select.value = optionLabels.includes(previousValue) ? previousValue : 'all';
+}
+
+function getFarmingHubFilters() {
+  const versionFilter = getFilterValue(elements.farmingHubVersionFilter);
+  const farmFilter = getFilterValue(elements.farmingHubFarmFilter);
+  const league = String(elements.farmingHubLeagueFilter?.value || '').trim();
+  const minProfitChaos = String(elements.farmingHubMinProfitFilter?.value || '').trim();
+  const params = { limit: 50 };
+
+  if (versionFilter !== 'all') {
+    params.poeVersion = versionFilter;
+  }
+  if (farmFilter !== 'all') {
+    params.farmType = farmFilter;
+  }
+  if (league) {
+    params.league = league;
+  }
+  if (minProfitChaos) {
+    params.minProfitChaos = minProfitChaos;
+  }
+
+  return params;
+}
+
+async function loadFarmingHubRuns() {
+  if (!elements.farmingHubList) return;
+
+  populateFarmingHubFarmOptions();
+  elements.farmingHubList.innerHTML = '<p class="empty-state">Loading shared farm runs...</p>';
+
+  try {
+    if (!window.electronAPI?.getFarmingHubRuns) {
+      throw new Error('Farming Hub desktop bridge is unavailable');
+    }
+
+    const response = await window.electronAPI.getFarmingHubRuns(getFarmingHubFilters());
+    state.farmingHubRuns = response?.runs || [];
+    populateFarmingHubFarmOptions();
+    renderFarmingHubRuns();
+  } catch (error) {
+    state.farmingHubRuns = [];
+    elements.farmingHubList.innerHTML = `<p class="empty-state">${escapeHTML(getUserFacingErrorMessage(error, 'toast.unexpectedError'))}</p>`;
+  }
+}
+
+function renderFarmingHubRuns() {
+  if (!elements.farmingHubList) return;
+
+  if (!state.farmingHubRuns.length) {
+    elements.farmingHubList.innerHTML = '<p class="empty-state">No public farm runs match these filters.</p>';
+    return;
+  }
+
+  const formatProfit = typeof profitCurrencyHTML === 'function'
+    ? profitCurrencyHTML
+    : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
+
+  elements.farmingHubList.innerHTML = state.farmingHubRuns.map((run) => {
+    const poeVersion = normalizePoeVersion(run.poeVersion) || 'poe1';
+    const profit = Number(run.profitChaos || 0);
+    const duration = run.durationSeconds ? formatDuration(run.durationSeconds) : '-';
+    const author = run.publisherDisplayName || run.author?.username || 'Unknown exile';
+    const reactions = run.reactions || {};
+    const reactionTotal = Object.values(reactions).reduce((sum, value) => sum + (Number(value) || 0), 0);
+
+    return `
+      <article class="farming-hub-run">
+        <div class="farming-hub-run-main">
+          <div class="farming-hub-run-kicker">${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(run.league || 'Standard')} / ${escapeHTML(author)}</div>
+          <h3>${escapeHTML(run.farmType || 'Unknown farm')}</h3>
+          <p>${escapeHTML(run.setupDescription || 'No setup notes shared.')}</p>
+        </div>
+        <div class="farming-hub-run-metrics">
+          <span><strong>${escapeHTML(String(run.runCount || 1))}</strong> maps</span>
+          <span><strong>${duration}</strong> duration</span>
+          <span class="${profit >= 0 ? 'positive' : 'negative'}">${formatProfit(profit, 16, poeVersion)}</span>
+          <span>${reactionTotal} reactions</span>
+        </div>
+      </article>
+    `;
+  }).join('');
 }
 
 /**
@@ -4228,15 +4441,23 @@ function renderSessionsList() {
     return;
   }
 
+  const filteredSessions = getFilteredSessions();
+  if (!filteredSessions.length) {
+    elements.sessionsList.innerHTML = '<p class="empty-state">No sessions match these filters.</p>';
+    closeSessionDrawer();
+    return;
+  }
+
   const formatProfit = typeof profitCurrencyHTML === 'function'
     ? profitCurrencyHTML
     : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
-  elements.sessionsList.innerHTML = state.sessions.map((session) => {
+  elements.sessionsList.innerHTML = filteredSessions.map((session) => {
     const profit = parseFloat(session.profitChaos || 0);
     const lootCount = Array.isArray(session.lootEntries)
       ? session.lootEntries.reduce((sum, loot) => sum + parseInt(loot.quantity || 0, 10), 0)
       : 0;
-    const contextLabel = `${session.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(session.league || 'Standard')}`;
+    const poeVersion = getSessionPoeVersion(session);
+    const contextLabel = `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(session.league || 'Standard')} / ${escapeHTML(getSessionFarmTypeLabel(session))}`;
     const duration = session.durationSec ? formatDuration(session.durationSec) : '-';
     const tier = session.mapTier ? `T${session.mapTier}` : '-';
     const startedAt = session.startedAt ? timeAgo(session.startedAt) : '-';
@@ -4256,7 +4477,7 @@ function renderSessionsList() {
           <span class="session-secondary-label">${window.t('sessions.lootCount')}</span>
           <span class="session-secondary-value">${lootCount}</span>
         </div>
-        <div class="session-profit ${profit >= 0 ? 'positive' : 'negative'}">${formatProfit(profit, 16, session.poeVersion || state.settings.poeVersion || 'poe1')}</div>
+        <div class="session-profit ${profit >= 0 ? 'positive' : 'negative'}">${formatProfit(profit, 16, poeVersion)}</div>
         <div class="session-status ${safeStatus}">${window.t(`sessions.${safeStatus}`)}</div>
       </button>
     `;

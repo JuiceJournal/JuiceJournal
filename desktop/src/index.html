@@ -38,6 +38,10 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14v13H5z"/><path d="M5 9.5h14"/><path d="M9 9.5v9"/></svg>
           <span data-i18n="nav.sessions">Session'lar</span>
         </button>
+        <button class="nav-btn" data-page="farming-hub">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+          <span data-i18n="nav.farmingHub">Farming Hub</span>
+        </button>
         <button class="nav-btn" data-page="currency">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18.5h14"/><path d="M7 18.5V9.5"/><path d="M12 18.5V5.5"/><path d="M17 18.5v-6"/><path d="M5 12.5 9.5 8 13 10.5 19 4.5"/></svg>
           <span data-i18n="nav.currency">Currency</span>
@@ -480,13 +484,25 @@
       <section id="sessions-page" class="page">
         <div class="page-header">
           <h2 data-i18n="sessions.title">Map Session'lari</h2>
-          <div class="filters">
+          <div class="filters session-filters">
             <select id="session-filter">
               <option value="all" data-i18n="sessions.all">Tumu</option>
               <option value="active" data-i18n="sessions.active">Aktif</option>
               <option value="completed" data-i18n="sessions.completed">Tamamlanmis</option>
               <option value="abandoned" data-i18n="sessions.abandoned">Iptal Edilmis</option>
             </select>
+            <select id="session-version-filter" aria-label="Filter sessions by game">
+              <option value="all">All games</option>
+              <option value="poe1">PoE 1</option>
+              <option value="poe2">PoE 2</option>
+            </select>
+            <select id="session-league-filter" aria-label="Filter sessions by league">
+              <option value="all">All leagues</option>
+            </select>
+            <select id="session-farm-filter" aria-label="Filter sessions by farm type">
+              <option value="all">All farms</option>
+            </select>
+            <input id="session-search-filter" type="search" placeholder="Search map, farm, league..." aria-label="Search sessions">
           </div>
         </div>
         <div id="sessions-list" class="sessions-list">
@@ -496,6 +512,32 @@
             </span>
             Henuz session yok
           </p>
+        </div>
+      </section>
+
+      <!-- Farming Hub Page -->
+      <section id="farming-hub-page" class="page">
+        <div class="page-header">
+          <div>
+            <h2 data-i18n="farmingHub.title">Farming Hub</h2>
+            <p class="page-subtitle" data-i18n="farmingHub.subtitle">Public runs shared by players from their local ledger.</p>
+          </div>
+          <div class="filters farming-hub-filters">
+            <select id="farming-hub-version-filter" aria-label="Filter hub runs by game">
+              <option value="all">All games</option>
+              <option value="poe1">PoE 1</option>
+              <option value="poe2">PoE 2</option>
+            </select>
+            <input id="farming-hub-league-filter" type="search" placeholder="League" aria-label="Filter hub runs by league">
+            <select id="farming-hub-farm-filter" aria-label="Filter hub runs by farm type">
+              <option value="all">All farms</option>
+            </select>
+            <input id="farming-hub-min-profit-filter" type="number" min="0" step="1" placeholder="Min chaos" aria-label="Minimum profit">
+            <button id="farming-hub-refresh-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
+          </div>
+        </div>
+        <div id="farming-hub-list" class="farming-hub-list">
+          <p class="empty-state">No public farm runs loaded yet.</p>
         </div>
       </section>
 

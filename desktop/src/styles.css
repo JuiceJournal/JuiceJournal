@@ -1610,7 +1610,22 @@ body {
   letter-spacing: 0.1em;
 }
 
-.filters select {
+.page-subtitle {
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.filters select,
+.filters input {
   padding: 0.45rem 0.8rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -1619,6 +1634,19 @@ body {
   font-family: var(--font);
   font-size: 0.8rem;
   cursor: pointer;
+}
+
+.filters input {
+  width: 170px;
+  cursor: text;
+}
+
+.filters input::placeholder {
+  color: var(--text-muted);
+}
+
+.session-filters {
+  max-width: 760px;
 }
 
 .sessions-list {
@@ -1696,6 +1724,70 @@ body {
 .session-status.active { background: var(--blue-dim); color: var(--blue); }
 .session-status.completed { background: var(--green-dim); color: var(--green); }
 .session-status.abandoned { background: rgba(255,255,255,0.05); color: var(--text-muted); }
+
+.farming-hub-filters {
+  max-width: 820px;
+}
+
+.farming-hub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.farming-hub-run {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem 1.15rem;
+  background:
+    linear-gradient(90deg, rgba(198, 161, 91, 0.08), transparent 42%),
+    var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.farming-hub-run-kicker {
+  color: var(--gold-light);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.farming-hub-run h3 {
+  margin-top: 0.15rem;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  color: var(--text-bright);
+  letter-spacing: 0.06em;
+}
+
+.farming-hub-run p {
+  margin-top: 0.25rem;
+  max-width: 720px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.farming-hub-run-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(90px, auto));
+  gap: 0.45rem 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.farming-hub-run-metrics strong,
+.farming-hub-run-metrics .positive {
+  color: var(--green);
+}
+
+.farming-hub-run-metrics .negative {
+  color: var(--red);
+}
 
 .session-drawer {
   position: fixed;
