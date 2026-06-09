@@ -44,6 +44,9 @@ postgres_data/
 pgadmin_data/
 redis_data/
 
+# Tesseract OCR data
+*.traineddata
+
 # Misc
 .cache/
 .temp/
