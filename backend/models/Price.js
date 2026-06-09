@@ -46,6 +46,7 @@ module.exports = (sequelize, DataTypes) => {
         'idol',
         'expedition',
         'ultimatum',
+        'vaal',
         'base_type',
         'other'
       ),

@@ -80,7 +80,8 @@ const POE2_ITEM_TYPE_MAPPING = {
   'Runes': 'rune',
   'Essences': 'essence',
   'Expedition': 'expedition',
-  'Ultimatum': 'ultimatum'
+  'Ultimatum': 'ultimatum',
+  'Vaal': 'vaal'
 };
 
 // PoE 1 sync tipleri (currency API + item API types)
@@ -125,7 +126,7 @@ const POE1_CURRENCY_OVERVIEW_TYPES = new Set([
 // PoE 2 sync tipleri (all use exchange API — plural names required)
 const POE2_SYNC_TYPES = [
   'Currency', 'Fragments', 'UncutGems', 'SoulCores',
-  'Idol', 'Runes', 'Essences', 'Expedition', 'Ultimatum'
+  'Idol', 'Runes', 'Essences', 'Expedition', 'Ultimatum', 'Vaal'
 ];
 
 // Cache for league index states (refreshed every 30 min)

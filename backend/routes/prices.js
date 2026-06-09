@@ -107,7 +107,7 @@ router.get('/current',
       'divination_card', 'gem', 'unique', 'oil',
       'incubator', 'delirium_orb', 'catalyst',
       'essence', 'fossil', 'beast', 'rune', 'tattoo', 'omen',
-      'soul_core', 'idol', 'expedition', 'ultimatum', 'base_type', 'other'
+      'soul_core', 'idol', 'expedition', 'ultimatum', 'vaal', 'base_type', 'other'
     ]),
     query('search').optional().trim(),
     query('limit').optional().isInt({ min: 1, max: 1000 }),
