@@ -4173,10 +4173,13 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-sessions', async (event, params = {}) => {
-    const trackerContext = getTrackerContextDefaults(params);
+    const includeAllContexts = params.includeAllContexts === true;
+    const requestParams = { ...params };
+    delete requestParams.includeAllContexts;
+    const trackerContext = includeAllContexts ? {} : getTrackerContextDefaults(requestParams);
     try {
       return await apiClient.getSessions({
-        ...params,
+        ...requestParams,
         ...trackerContext
       });
     } catch (error) {
@@ -4185,8 +4188,8 @@ function setupIPC() {
         return {
           sessions: [queuedSession],
           total: 1,
-          limit: params.limit || 50,
-          offset: params.offset || 0
+          limit: requestParams.limit || 50,
+          offset: requestParams.offset || 0
         };
       }
       throw error;
@@ -4832,6 +4835,15 @@ function setupIPC() {
       return await publishMapResultsToFarmingHub(input);
     } catch (error) {
       throw toRendererError(error, 'Failed to publish farm run');
+    }
+  });
+
+  ipcMain.handle('get-farming-hub-runs', async (event, params = {}) => {
+    try {
+      const runs = await apiClient.getPublicFarmRuns(params);
+      return { runs };
+    } catch (error) {
+      throw toRendererError(error, 'Failed to load farm runs');
     }
   });
 
