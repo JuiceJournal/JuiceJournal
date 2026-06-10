@@ -48,7 +48,8 @@ const POE1_QUICK_SYNC = [
 ];
 const POE2_QUICK_SYNC = [
   'Currency', 'Fragments', 'Essences', 'Runes',
-  'UncutGems', 'SoulCores', 'Idol', 'Vaal'
+  'UncutGems', 'SoulCores', 'Idol', 'Vaal',
+  'Expedition', 'Ultimatum'
 ];
 
 // ─── Static core currencies (always present, per version) ─────────
@@ -170,10 +171,15 @@ const CATEGORY_KEYWORDS = [
   { pattern: /\btattoo\b/i, category: 'tattoo' },
   { pattern: /\brune\b/i, category: 'rune' },
   { pattern: /\bomen\b/i, category: 'omen' },
-  { pattern: /\bcoffin\b/i, category: 'coffin' },
-  { pattern: /\ballflame\b/i, category: 'allflame' },
+  { pattern: /\bcoffin\b/i, category: 'other' },
+  { pattern: /\ballflame\b/i, category: 'other' },
   { pattern: /\binfuser\b/i, category: 'vaal' },
   { pattern: /\bdestabiliser\b/i, category: 'vaal' },
+  { pattern: /\bsoul core\b/i, category: 'soul_core' },
+  { pattern: /\bidol\b/i, category: 'idol' },
+  { pattern: /\blogbook\b/i, category: 'expedition' },
+  { pattern: /\bexpedition\b/i, category: 'expedition' },
+  { pattern: /\binscribed ultimatum\b/i, category: 'ultimatum' },
 ];
 
 // ─── Registry Class ───────────────────────────────────────────────

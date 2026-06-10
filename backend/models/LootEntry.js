@@ -53,6 +53,7 @@ module.exports = (sequelize, DataTypes) => {
         'expedition',
         'ultimatum',
         'vaal',
+        'base_type',
         'other'
       ),
       allowNull: false,
