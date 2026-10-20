@@ -10,7 +10,6 @@ window._appState = { language: 'en' };
 const state = {
   currentUser: null,
   currentSession: null,
-  activeCharacterRefreshSource: null,
   settings: {},
   detectedGameVersion: null,
   activeLeagueOptions: {},
@@ -1059,17 +1058,11 @@ function syncRendererGameContext(version, options = {}) {
 
 function scheduleActiveCharacterRefresh({ version } = {}) {
   if (!version) {
-    state.activeCharacterRefreshSource = null;
     clearActiveCharacterRefreshTimers();
     return;
   }
 
   if (!state.currentUser) {
-    return;
-  }
-
-  if (state.activeCharacterRefreshSource === 'native-high-confidence') {
-    state.activeCharacterRefreshSource = null;
     return;
   }
 
@@ -1218,167 +1211,6 @@ function refreshRendererOverlayState() {
   });
 
   return state.overlay;
-}
-
-function applyNativeCharacterHint(nativeHint) {
-  if (!nativeHint || typeof nativeHint !== 'object' || !state.account) {
-    return false;
-  }
-
-  const account = state.account;
-  const stripWrappingQuotes = (value) => {
-    let normalized = typeof value === 'string' ? value.trim() : '';
-    const quotePairs = [
-      ['"', '"'],
-      ['\'', '\''],
-      ['“', '”'],
-      ['‘', '’']
-    ];
-    let stripped = true;
-
-    while (stripped && normalized.length >= 2) {
-      stripped = false;
-
-      for (const [openQuote, closeQuote] of quotePairs) {
-        if (normalized.startsWith(openQuote) && normalized.endsWith(closeQuote)) {
-          normalized = normalized.slice(1, -1).trim();
-          stripped = true;
-          break;
-        }
-      }
-    }
-
-    return normalized;
-  };
-  const normalizeText = (value) => (
-    typeof value === 'string'
-      ? stripWrappingQuotes(value).toLowerCase()
-      : ''
-  );
-  const normalizeDisplayText = (value) => {
-    const normalized = stripWrappingQuotes(value);
-    return normalized || null;
-  };
-  const normalizeNumber = (value) => {
-    if (value == null || typeof value === 'boolean') {
-      return 0;
-    }
-
-    const normalized = Number(value);
-    return Number.isFinite(normalized) ? normalized : 0;
-  };
-  const normalizeVersion = (value) => {
-    const normalized = normalizeText(value);
-    return normalized === 'poe1' || normalized === 'poe2' ? normalized : null;
-  };
-  const createNativeCharacterId = (character) => [
-    'native',
-    character.poeVersion,
-    normalizeText(character.name).replace(/[^a-z0-9]+/g, '-'),
-    normalizeText(character.className || character.ascendancy || 'unknown').replace(/[^a-z0-9]+/g, '-')
-  ].filter(Boolean).join(':');
-  const ensureRuntimeCharacterStored = (character) => {
-    account.characters = Array.isArray(account.characters) ? account.characters : [];
-    account.charactersByGame = account.charactersByGame && typeof account.charactersByGame === 'object'
-      ? account.charactersByGame
-      : {};
-    account.charactersByGame[poeVersion] = Array.isArray(account.charactersByGame[poeVersion])
-      ? account.charactersByGame[poeVersion]
-      : [];
-
-    const hasCharacter = account.characters.some((candidate) => candidate.id === character.id);
-    if (!hasCharacter) {
-      account.characters.push(character);
-    }
-
-    const hasGameCharacter = account.charactersByGame[poeVersion].some((candidate) => candidate.id === character.id);
-    if (!hasGameCharacter) {
-      account.charactersByGame[poeVersion].push(character);
-    }
-  };
-
-  if (nativeHint.confidence !== 'high') {
-    return false;
-  }
-
-  const poeVersion = normalizeVersion(nativeHint.poeVersion);
-  const activePoeVersion = normalizeVersion(state.detectedGameVersion)
-    || normalizeVersion(account.activePoeVersion)
-    || normalizeVersion(state.settings?.poeVersion);
-  const characterName = normalizeText(nativeHint.characterName);
-  if (!poeVersion || !characterName || !activePoeVersion || poeVersion !== activePoeVersion) {
-    return false;
-  }
-
-  const characters = Array.isArray(account.charactersByGame?.[poeVersion])
-    ? account.charactersByGame[poeVersion]
-    : (Array.isArray(account.characters)
-      ? account.characters.filter((character) => normalizeVersion(character?.poeVersion) === poeVersion)
-      : []);
-
-  let matches = characters.filter((character) => normalizeText(character?.name) === characterName);
-
-  const className = normalizeText(nativeHint.className);
-  if (matches.length && className) {
-    const classMatches = matches.filter((character) => normalizeText(character?.className) === className);
-    if (classMatches.length) {
-      matches = classMatches;
-    }
-  }
-
-  const league = normalizeText(nativeHint.league);
-  if (matches.length && league) {
-    const leagueMatches = matches.filter((character) => normalizeText(character?.league) === league);
-    if (leagueMatches.length) {
-      matches = leagueMatches;
-    }
-  }
-
-  const matchedCharacter = matches[0] || {
-    name: normalizeDisplayText(nativeHint.characterName),
-    level: normalizeNumber(nativeHint.level),
-    className: normalizeDisplayText(nativeHint.className),
-    ascendancy: normalizeDisplayText(nativeHint.ascendancy),
-    league: normalizeDisplayText(nativeHint.league),
-    poeVersion
-  };
-  if (!matchedCharacter.id) {
-    matchedCharacter.id = createNativeCharacterId(matchedCharacter);
-  }
-  if (!matchedCharacter) {
-    return false;
-  }
-
-  ensureRuntimeCharacterStored(matchedCharacter);
-  account.activePoeVersion = poeVersion;
-  account.selectedCharacter = matchedCharacter;
-  account.selectedCharacterByGame = account.selectedCharacterByGame && typeof account.selectedCharacterByGame === 'object'
-    ? account.selectedCharacterByGame
-    : {};
-  account.selectedCharacterByGame[poeVersion] = matchedCharacter.id;
-  account.summary = {
-    status: 'ready',
-    id: matchedCharacter.id || null,
-    name: matchedCharacter.name || null,
-    level: typeof matchedCharacter.level === 'number' ? matchedCharacter.level : 0,
-    className: matchedCharacter.className || null,
-    ascendancy: matchedCharacter.ascendancy || null,
-    league: matchedCharacter.league || null,
-    poeVersion: matchedCharacter.poeVersion || poeVersion
-  };
-  state.activeCharacterRefreshSource = 'native-high-confidence';
-  if (typeof clearActiveCharacterRefreshTimers === 'function') {
-    clearActiveCharacterRefreshTimers();
-  }
-
-  if (typeof renderCharacterSummaryCard === 'function') {
-    renderCharacterSummaryCard();
-  }
-  if (typeof refreshRendererOverlayState === 'function') {
-    refreshRendererOverlayState();
-  }
-
-  return true;
 }
 
 function setRuntimeSessionState(runtimeSession) {
@@ -2333,12 +2165,6 @@ function setupIPCListeners() {
   if (window.electronAPI.onProfitCalculated) {
     window.electronAPI.onProfitCalculated((report) => {
       renderProfitReport(report);
-    });
-  }
-
-  if (window.electronAPI.onActiveCharacterHint) {
-    window.electronAPI.onActiveCharacterHint((nativeHint) => {
-      applyNativeCharacterHint(nativeHint);
     });
   }
 
