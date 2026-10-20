@@ -123,9 +123,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onGameClosed: (callback) => {
     ipcRenderer.on('game-closed', (event, data) => callback(data));
   },
-  onActiveCharacterHint: (callback) => {
-    ipcRenderer.on('active-character-hint', (event, data) => callback(data));
-  },
   onAppUpdateStateChanged: (callback) => {
     ipcRenderer.on('app-update-state-changed', (event, data) => callback(data));
   },
@@ -134,7 +131,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('start-map-prompt-overlay-result', listener);
     return () => ipcRenderer.removeListener('start-map-prompt-overlay-result', listener);
   },
-  getLastActiveCharacterHint: () => ipcRenderer.invoke('get-last-active-character-hint'),
 
   // Dinleyicileri temizle (sadece izin verilen kanallar)
   removeAllListeners: (channel) => {
@@ -143,7 +139,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'loot-added', 'pending-loot-updated', 'pending-sync-updated',
       'audit-trail-updated', 'navigate', 'stash-snapshot-taken',
       'profit-calculated', 'game-version-changed', 'game-closed',
-      'active-character-hint', 'app-update-state-changed',
+      'app-update-state-changed',
       'start-map-prompt-overlay-result'
     ];
     if (channel && ALLOWED_CHANNELS.includes(channel)) {

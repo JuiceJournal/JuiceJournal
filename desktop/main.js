@@ -45,8 +45,6 @@ const {
   DEFAULT_STASH_SCAN_HOTKEY,
   validateHotkeys
 } = require('./src/modules/hotkeyModel');
-const { createNativeGameInfoProducer } = require('./src/modules/nativeGameInfoProducer');
-const { createOverwolfOverlayProvider } = require('./src/modules/overwolfOverlayProvider');
 const {
   getAppUpdateSupportState,
   createAppUpdateState,
@@ -58,10 +56,6 @@ const APP_NAME = 'Juice Journal';
 const APP_ID = 'JuiceJournal.Desktop';
 const DEFAULT_STRATEGY_PRESETS = ['Strongbox', 'Legion', 'Ritual', 'Expedition', 'Harvest', 'Boss Rush'];
 const MAP_RESULT_OVERLAY_DURATION_MS = 10_000;
-const OVERWOLF_OVERLAY_GAME_IDS = Object.freeze({
-  poe1: 7212,
-  poe2: 24886
-});
 const MAX_PENDING_LOOT_ACTIONS = 100;
 const MAX_PENDING_SESSION_ACTIONS = 20;
 const MAX_AUDIT_TRAIL_ENTRIES = 200;
@@ -309,15 +303,6 @@ let overlayRuntimeState = null;
 let overlayMapResultState = null;
 let overlayStartMapPromptState = null;
 let overlayMapResultDismissTimer = null;
-let lastActiveCharacterHint = null;
-let nativeGameInfoProducer = null;
-let nativeGameInfoProducerGep = null;
-let nativeGameInfoProducerBinding = null;
-let overwolfPackageListenersRegistered = false;
-let overwolfPackageReadyPollTimer = null;
-let overwolfOverlayProvider = null;
-let overwolfOverlayBinding = null;
-let overwolfOverlayInjectionRetryTimer = null;
 let poeAuthServer = null;
 let trayHintShown = false;
 let pendingLootFlushInProgress = false;
@@ -1146,518 +1131,6 @@ function emitPendingSyncState() {
     ...getPendingSyncSnapshot(),
     entries: getPendingSyncEntriesForView()
   });
-}
-
-function emitActiveCharacterHint(payload) {
-  lastActiveCharacterHint = payload || null;
-
-  if (!mainWindow || !mainWindow.webContents) {
-    return;
-  }
-
-  mainWindow.webContents.send('active-character-hint', payload);
-}
-
-function clearNativeActiveCharacterHint() {
-  emitActiveCharacterHint(null);
-}
-
-function getNativeGameInfoGameId(version) {
-  if (version === 'poe1') {
-    return 7212;
-  }
-
-  if (version === 'poe2') {
-    return 24886;
-  }
-
-  return null;
-}
-
-function getOverwolfOverlayGameId(version) {
-  return OVERWOLF_OVERLAY_GAME_IDS[version] || null;
-}
-
-function getOverwolfOverlayGameIds() {
-  return Object.values(OVERWOLF_OVERLAY_GAME_IDS);
-}
-
-function isOverwolfOverlayGameInfo(gameInfo) {
-  const gameId = Number(gameInfo?.id ?? gameInfo?.gameInfo?.id);
-  return getOverwolfOverlayGameIds().includes(gameId);
-}
-
-function getOverwolfOverlayInjectionCandidates(gameId, activeGame) {
-  const candidates = [];
-  const activeGameId = Number(activeGame?.id);
-  const activeClassId = Number(activeGame?.classId);
-
-  if (activeGameId === gameId && Number.isFinite(activeClassId) && activeClassId > 0) {
-    candidates.push(activeClassId);
-  }
-
-  // Overwolf late injection expects a game class id. In the games list this is
-  // commonly the game id with the primary executable suffix appended.
-  candidates.push((gameId * 10) + 1);
-  candidates.push(gameId);
-
-  return [...new Set(candidates.filter((candidate) => Number.isFinite(candidate) && candidate > 0))];
-}
-
-function scheduleOverwolfOverlayInjectionRetry(detectedVersion) {
-  const provider = getOverwolfOverlayProvider();
-  return provider.scheduleInjectionRetry(() => {
-    requestOverwolfOverlayInjectionForDetectedGame({
-      detectedVersion,
-      retry: true
-    });
-  });
-}
-
-function clearOverwolfOverlayInjectionRetry() {
-  const provider = getOverwolfOverlayProvider();
-  return provider.resetInjectionRetry();
-}
-
-function registerOverwolfOverlayEvents(overlayApi) {
-  if (!overlayApi || typeof overlayApi.on !== 'function') {
-    return false;
-  }
-
-  if (overwolfOverlayBinding?.overlayApi === overlayApi && overwolfOverlayBinding?.eventsRegistered) {
-    return true;
-  }
-
-  overlayApi.on('game-launched', (event, gameInfo) => {
-    const gameId = Number(gameInfo?.id);
-    const gameName = gameInfo?.name || `game ${gameId || 'unknown'}`;
-    if (!isOverwolfOverlayGameInfo(gameInfo)) {
-      if (typeof event?.dismiss === 'function') {
-        event.dismiss();
-      }
-      return;
-    }
-
-    if (gameInfo?.processInfo?.isElevated) {
-      console.warn(`[OverwolfOverlay] Cannot inject into elevated game process: ${gameName}`);
-      if (typeof event?.dismiss === 'function') {
-        event.dismiss();
-      }
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('runtime-event', {
-          type: 'overlay-elevation-mismatch',
-          game: gameName
-        });
-      }
-      return;
-    }
-
-    if (typeof event?.inject === 'function') {
-      event.inject();
-      console.info(`[OverwolfOverlay] Injection requested for ${gameName}`);
-    }
-  });
-
-  overlayApi.on('game-injected', (gameInfo) => {
-    if (isOverwolfOverlayGameInfo(gameInfo)) {
-      console.info(`[OverwolfOverlay] Game injected ${gameInfo?.name || gameInfo?.id || 'unknown'}`);
-      clearOverwolfOverlayInjectionRetry();
-      const provider = getOverwolfOverlayProvider();
-      provider.setInjectionState(provider.INJECTION_STATES.INJECTED);
-      provider.flushRenderQueue((queuedState) => renderOverwolfOverlayWindow(queuedState));
-      updateOverlayWindow();
-    }
-  });
-
-  overlayApi.on('game-injection-error', (gameInfo, error) => {
-    if (isOverwolfOverlayGameInfo(gameInfo)) {
-      console.warn('[OverwolfOverlay] Game injection failed', error, gameInfo);
-      const provider = getOverwolfOverlayProvider();
-      provider.setInjectionState(provider.INJECTION_STATES.FAILED);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('runtime-event', {
-          type: 'overlay-injection-failed',
-          game: gameInfo?.name || 'unknown'
-        });
-      }
-    }
-  });
-
-  overlayApi.on('game-exit', (gameInfo, wasInjected) => {
-    if (isOverwolfOverlayGameInfo(gameInfo)) {
-      console.info(`[OverwolfOverlay] Game exited ${gameInfo?.name || gameInfo?.id || 'unknown'} injected=${Boolean(wasInjected)}`);
-    }
-  });
-
-  overwolfOverlayBinding = {
-    overlayApi,
-    eventsRegistered: true,
-    gamesRegistered: false
-  };
-
-  return true;
-}
-
-function registerOverwolfOverlayGames() {
-  const overlayApi = getOverwolfOverlayApi();
-  if (!overlayApi || typeof overlayApi.registerGames !== 'function') {
-    return Promise.resolve(false);
-  }
-
-  registerOverwolfOverlayEvents(overlayApi);
-
-  if (overwolfOverlayBinding?.overlayApi === overlayApi && overwolfOverlayBinding?.gamesRegistered) {
-    return requestOverwolfOverlayInjectionForDetectedGame();
-  }
-
-  const gameIds = getOverwolfOverlayGameIds();
-  return Promise.resolve(overlayApi.registerGames({ gamesIds: gameIds }))
-    .then(() => {
-      overwolfOverlayBinding = {
-        ...(overwolfOverlayBinding || {}),
-        overlayApi,
-        eventsRegistered: true,
-        gamesRegistered: true
-      };
-      console.info(`[OverwolfOverlay] Registered games ${gameIds.join(', ')}`);
-      return requestOverwolfOverlayInjectionForDetectedGame().then((injected) => {
-        if (!injected) {
-          const detectedVersion = normalizePoeVersion(gameDetector ? gameDetector.getDetectedGame() : null)
-            || normalizePoeVersion(store.get('lastDetectedPoeVersion'));
-          if (detectedVersion) {
-            scheduleOverwolfOverlayInjectionRetry(detectedVersion);
-          }
-        }
-
-        return injected;
-      });
-    })
-    .catch((error) => {
-      console.warn('[OverwolfOverlay] Failed to register overlay games', error);
-      return false;
-    });
-}
-
-function requestOverwolfOverlayInjectionForDetectedGame(input = {}) {
-  const detectedVersion = normalizePoeVersion(input.detectedVersion)
-    || normalizePoeVersion(gameDetector ? gameDetector.getDetectedGame() : null)
-    || normalizePoeVersion(store.get('lastDetectedPoeVersion'));
-  const gameId = getOverwolfOverlayGameId(detectedVersion);
-  const overlayApi = getOverwolfOverlayApi();
-
-  if (!gameId || !overlayApi || typeof overlayApi.requestGameInjection !== 'function') {
-    return Promise.resolve(false);
-  }
-
-  const activeGameInfo = typeof overlayApi.getActiveGameInfo === 'function'
-    ? overlayApi.getActiveGameInfo()
-    : null;
-  const activeGame = activeGameInfo?.gameInfo;
-  const candidates = getOverwolfOverlayInjectionCandidates(gameId, activeGame);
-  let lastError = null;
-
-  return candidates.reduce((chain, candidate) => chain.then((injected) => {
-    if (injected) {
-      return true;
-    }
-
-    return Promise.resolve(overlayApi.requestGameInjection(candidate))
-      .then(() => {
-        console.info(`[OverwolfOverlay] Late injection requested for ${detectedVersion} (${candidate})`);
-        return true;
-      })
-      .catch((error) => {
-        lastError = error;
-        return false;
-      });
-  }), Promise.resolve(false)).then((injected) => {
-    if (!injected && lastError) {
-      console.warn(`[OverwolfOverlay] Late injection failed for ${detectedVersion}`, lastError);
-    }
-
-    if (!injected && !input.retry) {
-      scheduleOverwolfOverlayInjectionRetry(detectedVersion);
-    }
-
-    return injected;
-  });
-}
-
-function getOverwolfRuntimeDiagnostics() {
-  const overwolf = app?.overwolf || null;
-  const packages = overwolf?.packages || null;
-
-  return {
-    runtime: overwolf ? 'ow-electron' : 'electron',
-    gep: packages?.gep ? 'available' : 'unavailable',
-    overlay: getOverwolfOverlayApi() ? 'available' : 'unavailable'
-  };
-}
-
-function logOverwolfRuntimeDiagnostics() {
-  const diagnostics = getOverwolfRuntimeDiagnostics();
-  console.info(
-    `[OverwolfRuntime] runtime=${diagnostics.runtime} gep=${diagnostics.gep} overlay=${diagnostics.overlay}`
-  );
-}
-
-function getNativeGameInfoProducer() {
-  const gep = app?.overwolf?.packages?.gep || null;
-  if (!gep) {
-    return null;
-  }
-
-  if (!nativeGameInfoProducer || nativeGameInfoProducerGep !== gep) {
-    nativeGameInfoProducer = createNativeGameInfoProducer({
-      gep,
-      emitHint: emitActiveCharacterHint,
-      logger: console
-    });
-    nativeGameInfoProducerGep = gep;
-  }
-
-  return nativeGameInfoProducer;
-}
-
-function resyncNativeGameInfoProducerForDetectedGame() {
-  const detectedVersion = normalizePoeVersion(gameDetector ? gameDetector.getDetectedGame() : null)
-    || normalizePoeVersion(store.get('lastDetectedPoeVersion'));
-  const gameId = getNativeGameInfoGameId(detectedVersion);
-
-  if (!detectedVersion || !gameId) {
-    return Promise.resolve(false);
-  }
-
-  return syncNativeGameInfoProducer({
-    detectedVersion,
-    gameId
-  });
-}
-
-function clearOverwolfPackageReadyPoll() {
-  if (!overwolfPackageReadyPollTimer) {
-    return false;
-  }
-
-  clearInterval(overwolfPackageReadyPollTimer);
-  overwolfPackageReadyPollTimer = null;
-  return true;
-}
-
-function handleOverwolfPackageReady(_event, packageName, version) {
-  console.info(`[OverwolfRuntime] package ready ${packageName}${version ? `@${version}` : ''}`);
-
-  if (packageName === 'overlay') {
-    registerOverwolfOverlayGames();
-    updateOverlayWindow();
-    return;
-  }
-
-  if (packageName !== 'gep') {
-    return;
-  }
-
-  clearOverwolfPackageReadyPoll();
-  nativeGameInfoProducer = null;
-  nativeGameInfoProducerGep = null;
-  nativeGameInfoProducerBinding = null;
-
-  return resyncNativeGameInfoProducerForDetectedGame().catch((error) => {
-    console.warn('[NativeGameInfoProducer] Failed to resync after GEP became ready', error);
-    return false;
-  });
-}
-
-function probeOverwolfGepPackageAvailability(version = 'available') {
-  const gep = app?.overwolf?.packages?.gep || null;
-  if (!gep) {
-    return false;
-  }
-
-  if (nativeGameInfoProducerGep === gep) {
-    clearOverwolfPackageReadyPoll();
-    return true;
-  }
-
-  return handleOverwolfPackageReady(null, 'gep', version);
-}
-
-function startOverwolfPackageReadyPoll() {
-  const packages = app?.overwolf?.packages || null;
-  if (!packages || overwolfPackageReadyPollTimer) {
-    return false;
-  }
-
-  overwolfPackageReadyPollTimer = setInterval(() => {
-    const result = probeOverwolfGepPackageAvailability('polled');
-    if (result && typeof result.catch === 'function') {
-      result.catch((error) => {
-        console.warn('[OverwolfRuntime] Failed while polling for GEP package readiness', error);
-      });
-    }
-  }, 1000);
-
-  if (typeof overwolfPackageReadyPollTimer.unref === 'function') {
-    overwolfPackageReadyPollTimer.unref();
-  }
-
-  return true;
-}
-
-function registerOverwolfPackageListeners() {
-  const packages = app?.overwolf?.packages || null;
-  if (!packages || typeof packages.on !== 'function' || overwolfPackageListenersRegistered) {
-    return false;
-  }
-
-  overwolfPackageListenersRegistered = true;
-
-  packages.on('ready', handleOverwolfPackageReady);
-  packages.on('failed-to-initialize', (_event, packageName) => {
-    console.warn(`[OverwolfRuntime] package failed to initialize ${packageName}`);
-  });
-  packages.on('crashed', (_event, canRecover) => {
-    console.warn(`[OverwolfRuntime] package manager crashed recoverable=${Boolean(canRecover)}`);
-  });
-
-  const gepReady = probeOverwolfGepPackageAvailability('available');
-  if (!gepReady) {
-    startOverwolfPackageReadyPoll();
-  }
-
-  if (getOverwolfOverlayApi()) {
-    registerOverwolfOverlayGames();
-  }
-
-  return true;
-}
-
-function getOverwolfOverlayApi() {
-  const overwolf = app?.overwolf || null;
-  return overwolf?.packages?.overlay
-    || overwolf?.overlay
-    || overwolf?.windows
-    || overwolf?.packages?.windows
-    || null;
-}
-
-function getOverwolfOverlayProvider() {
-  const overlayApi = getOverwolfOverlayApi();
-  if (!overwolfOverlayProvider || (!overwolfOverlayProvider.isAvailable() && overlayApi)) {
-    overwolfOverlayProvider = createOverwolfOverlayProvider({
-      overlayApi,
-      entryPath: path.join(__dirname, 'src', 'overlay.html'),
-      preloadPath: path.join(__dirname, 'overlay-preload.js'),
-      logger: console
-    });
-  }
-
-  return overwolfOverlayProvider;
-}
-
-function isOverwolfOverlayAvailable() {
-  return getOverwolfOverlayProvider().isAvailable();
-}
-
-function renderOverwolfOverlayWindow(overlayState) {
-  if (!isOverwolfOverlayAvailable()) {
-    return Promise.resolve({
-      handled: false,
-      provider: 'overwolf',
-      reason: 'overlay-api-unavailable'
-    });
-  }
-
-  try {
-    return Promise.resolve(getOverwolfOverlayProvider().renderState(overlayState)).catch((error) => {
-      console.warn('[OverwolfOverlayProvider] Failed to render overlay state', error);
-      return {
-        handled: false,
-        provider: 'overwolf',
-        reason: 'render-failed'
-      };
-    });
-  } catch (error) {
-    console.warn('[OverwolfOverlayProvider] Failed to render overlay state', error);
-    return Promise.resolve({
-      handled: false,
-      provider: 'overwolf',
-      reason: 'render-failed'
-    });
-  }
-}
-
-function stopNativeGameInfoProducer() {
-  nativeGameInfoProducerBinding = null;
-  clearNativeActiveCharacterHint();
-
-  if (!nativeGameInfoProducer || typeof nativeGameInfoProducer.stop !== 'function') {
-    nativeGameInfoProducerGep = null;
-    return Promise.resolve(false);
-  }
-
-  try {
-    return Promise.resolve(nativeGameInfoProducer.stop()).catch((error) => {
-      console.warn('[NativeGameInfoProducer] Failed to stop producer', error);
-      return false;
-    }).finally(() => {
-      nativeGameInfoProducerGep = null;
-    });
-  } catch (error) {
-    console.warn('[NativeGameInfoProducer] Failed to stop producer', error);
-    nativeGameInfoProducerGep = null;
-    return Promise.resolve(false);
-  }
-}
-
-function syncNativeGameInfoProducer(input = {}) {
-  const detectedVersion = input.detectedVersion;
-  const gameId = input.gameId || getNativeGameInfoGameId(detectedVersion);
-
-  if (!detectedVersion || !gameId) {
-    return stopNativeGameInfoProducer();
-  }
-
-  if (
-    nativeGameInfoProducerBinding
-    && nativeGameInfoProducerBinding.detectedVersion === detectedVersion
-    && nativeGameInfoProducerBinding.gameId === gameId
-  ) {
-    return Promise.resolve(true);
-  }
-
-  const producer = getNativeGameInfoProducer();
-  if (!producer || typeof producer.start !== 'function') {
-    return Promise.resolve(false);
-  }
-
-  try {
-    const startPromise = producer.start({
-      poeVersion: detectedVersion,
-      gameId
-    });
-
-    return Promise.resolve(startPromise).then((started) => {
-      if (started) {
-        nativeGameInfoProducerBinding = {
-          detectedVersion,
-          gameId
-        };
-      } else {
-        nativeGameInfoProducerBinding = null;
-      }
-
-      return started;
-    }).catch((error) => {
-      nativeGameInfoProducerBinding = null;
-      console.warn('[NativeGameInfoProducer] Failed to start producer', error);
-      return false;
-    });
-  } catch (error) {
-    nativeGameInfoProducerBinding = null;
-    console.warn('[NativeGameInfoProducer] Failed to start producer', error);
-    return Promise.resolve(false);
-  }
 }
 
 function annotateSyncFailure(action, error, { blocked = false } = {}) {
@@ -3081,25 +2554,8 @@ function updateOverlayWindow({ character, runtimeSession } = {}) {
   }
 
   const overlayState = buildOverlayState();
-  const overwolfAvailable = typeof isOverwolfOverlayAvailable === 'function'
-    ? isOverwolfOverlayAvailable()
-    : false;
 
-  if (overwolfAvailable) {
-    if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
-      overlayWindow.hide();
-    }
-    const provider = getOverwolfOverlayProvider();
-    if (provider.getInjectionState() !== provider.INJECTION_STATES.INJECTED && overlayState.visibility !== 'hidden') {
-      provider.queueRender(overlayState);
-      return overlayState;
-    }
-    provider.flushRenderQueue((queuedState) => renderOverwolfOverlayWindow(queuedState));
-    renderOverwolfOverlayWindow(overlayState).catch(() => { });
-    return overlayState;
-  }
-
-  if (!overwolfAvailable && overlayState.visibility !== 'hidden' && (!overlayWindow || overlayWindow.isDestroyed())) {
+  if (overlayState.visibility !== 'hidden' && (!overlayWindow || overlayWindow.isDestroyed())) {
     const appReady = typeof app?.isReady === 'function' ? app.isReady() : true;
     if (appReady) {
       createOverlayWindow();
@@ -3835,8 +3291,6 @@ function handleGameClosed(version, at = new Date()) {
     runtimeSession
   };
 
-  stopNativeGameInfoProducer();
-
   console.log(`[GameDetector] ${gameLabel} closed`);
   if (mainWindow) {
     mainWindow.webContents.send('game-closed', payload);
@@ -3890,13 +3344,6 @@ function applyGameVersion(version, options = {}) {
       logParser.stop();
     }
     setupLogParser();
-  }
-
-  syncNativeGameInfoProducer({
-    detectedVersion: version
-  });
-  if (typeof isOverwolfOverlayAvailable === 'function' && isOverwolfOverlayAvailable()) {
-    requestOverwolfOverlayInjectionForDetectedGame({ detectedVersion: version }).catch(() => {});
   }
 
   // Notify renderer to update UI (icons, labels, etc.)
@@ -3993,7 +3440,6 @@ function applyDesktopSettings(settings = {}) {
 
 function handleLogout() {
   appendAuditTrail('auditLogout');
-  stopNativeGameInfoProducer();
   store.set('authToken', null);
   store.set('authTokenEncrypted', null);
   store.set('currentUserId', null);
@@ -4815,10 +4261,6 @@ function setupIPC() {
     return true;
   });
 
-  ipcMain.handle('get-last-active-character-hint', async () => {
-    return lastActiveCharacterHint;
-  });
-
   ipcMain.handle('save-map-result', async (event, result) => {
     assertDesktopUserAuthenticated();
     return saveMapResultHistory(result);
@@ -4917,8 +4359,6 @@ app.whenReady().then(() => {
   setupIPC();
 
   createMainWindow();
-  logOverwolfRuntimeDiagnostics();
-  registerOverwolfPackageListeners();
   initializeAppUpdater();
   mainWindow.show(); // Show the window.
   mainWindow.focus();
@@ -4975,11 +4415,6 @@ function handleAppWillQuit() {
   // Stop the game detector.
   if (gameDetector) {
     gameDetector.stop();
-  }
-
-  stopNativeGameInfoProducer();
-  if (typeof clearOverwolfOverlayInjectionRetry === 'function') {
-    clearOverwolfOverlayInjectionRetry();
   }
 
   if (ocrScanner) {

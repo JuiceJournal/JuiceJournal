@@ -146,7 +146,6 @@ git status --short
 Some repo areas depend on third-party approval or runtime availability:
 
 - Path of Exile OAuth approval
-- Overwolf runtime / GEP access
 
 Do not claim production readiness for those paths unless the external dependency is actually available and verified.
 

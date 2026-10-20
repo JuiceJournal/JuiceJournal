@@ -92,7 +92,7 @@ test('overlay state model stays hidden when runtime data is missing', () => {
   assert.equal(state.secondaryLine, '');
 });
 
-test('overlay state model shows active map session details even without GEP runtime data', () => {
+test('overlay state model shows active map session details even without character data', () => {
   const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
 
   const state = deriveOverlayState({

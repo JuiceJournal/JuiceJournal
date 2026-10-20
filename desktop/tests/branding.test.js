@@ -117,14 +117,10 @@ test('desktop package exposes a packaged dev runner for taskbar icon validation'
   );
 });
 
-test('desktop development script requires OW-Electron for GEP runtime data', () => {
+test('desktop development script runs plain Electron', () => {
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 
-  assert.equal(packageJson.scripts.dev, 'npm run dev:ow');
-  assert.equal(packageJson.scripts['dev:electron'], 'electron . --dev');
-  assert.match(packageJson.scripts['dev:ow'], /^ow-electron \. --dev/);
-  assert.match(packageJson.scripts['dev:ow'], /--owepm-packages-url=https:\/\/electronapi-qa\.overwolf\.com\/packages/);
-  assert.deepEqual(packageJson.overwolf.packages, ['gep', 'overlay']);
+  assert.equal(packageJson.scripts.dev, 'electron . --dev');
   assert.equal(packageJson.author?.name, 'Furkan Tasci');
   assert.equal(fs.existsSync(path.join(desktopDir, 'scripts', 'start-dev.js')), false);
 });
@@ -134,7 +130,7 @@ test('desktop build includes the overlay preload script', () => {
 
   assert.ok(
     packageJson.build.files.includes('overlay-preload.js'),
-    'Expected packaged Overwolf builds to include overlay-preload.js'
+    'Expected packaged builds to include overlay-preload.js'
   );
 });
 
