@@ -1683,7 +1683,23 @@ const CURRENCY_IMAGE_VARIANTS = {
   poe2: {
     chaos: 'assets/currency/poe2/chaos.png',
     divine: 'assets/currency/poe2/divine.webp',
+    mirror: 'assets/currency/poe2/mirror.png',
+    exalted: 'assets/currency/poe2/exalted.png',
+    regal: 'assets/currency/poe2/regal.png',
+    transmute: 'assets/currency/poe2/transmute.png',
+    fragment: 'assets/currency/poe2/fragment.png',
+    essence: 'assets/currency/poe2/essence.png',
+    rune: 'assets/currency/poe2/rune.png',
+    'uncut-gem': 'assets/currency/poe2/uncut-gem.png',
+    'soul-core': 'assets/currency/poe2/soul-core.png',
+    expedition: 'assets/currency/poe2/expedition.png',
   }
+};
+
+const CURRENCY_NAMES = {
+  chaos: 'Chaos Orb',
+  divine: 'Divine Orb',
+  mirror: 'Mirror of Kalandra'
 };
 
 const CURRENCY_IMAGES = {
@@ -1727,7 +1743,8 @@ function currencyHTML(value, type = 'chaos', iconSize = 18, poeVersion = state.s
   const num = parseFloat(value);
   const imgPath = getCurrencyAssetPath(type, poeVersion);
   const formatted = isNaN(num) ? '0' : (type === 'divine' || type === 'mirror' ? num.toFixed(2) : num.toFixed(1));
-  return `<span class="currency-value">${formatted} <img src="${imgPath}" class="currency-icon" width="${iconSize}" height="${iconSize}" alt="${type}" draggable="false"></span>`;
+  const name = CURRENCY_NAMES[type] || type;
+  return `<span class="value-chip">${formatted} <img src="${imgPath}" class="value-chip-icon" width="${iconSize}" height="${iconSize}" alt="${name}" title="${name}" draggable="false"></span>`;
 }
 
 function normalizeSafeImageSrc(src) {
@@ -1757,15 +1774,16 @@ function createCurrencyValueElement(value, type = 'chaos', iconSize = 18, poeVer
   const num = parseFloat(value);
   const formatted = isNaN(num) ? '0' : (type === 'divine' || type === 'mirror' ? num.toFixed(2) : num.toFixed(1));
   const span = document.createElement('span');
-  span.className = 'currency-value';
+  span.className = 'value-chip';
   span.append(`${formatted} `);
 
   const img = document.createElement('img');
   img.src = normalizeSafeImageSrc(getCurrencyAssetPath(type, poeVersion)) || getCurrencyAssetPath(type, poeVersion);
-  img.className = 'currency-icon';
+  img.className = 'value-chip-icon';
   img.width = iconSize;
   img.height = iconSize;
-  img.alt = type;
+  img.alt = CURRENCY_NAMES[type] || type;
+  img.title = img.alt;
   img.draggable = false;
   span.appendChild(img);
 
@@ -5425,7 +5443,7 @@ function renderProfitReport(report) {
       const sign = item.changeType === 'gained' ? '+' : '-';
       const cls = item.changeType === 'gained' ? 'gained' : 'lost';
       const iconHtml = item.icon
-        ? `<img class="profit-item-icon" src="${escapeHTML(item.icon)}" alt="">`
+        ? `<span class="item-slot item-slot--sm"><img src="${escapeHTML(item.icon)}" alt=""></span>`
         : '';
       return `<div class="profit-item-row">
         <div class="profit-item-left">
@@ -5823,15 +5841,15 @@ const POE1_CATEGORY_TYPES = [
 const POE2_CATEGORY_TYPES = [
   { value: '', labelKey: 'category.all', label: 'All', icon: null },
   { value: 'currency', labelKey: 'category.currency', label: 'Currency', icon: 'chaos' },
-  { value: 'fragment', labelKey: 'category.fragment', label: 'Fragment', icon: 'vaal', poe2Only: true },
-  { value: 'essence', labelKey: 'category.essence', label: 'Essence', icon: 'fusing' },
-  { value: 'rune', labelKey: 'category.rune', label: 'Rune', icon: 'regal', poe2Only: true },
-  { value: 'gem', labelKey: 'category.gem', label: 'Gem', icon: 'gcp' },
-  { value: 'soul_core', labelKey: 'category.soulCore', label: 'Soul Core', icon: 'divine', poe2Only: true },
+  { value: 'fragment', labelKey: 'category.fragment', label: 'Fragment', icon: 'fragment', poe2Only: true },
+  { value: 'essence', labelKey: 'category.essence', label: 'Essence', icon: 'essence' },
+  { value: 'rune', labelKey: 'category.rune', label: 'Rune', icon: 'rune', poe2Only: true },
+  { value: 'gem', labelKey: 'category.gem', label: 'Gem', icon: 'uncut-gem' },
+  { value: 'soul_core', labelKey: 'category.soulCore', label: 'Soul Core', icon: 'soul-core', poe2Only: true },
   { value: 'idol', labelKey: 'category.idol', label: 'Idol', icon: 'exalted', poe2Only: true },
-  { value: 'expedition', labelKey: 'category.expedition', label: 'Expedition', icon: 'chance', poe2Only: true },
+  { value: 'expedition', labelKey: 'category.expedition', label: 'Expedition', icon: 'expedition', poe2Only: true },
   { value: 'ultimatum', labelKey: 'category.ultimatum', label: 'Ultimatum', icon: 'regal', poe2Only: true },
-  { value: 'other', labelKey: 'category.other', label: 'Other', icon: 'alteration' },
+  { value: 'other', labelKey: 'category.other', label: 'Other', icon: 'transmute' },
 ];
 
 const currencyState = {
@@ -6079,18 +6097,16 @@ function renderCurrencyTable() {
     const iconCell = document.createElement('td');
     iconCell.className = 'currency-td-icon';
     const safeIconUrl = normalizeSafeImageSrc(item.iconUrl);
+    const slot = document.createElement('span');
+    slot.className = 'item-slot';
     if (safeIconUrl) {
       const icon = document.createElement('img');
       icon.src = safeIconUrl;
-      icon.className = 'currency-row-icon';
       icon.loading = 'lazy';
       icon.alt = item.itemName ? `${item.itemName} icon` : 'Currency icon';
-      iconCell.appendChild(icon);
-    } else {
-      const placeholder = document.createElement('div');
-      placeholder.className = 'currency-row-icon-placeholder';
-      iconCell.appendChild(placeholder);
+      slot.appendChild(icon);
     }
+    iconCell.appendChild(slot);
 
     const nameCell = document.createElement('td');
     nameCell.className = 'currency-td-name';
