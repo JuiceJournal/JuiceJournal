@@ -446,7 +446,7 @@ body {
   background: var(--gold-glow);
   color: var(--gold-light);
   font-size: 0.7rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-weight: 700;
 }
 
@@ -516,7 +516,7 @@ body {
   width: 52px;
   height: 52px;
   border: 1px solid rgb(var(--brass-light-rgb) / 0.42);
-  border-radius: 18px;
+  clip-path: var(--chamfer-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -557,14 +557,14 @@ body {
   gap: 1rem;
   padding: 0.75rem 0.85rem;
   border: 1px solid rgb(var(--ink-rgb) / 0.07);
-  border-radius: 14px;
+  border-radius: 4px;
   background: rgb(var(--shadow-rgb) / 0.24);
 }
 
 .map-session-context span,
 .map-session-label {
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -587,7 +587,7 @@ body {
   width: 100%;
   padding: 0.85rem 0.95rem;
   border: 1px solid rgb(var(--brass-rgb) / 0.32);
-  border-radius: 14px;
+  border-radius: 4px;
   background: rgb(var(--plate-deep-rgb) / 0.68);
   color: var(--text-bright);
   font: 700 1rem var(--font);
@@ -1345,7 +1345,7 @@ body {
   background: var(--bg-elevated);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
+  font-family: var(--font);
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--gold-light);
@@ -2146,7 +2146,7 @@ body {
   gap: 2px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: 4px;
   padding: 0.5rem;
   height: fit-content;
   position: sticky;
@@ -2165,7 +2165,7 @@ body {
   font-family: var(--font);
   font-size: 0.8rem;
   font-weight: 500;
-  border-radius: var(--radius-sm);
+  border-radius: 2px;
   transition: var(--transition);
   text-align: left;
   width: 100%;
@@ -2177,7 +2177,8 @@ body {
 }
 
 .settings-nav-btn.active {
-  color: var(--gold-light);
+  color: var(--text-bright);
+  box-shadow: inset 2px 0 0 var(--ember-hot);
   background: var(--gold-glow);
 }
 
@@ -2207,8 +2208,8 @@ body {
 
 .settings-group {
   background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
   padding: 1.25rem;
   margin-bottom: 1rem;
 }
@@ -2244,7 +2245,7 @@ body {
   padding: 0.75rem 0.9rem;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 4px;
   color: var(--text);
   font-family: var(--font);
   font-size: 0.84rem;
@@ -2269,7 +2270,7 @@ body {
   gap: 1rem;
   padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
   background: rgb(var(--ink-rgb) / 0.02);
 }
 
@@ -2309,7 +2310,7 @@ body {
   padding: 0.75rem 1rem;
   background: var(--bg-base);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
   color: var(--text-secondary);
   cursor: pointer;
   font-family: var(--font);
@@ -2339,7 +2340,7 @@ body {
 .hotkey-field {
   flex: 1;
   text-align: center;
-  font-family: var(--font-mono);
+  font-family: var(--font);
   font-weight: 600;
   cursor: pointer;
 }
@@ -2353,7 +2354,7 @@ body {
   padding: 0.6rem 0.85rem;
   background: var(--bg-base);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
 }
 
 .connection-dot {
@@ -2382,7 +2383,7 @@ body {
   padding: 0.9rem 1rem;
   margin-bottom: 0.9rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
   background: var(--bg-base);
 }
 
@@ -2407,7 +2408,7 @@ body {
 
 .sync-action-item {
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
   padding: 0.75rem 0.9rem;
   background: var(--bg-base);
 }
@@ -2451,7 +2452,7 @@ body {
 
 .audit-entry {
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
   padding: 0.8rem 0.95rem;
   background: var(--bg-base);
 }
@@ -2509,6 +2510,12 @@ body {
   height: 44px;
 }
 
+.about-notice {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
 .about-links {
   display: flex;
   flex-direction: column;
@@ -2548,9 +2555,12 @@ body {
 }
 
 .currency-header-top h2 {
-  font-size: 1.1rem;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--text-bright);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
   white-space: nowrap;
 }
 
@@ -2564,7 +2574,7 @@ body {
 .poe-toggle {
   display: flex;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   overflow: hidden;
 }
 
@@ -2583,15 +2593,15 @@ body {
 .poe-toggle-btn:hover { color: var(--text); }
 
 .poe-toggle-btn.active {
-  background: var(--gold);
-  color: var(--bg-base);
+  background: linear-gradient(180deg, var(--ember-hot), var(--ember-deep));
+  color: var(--on-accent);
 }
 
 .currency-select {
   padding: 0.35rem 0.6rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   color: var(--text);
   font-family: var(--font);
   font-size: 0.75rem;
@@ -2602,7 +2612,7 @@ body {
   padding: 0.35rem 0.6rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   color: var(--text);
   font-family: var(--font);
   font-size: 0.75rem;
@@ -2656,7 +2666,7 @@ body {
   align-items: center;
   justify-content: flex-start;
   padding: 0.28rem 0.5rem;
-  border-radius: var(--radius-sm);
+  clip-path: var(--chamfer-sm);
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -2690,7 +2700,7 @@ body {
   padding: 0.34rem 0.5rem;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: 2px;
   color: var(--text-muted);
   font-family: var(--font);
   font-size: 0.7rem;
@@ -2708,10 +2718,10 @@ body {
 }
 
 .currency-type-btn.active {
-  background: linear-gradient(90deg, rgb(var(--brass-rgb) / 0.95), rgb(var(--brass-rgb) / 0.66));
-  color: var(--on-accent);
-  border-color: var(--gold);
-  box-shadow: 0 8px 18px rgb(var(--brass-rgb) / 0.12);
+  background: var(--gold-glow);
+  color: var(--text-bright);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--ember-hot);
 }
 
 .currency-tab-icon {
@@ -2724,7 +2734,7 @@ body {
   overflow-x: auto;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
   margin-top: 0;
 }
 
@@ -2793,13 +2803,14 @@ body {
   display: inline-block;
   padding: 0.1rem 0.45rem;
   background: rgb(var(--ink-rgb) / 0.04);
-  border-radius: 99px;
+  clip-path: var(--chamfer-sm);
   font-size: 0.68rem;
   color: var(--text-secondary);
 }
 
 .currency-td-chaos, .currency-td-divine {
-  font-family: var(--font-mono);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
   font-size: 0.78rem;
   white-space: nowrap;
 }
