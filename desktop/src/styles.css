@@ -5,6 +5,9 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* Rounded corners render as bevels; true circles set corner-shape: round next to border-radius: 50%. */
+*, *::before, *::after { corner-shape: var(--corner-shape); }
+
 body {
   font-family: var(--font);
   background:
@@ -132,6 +135,7 @@ body {
   width: 28px;
   height: 28px;
   border-radius: 50%;
+  corner-shape: round;
   background: linear-gradient(135deg, var(--gold-dim), var(--gold));
   display: flex;
   align-items: center;
@@ -160,7 +164,7 @@ body {
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: var(--bevel-sm);
   transition: var(--transition);
 }
 
@@ -189,7 +193,7 @@ body {
 .btn {
   padding: 0.68rem 1rem;
   border: none;
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   cursor: pointer;
   font-family: var(--font);
   font-size: 0.76rem;
@@ -280,7 +284,7 @@ body {
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
-  border-radius: 0.35rem;
+  border-radius: var(--bevel-sm);
 }
 
 .btn-glyph svg {
@@ -325,7 +329,7 @@ body {
   background: linear-gradient(180deg, rgb(var(--obsidian-rgb) / 0.98), rgb(var(--plate-deep-rgb) / 0.98));
   border: 1px solid var(--line-strong);
   padding: 1.25rem;
-  border-radius: 6px;
+  border-radius: var(--bevel-lg);
   width: 100%;
   max-width: 960px;
   box-shadow: 0 24px 64px rgb(var(--shadow-rgb) / 0.5);
@@ -342,7 +346,7 @@ body {
 .modal-panel {
   background: rgb(var(--plate-deep-rgb) / 0.64);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--bevel);
   padding: 1.6rem;
 }
 
@@ -432,7 +436,7 @@ body {
   align-items: start;
   padding: 0.8rem 0.9rem;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   background: rgb(var(--ink-rgb) / 0.03);
 }
 
@@ -442,7 +446,7 @@ body {
   justify-content: center;
   width: 28px;
   height: 28px;
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   background: var(--gold-glow);
   color: var(--gold-light);
   font-size: 0.7rem;
@@ -516,7 +520,7 @@ body {
   width: 52px;
   height: 52px;
   border: 1px solid rgb(var(--brass-light-rgb) / 0.42);
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -557,7 +561,7 @@ body {
   gap: 1rem;
   padding: 0.75rem 0.85rem;
   border: 1px solid rgb(var(--ink-rgb) / 0.07);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   background: rgb(var(--shadow-rgb) / 0.24);
 }
 
@@ -587,7 +591,7 @@ body {
   width: 100%;
   padding: 0.85rem 0.95rem;
   border: 1px solid rgb(var(--brass-rgb) / 0.32);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   background: rgb(var(--plate-deep-rgb) / 0.68);
   color: var(--text-bright);
   font: 700 1rem var(--font);
@@ -685,7 +689,7 @@ body {
   padding: 0.75rem 0.9rem;
   background: var(--bg-input);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   color: var(--text);
   font-family: var(--font);
   font-size: 0.85rem;
@@ -781,7 +785,7 @@ body {
 .character-banner {
   position: relative;
   min-height: 228px;
-  border-radius: 6px;
+  border-radius: var(--bevel);
   overflow: hidden;
   border: 1px solid var(--border-gold);
   background:
@@ -866,6 +870,7 @@ body {
   min-width: 140px;
   aspect-ratio: 1;
   border-radius: 50%;
+  corner-shape: round;
   display: grid;
   place-items: center;
   align-self: center;
@@ -883,6 +888,7 @@ body {
   position: absolute;
   inset: 6%;
   border-radius: 50%;
+  corner-shape: round;
   background:
     radial-gradient(circle at 48% 24%, rgb(var(--ink-rgb) / 0.22), transparent 16%),
     radial-gradient(circle at 50% 62%, rgb(var(--shadow-rgb) / 0.34), transparent 34%),
@@ -948,7 +954,7 @@ body {
   z-index: 3;
   min-width: 4rem;
   padding: 0.24rem 0.7rem;
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   transform: translateX(-50%);
   background: linear-gradient(180deg, rgb(var(--obsidian-rgb) / 0.94), rgb(var(--plate-deep-rgb) / 0.94));
   border: 1px solid rgb(var(--brass-rgb) / 0.42);
@@ -1022,7 +1028,7 @@ body {
   padding: 0.4rem 0.6rem;
   background: var(--bg-input);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   color: var(--text);
   font-family: var(--font);
   font-size: 0.82rem;
@@ -1048,7 +1054,7 @@ body {
   align-items: center;
   min-height: 28px;
   padding: 0.25rem 0.7rem;
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   background: rgb(var(--plate-deep-rgb) / 0.42);
   border: 1px solid rgb(var(--ink-rgb) / 0.1);
   color: rgb(var(--ink-rgb) / 0.88);
@@ -1076,7 +1082,7 @@ body {
 .character-meta {
   padding: 0.72rem 0.85rem;
   border: 1px solid rgb(var(--ink-rgb) / 0.08);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   background: rgb(var(--shadow-rgb) / 0.26);
   backdrop-filter: blur(8px);
 }
@@ -1111,7 +1117,7 @@ body {
   position: relative;
   background: linear-gradient(180deg, rgb(var(--plate-raised-rgb) / 0.88), rgb(var(--plate-rgb) / 0.96));
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--bevel);
   padding: 1.25rem;
   transition: var(--transition);
   box-shadow: 0 12px 32px rgb(var(--shadow-rgb) / 0.28);
@@ -1122,15 +1128,15 @@ body {
   position: absolute;
   inset: -1px;
   pointer-events: none;
-  background:
-    linear-gradient(var(--gold-dim), var(--gold-dim)) top left / 16px 1px no-repeat,
-    linear-gradient(var(--gold-dim), var(--gold-dim)) top left / 1px 16px no-repeat,
-    linear-gradient(var(--gold-dim), var(--gold-dim)) top right / 16px 1px no-repeat,
-    linear-gradient(var(--gold-dim), var(--gold-dim)) top right / 1px 16px no-repeat,
-    linear-gradient(var(--gold-dim), var(--gold-dim)) bottom left / 16px 1px no-repeat,
-    linear-gradient(var(--gold-dim), var(--gold-dim)) bottom left / 1px 16px no-repeat,
-    linear-gradient(var(--gold-dim), var(--gold-dim)) bottom right / 16px 1px no-repeat,
-    linear-gradient(var(--gold-dim), var(--gold-dim)) bottom right / 1px 16px no-repeat;
+  /* Corner brackets: a gold frame on the same bevel, masked down to the four corners. */
+  --reach: calc(var(--bevel) + var(--bracket));
+  border: 1px solid var(--gold-dim);
+  border-radius: inherit;
+  mask:
+    linear-gradient(rgb(var(--shadow-rgb)) 0 0) top left / var(--reach) var(--reach) no-repeat,
+    linear-gradient(rgb(var(--shadow-rgb)) 0 0) top right / var(--reach) var(--reach) no-repeat,
+    linear-gradient(rgb(var(--shadow-rgb)) 0 0) bottom left / var(--reach) var(--reach) no-repeat,
+    linear-gradient(rgb(var(--shadow-rgb)) 0 0) bottom right / var(--reach) var(--reach) no-repeat;
 }
 
 .card:hover {
@@ -1156,7 +1162,7 @@ body {
   font-size: 0.68rem;
   font-weight: 700;
   padding: 0.2rem 0.6rem;
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   background: var(--gold-glow);
   color: var(--gold-light);
 }
@@ -1171,7 +1177,7 @@ body {
   padding: 1rem;
   background: var(--bg-base);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   margin-bottom: 1rem;
   min-height: 120px;
   display: flex;
@@ -1212,7 +1218,7 @@ body {
   padding: 0.75rem 0.85rem;
   background: rgb(var(--ink-rgb) / 0.025);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
 }
 
 .session-actions {
@@ -1239,7 +1245,7 @@ body {
   padding: 0.8rem 1rem;
   background: var(--bg-base);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   transition: var(--transition);
 }
 
@@ -1278,7 +1284,7 @@ body {
   box-shadow:
     inset 0 0 0 1px rgb(var(--brass-rgb) / 0.3),
     inset 0 2px 6px rgb(var(--shadow-rgb) / 0.6);
-  clip-path: polygon(3px 0, calc(100% - 3px) 0, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 0 calc(100% - 3px), 0 3px);
+  border-radius: var(--bevel-xs);
 }
 
 .item-slot--sm {
@@ -1306,7 +1312,7 @@ body {
 .stat-icon {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--bevel-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1336,7 +1342,7 @@ body {
   padding: 1rem;
   background: var(--bg-base);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel);
 }
 
 .hotkey-badge {
@@ -1348,7 +1354,7 @@ body {
   padding: 0 0.5rem;
   background: var(--bg-elevated);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
+  border-radius: var(--bevel-sm);
   font-family: var(--font);
   font-size: 0.72rem;
   font-weight: 600;
@@ -1380,7 +1386,7 @@ body {
     radial-gradient(circle at top right, rgb(var(--brass-rgb) / 0.12), transparent 28%),
     var(--bg-base);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
 }
 
 .map-result-summary strong,
@@ -1389,7 +1395,7 @@ body {
 }
 
 #last-map-result-farm-type {
-  color: var(--text-bright);
+  color: var(--farm-color, var(--text-bright));
   font-family: var(--font-display);
   font-size: 1.4rem;
   letter-spacing: 0.05em;
@@ -1429,7 +1435,7 @@ body {
   padding: 0.55rem 0.75rem;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   color: var(--text);
   font-family: var(--font);
   font-size: 0.8rem;
@@ -1448,7 +1454,7 @@ body {
   gap: 1rem;
   padding: 0.9rem 1rem;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   background:
     radial-gradient(circle at top right, rgb(var(--brass-rgb) / 0.08), transparent 26%),
     var(--bg-card);
@@ -1463,7 +1469,7 @@ body {
 }
 
 .map-result-history-main strong {
-  color: var(--text-bright);
+  color: var(--farm-color, var(--text-bright));
   font-size: 0.95rem;
 }
 
@@ -1477,7 +1483,7 @@ body {
   width: fit-content;
   padding: 0.18rem 0.48rem;
   border: 1px solid rgb(var(--brass-rgb) / 0.22);
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   background: rgb(var(--brass-rgb) / 0.08);
   color: var(--gold-light) !important;
   font-family: var(--font);
@@ -1506,7 +1512,7 @@ body {
 .map-result-publish-btn {
   padding: 0.38rem 0.66rem;
   border: 1px solid rgb(var(--brass-rgb) / 0.28);
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   background: rgb(var(--brass-rgb) / 0.08);
   color: var(--gold-light);
   font-family: var(--font);
@@ -1552,7 +1558,7 @@ body {
   gap: 0.9rem;
   padding: 0.85rem 0.95rem;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   background: var(--bg-card);
 }
 
@@ -1582,7 +1588,7 @@ body {
   justify-content: center;
   min-width: 2rem;
   padding: 0.2rem 0.45rem;
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   background: rgb(var(--brass-rgb) / 0.12);
   color: var(--gold-light);
   font-size: 0.72rem;
@@ -1661,7 +1667,7 @@ body {
   padding: 0.45rem 0.8rem;
   background: var(--bg-input);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   color: var(--text);
   font-family: var(--font);
   font-size: 0.8rem;
@@ -1690,7 +1696,7 @@ body {
 .session-item {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   padding: 0.85rem 1.25rem;
   width: 100%;
   display: grid;
@@ -1749,7 +1755,7 @@ body {
 
 .session-status {
   padding: 0.2rem 0.6rem;
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -1779,7 +1785,7 @@ body {
     linear-gradient(90deg, rgb(var(--brass-rgb) / 0.08), transparent 42%),
     var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
 }
 
 .farming-hub-run-kicker {
@@ -1794,7 +1800,7 @@ body {
   margin-top: 0.15rem;
   font-family: var(--font-display);
   font-size: 1.2rem;
-  color: var(--text-bright);
+  color: var(--farm-color, var(--text-bright));
   letter-spacing: 0.06em;
 }
 
@@ -1837,7 +1843,7 @@ body {
   padding: 0.15rem 0.5rem 0.15rem 0.3rem;
   background: var(--bg-input);
   box-shadow: inset 0 0 0 1px var(--line);
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   color: var(--text);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -1908,7 +1914,7 @@ body {
 .session-drawer-close {
   width: 2.25rem;
   height: 2.25rem;
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   border: 1px solid var(--border);
   background: rgb(var(--ink-rgb) / 0.03);
   color: var(--text);
@@ -1933,7 +1939,7 @@ body {
   flex-direction: column;
   gap: 0.3rem;
   padding: 0.85rem 0.9rem;
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   border: 1px solid var(--border);
   background: rgb(var(--ink-rgb) / 0.025);
 }
@@ -1954,7 +1960,7 @@ body {
 
 .session-drawer-section {
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel);
   background: rgb(var(--ink-rgb) / 0.02);
 }
 
@@ -1983,7 +1989,7 @@ body {
   width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--bevel-sm);
   color: var(--text);
   font-family: var(--font);
   font-size: 0.85rem;
@@ -2018,7 +2024,7 @@ body {
 .session-analytics-item {
   border: 1px solid rgb(var(--ink-rgb) / 0.04);
   background: rgb(var(--ink-rgb) / 0.025);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   padding: 0.8rem;
 }
 
@@ -2055,7 +2061,7 @@ body {
 .session-analytics-bar {
   width: 100%;
   height: 6px;
-  border-radius: 1px;
+  border-radius: var(--bevel-xs);
   background: rgb(var(--ink-rgb) / 0.05);
   overflow: hidden;
 }
@@ -2102,7 +2108,7 @@ body {
   justify-content: space-between;
   gap: 0.9rem;
   padding: 0.75rem 0.8rem;
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   background: rgb(var(--ink-rgb) / 0.025);
   border: 1px solid rgb(var(--ink-rgb) / 0.04);
 }
@@ -2150,7 +2156,7 @@ body {
   gap: 2px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel);
   padding: 0.5rem;
   height: fit-content;
   position: sticky;
@@ -2169,7 +2175,7 @@ body {
   font-family: var(--font);
   font-size: 0.8rem;
   font-weight: 500;
-  border-radius: 2px;
+  border-radius: var(--bevel-xs);
   transition: var(--transition);
   text-align: left;
   width: 100%;
@@ -2213,7 +2219,7 @@ body {
 .settings-group {
   background: var(--bg-card);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--bevel);
   padding: 1.25rem;
   margin-bottom: 1rem;
 }
@@ -2249,7 +2255,7 @@ body {
   padding: 0.75rem 0.9rem;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   color: var(--text);
   font-family: var(--font);
   font-size: 0.84rem;
@@ -2274,7 +2280,7 @@ body {
   gap: 1rem;
   padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel);
   background: rgb(var(--ink-rgb) / 0.02);
 }
 
@@ -2314,7 +2320,7 @@ body {
   padding: 0.75rem 1rem;
   background: var(--bg-base);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   color: var(--text-secondary);
   cursor: pointer;
   font-family: var(--font);
@@ -2358,13 +2364,14 @@ body {
   padding: 0.6rem 0.85rem;
   background: var(--bg-base);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
 }
 
 .connection-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--red);
   flex-shrink: 0;
 }
@@ -2387,7 +2394,7 @@ body {
   padding: 0.9rem 1rem;
   margin-bottom: 0.9rem;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel);
   background: var(--bg-base);
 }
 
@@ -2412,7 +2419,7 @@ body {
 
 .sync-action-item {
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   padding: 0.75rem 0.9rem;
   background: var(--bg-base);
 }
@@ -2456,7 +2463,7 @@ body {
 
 .audit-entry {
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   padding: 0.8rem 0.95rem;
   background: var(--bg-base);
 }
@@ -2578,7 +2585,7 @@ body {
 .poe-toggle {
   display: flex;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   overflow: hidden;
 }
 
@@ -2605,7 +2612,7 @@ body {
   padding: 0.35rem 0.6rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   color: var(--text);
   font-family: var(--font);
   font-size: 0.75rem;
@@ -2616,7 +2623,7 @@ body {
   padding: 0.35rem 0.6rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   color: var(--text);
   font-family: var(--font);
   font-size: 0.75rem;
@@ -2670,7 +2677,7 @@ body {
   align-items: center;
   justify-content: flex-start;
   padding: 0.28rem 0.5rem;
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -2704,7 +2711,7 @@ body {
   padding: 0.34rem 0.5rem;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 2px;
+  border-radius: var(--bevel-xs);
   color: var(--text-muted);
   font-family: var(--font);
   font-size: 0.7rem;
@@ -2738,7 +2745,7 @@ body {
   overflow-x: auto;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--bevel);
   margin-top: 0;
 }
 
@@ -2807,7 +2814,7 @@ body {
   display: inline-block;
   padding: 0.1rem 0.45rem;
   background: rgb(var(--ink-rgb) / 0.04);
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   font-size: 0.68rem;
   color: var(--text-secondary);
 }
@@ -2873,7 +2880,7 @@ body {
 
 .toast {
   padding: 0.75rem 1rem;
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   background: var(--plate);
   border: 1px solid var(--line-strong);
   box-shadow: 0 8px 32px rgb(var(--shadow-rgb) / 0.4);
@@ -2911,7 +2918,7 @@ body {
 /* ==================== SCROLLBAR ==================== */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: var(--bevel-xs); }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 /* ==================== FOCUS & ACCESSIBILITY ==================== */
@@ -2922,11 +2929,11 @@ body {
   outline-offset: 2px;
 }
 
-/* Chamfered buttons clip outlines, so focus shows as an inset ring. */
+/* Bevelled corners no longer clip outlines, so focus rings sit outside and follow the bevel. */
 .btn:focus-visible,
 .nav-btn:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--gold-light);
+  outline: 2px solid var(--gold-light);
+  outline-offset: 2px;
 }
 
 .card:focus-within {
@@ -3056,7 +3063,7 @@ body {
   font-size: 0.7rem;
   color: var(--text-muted);
   padding: 0.2rem 0.5rem;
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   background: var(--bg-input);
   border: 1px solid var(--border);
   transition: all 0.3s;
@@ -3072,6 +3079,7 @@ body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--text-muted);
   flex-shrink: 0;
 }
@@ -3107,7 +3115,7 @@ body {
   justify-content: space-between;
   padding: 0.5rem 0.75rem;
   background: var(--bg-input);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   border: 1px solid var(--border);
 }
 
@@ -3142,7 +3150,7 @@ body {
   gap: 0.5rem;
   padding: 0.75rem;
   background: var(--bg-input);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   border: 1px solid var(--border);
   transition: border-color 0.2s;
 }
@@ -3171,7 +3179,7 @@ body {
   justify-content: center;
   width: 20px;
   height: 20px;
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   background: var(--gold-dim);
   color: var(--gold-light);
   font-size: 0.7rem;
@@ -3221,7 +3229,7 @@ body {
 .stash-profit-result {
   padding: 0.75rem;
   background: var(--bg-input);
-  border-radius: 4px;
+  border-radius: var(--bevel-sm);
   border: 1px solid var(--border);
 }
 
@@ -3341,7 +3349,7 @@ body {
   font-size: 0.75rem;
   padding: 0.3rem 0.75rem;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--bevel-sm);
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -3374,6 +3382,7 @@ body {
   border: 2px solid var(--border-light);
   border-top-color: var(--gold);
   border-radius: 50%;
+  corner-shape: round;
   animation: spin 0.6s linear infinite;
 }
 
@@ -3390,6 +3399,21 @@ body {
 [data-profit-tier="mirror"] { --profit-tier-color: var(--tier-mirror); }
 [data-profit-tier] { color: var(--profit-tier-color); }
 
+/* ===== Farm types (each league's content colour on its name) ===== */
+[data-farm-type="abyss"] { --farm-color: var(--farm-abyss); }
+[data-farm-type="breach"] { --farm-color: var(--farm-breach); }
+[data-farm-type="expedition"] { --farm-color: var(--farm-expedition); }
+[data-farm-type="ritual"] { --farm-color: var(--farm-ritual); }
+[data-farm-type="harbinger"] { --farm-color: var(--farm-harbinger); }
+[data-farm-type="essence"] { --farm-color: var(--farm-essence); }
+[data-farm-type="delirium"] { --farm-color: var(--farm-delirium); }
+[data-farm-type="blight"] { --farm-color: var(--farm-blight); }
+[data-farm-type="legion"] { --farm-color: var(--farm-legion); }
+[data-farm-type="harvest"] { --farm-color: var(--farm-harvest); }
+[data-farm-type="betrayal"] { --farm-color: var(--farm-betrayal); }
+[data-farm-type="incursion"] { --farm-color: var(--farm-incursion); }
+[data-farm-type] { color: var(--farm-color); }
+
 /* ===== Meme badges (flask mascot reactions for extreme profit tiers) ===== */
 .meme-badge {
   --meme-color: var(--text);
@@ -3400,7 +3424,7 @@ body {
   padding: 0.1rem 0.55rem 0.1rem 0.25rem;
   background: color-mix(in srgb, var(--meme-color) 14%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--meme-color) 45%, transparent);
-  clip-path: var(--chamfer-sm);
+  border-radius: var(--bevel-sm);
   color: var(--meme-color);
   font-family: var(--font);
   font-size: 0.68rem;

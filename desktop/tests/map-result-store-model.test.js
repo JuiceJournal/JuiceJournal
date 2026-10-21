@@ -1030,8 +1030,7 @@ test('desktop main process resolves dashboard stats from renderer tracker contex
   const source = fs.readFileSync(mainJsPath, 'utf8');
 
   assert.match(source, /ipcMain\.handle\('get-dashboard-stats',\s*async\s*\(event,\s*context\s*=\s*\{\}\)\s*=>/);
-  assert.match(source, /const\s+trackerContext\s*=\s*getTrackerContextDefaults\(context\)/);
-  assert.match(source, /apiClient\.getPersonalStats\('daily',\s*trackerContext\)/);
+  assert.match(source, /localJournal\.getPersonalStats\(readJournal\(\),\s*\{\s*period:\s*'daily',\s*\.\.\.getTrackerContextDefaults\(context\)/);
 });
 
 test('desktop main process registers adaptive profit currency rate IPC handler', () => {

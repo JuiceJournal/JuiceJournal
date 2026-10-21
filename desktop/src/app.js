@@ -691,6 +691,30 @@ function getFarmTypeModel() {
   return window.farmTypeModel;
 }
 
+// Farm names carry their league content colour through data-farm-type (stored as an id or a label).
+function getFarmTypeIdFor(value) {
+  const resolveFarmTypeId = window.farmTypeModel?.resolveFarmTypeId;
+  return typeof resolveFarmTypeId === 'function' ? resolveFarmTypeId(value) : null;
+}
+
+function farmTypeAttr(value) {
+  const farmTypeId = getFarmTypeIdFor(value);
+  return farmTypeId ? ` data-farm-type="${farmTypeId}"` : '';
+}
+
+function applyFarmType(element, value) {
+  if (!element?.dataset) {
+    return;
+  }
+
+  const farmTypeId = getFarmTypeIdFor(value);
+  if (farmTypeId) {
+    element.dataset.farmType = farmTypeId;
+  } else {
+    delete element.dataset.farmType;
+  }
+}
+
 function getFarmTypePoeVersion(version = null) {
   const normalizedVersion = normalizePoeVersion(version);
   if (normalizedVersion) {
@@ -1360,7 +1384,7 @@ function renderFarmTypeSelector() {
 
   elements.sessionFarmTypeSelect.innerHTML = [
     '<option value="">No farm type</option>',
-    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}">${escapeHTML(farmType.label)}</option>`)
+    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType.id) : ''}>${escapeHTML(farmType.label)}</option>`)
   ].join('');
   elements.sessionFarmTypeSelect.value = selectedFarmTypeId;
   elements.sessionFarmTypeSelect.disabled = hasActiveSession;
@@ -3494,6 +3518,9 @@ function renderLatestMapResult() {
   if (!hasCompletedResult) {
     elements.lastMapResultCard.dataset.resultState = 'empty';
     elements.lastMapResultFarmType.textContent = 'No completed map yet';
+    if (typeof applyFarmType === 'function') {
+      applyFarmType(elements.lastMapResultFarmType, '');
+    }
     elements.lastMapResultDuration.textContent = '—';
     elements.lastMapResultProfit.innerHTML = '—';
     if (typeof applyProfitTier === 'function') {
@@ -3504,6 +3531,9 @@ function renderLatestMapResult() {
 
   elements.lastMapResultCard.dataset.resultState = 'ready';
   elements.lastMapResultFarmType.textContent = latest.farmType || 'Unknown farm type';
+  if (typeof applyFarmType === 'function') {
+    applyFarmType(elements.lastMapResultFarmType, latest.farmType);
+  }
   elements.lastMapResultDuration.textContent = formatDuration(latest.durationSeconds || 0);
   elements.lastMapResultProfit.innerHTML = formatMapResultProfitHTML(latest, 16);
   if (typeof applyProfitTier === 'function' && typeof getMapResultProfitTier === 'function') {
@@ -3584,7 +3614,7 @@ function renderMapResultHistory() {
 
   elements.mapResultFilter.innerHTML = [
     '<option value="">All farms</option>',
-    ...availableFarmTypes.map((farmType) => `<option value="${escapeHTML(farmType)}">${escapeHTML(farmType)}</option>`)
+    ...availableFarmTypes.map((farmType) => `<option value="${escapeHTML(farmType)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType) : ''}>${escapeHTML(farmType)}</option>`)
   ].join('');
   elements.mapResultFilter.value = selectedFarmType;
 
@@ -3607,7 +3637,7 @@ function renderMapResultHistory() {
     return `
       <article class="map-result-history-item" data-result-id="${escapeHTML(result?.id || '')}">
         <div class="map-result-history-main">
-          <strong>${escapeHTML(result?.farmType || 'Unknown farm type')}</strong>
+          <strong${typeof farmTypeAttr === 'function' ? farmTypeAttr(result?.farmType) : ''}>${escapeHTML(result?.farmType || 'Unknown farm type')}</strong>
           <span>${formatDuration(Number(result?.durationSeconds || 0))}</span>
           <span class="map-result-publish-state" data-publish-state="${escapeHTML(result?.publishState || 'local')}">${escapeHTML(publishLabel)}</span>
           ${typeof profitMemeHTML === 'function' ? profitMemeHTML(profitTier) : ''}
@@ -3862,7 +3892,7 @@ function populateMapSessionFarmTypes(selectedFarmTypeId = '', options = {}) {
 
   elements.mapSessionFarmTypeSelect.innerHTML = [
     '<option value="">No farm type</option>',
-    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}">${escapeHTML(farmType.label)}</option>`)
+    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType.id) : ''}>${escapeHTML(farmType.label)}</option>`)
   ].join('');
   elements.mapSessionFarmTypeSelect.value = normalizedSelection;
 
@@ -4506,7 +4536,7 @@ function renderFarmingHubRuns() {
       <article class="farming-hub-run">
         <div class="farming-hub-run-main">
           <div class="farming-hub-run-kicker">${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(run.league || 'Standard')} / ${escapeHTML(author)}</div>
-          <h3>${escapeHTML(run.farmType || 'Unknown farm')}</h3>
+          <h3${typeof farmTypeAttr === 'function' ? farmTypeAttr(run.farmType) : ''}>${escapeHTML(run.farmType || 'Unknown farm')}</h3>
           <p>${escapeHTML(run.setupDescription || 'No setup notes shared.')}</p>
         </div>
         <div class="farming-hub-run-metrics">
@@ -4616,7 +4646,7 @@ function renderSessionsList() {
       ? session.lootEntries.reduce((sum, loot) => sum + parseInt(loot.quantity || 0, 10), 0)
       : 0;
     const poeVersion = getSessionPoeVersion(session);
-    const contextLabel = `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(session.league || 'Standard')} / ${escapeHTML(getSessionFarmTypeLabel(session))}`;
+    const contextLabel = `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(session.league || 'Standard')} / <span${typeof farmTypeAttr === 'function' ? farmTypeAttr(getSessionFarmTypeId(session)) : ''}>${escapeHTML(getSessionFarmTypeLabel(session))}</span>`;
     const duration = session.durationSec ? formatDuration(session.durationSec) : '-';
     const tier = session.mapTier ? `T${session.mapTier}` : '-';
     const startedAt = session.startedAt ? timeAgo(session.startedAt) : '-';
@@ -5493,7 +5523,7 @@ async function handleSyncPrices() {
   const btn = elements.syncPricesBtn;
   btn.disabled = true;
   const origHTML = btn.innerHTML;
-  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgb(var(--ink-rgb) / 0.2);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.syncing');
+  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgb(var(--ink-rgb) / 0.2);border-top-color:var(--gold);border-radius:50%;corner-shape:round;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.syncing');
 
   try {
     const league = getResolvedActiveLeague();
@@ -5537,7 +5567,7 @@ async function handleTakeSnapshot(type) {
 
   btn.disabled = true;
   const origHTML = btn.innerHTML;
-  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgb(var(--ink-rgb) / 0.2);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.scanning');
+  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgb(var(--ink-rgb) / 0.2);border-top-color:var(--gold);border-radius:50%;corner-shape:round;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.scanning');
 
   try {
     const snapshotId = type;

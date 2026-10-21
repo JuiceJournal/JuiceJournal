@@ -182,45 +182,6 @@ async function startSmokeBackend() {
       return;
     }
 
-    if (request.method === 'GET' && url.pathname === '/api/sessions/active') {
-      writeJson(response, 200, {
-        success: true,
-        data: {
-          session: null,
-        },
-        error: null,
-      });
-      return;
-    }
-
-    if (request.method === 'GET' && url.pathname === '/api/stats/personal') {
-      writeJson(response, 200, {
-        success: true,
-        data: {
-          summary: {
-            totalSessions: 0,
-            totalProfit: 0,
-            avgProfitPerMap: 0,
-          },
-          dailyStats: [],
-          mapStats: [],
-        },
-        error: null,
-      });
-      return;
-    }
-
-    if (request.method === 'GET' && url.pathname === '/api/loot/recent') {
-      writeJson(response, 200, {
-        success: true,
-        data: {
-          lootEntries: [],
-        },
-        error: null,
-      });
-      return;
-    }
-
     writeJson(response, 404, {
       success: false,
       data: null,

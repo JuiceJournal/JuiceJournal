@@ -10,11 +10,7 @@
   <style>
     /* Overlay card (Ember Forge): an opaque forged plate, so it stays readable over any game scene.
        No backdrop-filter or ambient animation; text is 11px or larger and click targets are 28px or larger. */
-    :root {
-      --card-chamfer: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px);
-    }
-
-    *, *::before, *::after { box-sizing: border-box; margin: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; corner-shape: var(--corner-shape); }
 
     html, body {
       width: 100%; height: 100%;
@@ -39,23 +35,32 @@
     /* ── Card shell: frame with tone-coloured corner brackets around an opaque plate ── */
     .jj-card {
       --tone: var(--ember-hot);
+      position: relative;
       width: 100%;
-      padding: 1px;
-      clip-path: var(--card-chamfer);
-      background:
-        linear-gradient(135deg, var(--tone) 0 18px, transparent 18px) top left / 50% 50% no-repeat,
-        linear-gradient(225deg, var(--tone) 0 18px, transparent 18px) top right / 50% 50% no-repeat,
-        linear-gradient(45deg, var(--tone) 0 18px, transparent 18px) bottom left / 50% 50% no-repeat,
-        linear-gradient(315deg, var(--tone) 0 18px, transparent 18px) bottom right / 50% 50% no-repeat,
-        var(--line-strong);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--bevel-lg);
+      background: linear-gradient(180deg, rgb(var(--plate-rgb) / 0.97), rgb(var(--obsidian-rgb) / 0.97));
+    }
+
+    .jj-card::before {
+      --reach: calc(var(--bevel-lg) + var(--bracket));
+      content: "";
+      position: absolute;
+      inset: -1px;
+      pointer-events: none;
+      border: 1px solid var(--tone);
+      border-radius: inherit;
+      mask:
+        linear-gradient(rgb(var(--shadow-rgb)) 0 0) top left / var(--reach) var(--reach) no-repeat,
+        linear-gradient(rgb(var(--shadow-rgb)) 0 0) top right / var(--reach) var(--reach) no-repeat,
+        linear-gradient(rgb(var(--shadow-rgb)) 0 0) bottom left / var(--reach) var(--reach) no-repeat,
+        linear-gradient(rgb(var(--shadow-rgb)) 0 0) bottom right / var(--reach) var(--reach) no-repeat;
     }
 
     .jj-content {
       display: grid;
       gap: 4px;
       padding: 9px 13px 10px;
-      clip-path: var(--card-chamfer);
-      background: linear-gradient(180deg, rgb(var(--plate-rgb) / 0.97), rgb(var(--obsidian-rgb) / 0.97));
     }
 
     /* ── States and tones ── */
@@ -141,7 +146,7 @@
       justify-content: center;
       min-height: 28px;
       border: none;
-      clip-path: var(--chamfer-sm);
+      border-radius: var(--bevel-sm);
       background: var(--plate-raised);
       box-shadow: inset 0 0 0 1px var(--line-strong);
       color: var(--text);
@@ -284,6 +289,25 @@
       box-shadow: inset 0 0 0 1px var(--ember-hot);
     }
 
+    /* ── Farm types: each league's content colour on its name ── */
+    [data-farm-type="abyss"] { --farm-color: var(--farm-abyss); }
+    [data-farm-type="breach"] { --farm-color: var(--farm-breach); }
+    [data-farm-type="expedition"] { --farm-color: var(--farm-expedition); }
+    [data-farm-type="ritual"] { --farm-color: var(--farm-ritual); }
+    [data-farm-type="harbinger"] { --farm-color: var(--farm-harbinger); }
+    [data-farm-type="essence"] { --farm-color: var(--farm-essence); }
+    [data-farm-type="delirium"] { --farm-color: var(--farm-delirium); }
+    [data-farm-type="blight"] { --farm-color: var(--farm-blight); }
+    [data-farm-type="legion"] { --farm-color: var(--farm-legion); }
+    [data-farm-type="harvest"] { --farm-color: var(--farm-harvest); }
+    [data-farm-type="betrayal"] { --farm-color: var(--farm-betrayal); }
+    [data-farm-type="incursion"] { --farm-color: var(--farm-incursion); }
+
+    .jj-primary-name[data-farm-type],
+    .jj-chip[data-farm-type] { color: var(--farm-color); }
+
+    .jj-chip[data-farm-type][aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--farm-color); }
+
     .jj-form-actions {
       display: flex;
       justify-content: flex-end;
@@ -354,6 +378,7 @@
   <script src="modules/overlayStateModel.js"></script>
   <script src="modules/profitCurrencyModel.js"></script>
   <script src="modules/profitTierModel.js"></script>
+  <script src="modules/farmTypeModel.js"></script>
   <script src="overlay.js"></script>
 </body>
 </html>

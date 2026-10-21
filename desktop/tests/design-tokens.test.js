@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const srcDir = path.join(__dirname, '..', 'src');
 const COLOR_LITERAL = /#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d/g;
+const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 test('stylesheet takes every UI color from tokens.css', () => {
   const stylesCss = fs.readFileSync(path.join(srcDir, 'styles.css'), 'utf8');
@@ -18,6 +19,39 @@ test('stylesheet takes every UI color from tokens.css', () => {
     ''
   );
   assert.deepEqual(withoutClassTones.match(COLOR_LITERAL) || [], []);
+});
+
+test('corners are bevels from the shape tokens', () => {
+  const overlayHtml = fs.readFileSync(path.join(srcDir, 'overlay.html'), 'utf8');
+  const sources = {
+    'styles.css': stripComments(fs.readFileSync(path.join(srcDir, 'styles.css'), 'utf8')),
+    'overlay.html': stripComments(overlayHtml.slice(overlayHtml.indexOf('<style>'), overlayHtml.indexOf('</style>')))
+  };
+
+  for (const [fileName, css] of Object.entries(sources)) {
+    // clip-path chamfers cut borders and focus rings off the diagonal; corner-shape draws them along it.
+    assert.doesNotMatch(css, /clip-path\s*:/, fileName);
+    assert.match(css, /corner-shape:\s*var\(--corner-shape\)/, fileName);
+
+    for (const [, value] of css.matchAll(/border-radius:\s*([^;]+);/g)) {
+      assert.match(value, /^(var\(--bevel(-xs|-sm|-lg)?\)|inherit|50%)$/, `${fileName}: border-radius ${value}`);
+    }
+  }
+});
+
+test('circles opt out of the bevel', () => {
+  const stylesCss = stripComments(fs.readFileSync(path.join(srcDir, 'styles.css'), 'utf8'));
+  const circleRules = stylesCss.match(/[^{}]*\{[^}]*border-radius:\s*50%[^}]*\}/g) || [];
+  assert.ok(circleRules.length > 0);
+  for (const rule of circleRules) {
+    assert.match(rule, /corner-shape:\s*round/, rule.slice(0, rule.indexOf('{')).trim());
+  }
+
+  const appJs = fs.readFileSync(path.join(srcDir, 'app.js'), 'utf8');
+  const inlineCircles = appJs.match(/border-radius:\s*50%;?[^"']*/g) || [];
+  for (const style of inlineCircles) {
+    assert.match(style, /corner-shape:\s*round/, style);
+  }
 });
 
 test('renderer markup and scripts use color tokens instead of literals', () => {

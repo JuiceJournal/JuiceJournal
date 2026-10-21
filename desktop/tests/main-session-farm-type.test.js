@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
+const localJournal = require('../src/modules/localJournalModel');
+
 const mainJsPath = path.join(__dirname, '..', 'main.js');
 
 function extractFunctionSource(source, functionName, filePath) {
@@ -163,85 +165,74 @@ function loadFunctions(functionNames, contextOverrides = {}) {
   return context;
 }
 
-test('main session start forwards the selected farm type to api and queued payloads', async () => {
-  const apiCalls = [];
-  const queuedCalls = [];
+// The real journal model over an in-memory journal, in place of the profile's journal file.
+function createJournalBackend() {
+  const backend = {
+    journal: { sessions: [] },
+    start(input = {}, id = 'session-1') {
+      const started = localJournal.startSession(backend.journal, {
+        mapName: 'Dunes Map',
+        poeVersion: 'poe1',
+        league: 'Mirage',
+        ...input
+      }, { id, now: new Date(input.startedAt || Date.now()) });
+      backend.journal = started.journal;
+      return started.session;
+    }
+  };
+  backend.context = {
+    localJournal,
+    readJournal: () => backend.journal,
+    writeJournal(journal) {
+      backend.journal = journal;
+    }
+  };
+  return backend;
+}
+
+test('main session start writes the selected farm type to the local journal', async () => {
+  const backend = createJournalBackend();
   const context = loadFunctions(['normalizeStoredFarmTypeId', 'startNewSession'], {
+    ...backend.context,
     currentSession: null,
     resolveLeagueContext: () => ({
       activeVersion: 'poe1',
       league: 'Mirage'
     }),
     getActiveFarmTypeId: () => 'ritual',
-    apiClient: {
-      async startSession(payload) {
-        apiCalls.push(payload);
-        throw new Error('offline');
-      }
-    },
-    isRetryableApiError: () => true,
-    createQueuedSession(input) {
-      queuedCalls.push(['createQueuedSession', { ...input }]);
-      return {
-        id: 'local-session-1',
-        startedAt: '2026-04-11T10:00:00.000Z'
-      };
-    },
-    queuePendingSessionAction(action) {
-      queuedCalls.push(['queuePendingSessionAction', JSON.parse(JSON.stringify(action))]);
-    },
-    setQueuedCurrentSession() {},
+    crypto: { randomUUID: () => 'session-uuid-1' },
     appendAuditTrail() {},
     showNotification() {},
     t: (key) => key,
     mainWindow: null
   });
 
-  await context.startNewSession({
+  const session = await context.startNewSession({
     mapName: 'Dunes Map',
     startedAt: '2026-04-11T10:00:00.000Z'
   });
 
-  assert.deepEqual(apiCalls.map((payload) => ({ ...payload })), [{
+  assert.equal(session.id, 'session-uuid-1');
+  assert.equal(context.currentSession.id, 'session-uuid-1');
+  assert.deepEqual(backend.journal.sessions.map((stored) => ({
+    id: stored.id,
+    mapName: stored.mapName,
+    mapType: stored.mapType,
+    farmTypeId: stored.farmTypeId,
+    poeVersion: stored.poeVersion,
+    league: stored.league,
+    status: stored.status,
+    startedAt: stored.startedAt
+  })), [{
+    id: 'session-uuid-1',
     mapName: 'Dunes Map',
-    mapTier: null,
     mapType: 'ritual',
     farmTypeId: 'ritual',
-    costChaos: 0,
     poeVersion: 'poe1',
-    league: 'Mirage'
+    league: 'Mirage',
+    status: 'active',
+    startedAt: '2026-04-11T10:00:00.000Z'
   }]);
-  assert.deepEqual(queuedCalls, [
-    ['createQueuedSession', {
-      localSessionId: undefined,
-      mapName: 'Dunes Map',
-      mapTier: null,
-      mapType: 'ritual',
-      farmTypeId: 'ritual',
-      strategyTag: null,
-      notes: null,
-      costChaos: 0,
-      poeVersion: 'poe1',
-      league: 'Mirage',
-      startedAt: '2026-04-11T10:00:00.000Z'
-    }],
-    ['queuePendingSessionAction', {
-      type: 'sessionStart',
-      localSessionId: 'local-session-1',
-      startedAt: '2026-04-11T10:00:00.000Z',
-      payload: {
-        mapName: 'Dunes Map',
-        mapTier: null,
-        mapType: 'ritual',
-        farmTypeId: 'ritual',
-        strategyTag: null,
-        notes: null,
-        costChaos: 0,
-        poeVersion: 'poe1',
-        league: 'Mirage'
-      }
-    }]
-  ]);
 });
 
 test('main start-map overlay prompt state can be shown and cleared independently of map results', () => {
@@ -363,21 +354,19 @@ test('main start-map overlay confirmation forwards the selected map details to t
   ]);
 });
 
-test('main session start surfaces non-retryable api failures to the renderer', async () => {
+test('main session start surfaces journal failures to the renderer', async () => {
   const notificationCalls = [];
   const context = loadFunctions(['normalizeStoredFarmTypeId', 'startNewSession'], {
+    localJournal,
+    readJournal() {
+      throw new Error('Local desktop sign-in is required');
+    },
     currentSession: null,
     resolveLeagueContext: () => ({
       activeVersion: 'poe1',
       league: 'Mirage'
     }),
     getActiveFarmTypeId: () => null,
-    apiClient: {
-      async startSession() {
-        throw new Error('sequelize is not defined');
-      }
-    },
-    isRetryableApiError: () => false,
     showNotification(title, body) {
       notificationCalls.push([title, body]);
     },
@@ -387,33 +376,25 @@ test('main session start surfaces non-retryable api failures to the renderer', a
 
   await assert.rejects(
     () => context.startNewSession({ mapName: 'Dunes Map' }),
-    /sequelize is not defined/
+    /Local desktop sign-in is required/
   );
 
   assert.deepEqual(notificationCalls, [['notificationError', 'sessionStartFailed']]);
 });
 
-test('main local session end adds completed metadata for PoE2 zero-profit results', async () => {
-  const queuedActions = [];
+test('main session end completes a PoE2 zero-profit session in the journal', async () => {
+  const backend = createJournalBackend();
+  const active = backend.start({
+    mapName: 'Channel',
+    farmTypeId: 'abyss',
+    poeVersion: 'poe2',
+    league: 'Fate of the Vaal',
+    startedAt: '2026-05-06T12:00:00.000Z'
+  }, 'session-1');
   const messages = [];
   const context = loadFunctions(['endCurrentSession'], {
-    currentSession: {
-      id: 'local-session-1',
-      mapName: 'Channel',
-      farmTypeId: 'abyss',
-      poeVersion: 'poe2',
-      league: 'Fate of the Vaal',
-      startedAt: '2026-05-06T12:00:00.000Z',
-      endedAt: null,
-      totalLootChaos: 0,
-      profitChaos: 0,
-      localOnly: true,
-      queued: true
-    },
-    queuePendingSessionAction(action) {
-      queuedActions.push(JSON.parse(JSON.stringify(action)));
-    },
-    setQueuedCurrentSession() {},
+    ...backend.context,
+    currentSession: active,
     appendAuditTrail() {},
     showNotification() {},
     t: (key) => key,
@@ -431,57 +412,27 @@ test('main local session end adds completed metadata for PoE2 zero-profit result
     endedAt: '2026-05-06T12:05:30.000Z'
   });
 
-  assert.equal(result.id, 'local-session-1');
-  assert.equal(result.queued, true);
+  assert.equal(result.id, 'session-1');
   assert.equal(result.status, 'completed');
   assert.equal(result.endedAt, '2026-05-06T12:05:30.000Z');
   assert.equal(result.durationSeconds, 330);
-  assert.deepEqual(queuedActions, [{
-    type: 'sessionEnd',
-    sessionId: 'local-session-1',
-    endedAt: '2026-05-06T12:05:30.000Z',
-    durationSeconds: 330
-  }]);
-  assert.deepEqual(messages, [{
-    channel: 'session-ended',
-    payload: {
-      id: 'local-session-1',
-      mapName: 'Channel',
-      farmTypeId: 'abyss',
-      poeVersion: 'poe2',
-      league: 'Fate of the Vaal',
-      startedAt: '2026-05-06T12:00:00.000Z',
-      endedAt: '2026-05-06T12:05:30.000Z',
-      totalLootChaos: 0,
-      profitChaos: 0,
-      localOnly: true,
-      queued: true,
-      status: 'completed',
-      durationSeconds: 330
-    }
-  }]);
+  assert.equal(result.profitChaos, 0);
+  assert.equal(backend.journal.sessions[0].status, 'completed');
+  assert.equal(backend.journal.sessions[0].durationSec, 330);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].channel, 'session-ended');
+  assert.equal(messages[0].payload.status, 'completed');
+  assert.equal(messages[0].payload.poeVersion, 'poe2');
   assert.equal(context.currentSession, null);
 });
 
-test('main session end can target a backend session id after process state is lost', async () => {
-  const apiCalls = [];
+test('main session end can target a journal session id after process state is lost', async () => {
+  const backend = createJournalBackend();
+  backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-1');
   const messages = [];
   const context = loadFunctions(['endCurrentSession'], {
+    ...backend.context,
     currentSession: null,
-    getCurrentSessionFromBackend: async () => null,
-    apiClient: {
-      async endSession(sessionId, payload) {
-        apiCalls.push([sessionId, { ...payload }]);
-        return {
-          id: sessionId,
-          mapName: 'Dunes Map',
-          status: 'completed',
-          profitChaos: payload.profitChaos,
-          totalLootChaos: payload.totalLootChaos
-        };
-      }
-    },
-    isRetryableApiError: () => false,
     appendAuditTrail() {},
     showNotification() {},
     t: (key) => key,
@@ -496,87 +447,24 @@ test('main session end can target a backend session id after process state is lo
   });
 
   const result = await context.endCurrentSession({
-    sessionId: 'session-remote-1',
-    mapName: 'Dunes Map',
-    startedAt: '2026-05-06T12:00:00.000Z',
+    sessionId: 'session-1',
     endedAt: '2026-05-06T12:04:00.000Z',
     totalLootChaos: 12,
     profitChaos: 12
   });
 
-  assert.equal(result.id, 'session-remote-1');
+  assert.equal(result.id, 'session-1');
   assert.equal(result.status, 'completed');
-  assert.deepEqual(apiCalls, [[
-    'session-remote-1',
-    {
-      endedAt: '2026-05-06T12:04:00.000Z',
-      durationSeconds: 240,
-      totalLootChaos: 12,
-      profitChaos: 12
-    }
-  ]]);
-  assert.equal(messages[0].channel, 'session-ended');
-  assert.equal(context.currentSession, null);
-});
-
-test('main session end queues a targeted backend session when auth must be refreshed', async () => {
-  const queuedActions = [];
-  const messages = [];
-  const context = loadFunctions(['endCurrentSession'], {
-    currentSession: null,
-    getCurrentSessionFromBackend: async () => null,
-    apiClient: {
-      async endSession() {
-        throw {
-          status: 401,
-          code: 'AUTH_TOKEN_REQUIRED',
-          message: 'Authorization token is required'
-        };
-      }
-    },
-    isRetryableApiError: () => true,
-    queuePendingSessionAction(action) {
-      queuedActions.push(JSON.parse(JSON.stringify(action)));
-    },
-    appendAuditTrail() {},
-    showNotification() {},
-    t: (key) => key,
-    updateOverlayWindow() {},
-    mainWindow: {
-      webContents: {
-        send(channel, payload) {
-          messages.push({ channel, payload: JSON.parse(JSON.stringify(payload)) });
-        }
-      }
-    }
-  });
-
-  const result = await context.endCurrentSession({
-    sessionId: 'session-remote-2',
-    mapName: 'Dunes Map',
-    startedAt: '2026-05-06T12:00:00.000Z',
-    endedAt: '2026-05-06T12:04:00.000Z',
-    totalLootChaos: 0,
-    profitChaos: 0
-  });
-
-  assert.equal(result.id, 'session-remote-2');
-  assert.equal(result.status, 'completed');
-  assert.equal(result.queued, true);
-  assert.deepEqual(queuedActions, [{
-    type: 'sessionEnd',
-    sessionId: 'session-remote-2',
-    endedAt: '2026-05-06T12:04:00.000Z',
-    durationSeconds: 240,
-    totalLootChaos: 0,
-    profitChaos: 0
-  }]);
+  assert.equal(result.durationSeconds, 240);
+  assert.equal(backend.journal.sessions[0].totalLootChaos, 12);
+  assert.equal(backend.journal.sessions[0].profitChaos, 12);
   assert.equal(messages[0].channel, 'session-ended');
   assert.equal(context.currentSession, null);
 });
 
 test('main shutdown finalizer closes an active session without profit data when calculation is unavailable', async () => {
   const calls = [];
+  const backend = createJournalBackend();
   const context = loadFunctions([
     'normalizePoeVersion',
     'normalizeStoredFarmTypeId',
@@ -590,15 +478,7 @@ test('main shutdown finalizer closes an active session without profit data when 
     'endCurrentSession',
     'finalizeActiveSessionOnShutdown'
   ], {
-    currentSession: {
-      id: 'session-shutdown-1',
-      mapName: 'Dunes Map',
-      mapType: 'breach',
-      poeVersion: 'poe1',
-      league: 'Mirage',
-      startedAt: '2026-05-06T12:00:00.000Z',
-      localOnly: false
-    },
+    currentSession: backend.start({ mapType: 'breach', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-shutdown-1'),
     calculateSessionProfitFromPersistedSnapshots: async () => {
       throw new Error('snapshot timeout');
     },
@@ -608,18 +488,7 @@ test('main shutdown finalizer closes an active session without profit data when 
       calls.push(['saveMapResultHistory', JSON.parse(JSON.stringify(result))]);
       return [result];
     },
-    apiClient: {
-      async endSession(sessionId, payload) {
-        calls.push(['endSession', sessionId, { ...payload }]);
-        return {
-          id: sessionId,
-          status: 'completed',
-          profitChaos: payload.profitChaos,
-          totalLootChaos: payload.totalLootChaos
-        };
-      }
-    },
-    isRetryableApiError: () => false,
+    ...backend.context,
     appendAuditTrail() {},
     showNotification() {},
     t: (key) => key,
@@ -658,16 +527,15 @@ test('main shutdown finalizer closes an active session without profit data when 
   assert.equal(calls[0][1].farmType, 'Breach');
   assert.equal(calls[0][1].profitUnavailable, true);
   assert.equal(calls[0][1].durationSeconds, 240);
-  assert.deepEqual(calls[1], ['endSession', 'session-shutdown-1', {
-    endedAt: '2026-05-06T12:04:00.000Z',
-    durationSeconds: 240,
-    totalLootChaos: 0,
-    profitChaos: 0
-  }]);
+  const stored = backend.journal.sessions[0];
+  assert.deepEqual([stored.id, stored.status, stored.endedAt, stored.durationSec, stored.totalLootChaos, stored.profitChaos], [
+    'session-shutdown-1', 'completed', '2026-05-06T12:04:00.000Z', 240, 0, 0
+  ]);
 });
 
 test('main shutdown finalizer stores calculated persisted profit before closing', async () => {
   const calls = [];
+  const backend = createJournalBackend();
   const context = loadFunctions([
     'normalizePoeVersion',
     'normalizeStoredFarmTypeId',
@@ -681,15 +549,7 @@ test('main shutdown finalizer stores calculated persisted profit before closing'
     'endCurrentSession',
     'finalizeActiveSessionOnShutdown'
   ], {
-    currentSession: {
-      id: 'session-shutdown-2',
-      mapName: 'Dunes Map',
-      mapType: 'breach',
-      poeVersion: 'poe1',
-      league: 'Mirage',
-      startedAt: '2026-05-06T12:00:00.000Z',
-      localOnly: false
-    },
+    currentSession: backend.start({ mapType: 'breach', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-shutdown-2'),
     calculateSessionProfitFromPersistedSnapshots: async () => ({
       report: {
         summary: {
@@ -705,18 +565,7 @@ test('main shutdown finalizer stores calculated persisted profit before closing'
       calls.push(['saveMapResultHistory', JSON.parse(JSON.stringify(result))]);
       return [result];
     },
-    apiClient: {
-      async endSession(sessionId, payload) {
-        calls.push(['endSession', sessionId, { ...payload }]);
-        return {
-          id: sessionId,
-          status: 'completed',
-          profitChaos: payload.profitChaos,
-          totalLootChaos: payload.totalLootChaos
-        };
-      }
-    },
-    isRetryableApiError: () => false,
+    ...backend.context,
     appendAuditTrail() {},
     showNotification() {},
     t: (key) => key,
@@ -747,12 +596,10 @@ test('main shutdown finalizer stores calculated persisted profit before closing'
   assert.equal(calls[0][1].inputValue, 5);
   assert.equal(calls[0][1].outputValue, 40);
   assert.equal(calls[0][1].netProfit, 35);
-  assert.deepEqual(calls[1], ['endSession', 'session-shutdown-2', {
-    endedAt: '2026-05-06T12:04:00.000Z',
-    durationSeconds: 240,
-    totalLootChaos: 40,
-    profitChaos: 35
-  }]);
+  const stored = backend.journal.sessions[0];
+  assert.deepEqual([stored.id, stored.status, stored.endedAt, stored.durationSec, stored.totalLootChaos, stored.profitChaos], [
+    'session-shutdown-2', 'completed', '2026-05-06T12:04:00.000Z', 240, 40, 35
+  ]);
 });
 
 test('main keeps zero-loot PoE1 sessions open on map exit for stash diff completion', () => {
@@ -805,4 +652,71 @@ test('map-enter handler publishes runtime state and leaves session start to the 
 
   assert.deepEqual(startCalls, []);
   assert.deepEqual(runtimeCalls, [['area_entered', { mapName: 'Crimson Temple', mapTier: 16 }]]);
+});
+
+test('legacy queue drain leaves the journal-backed current session alone', async () => {
+  const backend = createJournalBackend();
+  const active = backend.start({}, 'journal-session-1');
+  let queuedCurrentSession = { id: 'local-legacy-1' };
+  const context = loadFunctions(['isLocalSessionId', 'flushPendingSessionActions'], {
+    currentSession: active,
+    pendingSessionFlushInProgress: false,
+    apiClient: {
+      token: 'legacy-token',
+      async startSession() {
+        return { id: 'server-session-1' };
+      },
+      async endSession() {
+        return { id: 'server-session-1', status: 'completed' };
+      }
+    },
+    getCurrentUserId: () => 'user-1',
+    getPendingSessionActions: () => [
+      { type: 'sessionStart', localSessionId: 'local-legacy-1', payload: { mapName: 'Old Map' } },
+      { type: 'sessionEnd', sessionId: 'local-legacy-1', endedAt: '2026-05-06T12:04:00.000Z' }
+    ],
+    setPendingSessionActions() {},
+    getQueuedCurrentSession: () => queuedCurrentSession,
+    setQueuedCurrentSession(session) {
+      queuedCurrentSession = session;
+    }
+  });
+
+  const result = await context.flushPendingSessionActions();
+
+  assert.equal(result.processed, 2);
+  assert.equal(queuedCurrentSession, null);
+  assert.equal(context.currentSession, active);
+});
+
+test('journal store is per signed-in user and rejects unsafe ids', () => {
+  const created = [];
+  let userId = 'user-1';
+  const context = loadFunctions(['getJournalStore'], {
+    journalStore: null,
+    getCurrentUserId: () => userId,
+    path,
+    app: { getPath: () => 'D:/UserData' },
+    Store: class {
+      constructor(options) {
+        this.options = options;
+        created.push(options);
+      }
+    }
+  });
+
+  const first = context.getJournalStore();
+  assert.equal(context.getJournalStore(), first);
+  userId = 'user-2';
+  const second = context.getJournalStore();
+
+  assert.notEqual(second, first);
+  assert.deepEqual(JSON.parse(JSON.stringify(created)), [
+    { name: 'journal', cwd: path.join('D:/UserData', 'profiles', 'user-1') },
+    { name: 'journal', cwd: path.join('D:/UserData', 'profiles', 'user-2') }
+  ]);
+  for (const unsafeId of ['../user-1', 'user/1', '', null]) {
+    userId = unsafeId;
+    assert.throws(() => context.getJournalStore(), /Local desktop sign-in is required/);
+  }
 });

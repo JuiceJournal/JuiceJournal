@@ -1662,6 +1662,56 @@ test('renderer tags the latest map result with its loot-filter profit tier', () 
   assert.equal(elements.lastMapResultProfit.dataset.profitTier, undefined);
 });
 
+test('renderer colours farm names by their league content', () => {
+  const elements = {
+    lastMapResultCard: { dataset: { resultState: 'empty' } },
+    lastMapResultFarmType: { textContent: '', dataset: {} },
+    lastMapResultDuration: { textContent: '' },
+    lastMapResultProfit: { innerHTML: '', dataset: {} }
+  };
+  const state = {
+    settings: { poeVersion: 'poe1' },
+    mapResults: [{ farmType: 'Ritual', durationSeconds: 300, netProfit: 412, poeVersion: 'poe1' }]
+  };
+  const context = loadFunctions([
+    'getFarmTypeIdFor',
+    'farmTypeAttr',
+    'applyFarmType',
+    'formatMapResultProfitHTML',
+    'renderLatestMapResult'
+  ], {
+    elements,
+    state,
+    window: { farmTypeModel: require('../src/modules/farmTypeModel') },
+    normalizeProfitPoeVersion: (value) => value,
+    getProfitCurrencyRates: () => ({ divineChaos: 150 }),
+    profitCurrencyHTML: (value) => `profit:${value}`,
+    formatDuration: (seconds) => `duration:${seconds}`
+  });
+
+  context.renderLatestMapResult();
+  assert.equal(elements.lastMapResultFarmType.dataset.farmType, 'ritual');
+  assert.equal(context.farmTypeAttr('Expedition'), ' data-farm-type="expedition"');
+  assert.equal(context.farmTypeAttr('Unknown farm'), '');
+
+  state.mapResults = [];
+  context.renderLatestMapResult();
+  assert.equal(elements.lastMapResultFarmType.dataset.farmType, undefined);
+});
+
+test('stylesheet gives every farm type its colour token', () => {
+  const stylesCss = fs.readFileSync(path.join(desktopDir, 'src', 'styles.css'), 'utf8');
+  const overlayHtml = fs.readFileSync(path.join(desktopDir, 'src', 'overlay.html'), 'utf8');
+  const tokensCss = fs.readFileSync(path.join(desktopDir, 'src', 'tokens.css'), 'utf8');
+
+  for (const { id } of require('../src/modules/farmTypeModel').FARM_TYPES) {
+    assert.match(tokensCss, new RegExp(`--farm-${id}:\\s*#`), `tokens.css --farm-${id}`);
+    const mapping = new RegExp(`\\[data-farm-type="${id}"\\]\\s*\\{\\s*--farm-color:\\s*var\\(--farm-${id}\\);`);
+    assert.match(stylesCss, mapping, `styles.css ${id}`);
+    assert.match(overlayHtml, mapping, `overlay.html ${id}`);
+  }
+});
+
 test('dashboard loads the profit tier model before renderer app code', () => {
   const html = fs.readFileSync(indexHtmlPath, 'utf8');
 

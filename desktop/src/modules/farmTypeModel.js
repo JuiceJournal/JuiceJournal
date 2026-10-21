@@ -93,6 +93,13 @@
     return state.selectedFarmTypeId;
   }
 
+  // Map results and hub runs store the label ("Ritual"); sessions store the id ("ritual").
+  function resolveFarmTypeId(value) {
+    const key = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    const farmType = FARM_TYPES.find((entry) => entry.id === key || entry.label.toLowerCase() === key);
+    return farmType ? farmType.id : null;
+  }
+
   return {
     FARM_TYPES,
     createFarmTypeState,
@@ -100,6 +107,7 @@
     getFarmTypeById,
     isFarmTypeSupported,
     selectFarmType,
-    clearFarmType
+    clearFarmType,
+    resolveFarmTypeId
   };
 });
