@@ -15,6 +15,8 @@
   --brass: #e8b65a;
   --brass-light: #f3d08f;
   --brass-dim: #8a6534;
+  --line: #3d2b21;
+  --line-strong: #6b4a2c;
   --ember-hot: #ffa04d;
   --ember-deep: #e8600f;
   --ember-ink: #1a0d05;
@@ -86,8 +88,13 @@
   --radius-lg: 14px;
   --radius-xl: 20px;
 
+  --chamfer-sm: polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px);
+
   --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 120ms;
+  --duration-enter: 180ms;
 
   /* Type */
   --font: 'Source Sans 3', -apple-system, BlinkMacSystemFont, sans-serif;
