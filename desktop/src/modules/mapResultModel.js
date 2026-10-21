@@ -119,13 +119,19 @@
   }
 
   function normalizeReportEntry(entry = {}) {
-    return {
+    return withIcon({
       itemKey: getItemKey(entry),
       label: normalizeString(entry.name, 'Unknown Item'),
       quantityDelta: Math.abs(normalizeNumber(entry.quantityDiff, 0)),
       valueDelta: Math.abs(normalizeNumber(entry.totalChaosValue, 0)),
       currencyCode: 'chaos'
-    };
+    }, entry.icon);
+  }
+
+  // Keeps the item art URL so the overlay can show the top drop's icon.
+  function withIcon(entry, icon) {
+    const normalizedIcon = normalizeString(icon);
+    return normalizedIcon ? { ...entry, icon: normalizedIcon } : entry;
   }
 
   function deriveProfitValuesFromReport(profitReport = {}) {
@@ -168,13 +174,13 @@
   }
 
   function createDeltaEntry(itemKey, sourceItem, quantityDelta, valueDelta) {
-    return {
+    return withIcon({
       itemKey,
       label: sourceItem?.name || 'Unknown Item',
       quantityDelta,
       valueDelta,
       currencyCode: getCurrencyCode(sourceItem)
-    };
+    }, sourceItem?.icon);
   }
 
   function getLastCompletedInstance(runtimeSession = {}) {

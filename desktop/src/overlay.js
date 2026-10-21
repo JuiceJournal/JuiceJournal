@@ -30,21 +30,10 @@
     if (element) { element.textContent = value || ''; }
   }
 
-  // Game art for the top drop. The overlay CSP only allows local images, so only bundled currencies get an icon.
-  var CURRENCY_ICONS = {
-    poe1: {
-      'Chaos Orb': 'assets/currency/poe1/chaos.png',
-      'Divine Orb': 'assets/currency/poe1/divine.png',
-      'Exalted Orb': 'assets/currency/poe1/exalted.png',
-      'Mirror of Kalandra': 'assets/currency/poe1/mirror.png'
-    },
-    poe2: {
-      'Chaos Orb': 'assets/currency/poe2/chaos.png',
-      'Divine Orb': 'assets/currency/poe2/divine.webp',
-      'Exalted Orb': 'assets/currency/poe2/exalted.png',
-      'Mirror of Kalandra': 'assets/currency/poe2/mirror.png'
-    }
-  };
+  // Game art for the top drop. The overlay CSP only allows local images, so the art comes from the main-process
+  // icon cache as a file:// URL. Keyed by the remote URL; '' while loading or when the icon is unavailable.
+  var cachedIconSources = Object.create(null);
+  var secondaryIconUrl = '';
 
   // The primary line is a name plus an optional value, so the value can carry the profit tier colour.
   function setPrimary(name, value) {
@@ -65,13 +54,27 @@
   function setSecondary(text, iconSrc) {
     if (!el.secondary) return;
     el.secondary.textContent = text || '';
-    if (iconSrc) {
-      var icon = document.createElement('img');
-      icon.src = iconSrc;
-      icon.alt = '';
-      icon.draggable = false;
-      el.secondary.prepend(icon);
-    }
+    secondaryIconUrl = '';
+    if (iconSrc) prependSecondaryIcon(iconSrc);
+  }
+
+  function prependSecondaryIcon(iconSrc) {
+    var icon = document.createElement('img');
+    icon.src = iconSrc;
+    icon.alt = '';
+    icon.draggable = false;
+    el.secondary.prepend(icon);
+  }
+
+  function loadCachedIcon(iconUrl) {
+    var api = root.electronAPI;
+    if (!api || typeof api.getCachedIcon !== 'function') return;
+    cachedIconSources[iconUrl] = '';
+    api.getCachedIcon(iconUrl).then(function (src) {
+      if (typeof src !== 'string' || src.indexOf('file:') !== 0) return;
+      cachedIconSources[iconUrl] = src;
+      if (el.secondary && secondaryIconUrl === iconUrl) prependSecondaryIcon(src);
+    }).catch(function () {});
   }
 
   function escapeHTML(value) {
@@ -127,13 +130,17 @@
     var result = (state.mapResult && state.mapResult.result) || {};
     var rates = result.profitCurrencyRates || result.currencyRates || (state.mapResult && state.mapResult.profitCurrencyRates) || {};
     var topOutput = Array.isArray(result.topOutputs) && result.topOutputs.length > 0 ? result.topOutputs[0] : null;
-    var icons = CURRENCY_ICONS[result.poeVersion === 'poe2' ? 'poe2' : 'poe1'];
+    var iconUrl = topOutput && typeof topOutput.icon === 'string' ? topOutput.icon : '';
     setText(el.kickerLabel, 'Map Complete');
     setPrimary(result.farmType || 'Completed Map', formatSignedProfit(result.netProfit, rates));
     setSecondary(
       topOutput ? (topOutput.label || '') + ' ' + formatSignedProfit(topOutput.valueDelta, rates) : 'Completed map result',
-      topOutput ? icons[topOutput.label] : null
+      cachedIconSources[iconUrl]
     );
+    if (iconUrl) {
+      secondaryIconUrl = iconUrl;
+      if (!(iconUrl in cachedIconSources)) loadCachedIcon(iconUrl);
+    }
     setText(el.meta, formatDuration(result.durationSeconds));
   }
 
