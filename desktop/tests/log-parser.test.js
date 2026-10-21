@@ -1,8 +1,5 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
 
 const LogParser = require('../src/modules/logParser');
 
@@ -271,28 +268,20 @@ test('log parser resumes the session phase from the startup tail without replayi
   assert.equal(entered.length, 1);
 });
 
-test('log parser joins a Client.txt line that was flushed in two writes', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jj-log-'));
-  const logPath = path.join(dir, 'Client.txt');
-  fs.writeFileSync(logPath, '');
+// Pure: a temp-file version was flaky on Windows when antivirus briefly locked the file (EBUSY).
+test('log parser holds an unterminated Client.txt line and split UTF-8 bytes until the rest arrives', () => {
+  const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
+  const levelUp = '2026/10/21 13:10:01 1 3ef23348 [INFO Client 1] : ÜnalShaman (Shaman) is now level 2';
+  const play = '2026/10/21 13:10:52 2 2d8e64dd [DEBUG Client 1] Got Instance Details from login server';
+  const bytes = Buffer.from(`${levelUp}\r\n${play}\r\n`, 'utf8');
+  const insideUmlaut = bytes.indexOf(Buffer.from('Ü', 'utf8')) + 1;
+  const insidePlay = bytes.indexOf(Buffer.from('Instance Det')) + 'Instance Det'.length;
 
-  const parser = new LogParser(logPath, { poeVersion: 'poe2' });
-  const entered = [];
-  parser.on('gameSessionEntered', (payload) => entered.push(payload));
-  parser.start();
-  clearInterval(parser.watchInterval);
+  assert.deepEqual(parser.takeCompleteLines(bytes.subarray(0, insideUmlaut)), []);
+  assert.deepEqual(parser.takeCompleteLines(bytes.subarray(insideUmlaut, insidePlay)), [`${levelUp}\r`]);
+  assert.deepEqual(parser.takeCompleteLines(bytes.subarray(insidePlay)), [`${play}\r`]);
 
-  try {
-    fs.appendFileSync(logPath, '2026/10/21 13:10:03 1 4f3e4d2c [INFO Client 1] Async connecting to mil.login.pathofexile2.com:21270\r\n');
-    fs.appendFileSync(logPath, '2026/10/21 13:10:52 2 2d8e64dd [DEBUG Client 1] Got Instance Det');
-    await parser.readNewLines();
-    assert.equal(entered.length, 0);
-
-    fs.appendFileSync(logPath, 'ails from login server\r\n');
-    await parser.readNewLines();
-    assert.equal(entered.length, 1);
-  } finally {
-    parser.stop();
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  parser.resetLineBuffer();
+  assert.deepEqual(parser.takeCompleteLines(Buffer.from('tail without newline')), []);
+  assert.deepEqual(parser.takeCompleteLines(Buffer.from('\n')), ['tail without newline']);
 });

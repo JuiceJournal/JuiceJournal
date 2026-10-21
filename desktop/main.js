@@ -57,7 +57,8 @@ const APP_NAME = 'Juice Journal';
 const APP_ID = 'JuiceJournal.Desktop';
 const DEFAULT_STRATEGY_PRESETS = ['Strongbox', 'Legion', 'Ritual', 'Expedition', 'Harvest', 'Boss Rush'];
 const MAP_RESULT_OVERLAY_DURATION_MS = 10_000;
-const OVERLAY_CLICKABLE_MODES = new Set(['start-map-prompt', 'map-result']);
+const CHARACTER_PROMPT_OVERLAY_DURATION_MS = 8_000;
+const OVERLAY_CLICKABLE_MODES = new Set(['start-map-prompt', 'map-result', 'character-prompt']);
 const MAX_PENDING_LOOT_ACTIONS = 100;
 const MAX_PENDING_SESSION_ACTIONS = 20;
 const MAX_AUDIT_TRAIL_ENTRIES = 200;
@@ -74,7 +75,8 @@ const IPC_RENDERER_SCOPES = Object.freeze({
   'dismiss-map-result-overlay': ['main', 'overlay'],
   'get-overlay-cursor-position': ['main', 'overlay'],
   'confirm-start-map-prompt-overlay': ['overlay'],
-  'cancel-start-map-prompt-overlay': ['overlay']
+  'cancel-start-map-prompt-overlay': ['overlay'],
+  'choose-character-prompt-overlay': ['overlay']
 });
 let validatedIpcHandleInstalled = false;
 
@@ -304,6 +306,8 @@ let overlayCharacterState = null;
 let overlayRuntimeState = null;
 let overlayMapResultState = null;
 let overlayStartMapPromptState = null;
+let overlayCharacterPromptState = null;
+let overlayCharacterPromptTimer = null;
 let overlayMapResultDismissTimer = null;
 let poeAuthServer = null;
 let trayHintShown = false;
@@ -2232,7 +2236,7 @@ function getOverlayDisplay() {
 function getOverlayWindowBounds(overlayState = {}) {
   const display = getOverlayDisplay();
   const workArea = display.workArea || display.bounds;
-  const isInteractivePrompt = overlayState.mode === 'start-map-prompt';
+  const isInteractivePrompt = overlayState.mode === 'start-map-prompt' || overlayState.mode === 'character-prompt';
   const width = isInteractivePrompt ? 440 : 360;
   const height = isInteractivePrompt ? 286 : 112;
 
@@ -2291,46 +2295,24 @@ function createOverlayWindow() {
   return overlayWindow;
 }
 
-function extractOverlayCharacterFromUser(user) {
-  if (!user || typeof user !== 'object') {
+// The renderer resolves the active character (account payload, Client.txt names, the player's pick) and sends it
+// here, so the overlay and the main window always show the same one.
+function normalizeOverlayCharacter(character) {
+  if (!character || typeof character !== 'object') {
     return null;
   }
 
-  const poePayload = user.poe || {};
-  const characters = Array.isArray(user.characters)
-    ? user.characters
-    : (Array.isArray(user.poeCharacters)
-      ? user.poeCharacters
-      : (Array.isArray(poePayload.characters) ? poePayload.characters : []));
-  const selectedCharacterId = user.selectedCharacterId
-    || user.selectedCharacter?.id
-    || poePayload.selectedCharacterId
-    || poePayload.selectedCharacter?.id
-    || null;
-  const selectedCharacter = user.selectedCharacter
-    || poePayload.selectedCharacter
-    || characters.find((character) => character?.id && character.id === selectedCharacterId)
-    || characters[0]
-    || null;
+  const text = (value) => (typeof value === 'string' ? value.trim().slice(0, 64) : '') || null;
+  const level = Number(character.level);
+  const normalized = {
+    id: text(character.id),
+    name: text(character.name),
+    league: text(character.league),
+    className: text(character.className),
+    level: Number.isInteger(level) && level > 0 && level <= 100 ? level : null
+  };
 
-  if (selectedCharacter) {
-    return selectedCharacter;
-  }
-
-  const fallbackName = user.accountName
-    || user.poeAccountName
-    || poePayload.accountName
-    || poePayload.account?.name
-    || user.username
-    || null;
-  const fallbackLeague = user.league
-    || user.defaultLeague
-    || store.get(getLeagueKeyForVersion(normalizePoeVersion(store.get('poeVersion')) || 'poe1'))
-    || null;
-
-  return fallbackName
-    ? { name: fallbackName, league: fallbackLeague }
-    : null;
+  return normalized.name || normalized.league ? normalized : null;
 }
 
 function isOverlayEnabled() {
@@ -2465,6 +2447,54 @@ function hideStartMapPromptOverlay() {
   return updateOverlayWindow();
 }
 
+function clearCharacterPromptOverlay() {
+  if (overlayCharacterPromptTimer) {
+    clearTimeout(overlayCharacterPromptTimer);
+    overlayCharacterPromptTimer = null;
+  }
+  overlayCharacterPromptState = null;
+}
+
+// "Playing as …" after Play. It closes on its own, so an unanswered prompt leaves the assumed character in place.
+function showCharacterPromptOverlay(prompt = {}) {
+  clearCharacterPromptOverlay();
+  const characters = (Array.isArray(prompt.characters) ? prompt.characters : [])
+    .slice(0, 40)
+    .map(normalizeOverlayCharacter)
+    .filter((character) => character?.id && character.name);
+
+  overlayCharacterPromptState = {
+    poeVersion: normalizePoeVersion(prompt.poeVersion),
+    selectedId: typeof prompt.selectedId === 'string' ? prompt.selectedId.trim() || null : null,
+    characters
+  };
+  overlayCharacterPromptTimer = setTimeout(() => {
+    overlayCharacterPromptTimer = null;
+    overlayCharacterPromptState = null;
+    updateOverlayWindow();
+  }, CHARACTER_PROMPT_OVERLAY_DURATION_MS);
+
+  return updateOverlayWindow();
+}
+
+function chooseCharacterPromptOverlay(payload = {}) {
+  const prompt = overlayCharacterPromptState;
+  const character = prompt?.characters.find((entry) => entry.id === payload.characterId) || null;
+  clearCharacterPromptOverlay();
+  updateOverlayWindow();
+
+  if (!character) {
+    return null;
+  }
+
+  const result = { poeVersion: prompt.poeVersion, characterId: character.id };
+  if (mainWindow && (typeof mainWindow.isDestroyed !== 'function' || !mainWindow.isDestroyed())) {
+    mainWindow.webContents.send('character-prompt-overlay-result', result);
+  }
+
+  return result;
+}
+
 function toggleMapResultOverlayPin() {
   if (!overlayMapResultState?.result) {
     return updateOverlayWindow();
@@ -2528,6 +2558,7 @@ function buildOverlayState({ character = overlayCharacterState, runtimeSession =
     runtime: runtimeSession,
     session: getActiveSessionOverlayState(),
     startMapPrompt: currentSession ? null : overlayStartMapPromptState,
+    characterPrompt: overlayCharacterPromptState,
     now: Date.now()
   });
 }
@@ -3845,7 +3876,6 @@ function setupIPC() {
       const authCookie = apiClient.getToken();
       if (result?.success && persistDesktopAuthSession(authCookie)) {
         store.set('currentUserId', result?.data?.user?.id || null);
-        updateOverlayWindow({ character: extractOverlayCharacterFromUser(result?.data?.user) });
         await flushPendingActions();
         appendAuditTrail('auditLogin');
       }
@@ -3865,7 +3895,6 @@ function setupIPC() {
       const authCookie = apiClient.getToken();
       if (persistDesktopAuthSession(authCookie)) {
         store.set('currentUserId', result?.user?.id || null);
-        updateOverlayWindow({ character: extractOverlayCharacterFromUser(result?.user) });
         await flushPendingActions();
         appendAuditTrail('auditLogin');
       }
@@ -3887,7 +3916,6 @@ function setupIPC() {
     try {
       const me = await apiClient.getMe();
       store.set('currentUserId', me?.user?.id || null);
-      updateOverlayWindow({ character: extractOverlayCharacterFromUser(me?.user) });
       await flushPendingActions();
       return me;
     } catch (error) {
@@ -3921,7 +3949,6 @@ function setupIPC() {
         const authCookie = apiClient.getToken();
         if (result?.success && persistDesktopAuthSession(authCookie)) {
           store.set('currentUserId', result.data.user?.id || null);
-          updateOverlayWindow({ character: extractOverlayCharacterFromUser(result.data.user) });
           await flushPendingActions();
           appendAuditTrail('auditLogin');
         }
@@ -3942,7 +3969,6 @@ function setupIPC() {
       const authCookie = apiClient.getToken();
       if (result?.success && persistDesktopAuthSession(authCookie)) {
         store.set('currentUserId', result.data.user?.id || null);
-        updateOverlayWindow({ character: extractOverlayCharacterFromUser(result.data.user) });
         await flushPendingActions();
         appendAuditTrail('auditLogin');
       }
@@ -4259,6 +4285,21 @@ function setupIPC() {
   ipcMain.handle('cancel-start-map-prompt-overlay', async () => {
     assertDesktopUserAuthenticated();
     return cancelStartMapPromptOverlay();
+  });
+
+  ipcMain.handle('set-overlay-character', async (event, character) => {
+    assertDesktopUserAuthenticated();
+    return updateOverlayWindow({ character: normalizeOverlayCharacter(character) });
+  });
+
+  ipcMain.handle('show-character-prompt-overlay', async (event, prompt) => {
+    assertDesktopUserAuthenticated();
+    return showCharacterPromptOverlay(prompt || {});
+  });
+
+  ipcMain.handle('choose-character-prompt-overlay', async (event, payload) => {
+    assertDesktopUserAuthenticated();
+    return chooseCharacterPromptOverlay(payload || {});
   });
 
   ipcMain.handle('show-runtime-overlay-preview', async (event, runtimeSession) => {

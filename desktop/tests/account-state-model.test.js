@@ -526,10 +526,14 @@ function loadCharacterSessionRenderer({ lastKnownAccountState } = {}) {
     detectedGameVersion: 'poe2',
     characterSession: null
   };
+  const overlayCharacters = [];
+  const characterPrompts = [];
   const context = loadFunctions([
     'persistLastKnownAccountState',
     'refreshAccountStateFromCurrentUser',
+    'syncOverlayCharacter',
     'handleGameSessionEntered',
+    'handleCharacterChosen',
     'handleCharacterLogLine',
     'confirmActiveCharacter'
   ], {
@@ -539,6 +543,12 @@ function loadCharacterSessionRenderer({ lastKnownAccountState } = {}) {
       electronAPI: {
         setSettings: async (settings) => {
           persistedSettings.push(settings);
+        },
+        setOverlayCharacter: async (character) => {
+          overlayCharacters.push(character);
+        },
+        showCharacterPromptOverlay: async (prompt) => {
+          characterPrompts.push(prompt);
         }
       }
     },
@@ -549,7 +559,8 @@ function loadCharacterSessionRenderer({ lastKnownAccountState } = {}) {
 
   context.refreshAccountStateFromCurrentUser();
   persistedSettings.length = 0;
-  return { context, state, calls, persistedSettings };
+  overlayCharacters.length = 0;
+  return { context, state, calls, persistedSettings, overlayCharacters, characterPrompts };
 }
 
 test('renderer keeps the last confirmed character on Play and marks the session unconfirmed', () => {
@@ -589,6 +600,34 @@ test('renderer ignores party members and other-game names from Client.txt', () =
   assert.equal(state.account.summary.name, 'HighLevelDeadeye');
   assert.deepEqual(calls, []);
   assert.deepEqual(persistedSettings, []);
+});
+
+test('renderer asks in the overlay on Play and sends the card character to the overlay', () => {
+  const { context, overlayCharacters, characterPrompts } = loadCharacterSessionRenderer({
+    lastKnownAccountState: { confirmedCharacterByGame: { poe2: 'poe2-alt' } }
+  });
+
+  context.handleGameSessionEntered({ poeVersion: 'poe2' });
+
+  assert.equal(overlayCharacters.at(-1).name, 'AltShaman');
+  assert.equal(characterPrompts.length, 1);
+  assert.equal(characterPrompts[0].poeVersion, 'poe2');
+  assert.equal(characterPrompts[0].selectedId, 'poe2-alt');
+  assert.deepEqual([...characterPrompts[0].characters].map((character) => character.id), ['poe2-high', 'poe2-alt']);
+});
+
+test('renderer confirms a character picked in the overlay or on the card, but only an own one', () => {
+  const { context, state, persistedSettings, overlayCharacters } = loadCharacterSessionRenderer();
+
+  context.handleGameSessionEntered({ poeVersion: 'poe2' });
+  context.handleCharacterChosen({ poeVersion: 'poe2', characterId: 'someone-else' });
+  assert.equal(state.characterSession.confirmed, false);
+
+  context.handleCharacterChosen({ poeVersion: 'poe2', characterId: 'poe2-alt' });
+  assert.equal(state.account.summary.name, 'AltShaman');
+  assert.equal(state.characterSession.confirmed, true);
+  assert.equal(overlayCharacters.at(-1).name, 'AltShaman');
+  assert.equal(persistedSettings.at(-1).lastKnownAccountState.confirmedCharacterByGame.poe2, 'poe2-alt');
 });
 
 test('renderer logout clears normalized account state', async () => {

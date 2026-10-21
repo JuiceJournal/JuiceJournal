@@ -112,7 +112,8 @@
       --jj-glow: rgba(232, 116, 108, 0.08);
     }
 
-    [data-overlay-mode="start-map-prompt"][data-overlay-state="visible"] {
+    [data-overlay-mode="start-map-prompt"][data-overlay-state="visible"],
+    [data-overlay-mode="character-prompt"][data-overlay-state="visible"] {
       --jj-accent: #d4af60;
       --jj-border: rgba(212, 175, 96, 0.38);
     }
@@ -347,6 +348,15 @@
           <button class="jj-form-btn primary" type="submit" data-overlay-start-submit>Start Map</button>
         </div>
       </form>
+      <div class="jj-form" data-overlay-character-form hidden>
+        <div class="jj-field">
+          <span>Switch character</span>
+          <div class="jj-chips" role="group" aria-label="Character" data-overlay-characters></div>
+        </div>
+        <div class="jj-form-actions">
+          <button class="jj-form-btn primary" type="button" data-overlay-character-keep>Keep</button>
+        </div>
+      </div>
     </section>
   </main>
   <script src="modules/overlayStateModel.js"></script>

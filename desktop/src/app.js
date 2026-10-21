@@ -140,6 +140,8 @@ const elements = {
   characterAccount: document.getElementById('character-account'),
   characterStatus: document.getElementById('character-status'),
   characterGameVersion: document.getElementById('character-game-version'),
+  characterPickerField: document.getElementById('character-picker-field'),
+  characterPicker: document.getElementById('character-picker'),
   activeSession: document.getElementById('active-session'),
   sessionFarmTypeSelect: document.getElementById('session-farm-type-select'),
   clearFarmTypeBtn: document.getElementById('clear-farm-type-btn'),
@@ -1299,7 +1301,23 @@ function renderCharacterSummaryCard() {
     elements.characterAccount.textContent = account?.accountName || state.currentUser?.username || '—';
   }
   if (elements.characterStatus) {
-    elements.characterStatus.textContent = isReady ? 'Synced from Path of Exile' : 'Character sync needed';
+    const session = state.characterSession?.poeVersion === account?.activePoeVersion ? state.characterSession : null;
+    elements.characterStatus.textContent = !isReady
+      ? 'Character sync needed'
+      : session
+        ? window.t(session.confirmed ? 'dashboard.characterConfirmed' : 'dashboard.characterUnconfirmed')
+        : 'Synced from Path of Exile';
+  }
+  if (elements.characterPicker && elements.characterPickerField) {
+    const characters = isReady ? account.charactersByGame?.[account.activePoeVersion] || [] : [];
+    elements.characterPickerField.hidden = characters.length < 2;
+    elements.characterPicker.replaceChildren(...characters.map((character) => {
+      const option = document.createElement('option');
+      option.value = character.id;
+      option.textContent = character.level ? `${character.name} (${character.level})` : character.name;
+      return option;
+    }));
+    elements.characterPicker.value = isReady ? summary.id : '';
   }
   if (elements.characterGameVersion) {
     const version = normalizePoeVersion(summary.poeVersion)
@@ -1963,6 +1981,12 @@ function setupEventListeners() {
     elements.logoutBtn.addEventListener('click', handleLogout);
   }
 
+  if (elements.characterPicker) {
+    elements.characterPicker.addEventListener('change', () => {
+      handleCharacterChosen({ poeVersion: state.account?.activePoeVersion, characterId: elements.characterPicker.value });
+    });
+  }
+
   // Session
   elements.startSessionBtn.addEventListener('click', handleStartSession);
   elements.endSessionBtn.addEventListener('click', handleEndSession);
@@ -2260,6 +2284,10 @@ function setupIPCListeners() {
 
   if (window.electronAPI.onCharacterLogLine) {
     window.electronAPI.onCharacterLogLine(handleCharacterLogLine);
+  }
+
+  if (window.electronAPI.onCharacterPromptOverlayResult) {
+    window.electronAPI.onCharacterPromptOverlayResult(handleCharacterChosen);
   }
 
   if (window.electronAPI.onGameClosed) {
@@ -2780,6 +2808,19 @@ function refreshAccountStateFromCurrentUser() {
     cachedAccountState: state.settings?.lastKnownAccountState || null
   });
   persistLastKnownAccountState();
+  if (typeof syncOverlayCharacter === 'function') {
+    syncOverlayCharacter();
+  }
+}
+
+// The in-game overlay shows the same character as the card.
+function syncOverlayCharacter() {
+  const account = state.account;
+  const character = account?.summary?.status === 'ready'
+    ? account.summary
+    : (account?.accountName ? { name: account.accountName } : null);
+
+  window.electronAPI?.setOverlayCharacter?.(character)?.catch(() => {});
 }
 
 // Play: until a log line confirms this session's character, the card keeps the one last confirmed for this game.
@@ -2793,6 +2834,28 @@ function handleGameSessionEntered({ poeVersion } = {}) {
   refreshAccountStateFromCurrentUser();
   renderCharacterSummaryCard();
   refreshRendererOverlayState();
+
+  // Ask in the overlay only when there is a choice to make.
+  const characters = state.account?.activePoeVersion === version ? state.account.charactersByGame?.[version] || [] : [];
+  const selectedId = state.account?.selectedCharacter?.id;
+  if (characters.length > 1 && selectedId) {
+    window.electronAPI?.showCharacterPromptOverlay?.({
+      poeVersion: version,
+      selectedId,
+      characters: [...characters]
+        .sort((a, b) => (b.level || 0) - (a.level || 0))
+        .map(({ id, name, className, level }) => ({ id, name, className, level }))
+    })?.catch(() => {});
+  }
+}
+
+// The player picked a character in the overlay prompt or on the card.
+function handleCharacterChosen({ poeVersion, characterId } = {}) {
+  const version = normalizePoeVersion(poeVersion);
+  const known = (state.account?.charactersByGame?.[version] || []).some((character) => character.id === characterId);
+  if (known) {
+    confirmActiveCharacter(version, characterId);
+  }
 }
 
 // Level-up, death and reward lines also name party members, so only the account's own characters count.
