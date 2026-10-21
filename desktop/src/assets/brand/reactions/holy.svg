@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="liquid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff1c2"/><stop offset="1" stop-color="#e8b65a"/></linearGradient>
+    <clipPath id="body"><path d="M27 14H37V23.75A17 17 0 1 1 27 23.75Z"/></clipPath>
+  </defs>
+  <ellipse cx="32" cy="4.5" rx="11" ry="3" fill="none" stroke="#ffe9a8" stroke-width="2.4"/>
+  <path d="M10 26l-5-2M54 26l5-2M12 16l-4-4M52 16l4-4" stroke="#ffe9a8" stroke-width="2.2" stroke-linecap="round"/>
+  <rect x="0" y="29" width="64" height="35" fill="url(#liquid)" clip-path="url(#body)"/>
+  <path d="M27 14H37V23.75A17 17 0 1 1 27 23.75Z" fill="none" stroke="#e8b65a" stroke-width="3.2" stroke-linejoin="round"/>
+  <rect x="24.5" y="8.5" width="15" height="5.5" rx="1" fill="#e8b65a"/>
+  <path d="M22 39.5q3.5 3.5 7 0M35 39.5q3.5 3.5 7 0" fill="none" stroke="#1a0d05" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M27.5 47.5q4.5 3.5 9 0" fill="none" stroke="#1a0d05" stroke-width="2.4" stroke-linecap="round"/>
+</svg>

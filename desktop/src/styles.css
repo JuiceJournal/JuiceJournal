@@ -1686,7 +1686,7 @@ body {
 .session-item {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
   padding: 0.85rem 1.25rem;
   width: 100%;
   display: grid;
@@ -1694,6 +1694,8 @@ body {
   align-items: center;
   gap: 1rem;
   transition: var(--transition);
+  color: var(--text);
+  font: inherit;
   text-align: left;
   cursor: pointer;
 }
@@ -1704,8 +1706,9 @@ body {
 }
 
 .session-name {
-  font-weight: 600;
-  font-size: 0.88rem;
+  color: var(--text-bright);
+  font-weight: 700;
+  font-size: 0.9rem;
 }
 
 .session-primary {
@@ -1715,7 +1718,7 @@ body {
 .session-tier {
   color: var(--text-muted);
   font-size: 0.8rem;
-  font-family: var(--font-mono);
+  font-family: var(--font);
 }
 
 .session-secondary {
@@ -1734,14 +1737,15 @@ body {
 .session-secondary-value {
   font-size: 0.82rem;
   color: var(--text-bright);
-  font-family: var(--font-mono);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
 }
 
-.session-profit { font-weight: 700; font-family: var(--font-mono); }
+.session-profit { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .session-status {
   padding: 0.2rem 0.6rem;
-  border-radius: 99px;
+  clip-path: var(--chamfer-sm);
   font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -1771,7 +1775,7 @@ body {
     linear-gradient(90deg, rgb(var(--brass-rgb) / 0.08), transparent 42%),
     var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
 }
 
 .farming-hub-run-kicker {
@@ -1806,7 +1810,43 @@ body {
   text-align: right;
 }
 
-.farming-hub-run-metrics strong,
+.farming-hub-run-metrics strong {
+  color: var(--text-bright);
+  font-variant-numeric: tabular-nums;
+}
+
+.farming-hub-run-metrics .meme-badge,
+.farming-hub-run-metrics .hub-reactions {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+.hub-reactions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.hub-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem 0.15rem 0.3rem;
+  background: var(--bg-input);
+  box-shadow: inset 0 0 0 1px var(--line);
+  clip-path: var(--chamfer-sm);
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-reaction.is-empty {
+  color: var(--text-muted);
+}
+
+.hub-reaction.is-empty img {
+  opacity: 0.45;
+}
+
 .session-drawer {
   position: fixed;
   inset: 0;
@@ -1864,7 +1904,7 @@ body {
 .session-drawer-close {
   width: 2.25rem;
   height: 2.25rem;
-  border-radius: 999px;
+  clip-path: var(--chamfer-sm);
   border: 1px solid var(--border);
   background: rgb(var(--ink-rgb) / 0.03);
   color: var(--text);
@@ -1889,7 +1929,7 @@ body {
   flex-direction: column;
   gap: 0.3rem;
   padding: 0.85rem 0.9rem;
-  border-radius: var(--radius);
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: rgb(var(--ink-rgb) / 0.025);
 }
@@ -1904,12 +1944,13 @@ body {
 .session-drawer-value {
   font-size: 0.88rem;
   color: var(--text-bright);
-  font-family: var(--font-mono);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
 }
 
 .session-drawer-section {
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
   background: rgb(var(--ink-rgb) / 0.02);
 }
 
@@ -1973,7 +2014,7 @@ body {
 .session-analytics-item {
   border: 1px solid rgb(var(--ink-rgb) / 0.04);
   background: rgb(var(--ink-rgb) / 0.025);
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   padding: 0.8rem;
 }
 
@@ -1998,7 +2039,8 @@ body {
 
 .session-analytics-value {
   flex-shrink: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
 }
 
 .session-analytics-meta {
@@ -2009,7 +2051,7 @@ body {
 .session-analytics-bar {
   width: 100%;
   height: 6px;
-  border-radius: 999px;
+  border-radius: 1px;
   background: rgb(var(--ink-rgb) / 0.05);
   overflow: hidden;
 }
@@ -2039,7 +2081,8 @@ body {
 
 .session-drawer-count {
   color: var(--gold-light);
-  font-family: var(--font-mono);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
   font-size: 0.8rem;
 }
 
@@ -2055,7 +2098,7 @@ body {
   justify-content: space-between;
   gap: 0.9rem;
   padding: 0.75rem 0.8rem;
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   background: rgb(var(--ink-rgb) / 0.025);
   border: 1px solid rgb(var(--ink-rgb) / 0.04);
 }
@@ -2084,7 +2127,8 @@ body {
 
 .session-drawer-loot-value {
   flex-shrink: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ==================== SETTINGS PAGE ==================== */
@@ -3330,3 +3374,28 @@ body {
 [data-profit-tier="unique"] { --profit-tier-color: var(--tier-unique); }
 [data-profit-tier="mirror"] { --profit-tier-color: var(--tier-mirror); }
 [data-profit-tier] { color: var(--profit-tier-color); }
+
+/* ===== Meme badges (flask mascot reactions for extreme profit tiers) ===== */
+.meme-badge {
+  --meme-color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: max-content;
+  padding: 0.1rem 0.55rem 0.1rem 0.25rem;
+  background: color-mix(in srgb, var(--meme-color) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--meme-color) 45%, transparent);
+  clip-path: var(--chamfer-sm);
+  color: var(--meme-color);
+  font-family: var(--font);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.meme-badge[data-meme="bricked"] { --meme-color: var(--red); }
+.meme-badge[data-meme="pog"] { --meme-color: var(--tier-rare); }
+.meme-badge[data-meme="juiced"] { --meme-color: var(--tier-unique); }
+.meme-badge[data-meme="mirror"] { --meme-color: var(--tier-mirror); }

@@ -40,7 +40,20 @@
     return match ? match.tier : 'normal';
   }
 
+  // Meme badges only mark the extremes; the middle tiers stay quiet so lists do not get noisy.
+  const TIER_MEMES = {
+    loss: 'bricked',
+    rare: 'pog',
+    unique: 'juiced',
+    mirror: 'mirror'
+  };
+
+  function getProfitTierMeme(tier) {
+    return TIER_MEMES[tier] || null;
+  }
+
   return {
-    getProfitTier
+    getProfitTier,
+    getProfitTierMeme
   };
 });

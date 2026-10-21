@@ -34,3 +34,15 @@ test('profit tier treats non-numeric values as zero', () => {
   assert.equal(getProfitTier('abc', RATES), 'normal');
   assert.equal(getProfitTier('300', RATES), 'rare');
 });
+
+test('profit tier memes mark only the extremes', () => {
+  const { getProfitTierMeme } = require('../src/modules/profitTierModel');
+
+  assert.equal(getProfitTierMeme('loss'), 'bricked');
+  assert.equal(getProfitTierMeme('rare'), 'pog');
+  assert.equal(getProfitTierMeme('unique'), 'juiced');
+  assert.equal(getProfitTierMeme('mirror'), 'mirror');
+  assert.equal(getProfitTierMeme('normal'), null);
+  assert.equal(getProfitTierMeme('magic'), null);
+  assert.equal(getProfitTierMeme(undefined), null);
+});
