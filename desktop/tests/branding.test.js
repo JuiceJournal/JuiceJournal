@@ -32,6 +32,13 @@ function parseIcoEntries(buffer) {
   return entries;
 }
 
+function readPngSize(filePath) {
+  const buffer = fs.readFileSync(filePath);
+
+  assert.equal(buffer.toString('ascii', 12, 16), 'IHDR', `${path.basename(filePath)} must be a PNG`);
+  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+}
+
 test('desktop shell uses Juice Journal branding in the title bar', () => {
   const html = fs.readFileSync(indexHtmlPath, 'utf8');
 
@@ -153,5 +160,28 @@ test('windows icon includes taskbar-friendly sizes', () => {
       sizes.has(requiredSize),
       `Expected icon.ico to include a ${requiredSize}x${requiredSize} entry`
     );
+  }
+});
+
+test('brand icons are generated from the vector mark sources', () => {
+  const assetsDir = path.join(desktopDir, 'src', 'assets');
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+
+  assert.ok(fs.existsSync(path.join(assetsDir, 'brand', 'mark.svg')), 'Expected brand/mark.svg');
+  assert.ok(fs.existsSync(path.join(assetsDir, 'brand', 'mark-small.svg')), 'Expected brand/mark-small.svg');
+  assert.equal(packageJson.scripts['icon:build'], 'electron scripts/build-brand-assets.js');
+  assert.deepEqual(readPngSize(desktopIconPngPath), { width: 1024, height: 1024 });
+});
+
+test('tray icon ships a pixel-sized image for each common Windows display scale', () => {
+  const assetsDir = path.join(desktopDir, 'src', 'assets');
+
+  for (const [fileName, size] of [
+    ['tray-icon.png', 16],
+    ['tray-icon@1.25x.png', 20],
+    ['tray-icon@1.5x.png', 24],
+    ['tray-icon@2x.png', 32]
+  ]) {
+    assert.deepEqual(readPngSize(path.join(assetsDir, fileName)), { width: size, height: size }, fileName);
   }
 });

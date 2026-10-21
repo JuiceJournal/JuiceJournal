@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a1d16"/>
+      <stop offset="1" stop-color="#0f0a08"/>
+    </linearGradient>
+    <linearGradient id="ember" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffb347"/>
+      <stop offset="1" stop-color="#ff5a12"/>
+    </linearGradient>
+    <clipPath id="body">
+      <path d="M27 13.5H37V25.9A14.5 14.5 0 1 1 27 25.9Z"/>
+    </clipPath>
+  </defs>
+  <path d="M11 3H53L61 11V53L53 61H11L3 53V11Z" fill="url(#plate)" stroke="#e8b65a" stroke-width="2"/>
+  <path d="M12.1 7H51.9L57 12.1V51.9L51.9 57H12.1L7 51.9V12.1Z" fill="none" stroke="#8a6534" stroke-width="0.75"/>
+  <g clip-path="url(#body)">
+    <path d="M12 46.5L20 42.5L26 44.5L32.5 37.5L38 40L52 30V60H12Z" fill="url(#ember)"/>
+    <path d="M12 46.5L20 42.5L26 44.5L32.5 37.5L38 40L52 30" fill="none" stroke="#ffe0a8" stroke-width="1.2" stroke-linejoin="round"/>
+  </g>
+  <path d="M22.2 33.5A11 11 0 0 0 21.4 43" fill="none" stroke="#fff3dc" stroke-opacity="0.55" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M27 13.5H37V25.9A14.5 14.5 0 1 1 27 25.9Z" fill="none" stroke="#e8b65a" stroke-width="2.6" stroke-linejoin="round"/>
+  <rect x="24.5" y="9" width="15" height="4.5" rx="1" fill="#e8b65a"/>
+</svg>
