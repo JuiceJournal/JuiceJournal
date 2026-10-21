@@ -1334,7 +1334,7 @@ body {
 }
 
 .last-map-result-card[data-result-state="ready"] #last-map-result-profit {
-  color: var(--text-bright);
+  color: var(--profit-tier-color, var(--text-bright));
 }
 
 /* Map Result History */
@@ -1394,7 +1394,7 @@ body {
 }
 
 .map-result-history-main span,
-.map-result-history-meta span {
+.map-result-history-meta > span {
   color: var(--text-secondary);
   font-size: 0.78rem;
 }
@@ -1425,8 +1425,8 @@ body {
   flex-shrink: 0;
 }
 
-.map-result-history-profit {
-  color: var(--text-bright);
+.map-result-history-meta .map-result-history-profit {
+  color: var(--profit-tier-color, var(--text-bright));
 }
 
 .map-result-publish-btn {
@@ -1666,8 +1666,6 @@ body {
 }
 
 .session-profit { font-weight: 700; font-family: var(--font-mono); }
-.session-profit.positive { color: var(--green); }
-.session-profit.negative { color: var(--red); }
 
 .session-status {
   padding: 0.2rem 0.6rem;
@@ -1737,14 +1735,6 @@ body {
 }
 
 .farming-hub-run-metrics strong,
-.farming-hub-run-metrics .positive {
-  color: var(--green);
-}
-
-.farming-hub-run-metrics .negative {
-  color: var(--red);
-}
-
 .session-drawer {
   position: fixed;
   inset: 0;
@@ -1843,14 +1833,6 @@ body {
   font-size: 0.88rem;
   color: var(--text-bright);
   font-family: var(--font-mono);
-}
-
-.session-drawer-value.positive {
-  color: var(--green);
-}
-
-.session-drawer-value.negative {
-  color: var(--red);
 }
 
 .session-drawer-section {
@@ -3146,14 +3128,6 @@ body {
   font-family: 'Cormorant SC', serif;
 }
 
-.profit-value.positive {
-  color: var(--green);
-}
-
-.profit-value.negative {
-  color: var(--red);
-}
-
 .profit-divine {
   color: var(--text-muted);
   font-size: 0.85rem;
@@ -3292,3 +3266,12 @@ body {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ===== Profit tiers (loot-filter colours for a run's net profit) ===== */
+[data-profit-tier="loss"] { --profit-tier-color: var(--red); }
+[data-profit-tier="normal"] { --profit-tier-color: var(--tier-normal); }
+[data-profit-tier="magic"] { --profit-tier-color: var(--tier-magic); }
+[data-profit-tier="rare"] { --profit-tier-color: var(--tier-rare); }
+[data-profit-tier="unique"] { --profit-tier-color: var(--tier-unique); }
+[data-profit-tier="mirror"] { --profit-tier-color: var(--tier-mirror); }
+[data-profit-tier] { color: var(--profit-tier-color); }

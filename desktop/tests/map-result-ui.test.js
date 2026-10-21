@@ -1624,6 +1624,47 @@ test('renderer shows unavailable profit results as not calculated', () => {
   assert.equal(elements.lastMapResultProfit.innerHTML, '<span class="profit-unavailable">Not calculated</span>');
 });
 
+test('renderer tags the latest map result with its loot-filter profit tier', () => {
+  const elements = {
+    lastMapResultCard: { dataset: { resultState: 'empty' } },
+    lastMapResultFarmType: { textContent: '' },
+    lastMapResultDuration: { textContent: '' },
+    lastMapResultProfit: { innerHTML: '', dataset: {} }
+  };
+  const state = {
+    settings: { poeVersion: 'poe1' },
+    mapResults: [{ farmType: 'Ritual', durationSeconds: 300, netProfit: 412, poeVersion: 'poe1' }]
+  };
+  const context = loadFunctions([
+    'getProfitTierFor',
+    'applyProfitTier',
+    'formatMapResultProfitHTML',
+    'getMapResultProfitTier',
+    'renderLatestMapResult'
+  ], {
+    elements,
+    state,
+    window: { profitTierModel: require('../src/modules/profitTierModel') },
+    normalizeProfitPoeVersion: (value) => value,
+    getProfitCurrencyRates: () => ({ divineChaos: 150 }),
+    profitCurrencyHTML: (value) => `profit:${value}`,
+    formatDuration: (seconds) => `duration:${seconds}`
+  });
+
+  context.renderLatestMapResult();
+  assert.equal(elements.lastMapResultProfit.dataset.profitTier, 'rare');
+
+  state.mapResults = [];
+  context.renderLatestMapResult();
+  assert.equal(elements.lastMapResultProfit.dataset.profitTier, undefined);
+});
+
+test('dashboard loads the profit tier model before renderer app code', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+
+  assert.match(html, /modules\/profitTierModel\.js[\s\S]*app\.js/);
+});
+
 test('renderer map result history keeps persisted ordering and populates farm-type filter options', () => {
   const filterCalls = [];
   const elements = {
