@@ -922,7 +922,7 @@ test('map-entered events show an in-game start-map overlay prompt before opening
           overlayPrompts.push(payload);
         },
         hideStartMapPromptOverlay: async () => {
-          overlayPrompts.push({ hidden: true });
+          overlayPrompts.push({ hidden: true, beforeDesktopModal: startCalls.length === 0 });
         }
       }
     },
@@ -948,7 +948,7 @@ test('map-entered events show an in-game start-map overlay prompt before opening
       ],
       source: 'map-detected'
     },
-    { hidden: true }
+    { hidden: true, beforeDesktopModal: true }
   ]);
   assert.deepEqual(startCalls, [{ defaultMapName: 'Channel', source: 'map-detected' }]);
 });

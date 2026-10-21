@@ -461,12 +461,14 @@ test('main overlay falls back to the primary display when the game window lookup
 test('overlay has no mouse forwarding hook, focus toggle or script injection path', () => {
   const source = fs.readFileSync(mainJsPath, 'utf8');
   const overlayPreload = fs.readFileSync(path.join(__dirname, '..', 'overlay-preload.js'), 'utf8');
+  const mainPreload = fs.readFileSync(preloadJsPath, 'utf8');
 
   assert.doesNotMatch(source, /forward:\s*true/);
   assert.doesNotMatch(source, /overlayWindow\.setFocusable/);
   assert.doesNotMatch(source, /executeJavaScript/);
   assert.doesNotMatch(source, /set-overlay-pointer-passthrough/);
   assert.doesNotMatch(overlayPreload, /setOverlayPointerPassthrough/);
+  assert.doesNotMatch(mainPreload, /setOverlayPointerPassthrough|set-overlay-pointer-passthrough/);
   assert.match(overlayPreload, /ipcRenderer\.on\('overlay-render-state'/);
 });
 

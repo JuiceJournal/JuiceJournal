@@ -2401,14 +2401,15 @@ async function handleMapEnteredEvent(data = {}) {
           if (overlayResult?.action === 'cancel') {
             return;
           }
-
-          // Unanswered: take the prompt down before the desktop modal opens so late clicks are not lost.
-          if (window.electronAPI?.hideStartMapPromptOverlay) {
-            startPromptOverlayShown = false;
-            await window.electronAPI.hideStartMapPromptOverlay();
-          }
         } else {
           stopWaitingForOverlayResult();
+        }
+
+        // Unanswered, or not shown yet (e.g. behind a map-result card): take the prompt down before the
+        // desktop modal opens so it cannot surface later and swallow clicks nobody is listening for.
+        if (window.electronAPI?.hideStartMapPromptOverlay) {
+          await window.electronAPI.hideStartMapPromptOverlay();
+          startPromptOverlayShown = false;
         }
       } catch (error) {
         stopWaitingForOverlayResult();
