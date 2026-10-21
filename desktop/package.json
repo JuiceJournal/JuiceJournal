@@ -18,7 +18,7 @@
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "pack": "electron-builder --dir",
-    "icon:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-icon-assets.ps1",
+    "icon:build": "electron scripts/build-brand-assets.js",
     "icon:test": "node --test tests/branding.test.js",
     "postinstall": "node scripts/patch-deprecated-deps.js && electron-builder install-app-deps"
   },
