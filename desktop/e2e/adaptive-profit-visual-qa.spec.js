@@ -42,52 +42,6 @@ function writeJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload));
 }
 
-function writeJsonWithAuthCookie(response, statusCode, payload, token) {
-  response.writeHead(statusCode, {
-    'Content-Type': 'application/json',
-    'Set-Cookie': `juice_journal_auth=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`
-  });
-  response.end(JSON.stringify(payload));
-}
-
-function parseJsonBody(request) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    request.on('data', (chunk) => {
-      body += chunk;
-    });
-    request.on('end', () => {
-      if (!body) {
-        resolve({});
-        return;
-      }
-      try {
-        resolve(JSON.parse(body));
-      } catch (error) {
-        reject(error);
-      }
-    });
-    request.on('error', reject);
-  });
-}
-
-function createVisualUserPayload() {
-  return {
-    id: VISUAL_USER.id,
-    username: VISUAL_USER.username,
-    accountName: VISUAL_USER.accountName,
-    poeAccountName: VISUAL_USER.accountName,
-    selectedCharacterId: VISUAL_USER.selectedCharacter.id,
-    selectedCharacter: VISUAL_USER.selectedCharacter,
-    characters: [VISUAL_USER.selectedCharacter],
-    poe: {
-      accountName: VISUAL_USER.accountName,
-      selectedCharacter: VISUAL_USER.selectedCharacter,
-      characters: [VISUAL_USER.selectedCharacter]
-    }
-  };
-}
-
 function createVisualSession() {
   // Started today, so it counts in the dashboard's daily stats.
   const startedAt = new Date(Math.max(Date.now() - 60 * 1000, new Date().setHours(0, 0, 0, 0))).toISOString();

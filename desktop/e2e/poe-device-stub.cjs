@@ -14,7 +14,9 @@ shell.openExternal = async (authUrl) => {
   const callback = new URL(url.searchParams.get('redirect_uri'));
   callback.searchParams.set('code', 'e2e-code');
   callback.searchParams.set('state', url.searchParams.get('state'));
-  http.get(callback, (response) => response.resume());
+  http.get(callback, (response) => response.resume()).on('error', (error) => {
+    console.error('e2e PoE stub could not reach the sign-in callback', error);
+  });
 };
 
 const createClient = axios.create.bind(axios);
@@ -39,9 +41,14 @@ axios.create = (config = {}) => {
       }
     };
   };
-  client.request = async ({ url }) => ({
-    data: { characters: account.characters?.[url === '/character/poe2' ? 'poe2' : 'poe1'] || [] },
-    headers: {}
-  });
+  client.request = async ({ url }) => {
+    if (url !== '/character' && url !== '/character/poe2') {
+      throw new Error(`Unexpected GGG request in e2e: ${url}`);
+    }
+    return {
+      data: { characters: account.characters?.[url === '/character/poe2' ? 'poe2' : 'poe1'] || [] },
+      headers: {}
+    };
+  };
   return client;
 };

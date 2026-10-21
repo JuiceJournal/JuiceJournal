@@ -34,6 +34,7 @@ window.Translations = {
 
     // Login
     'login.title': 'Giris Yap',
+    'login.poeClientNote': 'GGG, Juice Journal gibi masaustu uygulamalari dogrulayamaz. Yalnizca resmi GitHub sayfasindan kurduysan giris yap.',
     'login.subtitle': 'Hesabiniza giris yaparak devam edin',
     'login.username': 'Kullanici Adi veya Email',
     'login.password': 'Sifre',
@@ -779,6 +780,7 @@ window.Translations = {
 
     // Login
     'login.title': 'Sign In',
+    'login.poeClientNote': 'GGG cannot verify desktop apps like Juice Journal. Sign in only if you installed it from the official GitHub page.',
     'login.subtitle': 'Sign in to your account to continue',
     'login.username': 'Username or Email',
     'login.password': 'Password',

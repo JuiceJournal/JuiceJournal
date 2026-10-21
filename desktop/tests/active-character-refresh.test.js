@@ -232,7 +232,7 @@ test('refresh scheduler clears the pending timer when the detected game becomes 
   assert.deepEqual(cleared, ['timer-1']);
 });
 
-test('stale in-flight refresh does not overwrite a newer refresh generation', async () => {
+test('a refresh cancelled before it fires does not reach GGG', async () => {
   const calls = [];
   const timers = [];
   const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'runActiveCharacterRefresh', 'scheduleActiveCharacterRefresh'], {
@@ -396,4 +396,29 @@ test('game-version change triggers active character refresh scheduling for poe2'
     ['syncRendererGameContext', 'poe2', 'F:/SteamLibrary/steamapps/common/Path of Exile 2/Client.txt'],
     { version: 'poe2' }
   ]);
+});
+
+test('a GGG answer that lands after sign-out is dropped', async () => {
+  const state = { currentUser: { id: 'profile-1' }, poeDeviceConnected: true, deviceCharactersByGame: {}, settings: {} };
+  const rendered = [];
+  const context = loadFunctions(['refreshDeviceCharacters'], {
+    state,
+    normalizePoeVersion: (value) => value,
+    window: {
+      electronAPI: {
+        getPoeDeviceCharacters: async () => {
+          state.currentUser = null;
+          state.poeDeviceConnected = false;
+          return { connected: true, characters: [{ id: 'char-1', name: 'OldAccountChar', current: true }] };
+        }
+      }
+    },
+    renderPoeLinkStatus: () => rendered.push('renderPoeLinkStatus'),
+    renderCharacterSummaryCard: () => rendered.push('renderCharacterSummaryCard')
+  });
+
+  assert.equal(await context.refreshDeviceCharacters('poe1'), false);
+  assert.equal(state.poeDeviceConnected, false);
+  assert.deepEqual(state.deviceCharactersByGame, {});
+  assert.deepEqual(rendered, []);
 });

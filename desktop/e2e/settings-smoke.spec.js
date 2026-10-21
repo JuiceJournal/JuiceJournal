@@ -35,56 +35,6 @@ function writeJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload));
 }
 
-function writeJsonWithAuthCookie(response, statusCode, payload, token) {
-  response.writeHead(statusCode, {
-    'Content-Type': 'application/json',
-    'Set-Cookie': `juice_journal_auth=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`,
-  });
-  response.end(JSON.stringify(payload));
-}
-
-function parseJsonBody(request) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-
-    request.on('data', (chunk) => {
-      body += chunk;
-    });
-
-    request.on('end', () => {
-      if (!body) {
-        resolve({});
-        return;
-      }
-
-      try {
-        resolve(JSON.parse(body));
-      } catch (error) {
-        reject(error);
-      }
-    });
-
-    request.on('error', reject);
-  });
-}
-
-function createSmokeUserPayload() {
-  return {
-    id: SMOKE_USER.id,
-    username: SMOKE_USER.username,
-    accountName: SMOKE_USER.accountName,
-    poeAccountName: SMOKE_USER.accountName,
-    selectedCharacterId: SMOKE_USER.selectedCharacter.id,
-    selectedCharacter: SMOKE_USER.selectedCharacter,
-    characters: [SMOKE_USER.selectedCharacter],
-    poe: {
-      accountName: SMOKE_USER.accountName,
-      selectedCharacter: SMOKE_USER.selectedCharacter,
-      characters: [SMOKE_USER.selectedCharacter],
-    },
-  };
-}
-
 async function startSmokeBackend() {
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url || '/', 'http://127.0.0.1');

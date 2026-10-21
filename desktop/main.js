@@ -144,7 +144,9 @@ const MAIN_PROCESS_TRANSLATIONS = {
     profitCalculated: 'Kar hesaplandi: {value}c',
     gameDetected: '{game} algilandi',
     gameClosed: '{game} kapatildi',
-    gameSwitched: '{from} → {to} gecis yapildi'
+    gameSwitched: '{from} → {to} gecis yapildi',
+    poeNoAccountId: 'Path of Exile hesap kimligini gondermedi.',
+    poeDifferentAccount: 'Bu farkli bir Path of Exile hesabi. Hesap degistirmek icin cikis yap.'
   },
   en: {
     trayStillRunning: 'The app is still running in the system tray.',
@@ -198,7 +200,9 @@ const MAIN_PROCESS_TRANSLATIONS = {
     profitCalculated: 'Profit calculated: {value}c',
     gameDetected: '{game} detected',
     gameClosed: '{game} closed',
-    gameSwitched: 'Switched {from} → {to}'
+    gameSwitched: 'Switched {from} → {to}',
+    poeNoAccountId: 'Path of Exile did not return an account id.',
+    poeDifferentAccount: 'That is a different Path of Exile account. Sign out to switch accounts.'
   }
 };
 
@@ -678,7 +682,7 @@ function getActiveProfile() {
 }
 
 // Each Path of Exile account gets one local profile on this machine, found again by GGG's account id.
-function selectLocalProfile({ sub, username }) {
+function findOrCreateLocalProfile({ sub, username }) {
   const profiles = store.get('localProfiles') || {};
   const existing = Object.values(profiles).find((profile) => profile.poeSub === sub);
   const now = new Date().toISOString();
@@ -688,15 +692,23 @@ function selectLocalProfile({ sub, username }) {
     lastSignedInAt: now
   };
   store.set('localProfiles', { ...profiles, [profile.id]: profile });
-  store.set('activeProfileId', profile.id);
   return profile;
 }
 
-// Moves what an earlier backend sign-in kept on this machine into the first local profile, once.
+// Moves what an earlier backend sign-in kept on this machine into the first local profile, once. Throws if the
+// journal folder cannot be moved; nothing is marked done then, so the next sign-in tries again.
 function migrateLegacyUserData(profile) {
   const legacyUserId = getCurrentUserId();
   if (!legacyUserId || store.get('legacyUserMigratedTo')) {
     return;
+  }
+
+  const profilesDir = path.join(app.getPath('userData'), 'profiles');
+  const legacyDir = path.join(profilesDir, legacyUserId);
+  const profileDir = path.join(profilesDir, profile.id);
+  const hasLegacyDir = /^[A-Za-z0-9_-]{1,64}$/.test(legacyUserId) && fs.existsSync(legacyDir);
+  if (hasLegacyDir && !fs.existsSync(profileDir)) {
+    fs.renameSync(legacyDir, profileDir);
   }
 
   const legacyResults = store.get(`mapResults:${legacyUserId}`);
@@ -705,13 +717,9 @@ function migrateLegacyUserData(profile) {
     store.delete(`mapResults:${legacyUserId}`);
   }
 
-  const profilesDir = path.join(app.getPath('userData'), 'profiles');
-  const legacyDir = path.join(profilesDir, legacyUserId);
-  const profileDir = path.join(profilesDir, profile.id);
-  if (/^[A-Za-z0-9_-]{1,64}$/.test(legacyUserId) && fs.existsSync(legacyDir) && !fs.existsSync(profileDir)) {
-    fs.renameSync(legacyDir, profileDir);
+  if (!hasLegacyDir || !fs.existsSync(legacyDir)) {
+    store.set('legacyUserMigratedTo', profile.id);
   }
-  store.set('legacyUserMigratedTo', profile.id);
 }
 
 function assertDesktopUserAuthenticated() {
@@ -2142,6 +2150,37 @@ async function connectPoeDevice() {
     expectedState: state
   });
   return await poeApiClient.exchangeCode({ code, codeVerifier, redirectUri });
+}
+
+function dropPoeDeviceConnection() {
+  poeApiClient.clearTokens();
+  persistPoeClientTokens(null);
+}
+
+// Signing in on this device opens (or creates) the account's local profile.
+async function signInWithPoe() {
+  const account = await connectPoeDevice();
+  if (!account?.sub) {
+    dropPoeDeviceConnection();
+    throw new Error(t('poeNoAccountId'));
+  }
+
+  const profile = findOrCreateLocalProfile(account);
+  // The profile becomes active only after the old data has moved, so a failed move is retried next time.
+  migrateLegacyUserData(profile);
+  store.set('activeProfileId', profile.id);
+  loadActiveSession();
+  appendAuditTrail('auditLogin');
+  return profile;
+}
+
+// Reconnecting keeps the profile, so it must be the same Path of Exile account.
+async function reconnectPoeDevice() {
+  const account = await connectPoeDevice();
+  if (account?.sub !== getActiveProfile()?.poeSub) {
+    dropPoeDeviceConnection();
+    throw new Error(t('poeDifferentAccount'));
+  }
 }
 
 function normalizeDeviceCharacter(character, poeVersion) {
@@ -4303,36 +4342,18 @@ function setupIPC() {
     };
   });
 
-  // Signing in on this device opens (or creates) the account's local profile.
   ipcMain.handle('sign-in-with-poe', async () => {
     try {
-      const account = await connectPoeDevice();
-      if (!account?.sub) {
-        poeApiClient.clearTokens();
-        persistPoeClientTokens(null);
-        throw new Error('Path of Exile did not return an account id');
-      }
-
-      const profile = selectLocalProfile(account);
-      migrateLegacyUserData(profile);
-      loadActiveSession();
-      appendAuditTrail('auditLogin');
-      return { success: true, profile, error: null };
+      return { success: true, profile: await signInWithPoe(), error: null };
     } catch (error) {
       return { success: false, profile: null, error: normalizeErrorMessage(error, 'Path of Exile sign-in failed') };
     }
   });
 
-  // Reconnecting keeps the profile, so it must be the same Path of Exile account.
   ipcMain.handle('connect-poe-device', async () => {
     assertDesktopUserAuthenticated();
     try {
-      const account = await connectPoeDevice();
-      if (account?.sub !== getActiveProfile().poeSub) {
-        poeApiClient.clearTokens();
-        persistPoeClientTokens(null);
-        return { success: false, error: 'That is a different Path of Exile account. Sign out to switch accounts.' };
-      }
+      await reconnectPoeDevice();
       return { success: true, error: null };
     } catch (error) {
       return { success: false, error: normalizeErrorMessage(error, 'Path of Exile sign-in failed') };
@@ -4341,8 +4362,7 @@ function setupIPC() {
 
   ipcMain.handle('disconnect-poe-device', async () => {
     assertDesktopUserAuthenticated();
-    poeApiClient.clearTokens();
-    persistPoeClientTokens(null);
+    dropPoeDeviceConnection();
     return true;
   });
 

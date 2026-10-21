@@ -735,20 +735,60 @@ function createMemoryStore(initial = {}) {
   };
 }
 
-test('signing in again with the same GGG account opens the same local profile', () => {
-  const store = createMemoryStore({ localProfiles: {}, activeProfileId: null });
+function loadSignIn({ store, accounts, fsOverrides = {}, legacy = false }) {
+  const calls = [];
   let nextId = 0;
-  const context = loadFunctions(['getActiveProfile', 'selectLocalProfile', 'assertDesktopUserAuthenticated'], {
+  const context = loadFunctions([
+    'getCurrentUserId',
+    'getActiveProfile',
+    'findOrCreateLocalProfile',
+    'migrateLegacyUserData',
+    'assertDesktopUserAuthenticated',
+    'dropPoeDeviceConnection',
+    'signInWithPoe',
+    'reconnectPoeDevice'
+  ], {
     store,
-    crypto: { randomUUID: () => `profile-${++nextId}` }
+    path,
+    crypto: { randomUUID: () => `profile-${++nextId}` },
+    app: { getPath: () => 'D:/UserData' },
+    fs: {
+      existsSync: () => false,
+      renameSync() {},
+      ...fsOverrides
+    },
+    connectPoeDevice: async () => accounts.shift(),
+    poeApiClient: {
+      clearTokens: () => calls.push('clearTokens')
+    },
+    persistPoeClientTokens: (tokens) => calls.push(['persistPoeClientTokens', tokens]),
+    loadActiveSession: () => calls.push('loadActiveSession'),
+    appendAuditTrail: (key) => calls.push(key),
+    t: (key) => key
+  });
+  if (legacy) {
+    store.set('currentUserId', 'backend-user-1');
+  }
+  return { context, calls };
+}
+
+test('signing in again with the same GGG account opens the same local profile', async () => {
+  const store = createMemoryStore({ localProfiles: {}, activeProfileId: null });
+  const { context, calls } = loadSignIn({
+    store,
+    accounts: [
+      { sub: 'ggg-account-1', username: 'Exile#1234' },
+      { sub: 'ggg-account-1', username: 'Exile#5678' },
+      { sub: 'ggg-account-2', username: 'Alt#0001' }
+    ]
   });
 
   assert.throws(() => context.assertDesktopUserAuthenticated(), /Local desktop sign-in is required/);
 
-  const first = context.selectLocalProfile({ sub: 'ggg-account-1', username: 'Exile#1234' });
+  const first = await context.signInWithPoe();
   store.set('activeProfileId', null);
-  const again = context.selectLocalProfile({ sub: 'ggg-account-1', username: 'Exile#5678' });
-  const other = context.selectLocalProfile({ sub: 'ggg-account-2', username: 'Alt#0001' });
+  const again = await context.signInWithPoe();
+  const other = await context.signInWithPoe();
 
   assert.equal(first.id, 'profile-1');
   assert.equal(again.id, 'profile-1');
@@ -757,7 +797,78 @@ test('signing in again with the same GGG account opens the same local profile', 
   assert.equal(other.id, 'profile-2');
   assert.equal(context.getActiveProfile().id, 'profile-2');
   assert.deepEqual(Object.keys(store.data.localProfiles), ['profile-1', 'profile-2']);
+  assert.deepEqual(calls.filter((call) => call === 'auditLogin').length, 3);
   context.assertDesktopUserAuthenticated();
+});
+
+test('a sign-in without a GGG account id drops the device token and opens no profile', async () => {
+  const store = createMemoryStore({ localProfiles: {}, activeProfileId: null });
+  const { context, calls } = loadSignIn({ store, accounts: [{ sub: null, username: 'Exile#1234' }] });
+
+  await assert.rejects(() => context.signInWithPoe(), /poeNoAccountId/);
+
+  assert.equal(context.getActiveProfile(), null);
+  assert.deepEqual(store.data.localProfiles, {});
+  assert.deepEqual(calls, ['clearTokens', ['persistPoeClientTokens', null]]);
+});
+
+test('reconnecting with another GGG account drops the token and keeps the profile', async () => {
+  const store = createMemoryStore({ localProfiles: {}, activeProfileId: null });
+  const { context, calls } = loadSignIn({
+    store,
+    accounts: [
+      { sub: 'ggg-account-1', username: 'Exile#1234' },
+      { sub: 'ggg-account-1', username: 'Exile#1234' },
+      { sub: 'ggg-account-2', username: 'Alt#0001' }
+    ]
+  });
+  const profile = await context.signInWithPoe();
+  calls.length = 0;
+
+  await context.reconnectPoeDevice();
+  await assert.rejects(() => context.reconnectPoeDevice(), /poeDifferentAccount/);
+
+  assert.equal(context.getActiveProfile().id, profile.id);
+  assert.deepEqual(calls, ['clearTokens', ['persistPoeClientTokens', null]]);
+});
+
+test('a failed legacy move keeps the profile inactive and is retried at the next sign-in', async () => {
+  const store = createMemoryStore({ localProfiles: {}, activeProfileId: null, 'mapResults:backend-user-1': [{ id: 'map-1' }] });
+  const legacyDir = path.join('D:/UserData', 'profiles', 'backend-user-1');
+  const existing = new Set([legacyDir]);
+  let renameAttempts = 0;
+  const { context } = loadSignIn({
+    store,
+    legacy: true,
+    accounts: [
+      { sub: 'ggg-account-1', username: 'Exile#1234' },
+      { sub: 'ggg-account-1', username: 'Exile#1234' }
+    ],
+    fsOverrides: {
+      existsSync: (target) => existing.has(target),
+      renameSync(from, to) {
+        renameAttempts += 1;
+        if (renameAttempts === 1) {
+          throw Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' });
+        }
+        existing.delete(from);
+        existing.add(to);
+      }
+    }
+  });
+
+  await assert.rejects(() => context.signInWithPoe(), /EBUSY/);
+  assert.equal(context.getActiveProfile(), null);
+  assert.equal(store.data.legacyUserMigratedTo, undefined);
+  assert.deepEqual(store.data['mapResults:backend-user-1'], [{ id: 'map-1' }]);
+
+  const profile = await context.signInWithPoe();
+
+  assert.equal(profile.id, 'profile-1');
+  assert.equal(context.getActiveProfile().id, 'profile-1');
+  assert.equal(existing.has(path.join('D:/UserData', 'profiles', 'profile-1')), true);
+  assert.deepEqual(store.data['mapResults:profile-1'], [{ id: 'map-1' }]);
+  assert.equal(store.data.legacyUserMigratedTo, 'profile-1');
 });
 
 test('the first local profile takes over the legacy user data once', () => {

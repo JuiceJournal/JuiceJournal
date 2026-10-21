@@ -2906,7 +2906,12 @@ async function refreshDeviceCharacters(poeVersion) {
     return false;
   }
 
+  const profileId = state.currentUser.id;
   const result = await window.electronAPI.getPoeDeviceCharacters(version).catch(() => null);
+  // Signed out (or another profile) while GGG answered: the result belongs to nobody now.
+  if (state.currentUser?.id !== profileId) {
+    return false;
+  }
   state.poeDeviceConnected = Boolean(result?.connected);
   renderPoeLinkStatus();
   if (!Array.isArray(result?.characters)) {
@@ -2944,10 +2949,15 @@ async function syncPoeDeviceConnection() {
   }
 }
 
+// The card and Settings both connect; one sign-in at a time, since a second loopback flow would wait for nothing.
 async function handleConnectPoeDevice() {
-  if (elements.characterConnectBtn) {
-    elements.characterConnectBtn.disabled = true;
+  const buttons = [elements.characterConnectBtn, elements.poeConnectBtn].filter(Boolean);
+  if (buttons.some((button) => button.disabled)) {
+    return;
   }
+  buttons.forEach((button) => {
+    button.disabled = true;
+  });
 
   try {
     const result = await window.electronAPI.connectPoeDevice();
@@ -2957,10 +2967,12 @@ async function handleConnectPoeDevice() {
     }
     state.poeDeviceConnected = true;
     await refreshDeviceCharacters(state.account?.activePoeVersion);
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
   } finally {
-    if (elements.characterConnectBtn) {
-      elements.characterConnectBtn.disabled = false;
-    }
+    buttons.forEach((button) => {
+      button.disabled = false;
+    });
     renderPoeLinkStatus();
     renderCharacterSummaryCard();
   }
@@ -3026,7 +3038,7 @@ function renderPoeLinkStatus() {
   }
 
   elements.poeLinkStatus.textContent = window.t('settings.poeNotLinked');
-  elements.poeAccountName.textContent = window.t('settings.poeNoAccount');
+  elements.poeAccountName.textContent = state.currentUser.accountName || window.t('settings.poeNoAccount');
   elements.poeLinkMode.textContent = window.t('settings.poeReconnectHint');
   if (elements.poeConnectBtn) elements.poeConnectBtn.classList.remove('hidden');
   if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.classList.add('hidden');
