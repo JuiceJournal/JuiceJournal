@@ -171,6 +171,17 @@ body {
   background: var(--win-close);
 }
 
+/* ==================== ICONS ==================== */
+/* Sprite icons from assets/icons.svg; small sizes get a heavier stroke to stay legible. */
+.icon {
+  flex-shrink: 0;
+  stroke-width: 1.75;
+}
+
+.icon-sm {
+  stroke-width: 2.25;
+}
+
 /* ==================== BUTTONS ==================== */
 .btn {
   padding: 0.7rem 1rem;
