@@ -574,7 +574,7 @@ test('adaptive profit visual QA: captures dashboard, sessions, stash result, and
       path: testInfo.outputPath('adaptive-profit-stash-result.png')
     });
 
-    const overlayWindow = await waitForOverlayWindow(electronApp);
+    // The overlay window is created lazily once there is visible state to show.
     await showMapResultOverlay(page, {
       id: 'adaptive-profit-overlay-result',
       farmType: 'Ritual',
@@ -587,6 +587,7 @@ test('adaptive profit visual QA: captures dashboard, sessions, stash result, and
     }, {
       durationMs: 3000
     });
+    const overlayWindow = await waitForOverlayWindow(electronApp);
 
     await expect(overlayWindow.locator('[data-overlay-state="visible"]')).toBeVisible();
     await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText('2.00 mirror');

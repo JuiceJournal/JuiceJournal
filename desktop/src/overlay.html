@@ -251,22 +251,29 @@
       text-transform: uppercase;
     }
 
-    .jj-field input, .jj-field select {
-      width: 100%;
-      border: 1px solid rgba(212, 175, 96, 0.32);
-      border-radius: 10px;
-      background: rgba(4, 5, 7, 0.88);
-      color: var(--jj-text);
-      font: 600 13px "Inter", "Segoe UI", system-ui, sans-serif;
-      letter-spacing: 0.02em;
-      outline: none;
-      padding: 9px 10px;
-      transition: border-color 120ms, box-shadow 120ms;
+    .jj-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-height: 96px;
+      overflow-y: auto;
     }
 
-    .jj-field input:focus, .jj-field select:focus {
+    .jj-chip {
+      border: 1px solid rgba(212, 175, 96, 0.32);
+      border-radius: 999px;
+      background: rgba(4, 5, 7, 0.88);
+      color: var(--jj-text);
+      cursor: pointer;
+      font: 600 12px "Inter", "Segoe UI", system-ui, sans-serif;
+      letter-spacing: 0.02em;
+      padding: 6px 10px;
+      transition: border-color 120ms, background 120ms;
+    }
+
+    .jj-chip[aria-pressed="true"] {
       border-color: rgba(232, 220, 200, 0.72);
-      box-shadow: 0 0 0 2px rgba(212, 175, 96, 0.14);
+      background: rgba(212, 175, 96, 0.22);
     }
 
     .jj-form-actions {
@@ -331,14 +338,10 @@
         <span class="jj-meta" data-overlay-meta></span>
       </div>
       <form class="jj-form" data-overlay-start-form hidden>
-        <label class="jj-field">
-          <span>Map</span>
-          <input type="text" data-overlay-start-map-name autocomplete="off" spellcheck="false">
-        </label>
-        <label class="jj-field">
+        <div class="jj-field">
           <span>Farm Type</span>
-          <select data-overlay-start-farm-type></select>
-        </label>
+          <div class="jj-chips" role="group" aria-label="Farm type" data-overlay-start-farm-types></div>
+        </div>
         <div class="jj-form-actions">
           <button class="jj-form-btn" type="button" data-overlay-start-cancel>Cancel</button>
           <button class="jj-form-btn primary" type="submit" data-overlay-start-submit>Start Map</button>

@@ -27,6 +27,7 @@
     "chokidar": "^3.5.3",
     "electron-store": "^8.1.0",
     "electron-updater": "^6.8.3",
+    "koffi": "3.3.2",
     "node-global-key-listener": "^0.1.1",
     "punycode": "2.3.1",
     "tesseract.js": "^5.0.3"

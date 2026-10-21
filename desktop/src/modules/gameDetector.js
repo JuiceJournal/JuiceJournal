@@ -2,6 +2,7 @@
  * Game Detector Module
  * Detects which Path of Exile client (PoE 1 or PoE 2) is currently running.
  * Polls the process list and emits events on game launch/exit/switch.
+ * Uses the in-process Win32 probe when available and falls back to PowerShell/CIM otherwise.
  *
  * Process names:
  *   PoE 1: PathOfExile.exe, PathOfExile_x64.exe, PathOfExileSteam.exe
@@ -12,6 +13,7 @@ const { execFile } = require('child_process');
 const { EventEmitter } = require('events');
 const fs = require('fs');
 const path = require('path');
+const win32Probe = require('./win32Probe');
 
 // Known process names per version
 const POE1_PROCESSES = [
@@ -236,12 +238,15 @@ function detectGameVersionFromProcesses(processes = []) {
 }
 
 class GameDetector extends EventEmitter {
-  constructor() {
+  constructor(options = {}) {
     super();
     this.pollInterval = null;
     this.currentGame = null;   // null | 'poe1' | 'poe2'
+    this.currentProcesses = [];
     this.isRunning = false;
     this.lastDetectedPid = null;
+    this.processProbe = options.processProbe || win32Probe;
+    this.processProbeFailed = false;
   }
 
   /**
@@ -279,6 +284,13 @@ class GameDetector extends EventEmitter {
   }
 
   /**
+   * Get the process snapshots of the currently detected game ({ Name, ExecutablePath, ProcessId? })
+   */
+  getDetectedProcesses() {
+    return this.currentProcesses;
+  }
+
+  /**
    * Check running processes
    */
   async _poll() {
@@ -290,6 +302,7 @@ class GameDetector extends EventEmitter {
       const detectedProcesses = detected
         ? processes.filter((process) => getProcessGameVersion(process) === detected)
         : [];
+      this.currentProcesses = detectedProcesses;
 
       // Detect state changes
       if (detected !== this.currentGame) {
@@ -327,6 +340,23 @@ class GameDetector extends EventEmitter {
    * Get list of running process details (Windows-specific)
    */
   _getRunningProcesses() {
+    const probed = this._probeRunningProcesses();
+    return probed ? Promise.resolve(probed) : this._getRunningProcessesFromPowerShell();
+  }
+
+  _probeRunningProcesses() {
+    if (this.processProbeFailed) return null;
+    try {
+      return this.processProbe.scanProcesses(WINDOWS_PROCESS_QUERY_NAMES);
+    } catch (error) {
+      // A broken native probe should not stop detection; stay on PowerShell for this session.
+      this.processProbeFailed = true;
+      console.error('Native process scan failed, falling back to PowerShell:', error.message);
+      return null;
+    }
+  }
+
+  _getRunningProcessesFromPowerShell() {
     return new Promise((resolve, reject) => {
       const command = buildWindowsProcessCommand();
 
