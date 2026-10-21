@@ -75,35 +75,6 @@ async function startVisualBackend() {
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url || '/', 'http://127.0.0.1');
 
-    if (request.method === 'GET' && url.pathname === '/api/prices/leagues') {
-      writeJson(response, 200, {
-        success: true,
-        data: {
-          activeLeagues: ['Standard']
-        },
-        error: null
-      });
-      return;
-    }
-
-    if (request.method === 'GET' && url.pathname.startsWith('/api/prices/item/')) {
-      const itemName = decodeURIComponent(url.pathname.slice('/api/prices/item/'.length));
-      const chaosValue = itemName === 'Mirror of Kalandra'
-        ? PROFIT_RATES.mirrorChaos
-        : itemName === 'Divine Orb'
-          ? PROFIT_RATES.divineChaos
-          : null;
-
-      writeJson(response, 200, {
-        success: true,
-        data: {
-          price: chaosValue ? { itemName, chaosValue } : null
-        },
-        error: null
-      });
-      return;
-    }
-
     writeJson(response, 404, {
       success: false,
       data: null,
@@ -158,6 +129,10 @@ function createIsolatedProfile(testInfo, apiUrl) {
         username: VISUAL_USER.username,
         characters: { poe1: [{ ...VISUAL_USER.selectedCharacter, current: true }] }
       }),
+      JUICE_JOURNAL_E2E_PRICES: JSON.stringify({
+        'Divine Orb': PROFIT_RATES.divineChaos,
+        'Mirror of Kalandra': PROFIT_RATES.mirrorChaos
+      }),
       JUICE_JOURNAL_E2E_POE_LOG_PATH: poeLogPath,
       TMP: tempDir,
       TEMP: tempDir
@@ -174,7 +149,7 @@ function createBootstrapScript(testInfo) {
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
-require(${JSON.stringify(path.join(__dirname, 'poe-device-stub.cjs'))});
+require(${JSON.stringify(path.join(__dirname, 'network-stub.cjs'))});
 
 const appDataDir = process.env.JUICE_JOURNAL_E2E_APP_DATA_DIR;
 const userDataDir = process.env.JUICE_JOURNAL_E2E_USER_DATA_DIR;
