@@ -18,6 +18,7 @@
   // The overlay never takes focus, so the prompt is mouse-only: the map name comes from the prompt state
   // and the farm type is picked from buttons.
   var startPromptKey = null;
+  var renderedChipsKey = null;
   var selectedFarmTypeId = '';
 
   function setText(element, value) {
@@ -102,12 +103,17 @@
     if (!showForm) return;
     var prompt = (state.startMapPrompt && typeof state.startMapPrompt === 'object') ? state.startMapPrompt : {};
     var opts = normalizeFarmTypeOptions(prompt.farmTypeOptions);
-    var promptKey = String(prompt.createdAt || '') + '|' + String(prompt.mapName || '');
-    if (promptKey !== startPromptKey) {
+    // A new prompt (entering the prompt mode, or a different map) resets the selection to its default.
+    var promptKey = String(prompt.mapName || '') + '|' + String(prompt.farmTypeId || '');
+    if (lastRenderedMode !== 'start-map-prompt' || promptKey !== startPromptKey) {
       startPromptKey = promptKey;
+      renderedChipsKey = null;
       selectedFarmTypeId = opts.some(function (e) { return e.id === prompt.farmTypeId; }) ? prompt.farmTypeId : '';
     }
-    if (el.startFarmTypes) {
+    // Rebuild the buttons only when they change, so state pushes cannot swallow a click in progress.
+    var chipsKey = JSON.stringify(opts);
+    if (el.startFarmTypes && chipsKey !== renderedChipsKey) {
+      renderedChipsKey = chipsKey;
       el.startFarmTypes.innerHTML = [{ id: '', label: 'No farm type' }].concat(opts).map(function (e) {
         return '<button class="jj-chip" type="button" data-farm-type-id="' + escapeHTML(e.id) + '" aria-pressed="' +
           (e.id === selectedFarmTypeId ? 'true' : 'false') + '">' + escapeHTML(e.label) + '</button>';

@@ -86,7 +86,7 @@ function buildWindowsProcessCommand() {
   return [
     '$ErrorActionPreference = "Stop";',
     `Get-CimInstance Win32_Process -Filter "${filter}" |`,
-    'Select-Object Name,ExecutablePath,CommandLine |',
+    'Select-Object Name,ProcessId,ExecutablePath,CommandLine |',
     'ConvertTo-Json -Compress'
   ].join(' ');
 }
@@ -247,6 +247,7 @@ class GameDetector extends EventEmitter {
     this.lastDetectedPid = null;
     this.processProbe = options.processProbe || win32Probe;
     this.processProbeFailed = false;
+    this.processProbeUnavailableLogged = false;
   }
 
   /**
@@ -341,7 +342,14 @@ class GameDetector extends EventEmitter {
    */
   _getRunningProcesses() {
     const probed = this._probeRunningProcesses();
-    return probed ? Promise.resolve(probed) : this._getRunningProcessesFromPowerShell();
+    if (probed) return Promise.resolve(probed);
+
+    if (!this.processProbeUnavailableLogged && !this.processProbeFailed) {
+      this.processProbeUnavailableLogged = true;
+      const reason = this.processProbe.getLoadError ? this.processProbe.getLoadError()?.message : null;
+      console.warn('Native process probe unavailable, using PowerShell:', reason || 'unknown reason');
+    }
+    return this._getRunningProcessesFromPowerShell();
   }
 
   _probeRunningProcesses() {

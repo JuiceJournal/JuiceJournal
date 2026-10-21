@@ -26,8 +26,9 @@ function loadApi() {
     return api;
   }
 
-  if (process.platform !== 'win32') {
-    loadError = new Error('Win32 probe is only available on Windows');
+  // The PROCESSENTRY32W offsets below are the 64-bit layout.
+  if (process.platform !== 'win32' || !['x64', 'arm64'].includes(process.arch)) {
+    loadError = new Error('Win32 probe is only available on 64-bit Windows');
     return null;
   }
 
@@ -38,19 +39,20 @@ function loadApi() {
     koffi.struct('JJ_RECT', { left: 'int32_t', top: 'int32_t', right: 'int32_t', bottom: 'int32_t' });
     koffi.struct('JJ_POINT', { x: 'int32_t', y: 'int32_t' });
 
+    // Win32 BOOL is a 4-byte int, so it is declared as int32_t rather than C bool.
     api = {
       CreateToolhelp32Snapshot: kernel32.func('intptr_t __stdcall CreateToolhelp32Snapshot(uint32_t flags, uint32_t pid)'),
-      Process32FirstW: kernel32.func('bool __stdcall Process32FirstW(intptr_t snapshot, void *entry)'),
-      Process32NextW: kernel32.func('bool __stdcall Process32NextW(intptr_t snapshot, void *entry)'),
-      OpenProcess: kernel32.func('intptr_t __stdcall OpenProcess(uint32_t access, bool inherit, uint32_t pid)'),
-      QueryFullProcessImageNameW: kernel32.func('bool __stdcall QueryFullProcessImageNameW(intptr_t process, uint32_t flags, void *buffer, _Inout_ uint32_t *size)'),
-      CloseHandle: kernel32.func('bool __stdcall CloseHandle(intptr_t handle)'),
+      Process32FirstW: kernel32.func('int32_t __stdcall Process32FirstW(intptr_t snapshot, void *entry)'),
+      Process32NextW: kernel32.func('int32_t __stdcall Process32NextW(intptr_t snapshot, void *entry)'),
+      OpenProcess: kernel32.func('intptr_t __stdcall OpenProcess(uint32_t access, int32_t inherit, uint32_t pid)'),
+      QueryFullProcessImageNameW: kernel32.func('int32_t __stdcall QueryFullProcessImageNameW(intptr_t process, uint32_t flags, void *buffer, _Inout_ uint32_t *size)'),
+      CloseHandle: kernel32.func('int32_t __stdcall CloseHandle(intptr_t handle)'),
       FindWindowExW: user32.func('intptr_t __stdcall FindWindowExW(intptr_t parent, intptr_t after, str16 className, str16 title)'),
       GetWindowThreadProcessId: user32.func('uint32_t __stdcall GetWindowThreadProcessId(intptr_t hwnd, _Out_ uint32_t *pid)'),
-      IsWindowVisible: user32.func('bool __stdcall IsWindowVisible(intptr_t hwnd)'),
-      IsIconic: user32.func('bool __stdcall IsIconic(intptr_t hwnd)'),
-      GetClientRect: user32.func('bool __stdcall GetClientRect(intptr_t hwnd, _Out_ JJ_RECT *rect)'),
-      ClientToScreen: user32.func('bool __stdcall ClientToScreen(intptr_t hwnd, _Inout_ JJ_POINT *point)')
+      IsWindowVisible: user32.func('int32_t __stdcall IsWindowVisible(intptr_t hwnd)'),
+      IsIconic: user32.func('int32_t __stdcall IsIconic(intptr_t hwnd)'),
+      GetClientRect: user32.func('int32_t __stdcall GetClientRect(intptr_t hwnd, _Out_ JJ_RECT *rect)'),
+      ClientToScreen: user32.func('int32_t __stdcall ClientToScreen(intptr_t hwnd, _Inout_ JJ_POINT *point)')
     };
   } catch (error) {
     loadError = error;
@@ -76,7 +78,7 @@ function readWideString(buffer, offset, maxChars) {
 }
 
 function readImagePath(win, pid) {
-  const handle = win.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+  const handle = win.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
   if (!handle) {
     return '';
   }
@@ -113,7 +115,11 @@ function scanProcesses(names = []) {
   const matches = [];
 
   try {
-    for (let ok = win.Process32FirstW(snapshot, entry); ok; ok = win.Process32NextW(snapshot, entry)) {
+    // A snapshot always holds processes, so a failed first call means the probe is broken, not "no game".
+    if (!win.Process32FirstW(snapshot, entry)) {
+      throw new Error('Process32FirstW failed');
+    }
+    for (let ok = 1; ok; ok = win.Process32NextW(snapshot, entry)) {
       const name = readWideString(entry, PROCESSENTRY32W_EXE_OFFSET, MAX_PATH_CHARS);
       if (wanted.has(name.toLowerCase())) {
         const pid = entry.readUInt32LE(PROCESSENTRY32W_PID_OFFSET);
