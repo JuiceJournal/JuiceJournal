@@ -127,8 +127,6 @@ const MAIN_PROCESS_TRANSLATIONS = {
     promptMessage: 'Map adini girin:',
     promptDetail: 'Ornegin: Dunes Map, City Square Map',
     unknownMap: 'Bilinmeyen Map',
-    lootQueuedTitle: 'Loot Kuyruga Alindi',
-    lootQueuedBody: '{count} item baglanti gelince senkronize edilecek.',
     auditLogin: 'Yerel kullanici girisi basarili',
     auditLogout: 'Kullanici cikis yapti',
     auditSessionStarted: '{mapName} session baslatildi',
@@ -183,8 +181,6 @@ const MAIN_PROCESS_TRANSLATIONS = {
     promptMessage: 'Enter the map name:',
     promptDetail: 'For example: Dunes Map, City Square Map',
     unknownMap: 'Unknown Map',
-    lootQueuedTitle: 'Loot Queued',
-    lootQueuedBody: '{count} items will sync when the connection returns.',
     auditLogin: 'Local user login succeeded',
     auditLogout: 'User logged out',
     auditSessionStarted: '{mapName} session started',
@@ -1187,9 +1183,9 @@ async function flushPendingSessionActions(forceBlocked = false) {
           });
           sessionIdMap.set(action.localSessionId, session.id);
 
+          // The active session now comes from the local journal; only the legacy queue entry is dropped.
           const queuedCurrentSession = getQueuedCurrentSession();
           if (queuedCurrentSession?.id === action.localSessionId) {
-            currentSession = session;
             setQueuedCurrentSession(null);
           }
         } else if (action.type === 'sessionEnd') {
@@ -1205,7 +1201,6 @@ async function flushPendingSessionActions(forceBlocked = false) {
 
           const queuedCurrentSession = getQueuedCurrentSession();
           if (queuedCurrentSession?.id === action.sessionId) {
-            currentSession = null;
             setQueuedCurrentSession(null);
           }
         }
@@ -3617,11 +3612,15 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-session-details', async (event, sessionId) => {
-    const session = localJournal.getSession(readJournal(), sessionId);
-    if (!session) {
-      throw new Error('Session not found');
+    try {
+      const session = localJournal.getSession(readJournal(), sessionId);
+      if (!session) {
+        throw new Error('Session not found');
+      }
+      return session;
+    } catch (error) {
+      throw toRendererError(error, 'Failed to load session details');
     }
-    return session;
   });
 
   ipcMain.handle('update-session-details', async (event, sessionId, payload = {}) => {

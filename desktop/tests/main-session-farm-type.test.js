@@ -653,3 +653,70 @@ test('map-enter handler publishes runtime state and leaves session start to the 
   assert.deepEqual(startCalls, []);
   assert.deepEqual(runtimeCalls, [['area_entered', { mapName: 'Crimson Temple', mapTier: 16 }]]);
 });
+
+test('legacy queue drain leaves the journal-backed current session alone', async () => {
+  const backend = createJournalBackend();
+  const active = backend.start({}, 'journal-session-1');
+  let queuedCurrentSession = { id: 'local-legacy-1' };
+  const context = loadFunctions(['isLocalSessionId', 'flushPendingSessionActions'], {
+    currentSession: active,
+    pendingSessionFlushInProgress: false,
+    apiClient: {
+      token: 'legacy-token',
+      async startSession() {
+        return { id: 'server-session-1' };
+      },
+      async endSession() {
+        return { id: 'server-session-1', status: 'completed' };
+      }
+    },
+    getCurrentUserId: () => 'user-1',
+    getPendingSessionActions: () => [
+      { type: 'sessionStart', localSessionId: 'local-legacy-1', payload: { mapName: 'Old Map' } },
+      { type: 'sessionEnd', sessionId: 'local-legacy-1', endedAt: '2026-05-06T12:04:00.000Z' }
+    ],
+    setPendingSessionActions() {},
+    getQueuedCurrentSession: () => queuedCurrentSession,
+    setQueuedCurrentSession(session) {
+      queuedCurrentSession = session;
+    }
+  });
+
+  const result = await context.flushPendingSessionActions();
+
+  assert.equal(result.processed, 2);
+  assert.equal(queuedCurrentSession, null);
+  assert.equal(context.currentSession, active);
+});
+
+test('journal store is per signed-in user and rejects unsafe ids', () => {
+  const created = [];
+  let userId = 'user-1';
+  const context = loadFunctions(['getJournalStore'], {
+    journalStore: null,
+    getCurrentUserId: () => userId,
+    path,
+    app: { getPath: () => 'D:/UserData' },
+    Store: class {
+      constructor(options) {
+        this.options = options;
+        created.push(options);
+      }
+    }
+  });
+
+  const first = context.getJournalStore();
+  assert.equal(context.getJournalStore(), first);
+  userId = 'user-2';
+  const second = context.getJournalStore();
+
+  assert.notEqual(second, first);
+  assert.deepEqual(JSON.parse(JSON.stringify(created)), [
+    { name: 'journal', cwd: path.join('D:/UserData', 'profiles', 'user-1') },
+    { name: 'journal', cwd: path.join('D:/UserData', 'profiles', 'user-2') }
+  ]);
+  for (const unsafeId of ['../user-1', 'user/1', '', null]) {
+    userId = unsafeId;
+    assert.throws(() => context.getJournalStore(), /Local desktop sign-in is required/);
+  }
+});
