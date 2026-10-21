@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   dismissMapResultOverlay: () => ipcRenderer.invoke('dismiss-map-result-overlay'),
   getOverlayCursorPosition: () => ipcRenderer.invoke('get-overlay-cursor-position'),
   confirmStartMapPromptOverlay: (payload) => ipcRenderer.invoke('confirm-start-map-prompt-overlay', payload),
-  cancelStartMapPromptOverlay: () => ipcRenderer.invoke('cancel-start-map-prompt-overlay')
+  cancelStartMapPromptOverlay: () => ipcRenderer.invoke('cancel-start-map-prompt-overlay'),
+  chooseCharacterPromptOverlay: (payload) => ipcRenderer.invoke('choose-character-prompt-overlay', payload)
 });

@@ -190,3 +190,46 @@ test('overlay state model returns hidden state when overlay is disabled or omitt
   assert.equal(explicitlyDisabledState.visibility, 'hidden');
   assert.equal(defaultState.visibility, 'hidden');
 });
+
+test('overlay state model asks which character is played when the realm has more than one', () => {
+  const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
+  const characterPrompt = {
+    poeVersion: 'poe2',
+    selectedId: 'poe2-alt',
+    characters: [
+      { id: 'poe2-high', name: 'HighLevelDeadeye', className: 'Deadeye', level: 94 },
+      { id: 'poe2-alt', name: 'AltShaman', className: 'Shaman', level: 88 }
+    ]
+  };
+
+  const state = deriveOverlayState({ enabled: true, characterPrompt, runtime: { currentArea: 'Canal Hideout' } });
+
+  assert.equal(state.mode, 'character-prompt');
+  assert.equal(state.primaryLine, 'AltShaman');
+  assert.equal(state.secondaryLine, 'Level 88 Shaman');
+  assert.equal(state.metaLine, 'PoE 2');
+  assert.equal(state.characterPrompt.characters.length, 2);
+});
+
+test('overlay state model skips the character prompt when there is no choice, the overlay is off, or a map prompt is up', () => {
+  const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
+  const characterPrompt = {
+    poeVersion: 'poe2',
+    selectedId: 'poe2-alt',
+    characters: [
+      { id: 'poe2-high', name: 'HighLevelDeadeye', level: 94 },
+      { id: 'poe2-alt', name: 'AltShaman', level: 88 }
+    ]
+  };
+
+  assert.notEqual(deriveOverlayState({
+    enabled: true,
+    characterPrompt: { ...characterPrompt, characters: characterPrompt.characters.slice(1) }
+  }).mode, 'character-prompt');
+  assert.equal(deriveOverlayState({ enabled: false, characterPrompt }).visibility, 'hidden');
+  assert.equal(deriveOverlayState({
+    enabled: true,
+    characterPrompt,
+    startMapPrompt: { mapName: 'Headland' }
+  }).mode, 'start-map-prompt');
+});

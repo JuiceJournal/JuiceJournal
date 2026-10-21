@@ -314,6 +314,7 @@ test('main overlay window is created lazily only when overlay state is visible',
   const context = loadFunctions(['buildOverlayState', 'updateOverlayWindow'], {
     overlayMapResultState: null,
     overlayStartMapPromptState: null,
+    overlayCharacterPromptState: null,
     overlayCharacterState: null,
     overlayRuntimeState: null,
     overlayWindow: null,
@@ -1220,4 +1221,104 @@ test('setupLogParser forwards game session events from Client.txt to the rendere
     { channel: 'game-session-left', payload: { poeVersion: 'poe2', reason: 'character_select' } },
     { channel: 'character-log-line', payload: { poeVersion: 'poe2', name: 'ExampleRanger', kind: 'level_up' } }
   ]);
+});
+
+function loadCharacterPromptMain() {
+  const sent = [];
+  const overlayUpdates = [];
+  const timers = [];
+  const context = loadFunctions([
+    'normalizeOverlayCharacter',
+    'clearCharacterPromptOverlay',
+    'showCharacterPromptOverlay',
+    'chooseCharacterPromptOverlay'
+  ], {
+    overlayCharacterPromptState: null,
+    overlayCharacterPromptTimer: null,
+    CHARACTER_PROMPT_OVERLAY_DURATION_MS: 8000,
+    normalizePoeVersion: (value) => value === 'poe1' || value === 'poe2' ? value : null,
+    updateOverlayWindow: () => {
+      overlayUpdates.push(context.overlayCharacterPromptState);
+      return null;
+    },
+    setTimeout: (callback, delay) => {
+      timers.push({ callback, delay, cleared: false });
+      return timers.length;
+    },
+    clearTimeout: (id) => {
+      if (timers[id - 1]) {
+        timers[id - 1].cleared = true;
+      }
+    },
+    mainWindow: {
+      isDestroyed: () => false,
+      webContents: {
+        send(channel, payload) {
+          sent.push({ channel, payload });
+        }
+      }
+    }
+  });
+
+  return { context, sent, overlayUpdates, timers };
+}
+
+const PROMPT = {
+  poeVersion: 'poe2',
+  selectedId: 'poe2-alt',
+  characters: [
+    { id: 'poe2-high', name: 'HighLevelDeadeye', className: 'Deadeye', level: 94, league: 'Standard' },
+    { id: 'poe2-alt', name: 'AltShaman', className: 'Shaman', level: 88, league: 'Standard' },
+    { id: '', name: 'NoId' }
+  ]
+};
+
+test('main character prompt reports the picked character to the renderer and closes', () => {
+  const { context, sent, timers } = loadCharacterPromptMain();
+
+  context.showCharacterPromptOverlay(PROMPT);
+  assert.equal(context.overlayCharacterPromptState.characters.length, 2);
+  assert.equal(timers[0].delay, 8000);
+
+  const result = context.chooseCharacterPromptOverlay({ characterId: 'poe2-high' });
+
+  assert.deepEqual({ ...result }, { poeVersion: 'poe2', characterId: 'poe2-high' });
+  assert.deepEqual(sent.map((message) => message.channel), ['character-prompt-overlay-result']);
+  assert.equal(context.overlayCharacterPromptState, null);
+  assert.equal(timers[0].cleared, true);
+});
+
+test('main character prompt ignores ids it did not offer and closes itself after the timeout', () => {
+  const { context, sent, timers } = loadCharacterPromptMain();
+
+  context.showCharacterPromptOverlay(PROMPT);
+  assert.equal(context.chooseCharacterPromptOverlay({ characterId: 'someone-else' }), null);
+  assert.deepEqual(sent, []);
+
+  context.showCharacterPromptOverlay(PROMPT);
+  timers.at(-1).callback();
+  assert.equal(context.overlayCharacterPromptState, null);
+  assert.deepEqual(sent, []);
+});
+
+test('main overlay character accepts only short display fields from the renderer', () => {
+  const { context } = loadCharacterPromptMain();
+
+  assert.deepEqual({ ...context.normalizeOverlayCharacter({
+    id: 'poe2-alt',
+    name: `  ${'A'.repeat(80)}  `,
+    league: 'Standard',
+    className: 'Shaman',
+    level: 88,
+    portrait: 'file:///C:/evil.png'
+  }) }, {
+    id: 'poe2-alt',
+    name: 'A'.repeat(64),
+    league: 'Standard',
+    className: 'Shaman',
+    level: 88
+  });
+  assert.equal(context.normalizeOverlayCharacter({ level: 5 }), null);
+  assert.equal(context.normalizeOverlayCharacter('AltShaman'), null);
+  assert.equal(context.normalizeOverlayCharacter({ name: 'AltShaman', level: 1e9 }).level, null);
 });

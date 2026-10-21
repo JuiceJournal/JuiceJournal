@@ -170,6 +170,35 @@
     };
   }
 
+  function getCharacterPromptSummary(characterPrompt) {
+    if (!characterPrompt || typeof characterPrompt !== 'object' || !Array.isArray(characterPrompt.characters)) {
+      return null;
+    }
+
+    const characters = characterPrompt.characters
+      .map((entry) => {
+        const id = normalizeString(entry?.id);
+        const name = normalizeString(entry?.name);
+        const level = Number(entry?.level);
+        return id && name
+          ? { id, name, className: normalizeString(entry.className), level: Number.isFinite(level) && level > 0 ? level : null }
+          : null;
+      })
+      .filter(Boolean);
+    const selected = characters.find((entry) => entry.id === normalizeString(characterPrompt.selectedId));
+
+    // With a single character there is nothing to choose.
+    if (characters.length < 2 || !selected) {
+      return null;
+    }
+
+    return {
+      poeVersion: normalizeString(characterPrompt.poeVersion),
+      selectedId: selected.id,
+      characters
+    };
+  }
+
   function createPrimaryLine(characterSummary) {
     if (!characterSummary) {
       return 'Character sync needed';
@@ -181,7 +210,7 @@
     ].filter(Boolean).join(SEPARATOR) || 'Character sync needed';
   }
 
-  function deriveOverlayState({ enabled = false, character, runtime, session, startMapPrompt, now = Date.now() } = {}) {
+  function deriveOverlayState({ enabled = false, character, runtime, session, startMapPrompt, characterPrompt, now = Date.now() } = {}) {
     const sessionSummary = getActiveSessionSummary(session, now);
     if (sessionSummary) {
       const contextLine = [
@@ -222,6 +251,21 @@
         primaryLine: '',
         secondaryLine: '',
         metaLine: ''
+      };
+    }
+
+    const characterPromptSummary = getCharacterPromptSummary(characterPrompt);
+    if (characterPromptSummary) {
+      const selected = characterPromptSummary.characters.find((entry) => entry.id === characterPromptSummary.selectedId);
+
+      return {
+        visibility: 'visible',
+        mode: 'character-prompt',
+        primaryLine: selected.name,
+        secondaryLine: [selected.level ? `Level ${selected.level}` : null, selected.className].filter(Boolean).join(' ')
+          || 'Last played character',
+        metaLine: characterPromptSummary.poeVersion ? characterPromptSummary.poeVersion.replace(/^poe/i, 'PoE ') : '',
+        characterPrompt: characterPromptSummary
       };
     }
 

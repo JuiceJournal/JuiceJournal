@@ -65,6 +65,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showMapResultOverlay: (result, options) => ipcRenderer.invoke('show-map-result-overlay', result, options),
   showStartMapPromptOverlay: (prompt, options) => ipcRenderer.invoke('show-start-map-prompt-overlay', prompt, options),
   hideStartMapPromptOverlay: () => ipcRenderer.invoke('hide-start-map-prompt-overlay'),
+  setOverlayCharacter: (character) => ipcRenderer.invoke('set-overlay-character', character),
+  showCharacterPromptOverlay: (prompt) => ipcRenderer.invoke('show-character-prompt-overlay', prompt),
   showRuntimeOverlayPreview: (runtimeSession) => ipcRenderer.invoke('show-runtime-overlay-preview', runtimeSession),
   toggleMapResultOverlayPin: () => ipcRenderer.invoke('toggle-map-result-overlay-pin'),
   dismissMapResultOverlay: () => ipcRenderer.invoke('dismiss-map-result-overlay'),
@@ -139,6 +141,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('start-map-prompt-overlay-result', listener);
     return () => ipcRenderer.removeListener('start-map-prompt-overlay-result', listener);
   },
+  onCharacterPromptOverlayResult: (callback) => {
+    ipcRenderer.on('character-prompt-overlay-result', (event, data) => callback(data));
+  },
 
   // Dinleyicileri temizle (sadece izin verilen kanallar)
   removeAllListeners: (channel) => {
@@ -149,7 +154,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'profit-calculated', 'game-version-changed', 'game-closed',
       'game-session-entered', 'game-session-left', 'character-log-line',
       'app-update-state-changed',
-      'start-map-prompt-overlay-result'
+      'start-map-prompt-overlay-result', 'character-prompt-overlay-result'
     ];
     if (channel && ALLOWED_CHANNELS.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);

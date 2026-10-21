@@ -10,7 +10,10 @@
     startForm: document.querySelector('[data-overlay-start-form]'),
     startFarmTypes: document.querySelector('[data-overlay-start-farm-types]'),
     startSubmit: document.querySelector('[data-overlay-start-submit]'),
-    startCancel: document.querySelector('[data-overlay-start-cancel]')
+    startCancel: document.querySelector('[data-overlay-start-cancel]'),
+    characterForm: document.querySelector('[data-overlay-character-form]'),
+    characters: document.querySelector('[data-overlay-characters]'),
+    characterKeep: document.querySelector('[data-overlay-character-keep]')
   };
 
   var lastRenderedMode = 'runtime';
@@ -20,6 +23,8 @@
   var startPromptKey = null;
   var renderedChipsKey = null;
   var selectedFarmTypeId = '';
+  var renderedCharactersKey = null;
+  var promptedCharacterId = '';
 
   function setText(element, value) {
     if (element) { element.textContent = value || ''; }
@@ -129,6 +134,39 @@
     });
   }
 
+  /* ── Mode: Character Prompt ── */
+  function renderCharacterPrompt(state) {
+    setText(el.kickerLabel, 'Playing as');
+    setText(el.primary, state.primaryLine || '');
+    setText(el.secondary, state.secondaryLine || '');
+    setText(el.meta, state.metaLine || '');
+  }
+
+  function renderCharacterForm(state) {
+    if (!el.characterForm) return;
+    var prompt = state.mode === 'character-prompt' && state.visibility !== 'hidden' ? state.characterPrompt : null;
+    el.characterForm.hidden = !prompt;
+    if (!prompt) {
+      renderedCharactersKey = null;
+      return;
+    }
+    promptedCharacterId = prompt.selectedId || '';
+    // Same rule as the farm type chips: rebuild only on change so a state push cannot swallow a click.
+    var charactersKey = JSON.stringify([prompt.selectedId, prompt.characters]);
+    if (el.characters && charactersKey !== renderedCharactersKey) {
+      renderedCharactersKey = charactersKey;
+      el.characters.innerHTML = (prompt.characters || []).map(function (c) {
+        return '<button class="jj-chip" type="button" data-character-id="' + escapeHTML(c.id) + '" aria-pressed="' +
+          (c.id === prompt.selectedId ? 'true' : 'false') + '">' + escapeHTML(c.name) + (c.level ? ' ' + c.level : '') + '</button>';
+      }).join('');
+    }
+  }
+
+  function chooseCharacter(characterId) {
+    if (!characterId || typeof root.electronAPI === 'undefined' || typeof root.electronAPI.chooseCharacterPromptOverlay !== 'function') return;
+    root.electronAPI.chooseCharacterPromptOverlay({ characterId: characterId });
+  }
+
   function clearExitingAnimation() {
     if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
     if (el.card) el.card.setAttribute('data-overlay-exiting', 'false');
@@ -166,11 +204,14 @@
       renderMapResultMode(state);
     } else if (mode === 'start-map-prompt') {
       renderStartMapPrompt(state);
+    } else if (mode === 'character-prompt') {
+      renderCharacterPrompt(state);
     } else {
       renderRuntimeMode(state);
     }
 
     renderStartMapForm(state);
+    renderCharacterForm(state);
 
     if (el.pin) {
       var showPin = mode === 'map-result' && visibility !== 'hidden';
@@ -230,6 +271,19 @@
       if (typeof root.electronAPI === 'undefined' || typeof root.electronAPI.cancelStartMapPromptOverlay !== 'function') return;
       setStartMapPromptBusy(true);
       root.electronAPI.cancelStartMapPromptOverlay().finally(function () { setStartMapPromptBusy(false); });
+    });
+  }
+
+  if (el.characters) {
+    el.characters.addEventListener('click', function (event) {
+      var button = event.target && event.target.closest ? event.target.closest('[data-character-id]') : null;
+      if (button) chooseCharacter(button.getAttribute('data-character-id'));
+    });
+  }
+
+  if (el.characterKeep) {
+    el.characterKeep.addEventListener('click', function () {
+      chooseCharacter(promptedCharacterId);
     });
   }
 

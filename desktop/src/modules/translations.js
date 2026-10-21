@@ -59,6 +59,9 @@ window.Translations = {
 
     // Dashboard
     'dashboard.characterSummary': 'Karakter Ozeti',
+    'dashboard.playingAs': 'Oynanan karakter',
+    'dashboard.characterConfirmed': 'Oyunda dogrulandi',
+    'dashboard.characterUnconfirmed': 'Son oynanan, henuz dogrulanmadi',
     'dashboard.activeSession': 'Aktif Map Session',
     'dashboard.waiting': 'Bekleniyor',
     'dashboard.active': 'Aktif',
@@ -805,6 +808,9 @@ window.Translations = {
 
     // Dashboard
     'dashboard.characterSummary': 'Character Summary',
+    'dashboard.playingAs': 'Playing as',
+    'dashboard.characterConfirmed': 'Confirmed in game',
+    'dashboard.characterUnconfirmed': 'Last played, not confirmed yet',
     'dashboard.activeSession': 'Active Map Session',
     'dashboard.waiting': 'Waiting',
     'dashboard.active': 'Active',
