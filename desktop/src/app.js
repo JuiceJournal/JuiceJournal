@@ -1930,6 +1930,36 @@ function applyProfitTier(element, tier) {
   }
 }
 
+const PROFIT_MEME_LABELS = {
+  bricked: 'Bricked',
+  pog: 'Pog',
+  juiced: 'Juiced',
+  mirror: 'Mirror tier'
+};
+
+function profitMemeHTML(tier) {
+  const meme = window.profitTierModel?.getProfitTierMeme?.(tier);
+  if (!meme) {
+    return '';
+  }
+
+  const label = PROFIT_MEME_LABELS[meme];
+  return `<div class="meme-badge" data-meme="${meme}" title="${label}"><img src="assets/brand/reactions/${meme}.svg" width="18" height="18" alt="" draggable="false">${label}</div>`;
+}
+
+function farmRunReactionsHTML(reactions = {}, poeVersion = 'poe1') {
+  const items = [
+    { id: 'divine', label: 'Divine', icon: getCurrencyAssetPath('divine', poeVersion) },
+    { id: 'holy', label: 'Holy', icon: 'assets/brand/reactions/holy.svg' },
+    { id: 'pog', label: 'Pog', icon: 'assets/brand/reactions/pog.svg' }
+  ];
+
+  return `<div class="hub-reactions">${items.map(({ id, label, icon }) => {
+    const count = Number(reactions?.[id]) || 0;
+    return `<span class="hub-reaction${count ? '' : ' is-empty'}" title="${label}"><img src="${icon}" width="18" height="18" alt="${label}" draggable="false">${count}</span>`;
+  }).join('')}</div>`;
+}
+
 /**
  * Event listener'lari kur
  */
@@ -3400,6 +3430,7 @@ function renderMapResultHistory() {
           <strong>${escapeHTML(result?.farmType || 'Unknown farm type')}</strong>
           <span>${formatDuration(Number(result?.durationSeconds || 0))}</span>
           <span class="map-result-publish-state" data-publish-state="${escapeHTML(result?.publishState || 'local')}">${escapeHTML(publishLabel)}</span>
+          ${typeof profitMemeHTML === 'function' ? profitMemeHTML(profitTier) : ''}
         </div>
         <div class="map-result-history-meta">
           <span class="map-result-history-profit"${profitTier ? ` data-profit-tier="${profitTier}"` : ''}>${formatMapResultProfitHTML(result, 14)}</span>
@@ -4281,14 +4312,15 @@ function renderFarmingHubRuns() {
   const profitTierFor = typeof getProfitTierFor === 'function'
     ? getProfitTierFor
     : (value) => (Number(value) < 0 ? 'loss' : 'normal');
+  const memeFor = typeof profitMemeHTML === 'function' ? profitMemeHTML : () => '';
+  const reactionsFor = typeof farmRunReactionsHTML === 'function' ? farmRunReactionsHTML : () => '';
 
   elements.farmingHubList.innerHTML = state.farmingHubRuns.map((run) => {
     const poeVersion = normalizePoeVersion(run.poeVersion) || 'poe1';
     const profit = Number(run.profitChaos || 0);
     const duration = run.durationSeconds ? formatDuration(run.durationSeconds) : '-';
     const author = run.publisherDisplayName || run.author?.username || 'Unknown exile';
-    const reactions = run.reactions || {};
-    const reactionTotal = Object.values(reactions).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    const profitTier = profitTierFor(profit, poeVersion);
 
     return `
       <article class="farming-hub-run">
@@ -4300,8 +4332,9 @@ function renderFarmingHubRuns() {
         <div class="farming-hub-run-metrics">
           <span><strong>${escapeHTML(String(run.runCount || 1))}</strong> maps</span>
           <span><strong>${duration}</strong> duration</span>
-          <span data-profit-tier="${profitTierFor(profit, poeVersion)}">${formatProfit(profit, 16, poeVersion)}</span>
-          <span>${reactionTotal} reactions</span>
+          <span data-profit-tier="${profitTier}">${formatProfit(profit, 16, poeVersion)}</span>
+          ${memeFor(profitTier)}
+          ${reactionsFor(run.reactions, poeVersion)}
         </div>
       </article>
     `;
@@ -4396,6 +4429,7 @@ function renderSessionsList() {
   const profitTierFor = typeof getProfitTierFor === 'function'
     ? getProfitTierFor
     : (value) => (Number(value) < 0 ? 'loss' : 'normal');
+  const memeFor = typeof profitMemeHTML === 'function' ? profitMemeHTML : () => '';
   elements.sessionsList.innerHTML = filteredSessions.map((session) => {
     const profit = parseFloat(session.profitChaos || 0);
     const lootCount = Array.isArray(session.lootEntries)
@@ -4422,7 +4456,7 @@ function renderSessionsList() {
           <span class="session-secondary-label">${window.t('sessions.lootCount')}</span>
           <span class="session-secondary-value">${lootCount}</span>
         </div>
-        <div class="session-profit" data-profit-tier="${profitTierFor(profit, poeVersion)}">${formatProfit(profit, 16, poeVersion)}</div>
+        <div class="session-profit" data-profit-tier="${profitTierFor(profit, poeVersion)}">${formatProfit(profit, 16, poeVersion)}${memeFor(profitTierFor(profit, poeVersion))}</div>
         <div class="session-status ${safeStatus}">${window.t(`sessions.${safeStatus}`)}</div>
       </button>
     `;
