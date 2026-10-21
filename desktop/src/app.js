@@ -1889,6 +1889,28 @@ function formatAdaptiveProfitText(value, poeVersion = state.settings.poeVersion 
   return `${sign}${Math.abs(normalizedValue)}c`;
 }
 
+function getProfitTierFor(value, poeVersion = state.settings.poeVersion || 'poe1', options = {}) {
+  const model = window.profitTierModel;
+  if (!model || typeof model.getProfitTier !== 'function') {
+    return Number(value) < 0 ? 'loss' : 'normal';
+  }
+
+  const rates = options.rates || getProfitCurrencyRates(normalizeProfitPoeVersion(poeVersion), options.league) || {};
+  return model.getProfitTier(value, rates);
+}
+
+function applyProfitTier(element, tier) {
+  if (!element?.dataset) {
+    return;
+  }
+
+  if (tier) {
+    element.dataset.profitTier = tier;
+  } else {
+    delete element.dataset.profitTier;
+  }
+}
+
 /**
  * Event listener'lari kur
  */
@@ -3157,6 +3179,14 @@ function formatMapResultProfitHTML(result = {}, iconSize = 16) {
   );
 }
 
+function getMapResultProfitTier(result = {}) {
+  if (result?.profitUnavailable || typeof getProfitTierFor !== 'function') {
+    return '';
+  }
+
+  return getProfitTierFor(result?.netProfit || 0, result?.poeVersion || state.settings?.poeVersion || 'poe1');
+}
+
 function renderLatestMapResult() {
   if (
     !elements.lastMapResultCard
@@ -3180,6 +3210,9 @@ function renderLatestMapResult() {
     elements.lastMapResultFarmType.textContent = 'No completed map yet';
     elements.lastMapResultDuration.textContent = '—';
     elements.lastMapResultProfit.innerHTML = '—';
+    if (typeof applyProfitTier === 'function') {
+      applyProfitTier(elements.lastMapResultProfit, '');
+    }
     return;
   }
 
@@ -3187,6 +3220,9 @@ function renderLatestMapResult() {
   elements.lastMapResultFarmType.textContent = latest.farmType || 'Unknown farm type';
   elements.lastMapResultDuration.textContent = formatDuration(latest.durationSeconds || 0);
   elements.lastMapResultProfit.innerHTML = formatMapResultProfitHTML(latest, 16);
+  if (typeof applyProfitTier === 'function' && typeof getMapResultProfitTier === 'function') {
+    applyProfitTier(elements.lastMapResultProfit, getMapResultProfitTier(latest));
+  }
 }
 
 function isPoe1ZeroLifecycleResult(result = {}) {
@@ -3280,6 +3316,7 @@ function renderMapResultHistory() {
     const publishable = typeof canPublishMapResult === 'function'
       ? canPublishMapResult(result)
       : canDisplayMapResult(result);
+    const profitTier = typeof getMapResultProfitTier === 'function' ? getMapResultProfitTier(result) : '';
 
     return `
       <article class="map-result-history-item" data-result-id="${escapeHTML(result?.id || '')}">
@@ -3289,7 +3326,7 @@ function renderMapResultHistory() {
           <span class="map-result-publish-state" data-publish-state="${escapeHTML(result?.publishState || 'local')}">${escapeHTML(publishLabel)}</span>
         </div>
         <div class="map-result-history-meta">
-          <span class="map-result-history-profit">${formatMapResultProfitHTML(result, 14)}</span>
+          <span class="map-result-history-profit"${profitTier ? ` data-profit-tier="${profitTier}"` : ''}>${formatMapResultProfitHTML(result, 14)}</span>
           <span>${escapeHTML(result?.createdAt ? timeAgo(result.createdAt) : 'Just now')}</span>
           <button type="button" class="map-result-publish-btn" data-result-id="${escapeHTML(result?.id || result?.localRunId || '')}" ${publishable ? '' : 'disabled'}>
             ${escapeHTML(result?.publishState === 'published' ? 'Shared' : 'Share')}
@@ -4165,6 +4202,9 @@ function renderFarmingHubRuns() {
   const formatProfit = typeof profitCurrencyHTML === 'function'
     ? profitCurrencyHTML
     : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
+  const profitTierFor = typeof getProfitTierFor === 'function'
+    ? getProfitTierFor
+    : (value) => (Number(value) < 0 ? 'loss' : 'normal');
 
   elements.farmingHubList.innerHTML = state.farmingHubRuns.map((run) => {
     const poeVersion = normalizePoeVersion(run.poeVersion) || 'poe1';
@@ -4184,7 +4224,7 @@ function renderFarmingHubRuns() {
         <div class="farming-hub-run-metrics">
           <span><strong>${escapeHTML(String(run.runCount || 1))}</strong> maps</span>
           <span><strong>${duration}</strong> duration</span>
-          <span class="${profit >= 0 ? 'positive' : 'negative'}">${formatProfit(profit, 16, poeVersion)}</span>
+          <span data-profit-tier="${profitTierFor(profit, poeVersion)}">${formatProfit(profit, 16, poeVersion)}</span>
           <span>${reactionTotal} reactions</span>
         </div>
       </article>
@@ -4277,6 +4317,9 @@ function renderSessionsList() {
   const formatProfit = typeof profitCurrencyHTML === 'function'
     ? profitCurrencyHTML
     : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
+  const profitTierFor = typeof getProfitTierFor === 'function'
+    ? getProfitTierFor
+    : (value) => (Number(value) < 0 ? 'loss' : 'normal');
   elements.sessionsList.innerHTML = filteredSessions.map((session) => {
     const profit = parseFloat(session.profitChaos || 0);
     const lootCount = Array.isArray(session.lootEntries)
@@ -4303,7 +4346,7 @@ function renderSessionsList() {
           <span class="session-secondary-label">${window.t('sessions.lootCount')}</span>
           <span class="session-secondary-value">${lootCount}</span>
         </div>
-        <div class="session-profit ${profit >= 0 ? 'positive' : 'negative'}">${formatProfit(profit, 16, poeVersion)}</div>
+        <div class="session-profit" data-profit-tier="${profitTierFor(profit, poeVersion)}">${formatProfit(profit, 16, poeVersion)}</div>
         <div class="session-status ${safeStatus}">${window.t(`sessions.${safeStatus}`)}</div>
       </button>
     `;
@@ -5353,7 +5396,9 @@ function renderProfitReport(report) {
       signed: true,
       rates
     });
-    elements.profitChaosValue.className = 'profit-value ' + (val >= 0 ? 'positive' : 'negative');
+    if (typeof applyProfitTier === 'function' && typeof getProfitTierFor === 'function') {
+      applyProfitTier(elements.profitChaosValue, getProfitTierFor(val, poeVersion, { rates }));
+    }
   }
 
   if (elements.profitDivineValue) {
@@ -5547,6 +5592,9 @@ function renderSessionDrawer() {
   const formatProfit = typeof profitCurrencyHTML === 'function'
     ? profitCurrencyHTML
     : (value, iconSize, version) => currencyHTML(value, 'chaos', iconSize, version);
+  const profitTier = typeof getProfitTierFor === 'function'
+    ? getProfitTierFor(profit, poeVersion)
+    : (profit < 0 ? 'loss' : 'normal');
 
   elements.sessionDrawerTitle.textContent = session.mapName || 'Session';
   elements.sessionDrawerLootCount.textContent = String(lootEntries.length);
@@ -5577,7 +5625,7 @@ function renderSessionDrawer() {
     </div>
     <div class="session-drawer-metric">
       <span class="session-drawer-label">${window.t('dashboard.liveProfit')}</span>
-      <span class="session-drawer-value ${profit >= 0 ? 'positive' : 'negative'}">${formatProfit(profit, 15, poeVersion)}</span>
+      <span class="session-drawer-value" data-profit-tier="${profitTier}">${formatProfit(profit, 15, poeVersion)}</span>
     </div>
     <div class="session-drawer-metric">
       <span class="session-drawer-label">${window.t('sessions.startedAt')}</span>

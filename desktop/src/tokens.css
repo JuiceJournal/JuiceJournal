@@ -24,6 +24,13 @@
   --warn: #ffb547;
   --win-close: #e81123;
 
+  /* Profit tiers, after PoE item rarity */
+  --tier-normal: #c8c8c8;
+  --tier-magic: #a0a0ff;
+  --tier-rare: #ffff77;
+  --tier-unique: #f0925a;
+  --tier-mirror: #ff7ae6;
+
   --plate-deep-rgb: 13 9 8;
   --obsidian-rgb: 18 13 11;
   --plate-rgb: 28 20 17;
