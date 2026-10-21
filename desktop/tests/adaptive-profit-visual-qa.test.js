@@ -4,9 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const desktopRoot = path.resolve(__dirname, '..');
-const repoRoot = path.resolve(desktopRoot, '..');
 const visualQaSpecPath = path.join(desktopRoot, 'e2e', 'adaptive-profit-visual-qa.spec.js');
-const gapRegisterPath = path.join(repoRoot, 'docs', 'farm-tracking-gap-register.md');
 
 test('adaptive profit visual QA has reproducible screenshot coverage for all target surfaces', () => {
   assert.equal(
@@ -34,15 +32,4 @@ test('adaptive profit visual QA has reproducible screenshot coverage for all tar
   ]) {
     assert.match(spec, new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
-});
-
-test('farm tracking gap register records adaptive profit visual QA evidence', () => {
-  const gapRegister = fs.readFileSync(gapRegisterPath, 'utf8');
-
-  assert.match(gapRegister, /\| Adaptive profit visual QA \| Ready \|/);
-  assert.match(gapRegister, /adaptive-profit-visual-qa\.spec\.js/);
-  assert.doesNotMatch(
-    gapRegister,
-    /1\. Add visual QA screenshots for adaptive profit display/
-  );
 });

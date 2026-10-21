@@ -4,6 +4,7 @@
   "description": "Juice Journal Backend API",
   "main": "server.js",
   "scripts": {
+    "test": "node --test tests/*.test.js",
     "build": "node scripts/build-check.js",
     "start": "node server.js",
     "dev": "nodemon server.js",
