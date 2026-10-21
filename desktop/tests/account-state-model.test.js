@@ -359,6 +359,63 @@ test('account state model creates a last known cache from current account state'
   assert.equal(cache.charactersByGame.poe2[0].name, 'PoeTwoShaman');
 });
 
+test('account state model prefers the character confirmed in game over the server default', () => {
+  const deriveAccountState = getAccountStateModelExport('deriveAccountState');
+  const characters = [
+    { id: 'poe2-high', name: 'HighLevelDeadeye', level: 94, class: 'Deadeye', league: 'Standard', poeVersion: 'poe2' },
+    { id: 'poe2-alt', name: 'AltShaman', level: 88, class: 'Shaman', league: 'Standard', poeVersion: 'poe2' }
+  ];
+
+  const confirmed = deriveAccountState({
+    activePoeVersion: 'poe2',
+    selectedCharacterByGame: { poe2: 'poe2-high' },
+    characters,
+    cachedAccountState: { confirmedCharacterByGame: { poe2: 'poe2-alt', poe1: 'poe1-gone' } }
+  });
+  assert.equal(confirmed.selectedCharacter.id, 'poe2-alt');
+  assert.deepEqual(confirmed.confirmedCharacterByGame, { poe1: 'poe1-gone', poe2: 'poe2-alt' });
+
+  const deleted = deriveAccountState({
+    activePoeVersion: 'poe2',
+    selectedCharacterByGame: { poe2: 'poe2-high' },
+    characters,
+    cachedAccountState: { confirmedCharacterByGame: { poe2: 'poe2-deleted' } }
+  });
+  assert.equal(deleted.selectedCharacter.id, 'poe2-high');
+});
+
+test('account state cache keeps the confirmed character for each game', () => {
+  const deriveAccountState = getAccountStateModelExport('deriveAccountState');
+  const createAccountStateCache = getAccountStateModelExport('createAccountStateCache');
+  const accountState = deriveAccountState({
+    activePoeVersion: 'poe2',
+    characters: [
+      { id: 'poe1-main', name: 'PoeOneRanger', level: 95, class: 'Ranger', poeVersion: 'poe1' },
+      { id: 'poe2-main', name: 'PoeTwoShaman', level: 96, class: 'Shaman', poeVersion: 'poe2' }
+    ],
+    cachedAccountState: { confirmedCharacterByGame: { poe1: 'poe1-main', poe2: 'poe2-main' } }
+  });
+
+  assert.deepEqual(createAccountStateCache(accountState).confirmedCharacterByGame, { poe1: 'poe1-main', poe2: 'poe2-main' });
+});
+
+test('account state model finds only the account own characters by log name', () => {
+  const deriveAccountState = getAccountStateModelExport('deriveAccountState');
+  const findCharacterByName = getAccountStateModelExport('findCharacterByName');
+  const accountState = deriveAccountState({
+    activePoeVersion: 'poe2',
+    characters: [
+      { id: 'poe1-main', name: 'SameNameRanger', level: 95, class: 'Ranger', poeVersion: 'poe1' },
+      { id: 'poe2-main', name: 'PoeTwoShaman', level: 96, class: 'Shaman', poeVersion: 'poe2' }
+    ]
+  });
+
+  assert.equal(findCharacterByName(accountState, 'poe2', 'PoeTwoShaman').id, 'poe2-main');
+  assert.equal(findCharacterByName(accountState, 'poe2', 'PartyFriend'), null);
+  assert.equal(findCharacterByName(accountState, 'poe2', 'SameNameRanger'), null);
+  assert.equal(findCharacterByName(null, 'poe2', 'PoeTwoShaman'), null);
+});
+
 test('renderer setCurrentUser stores normalized account state for later dashboard consumption', () => {
   const calls = [];
   const persistedSettings = [];
@@ -449,6 +506,89 @@ test('renderer uses the last detected game for cached dashboard character when n
   assert.equal(state.account.summary.poeVersion, 'poe2');
   assert.equal(state.account.selectedCharacter.id, 'cached-shaman');
   assert.equal(persistedSettings.length, 1);
+});
+
+function loadCharacterSessionRenderer({ lastKnownAccountState } = {}) {
+  const calls = [];
+  const persistedSettings = [];
+  const accountStateModel = require('../src/modules/accountStateModel');
+  const state = {
+    currentUser: {
+      accountName: 'HybridAccount',
+      selectedCharacterByGame: { poe2: 'poe2-high' },
+      characters: [
+        { id: 'poe1-main', name: 'PoeOneRanger', level: 95, class: 'Ranger', poeVersion: 'poe1' },
+        { id: 'poe2-high', name: 'HighLevelDeadeye', level: 94, class: 'Deadeye', poeVersion: 'poe2' },
+        { id: 'poe2-alt', name: 'AltShaman', level: 88, class: 'Shaman', poeVersion: 'poe2' }
+      ]
+    },
+    settings: { lastKnownAccountState },
+    detectedGameVersion: 'poe2',
+    characterSession: null
+  };
+  const context = loadFunctions([
+    'persistLastKnownAccountState',
+    'refreshAccountStateFromCurrentUser',
+    'handleGameSessionEntered',
+    'handleCharacterLogLine',
+    'confirmActiveCharacter'
+  ], {
+    state,
+    normalizePoeVersion: (value) => value === 'poe1' || value === 'poe2' ? value : null,
+    window: {
+      electronAPI: {
+        setSettings: async (settings) => {
+          persistedSettings.push(settings);
+        }
+      }
+    },
+    renderCharacterSummaryCard: () => calls.push('renderCharacterSummaryCard'),
+    refreshRendererOverlayState: () => calls.push('refreshRendererOverlayState'),
+    getAccountStateModel: () => accountStateModel
+  });
+
+  context.refreshAccountStateFromCurrentUser();
+  persistedSettings.length = 0;
+  return { context, state, calls, persistedSettings };
+}
+
+test('renderer keeps the last confirmed character on Play and marks the session unconfirmed', () => {
+  const { context, state, calls } = loadCharacterSessionRenderer({
+    lastKnownAccountState: { confirmedCharacterByGame: { poe2: 'poe2-alt' } }
+  });
+
+  context.handleGameSessionEntered({ poeVersion: 'poe2' });
+
+  assert.deepEqual({ ...state.characterSession }, { poeVersion: 'poe2', confirmed: false });
+  assert.equal(state.account.summary.name, 'AltShaman');
+  assert.deepEqual(calls, ['renderCharacterSummaryCard', 'refreshRendererOverlayState']);
+});
+
+test('renderer switches to and remembers an own character named in Client.txt', () => {
+  const { context, state, calls, persistedSettings } = loadCharacterSessionRenderer();
+  assert.equal(state.account.summary.name, 'HighLevelDeadeye');
+
+  context.handleGameSessionEntered({ poeVersion: 'poe2' });
+  context.handleCharacterLogLine({ poeVersion: 'poe2', name: 'AltShaman', kind: 'level_up' });
+
+  assert.equal(state.account.summary.name, 'AltShaman');
+  assert.equal(state.characterSession.confirmed, true);
+  assert.equal(calls.length, 4);
+  assert.deepEqual(
+    { ...persistedSettings.at(-1).lastKnownAccountState.confirmedCharacterByGame },
+    { poe2: 'poe2-alt' }
+  );
+});
+
+test('renderer ignores party members and other-game names from Client.txt', () => {
+  const { context, state, calls, persistedSettings } = loadCharacterSessionRenderer();
+
+  context.handleCharacterLogLine({ poeVersion: 'poe2', name: 'PartyFriend', kind: 'slain' });
+  context.handleCharacterLogLine({ poeVersion: 'poe2', name: 'PoeOneRanger', kind: 'level_up' });
+
+  assert.equal(state.account.summary.name, 'HighLevelDeadeye');
+  assert.deepEqual(calls, []);
+  assert.deepEqual(persistedSettings, []);
 });
 
 test('renderer logout clears normalized account state', async () => {
