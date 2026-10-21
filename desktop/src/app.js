@@ -3553,9 +3553,7 @@ function setMapSessionConfirmButton(label = 'Start Map') {
   }
 
   elements.mapSessionConfirmBtn.innerHTML = `
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-      <polygon points="5 3 19 12 5 21 5 3"/>
-    </svg>
+    <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#play"/></svg>
     <span>${escapeHTML(label)}</span>
   `;
 }
@@ -3972,7 +3970,7 @@ function updateActiveSessionUI() {
       elements.sessionBadge.style.color = 'var(--green)';
     }
   } else {
-    elements.activeSession.innerHTML = `<p class="empty-state"><span class="empty-state-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></span>${window.t('dashboard.noActiveMap')}</p>`;
+    elements.activeSession.innerHTML = `<p class="empty-state"><span class="empty-state-icon"><svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#ledger"/></svg></span>${window.t('dashboard.noActiveMap')}</p>`;
     elements.startSessionBtn.classList.remove('hidden');
     elements.endSessionBtn.classList.add('hidden');
     if (elements.sessionBadge) {

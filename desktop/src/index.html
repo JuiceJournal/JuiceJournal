@@ -31,23 +31,23 @@
       </div>
       <nav class="nav" role="navigation" aria-label="Ana navigasyon">
         <button class="nav-btn active" data-page="dashboard">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 4.5v9L12 21 4.5 16.5v-9L12 3z"/><path d="M12 3v18"/><path d="M4.5 7.5 12 12l7.5-4.5"/></svg>
+          <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#dashboard"/></svg>
           <span data-i18n="nav.dashboard">Dashboard</span>
         </button>
         <button class="nav-btn" data-page="sessions">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14v13H5z"/><path d="M5 9.5h14"/><path d="M9 9.5v9"/></svg>
+          <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#ledger"/></svg>
           <span data-i18n="nav.sessions">Session'lar</span>
         </button>
         <button class="nav-btn" data-page="farming-hub">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+          <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#map"/></svg>
           <span data-i18n="nav.farmingHub">Farming Hub</span>
         </button>
         <button class="nav-btn" data-page="currency">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18.5h14"/><path d="M7 18.5V9.5"/><path d="M12 18.5V5.5"/><path d="M17 18.5v-6"/><path d="M5 12.5 9.5 8 13 10.5 19 4.5"/></svg>
+          <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#orb"/></svg>
           <span data-i18n="nav.currency">Currency</span>
         </button>
         <button class="nav-btn" data-page="settings">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1.75v2.5"/><path d="M12 19.75v2.5"/><path d="M4.75 4.75l1.8 1.8"/><path d="M17.45 17.45l1.8 1.8"/><path d="M1.75 12h2.5"/><path d="M19.75 12h2.5"/><path d="M4.75 19.25l1.8-1.8"/><path d="M17.45 6.55l1.8-1.8"/></svg>
+          <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#gear"/></svg>
           <span data-i18n="nav.settings">Ayarlar</span>
         </button>
       </nav>
@@ -113,10 +113,7 @@
             <p class="modal-subtitle compact">Juice Journal requires a linked Path of Exile account.</p>
             <div class="form-actions">
               <button type="button" class="btn btn-poe-oauth" id="poe-oauth-login">
-                <svg class="poe-oauth-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/>
-                  <path d="M12 7.25 16 9.5v5L12 16.75 8 14.5v-5Z"/>
-                </svg>
+                <svg class="icon poe-oauth-icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#poe-hex"/></svg>
                 <span>Continue with Path of Exile</span>
               </button>
             </div>
@@ -130,11 +127,7 @@
       <div class="modal-content map-session-content">
         <form id="map-session-form" class="map-session-form">
           <div class="map-session-orb" aria-hidden="true">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/>
-              <path d="M12 3v18"/>
-              <path d="M4 8l8 4.5L20 8"/>
-            </svg>
+            <svg class="icon" width="26" height="26" aria-hidden="true"><use href="assets/icons.svg#map"/></svg>
           </div>
           <div class="map-session-copy">
             <p class="modal-kicker">Atlas Ledger</p>
@@ -154,9 +147,7 @@
           <div class="map-session-actions">
             <button id="map-session-cancel-btn" type="button" class="btn btn-secondary">Cancel</button>
             <button id="map-session-confirm-btn" type="submit" class="btn btn-primary">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
+              <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#play"/></svg>
               <span>Start Map</span>
             </button>
           </div>
@@ -169,11 +160,7 @@
       <div class="modal-content map-session-content farm-publish-content">
         <form id="farm-publish-form" class="map-session-form farm-publish-form">
           <div class="map-session-orb" aria-hidden="true">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/>
-              <path d="M4 8l8 4.5L20 8"/>
-              <path d="M12 12.5V21"/>
-            </svg>
+            <svg class="icon" width="26" height="26" aria-hidden="true"><use href="assets/icons.svg#publish"/></svg>
           </div>
           <div class="map-session-copy">
             <p class="modal-kicker">Farming Hub</p>
@@ -199,11 +186,7 @@
           <div class="map-session-actions">
             <button id="farm-publish-cancel-btn" type="button" class="btn btn-secondary">Cancel</button>
             <button id="farm-publish-confirm-btn" type="submit" class="btn btn-primary">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3 20 7.5v9L12 21 4 16.5v-9Z"/>
-                <path d="M12 12v5"/>
-                <path d="m8.5 10.2 3.5-2 3.5 2"/>
-              </svg>
+              <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#publish"/></svg>
               <span>Publish</span>
             </button>
           </div>
@@ -273,21 +256,19 @@
             <div id="active-session">
               <p class="empty-state">
                 <span class="empty-state-icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                  <svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#ledger"/></svg>
                 </span>
                 Aktif map yok
               </p>
             </div>
             <div class="session-actions">
               <button id="start-session-btn" class="btn btn-primary">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#play"/></svg>
                 <span data-i18n="dashboard.newMap">Yeni Map Baslat</span>
               </button>
               <button id="end-session-btn" class="btn btn-danger hidden">
                 <span class="btn-glyph btn-glyph-stop" aria-hidden="true">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="6" y="6" width="12" height="12" rx="2"/>
-                  </svg>
+                  <svg class="icon icon-sm" width="13" height="13" aria-hidden="true"><use href="assets/icons.svg#stop"/></svg>
                 </span>
                 <span data-i18n="dashboard.endMap">Map'i Bitir</span>
               </button>
@@ -303,7 +284,7 @@
               <div class="stat">
                 <div class="stat-left">
                   <div class="stat-icon maps">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 19.5 7.5v9L12 21 4.5 16.5v-9Z"/><path d="M12 3v18"/><path d="M4.5 7.5 12 12l7.5-4.5"/></svg>
+                    <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#dashboard"/></svg>
                   </div>
                   <span class="stat-label" data-i18n="dashboard.map">Map</span>
                 </div>
@@ -341,7 +322,7 @@
                 <p data-i18n="dashboard.scanHint">Stash erisimi olmadiginda deneysel OCR fallback kullanin.</p>
               </div>
               <button id="scan-screen-btn" class="btn btn-secondary">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 4v-1a2 2 0 0 1 2-2h3M1 20v1a2 2 0 0 0 2 2h3M18 1h3a2 2 0 0 1 2 2v1M18 23h3a2 2 0 0 0 2-2v-1"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#scan"/></svg>
                 <span data-i18n="dashboard.scanScreen">Fallback Taramayi Calistir</span>
               </button>
             </div>
@@ -391,7 +372,7 @@
                   <span class="price-status-value" id="price-item-count">—</span>
                 </div>
                 <button id="sync-prices-btn" class="btn btn-sm btn-secondary">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21.5 2v6h-6M2.5 22v-6h6"/><path d="M2.5 11.5a10 10 0 0 1 18.14-4.5M21.5 12.5a10 10 0 0 1-18.14 4.5"/></svg>
+                  <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sync"/></svg>
                   <span data-i18n="stash.syncPrices">Sync Prices</span>
                 </button>
               </div>
@@ -404,13 +385,13 @@
                     <span data-i18n="stash.beforeMap">Before Map</span>
                   </div>
                   <button id="take-before-snapshot-btn" class="btn btn-secondary btn-snapshot">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#camera"/></svg>
                     <span data-i18n="stash.takeSnapshot">Take Snapshot</span>
                   </button>
                   <div class="snapshot-info" id="before-snapshot-info"></div>
                 </div>
                 <div class="snapshot-step-divider">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  <svg class="icon" width="20" height="20" aria-hidden="true"><use href="assets/icons.svg#arrow-right"/></svg>
                 </div>
                 <div class="snapshot-step" id="snapshot-step-after">
                   <div class="snapshot-step-header">
@@ -418,7 +399,7 @@
                     <span data-i18n="stash.afterMap">After Map</span>
                   </div>
                   <button id="take-after-snapshot-btn" class="btn btn-secondary btn-snapshot" disabled>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#camera"/></svg>
                     <span data-i18n="stash.takeSnapshot">Take Snapshot</span>
                   </button>
                   <div class="snapshot-info" id="after-snapshot-info"></div>
@@ -427,7 +408,7 @@
 
               <!-- Calculate profit button -->
               <button id="calculate-profit-btn" class="btn btn-primary btn-calculate-profit hidden">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#sum"/></svg>
                 <span data-i18n="stash.calculateProfit">Calculate Profit</span>
               </button>
 
@@ -441,12 +422,12 @@
                   </div>
                   <div class="profit-breakdown">
                     <div class="profit-gained">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                      <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#arrow-up"/></svg>
                       <span data-i18n="stash.gained">Gained</span>
                       <span id="profit-gained-value">0c</span>
                     </div>
                     <div class="profit-lost">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                      <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#arrow-down"/></svg>
                       <span data-i18n="stash.spent">Spent</span>
                       <span id="profit-lost-value">0c</span>
                     </div>
@@ -456,7 +437,7 @@
                 <div class="profit-items-list" id="profit-items-list"></div>
                 <!-- Reset -->
                 <button id="reset-snapshots-btn" class="btn btn-sm btn-ghost">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                  <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#trash"/></svg>
                   <span data-i18n="stash.resetSnapshots">Reset & Start New</span>
                 </button>
               </div>
@@ -471,7 +452,7 @@
             <div id="recent-loot-list">
               <p class="empty-state">
                 <span class="empty-state-icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                  <svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#chest"/></svg>
                 </span>
                 Henuz loot eklenmedi
               </p>
@@ -508,7 +489,7 @@
         <div id="sessions-list" class="sessions-list">
           <p class="empty-state">
             <span class="empty-state-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              <svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#ledger"/></svg>
             </span>
             Henuz session yok
           </p>
@@ -550,7 +531,7 @@
               <h3 id="session-drawer-title">Session</h3>
             </div>
             <button id="session-drawer-close" class="session-drawer-close" type="button" aria-label="Close">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              <svg class="icon" width="18" height="18" aria-hidden="true"><use href="assets/icons.svg#close"/></svg>
             </button>
           </div>
 
@@ -650,27 +631,27 @@
           <!-- Settings Sidebar -->
           <nav class="settings-nav" role="tablist" aria-label="Settings categories">
             <button class="settings-nav-btn active" data-settings-tab="general" role="tab" aria-selected="true">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+              <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#sliders"/></svg>
               <span data-i18n="settings.general">Genel</span>
             </button>
             <button class="settings-nav-btn" data-settings-tab="poe" role="tab" aria-selected="false">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#layers"/></svg>
               <span data-i18n="settings.poe">Path of Exile</span>
             </button>
             <button class="settings-nav-btn" data-settings-tab="hotkeys" role="tab" aria-selected="false">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>
+              <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#keyboard"/></svg>
               <span data-i18n="settings.hotkeys">Kisayollar</span>
             </button>
             <button class="settings-nav-btn" data-settings-tab="notifications" role="tab" aria-selected="false">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#bell"/></svg>
               <span data-i18n="settings.notifications">Bildirimler</span>
             </button>
             <button class="settings-nav-btn" data-settings-tab="api" role="tab" aria-selected="false">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#link"/></svg>
               <span data-i18n="settings.api">API Baglantisi</span>
             </button>
             <button class="settings-nav-btn" data-settings-tab="about" role="tab" aria-selected="false">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#info"/></svg>
               <span data-i18n="settings.about">Hakkinda</span>
             </button>
           </nav>
@@ -705,11 +686,11 @@
                 <div class="form-group">
                   <div class="poe-version-select">
                     <button class="version-btn active" data-version="poe1">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/><line x1="12" y1="22" x2="12" y2="15.5"/><polyline points="22 8.5 12 15.5 2 8.5"/></svg>
+                      <svg class="icon" width="18" height="18" aria-hidden="true"><use href="assets/icons.svg#poe1"/></svg>
                       Path of Exile 1
                     </button>
                     <button class="version-btn" data-version="poe2">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/><line x1="12" y1="22" x2="12" y2="15.5"/><polyline points="22 8.5 12 15.5 2 8.5"/><line x1="2" y1="15.5" x2="22" y2="8.5"/></svg>
+                      <svg class="icon" width="18" height="18" aria-hidden="true"><use href="assets/icons.svg#poe2"/></svg>
                       Path of Exile 2
                     </button>
                   </div>
