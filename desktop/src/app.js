@@ -5508,7 +5508,7 @@ async function handleSyncPrices() {
   const btn = elements.syncPricesBtn;
   btn.disabled = true;
   const origHTML = btn.innerHTML;
-  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgb(var(--ink-rgb) / 0.2);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.syncing');
+  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgb(var(--ink-rgb) / 0.2);border-top-color:var(--gold);border-radius:50%;corner-shape:round;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.syncing');
 
   try {
     const league = getResolvedActiveLeague();
@@ -5552,7 +5552,7 @@ async function handleTakeSnapshot(type) {
 
   btn.disabled = true;
   const origHTML = btn.innerHTML;
-  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgb(var(--ink-rgb) / 0.2);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.scanning');
+  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgb(var(--ink-rgb) / 0.2);border-top-color:var(--gold);border-radius:50%;corner-shape:round;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.scanning');
 
   try {
     const snapshotId = type;
