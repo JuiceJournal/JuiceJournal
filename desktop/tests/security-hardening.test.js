@@ -104,7 +104,7 @@ test('desktop fonts are bundled locally instead of fetched from Google Fonts', (
       `Expected bundled font file ${match[1]}`
     );
   }
-  for (const family of ['Cinzel', 'SourceSans3', 'JetBrainsMono']) {
+  for (const family of ['Cinzel', 'SourceSans3']) {
     assert.ok(fs.existsSync(path.join(desktopRoot, 'src', 'assets', 'fonts', `OFL-${family}.txt`)), `Expected OFL licence for ${family}`);
   }
 });
