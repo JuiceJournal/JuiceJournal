@@ -3903,7 +3903,7 @@ function updateActiveSessionUI() {
         </div>
         <div class="session-info-item">
           <span class="session-info-label">${window.t('session.status')}</span>
-          <span class="session-info-value" style="color: #2196f3;">${window.t('dashboard.active')}</span>
+          <span class="session-info-value" style="color: var(--blue);">${window.t('dashboard.active')}</span>
         </div>
         <div class="session-info-item">
           <span class="session-info-label">Game</span>
@@ -3931,8 +3931,8 @@ function updateActiveSessionUI() {
     elements.endSessionBtn.classList.remove('hidden');
     if (elements.sessionBadge) {
       elements.sessionBadge.textContent = window.t('dashboard.active');
-      elements.sessionBadge.style.background = 'rgba(61,220,132,0.12)';
-      elements.sessionBadge.style.color = '#3ddc84';
+      elements.sessionBadge.style.background = 'var(--green-dim)';
+      elements.sessionBadge.style.color = 'var(--green)';
     }
   } else {
     elements.activeSession.innerHTML = `<p class="empty-state"><span class="empty-state-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></span>${window.t('dashboard.noActiveMap')}</p>`;
@@ -5160,7 +5160,7 @@ async function handleSyncPrices() {
   const btn = elements.syncPricesBtn;
   btn.disabled = true;
   const origHTML = btn.innerHTML;
-  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgba(255,255,255,0.2);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.syncing');
+  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgb(var(--ink-rgb) / 0.2);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.syncing');
 
   try {
     const league = getResolvedActiveLeague();
@@ -5204,7 +5204,7 @@ async function handleTakeSnapshot(type) {
 
   btn.disabled = true;
   const origHTML = btn.innerHTML;
-  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgba(255,255,255,0.2);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.scanning');
+  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border:2px solid rgb(var(--ink-rgb) / 0.2);border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;display:inline-block;"></span> ' + window.t('stash.scanning');
 
   try {
     const snapshotId = type;
@@ -6100,7 +6100,7 @@ function createSparklineElement(sparkData) {
     return `${x},${y}`;
   }).join(' ');
 
-  const color = values[values.length - 1] >= values[0] ? '#3ddc84' : '#ff5252';
+  const color = values[values.length - 1] >= values[0] ? 'var(--green)' : 'var(--red)';
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('width', String(w));
   svg.setAttribute('height', String(h));
@@ -6108,7 +6108,7 @@ function createSparklineElement(sparkData) {
   const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
   polyline.setAttribute('points', points);
   polyline.setAttribute('fill', 'none');
-  polyline.setAttribute('stroke', color);
+  polyline.style.stroke = color;
   polyline.setAttribute('stroke-width', '1.5');
   polyline.setAttribute('stroke-linecap', 'round');
   polyline.setAttribute('stroke-linejoin', 'round');
