@@ -6,7 +6,7 @@
 
 A farming journal and in-game overlay for **Path of Exile 1** and **Path of Exile 2**. Free, open source and ad-free. Your data stays on your PC.
 
-Juice Journal follows your map runs from the game's log file, recognises the character you are playing, prices your loot with poe.ninja and keeps a journal of every session. An optional overlay shows the current run, map prompts and map results on top of the game.
+Juice Journal follows your map runs from the game's log file, recognises the character you are playing and keeps a journal of your sessions. An optional overlay shows your current run on top of the game and asks whether to start a session when you enter a map.
 
 Inspired by [TLI Tracker](https://github.com/Giboork/TLI-tracker-translated) from the Torchlight Infinite community.
 
@@ -18,23 +18,24 @@ Inspired by [TLI Tracker](https://github.com/Giboork/TLI-tracker-translated) fro
 |---|---|
 | Map and session tracking | Reads the game's `Client.txt` log: map entries and exits, time per map, sessions |
 | Character on Play | Detects when you press Play and which of your characters you are on |
-| In-game overlay | Run status, a "start session?" prompt on map entry, and a result card when a map ends. Off by default (Settings) |
-| Local journal | Sessions, loot, map costs and map results, stored per Path of Exile profile on your PC |
-| Loot pricing | Prices from [poe.ninja](https://poe.ninja), cached in memory; item icons cached on disk |
+| In-game overlay | Run status, a "start session?" prompt on map entry and a character picker after Play. Off by default (Settings) |
+| Local journal | Sessions, loot and map results per Path of Exile account, stored on your PC |
 | Path of Exile sign-in | Official OAuth sign-in on your PC; only reads your character list |
 | Farm types and profit tiers | Tag runs by league content and see how good a run was at a glance |
 | 12 languages | English and Turkish reviewed; others partly translated |
-| OCR loot scan | Experimental: reads loot text from a screenshot (F9) |
+| OCR loot scan | Experimental: F9 or Ctrl+Shift+L takes a screenshot of your main display, reads loot text from it and prices it with [poe.ninja](https://poe.ninja) |
 
-**Profit.** For PoE1, profit comes from loot added to a session. Stash snapshot comparison needs the `account:stashes` API scope, which the built-in sign-in does not request yet, so it is not available for now. GGG offers no stash API for PoE2, so PoE2 profit stays at 0 instead of being guessed. Details: [How tracking works](docs/how-tracking-works.md).
+**Profit is limited for now.** Profit numbers come from loot added by the experimental OCR scan. Stash comparison, the reliable source for PoE1, needs the `account:stashes` API scope, which the built-in sign-in does not request yet, and GGG offers no stash API for PoE2. Ending a PoE1 session with the End button currently records 0 profit. Details: [How tracking works](docs/how-tracking-works.md).
 
 ## Privacy and data
 
-Juice Journal has no accounts and no servers of its own. Everything is stored under `%APPDATA%\Juice Journal\`:
+Juice Journal has no accounts and no servers of its own. Your data is stored under `%APPDATA%\Juice Journal\`:
 
-- `config.json`: settings, your signed-in profile, cached character list, the GGG token (encrypted with Windows data protection)
-- `profiles/<id>/journal.json`: your journal
+- `config.json`: settings, your signed-in profile, map results, the cached character list and the GGG token (encrypted with Windows data protection)
+- `profiles/<id>/journal.json`: your sessions and loot
 - `icon-cache/`: downloaded item icons
+
+The OCR scan's screenshot is processed on your PC and is not uploaded. Its language data (`eng.traineddata`) is downloaded on the first scan and saved in the app's working folder.
 
 The app talks to these hosts only:
 
@@ -43,21 +44,21 @@ The app talks to these hosts only:
 | `www.pathofexile.com`, `api.pathofexile.com` | Sign-in and your character list |
 | `poe.ninja` | Item prices (league and category only) |
 | `web.poecdn.com` | Item icons |
-| `cdn.jsdelivr.net` | OCR language data, on the first OCR scan only |
-| `github.com` | Update checks in installed builds |
-| A backend URL you configure | Only if you self-host the optional backend |
+| `cdn.jsdelivr.net` | OCR language data, first scan only |
+| GitHub | Checking for and downloading updates, installed builds only |
+| The backend URL in Settings → API (default `http://localhost:3001`, your own PC) | League list, Currency page, Farming Hub list and profit-tier rates. Without a self-hosted backend these requests fail and the app uses built-in fallbacks |
 
 There is no telemetry and there are no ads.
 
 ## Fair play
 
-Juice Journal uses only what GGG allows third-party tools to use: the game's log file and the official API.
+Juice Journal reads the game's log file and uses the official Path of Exile API. To find the game and place the overlay, it also checks the Windows process list and the game window's position.
 
 - It does **not** inject into the game, hook it or read its memory.
 - It does **not** send keys or mouse input to the game.
 - It does **not** modify game files or settings.
 
-The overlay is a separate always-on-top window. It never takes keyboard focus, so clicking it leaves the game in the foreground. It shows over **Windowed** and **Windowed Fullscreen**, and over **Fullscreen with DirectX 12**. Use Windowed Fullscreen if it does not appear.
+The overlay is a separate always-on-top window. It never takes keyboard focus, so clicking it leaves the game in the foreground. It shows over **Windowed** and **Windowed Fullscreen**; in our tests it also showed over Path of Exile 2 in **Fullscreen with DirectX 12**. Use Windowed Fullscreen if it does not appear.
 
 ## Getting started
 
@@ -70,9 +71,15 @@ npm install
 npm run dev
 ```
 
-Then sign in with Path of Exile, check the `Client.txt` path in Settings if it was not found, and turn on the overlay in Settings if you want it.
-
 If `npm install` warns that install scripts were skipped (npm 12 does this by default), approve them with `npm install-scripts approve electron koffi` and run `npm install` again; otherwise Electron is not downloaded.
+
+Good to know:
+
+- Sign-in with Path of Exile (**Continue with Path of Exile**) is required before the app does anything. It uses local port `34127`, which must be free.
+- If the log file was not found, set the `Client.txt` path in Settings. Turn on the overlay there too.
+- F9 and Ctrl+Shift+L are global hotkeys for the OCR scan, so the game does not receive them while the app runs. Change them in Settings → Hotkeys.
+- Closing the window keeps the app running in the tray.
+- Deleting `%APPDATA%\Juice Journal\` removes all of your local data.
 
 Build a Windows installer into `desktop/dist/`:
 

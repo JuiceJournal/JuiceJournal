@@ -4,11 +4,11 @@ Juice Journal signs in with your Path of Exile account on your own PC. There is 
 
 ## How it works
 
-1. You click **Sign in with Path of Exile**. The app opens `www.pathofexile.com` in your default browser.
-2. You approve access on GGG's site. GGG then redirects the browser to a short-lived local address on your PC (`http://127.0.0.1:34127/oauth/poe/callback`).
+1. You click **Continue with Path of Exile** (or **Connect Path of Exile** in Settings to reconnect). The app opens `www.pathofexile.com` in your default browser.
+2. You approve access on GGG's site. GGG then redirects the browser to a short-lived local address on your PC (`http://127.0.0.1:34127/oauth/poe/callback`), so port `34127` must be free.
 3. The app exchanges the code for an access token. The flow uses PKCE (S256) and a random `state` value, and it gives up after 3 minutes.
 
-Juice Journal is a *public* OAuth client: it has no client secret, which is how GGG requires desktop apps to work. GGG cannot verify that the app asking for access is the real Juice Journal, so only use builds from the [official releases](https://github.com/JuiceJournal/JuiceJournal/releases) or build it yourself from this repository.
+Juice Journal is a *public* OAuth client: it has no client secret, which is how GGG requires desktop apps to work. GGG cannot verify that the app asking for access is the real Juice Journal, so only use a build you made yourself from this repository (or, once they exist, the [official releases](https://github.com/JuiceJournal/JuiceJournal/releases)).
 
 ## What it can access
 
@@ -22,13 +22,15 @@ GGG does not issue refresh tokens to this kind of client. When the token expires
 
 To remove access, sign out in the app and revoke Juice Journal's access in your pathofexile.com account settings.
 
-## For forks
+## Using your own OAuth client
 
-If you register your own GGG OAuth client, point a build at it with environment variables:
+If you register your own GGG OAuth client, set these environment variables before starting the app. They are read at run time, not built into an installer.
 
 | Variable | Default |
 |---|---|
 | `POE_CLIENT_ID` | `juicejournal` |
 | `POE_REDIRECT_URI` | `http://127.0.0.1:34127/oauth/poe/callback` |
+
+For a fork you distribute, change `DEFAULT_POE_CLIENT_ID` and `POE_CONTACT` in `desktop/src/modules/poeApiClient.js`, the redirect URI in `desktop/main.js` and `build.publish` in `desktop/package.json`.
 
 The optional backend has its own `POE_*` settings; see `backend/.env.example`.

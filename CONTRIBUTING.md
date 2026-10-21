@@ -35,9 +35,12 @@ Optional backend (only for backend changes):
 ```bash
 cd backend
 npm install
-cp .env.example .env
-docker-compose up -d
+cp .env.example .env      # set DB_PASSWORD and JWT_SECRET
+docker-compose up -d postgres
+npm run dev
 ```
+
+`docker-compose up -d` without a service name also starts the API in a container on port 3001 and pgAdmin on port 5050, which conflicts with `npm run dev`.
 
 ## Development Commands
 
@@ -140,7 +143,7 @@ git status --short
 
 ## External Platform Notes
 
-- Path of Exile sign-in uses GGG's public OAuth client flow. Forks with their own client can set `POE_CLIENT_ID` and `POE_REDIRECT_URI` (see `docs/path-of-exile-sign-in.md`).
+- Path of Exile sign-in uses GGG's public OAuth client flow. To use your own client, set `POE_CLIENT_ID` and `POE_REDIRECT_URI` when starting the app, or change the defaults for a fork you distribute (see `docs/path-of-exile-sign-in.md`).
 - Only use documented Path of Exile API endpoints and keep the app read-only towards the game: no injection, no memory reading, no input sent to the game, no writes to game files.
 
 ## Questions

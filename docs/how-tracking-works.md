@@ -1,6 +1,6 @@
 # How tracking works
 
-Juice Journal tracks your farming from files and APIs that Grinding Gear Games makes available to third-party tools. It never touches the game process.
+Juice Journal tracks your farming from the game's log file, the official Path of Exile API and poe.ninja prices. It does not inject into the game, hook it or read its memory. It only looks up the game's process and window, to find the log file and to place the overlay.
 
 ## Maps and sessions: `Client.txt`
 
@@ -20,17 +20,17 @@ When a map starts and there is no active session, the app can ask whether to sta
 
 ## Your characters: Path of Exile API
 
-After you sign in (see [Path of Exile sign-in](path-of-exile-sign-in.md)), the app reads your character list from the official API with the `account:characters` scope. It does this at sign-in and start-up, and again when the log shows a character it does not know yet. Requests stay inside GGG's rate limits and leave room for other tools on the same account.
+After you sign in (see [Path of Exile sign-in](path-of-exile-sign-in.md)), the app reads your character list from the official API with the `account:characters` scope. It does this at sign-in and start-up, when the game starts or switches between PoE1 and PoE2, when a new character first levels up, and once after you press Play if the log has not shown which character you are on. Requests stay inside GGG's rate limits and leave room for other tools on the same account.
 
 ## Your journal: stored on this PC
 
-Sessions, loot entries, map costs and map results are written to a journal file per signed-in profile:
+Sessions and their loot entries are written to a journal file per signed-in profile:
 
 ```
 %APPDATA%\Juice Journal\profiles\<profile-id>\journal.json
 ```
 
-Settings and the cached character list are kept in `%APPDATA%\Juice Journal\config.json`. Nothing in the journal is uploaded anywhere.
+Settings, map results (per profile) and the cached character list are kept in `%APPDATA%\Juice Journal\config.json`. Nothing in the journal is uploaded anywhere.
 
 ## Prices: poe.ninja
 
@@ -38,8 +38,8 @@ Item values come from [poe.ninja](https://poe.ninja). The app asks for prices by
 
 ## Profit
 
-- **Path of Exile 1:** profit is the value of what you gained during a session. It can come from loot you add to the session, or from comparing stash snapshots taken before and after. Stash snapshots need the `account:stashes` API scope. The built-in sign-in only asks for `account:characters`, so stash comparison is not available yet.
-- **Path of Exile 2:** GGG offers no stash API for PoE2. Juice Journal tracks time, maps and characters for PoE2 and shows profit as 0 rather than guessing. An experimental screen-reading (OCR) fallback exists, but its results are not treated as reliable profit.
+- **Path of Exile 1:** the intended source is a stash comparison: snapshots of your stash before and after a session. Snapshots need the `account:stashes` API scope, and the built-in sign-in only asks for `account:characters`, so this is not available yet. Today profit is the value of loot added by the experimental OCR scan, and it is kept only when the session ends automatically as you leave the map. Ending a session with the End button records 0 while there is no stash snapshot.
+- **Path of Exile 2:** GGG offers no stash API for PoE2. Juice Journal tracks time, maps and characters for PoE2; the only profit it can show is the value of loot read by the experimental OCR scan.
 
 ## What Juice Journal does not do
 
