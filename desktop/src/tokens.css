@@ -33,6 +33,20 @@
   --tier-unique: #f0925a;
   --tier-mirror: #ff7ae6;
 
+  /* Farm types, after the colour of each league's content in game */
+  --farm-abyss: #6fd36a;
+  --farm-breach: #d26bf2;
+  --farm-expedition: #4f9dff;
+  --farm-ritual: #9d74ff;
+  --farm-harbinger: #5ad7ef;
+  --farm-essence: #ff6fb0;
+  --farm-delirium: #d9dde8;
+  --farm-blight: #c3d93a;
+  --farm-legion: #ffb02e;
+  --farm-harvest: #3fd1ad;
+  --farm-betrayal: #ff5f57;
+  --farm-incursion: #ff8247;
+
   --plate-deep-rgb: 13 9 8;
   --obsidian-rgb: 18 13 11;
   --plate-rgb: 28 20 17;
