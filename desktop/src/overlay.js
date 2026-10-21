@@ -30,6 +30,50 @@
     if (element) { element.textContent = value || ''; }
   }
 
+  // Game art for the top drop. The overlay CSP only allows local images, so only bundled currencies get an icon.
+  var CURRENCY_ICONS = {
+    poe1: {
+      'Chaos Orb': 'assets/currency/poe1/chaos.png',
+      'Divine Orb': 'assets/currency/poe1/divine.png',
+      'Exalted Orb': 'assets/currency/poe1/exalted.png',
+      'Mirror of Kalandra': 'assets/currency/poe1/mirror.png'
+    },
+    poe2: {
+      'Chaos Orb': 'assets/currency/poe2/chaos.png',
+      'Divine Orb': 'assets/currency/poe2/divine.webp',
+      'Exalted Orb': 'assets/currency/poe2/exalted.png',
+      'Mirror of Kalandra': 'assets/currency/poe2/mirror.png'
+    }
+  };
+
+  // The primary line is a name plus an optional value, so the value can carry the profit tier colour.
+  function setPrimary(name, value) {
+    if (!el.primary) return;
+    var nameSpan = document.createElement('span');
+    nameSpan.className = 'jj-primary-name';
+    nameSpan.textContent = name || '';
+    el.primary.replaceChildren(nameSpan);
+    if (value) {
+      el.primary.append(' ');
+      var valueSpan = document.createElement('span');
+      valueSpan.className = 'jj-value';
+      valueSpan.textContent = value;
+      el.primary.appendChild(valueSpan);
+    }
+  }
+
+  function setSecondary(text, iconSrc) {
+    if (!el.secondary) return;
+    el.secondary.textContent = text || '';
+    if (iconSrc) {
+      var icon = document.createElement('img');
+      icon.src = iconSrc;
+      icon.alt = '';
+      icon.draggable = false;
+      el.secondary.prepend(icon);
+    }
+  }
+
   function escapeHTML(value) {
     return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
@@ -73,8 +117,8 @@
   /* ── Mode: Runtime / Waiting ── */
   function renderRuntimeMode(state) {
     setText(el.kickerLabel, 'Juice Journal');
-    setText(el.primary, state.primaryLine || 'Waiting for game');
-    setText(el.secondary, state.secondaryLine || '');
+    setPrimary(state.primaryLine || 'Waiting for game');
+    setSecondary(state.secondaryLine || '');
     setText(el.meta, state.metaLine || '');
   }
 
@@ -83,21 +127,33 @@
     var result = (state.mapResult && state.mapResult.result) || {};
     var rates = result.profitCurrencyRates || result.currencyRates || (state.mapResult && state.mapResult.profitCurrencyRates) || {};
     var topOutput = Array.isArray(result.topOutputs) && result.topOutputs.length > 0 ? result.topOutputs[0] : null;
+    var icons = CURRENCY_ICONS[result.poeVersion === 'poe2' ? 'poe2' : 'poe1'];
     setText(el.kickerLabel, 'Map Complete');
-    setText(el.primary, (result.farmType || 'Completed Map') + '  ' + formatSignedProfit(result.netProfit, rates));
-    setText(el.secondary, topOutput ? (topOutput.label || '') + ' ' + formatSignedProfit(topOutput.valueDelta, rates) : 'Completed map result');
+    setPrimary(result.farmType || 'Completed Map', formatSignedProfit(result.netProfit, rates));
+    setSecondary(
+      topOutput ? (topOutput.label || '') + ' ' + formatSignedProfit(topOutput.valueDelta, rates) : 'Completed map result',
+      topOutput ? icons[topOutput.label] : null
+    );
     setText(el.meta, formatDuration(result.durationSeconds));
+  }
+
+  function getMapResultTier(state) {
+    var model = root.profitTierModel;
+    var result = (state.mapResult && state.mapResult.result) || {};
+    if (!model || typeof model.getProfitTier !== 'function' || result.profitUnavailable) return '';
+    var rates = result.profitCurrencyRates || result.currencyRates || (state.mapResult && state.mapResult.profitCurrencyRates) || {};
+    return model.getProfitTier(result.netProfit, rates);
   }
 
   /* ── Mode: Start Map Prompt ── */
   function renderStartMapPrompt(state) {
     var prompt = (state.startMapPrompt && typeof state.startMapPrompt === 'object') ? state.startMapPrompt : {};
     setText(el.kickerLabel, 'New Map');
-    setText(el.primary, prompt.mapName || state.primaryLine || 'Unknown Map');
+    setPrimary(prompt.mapName || state.primaryLine || 'Unknown Map');
     var ctxParts = [prompt.farmType || 'Choose farm type'];
     if (prompt.poeVersion) ctxParts.push(prompt.poeVersion.replace(/^poe/i, 'PoE '));
     if (prompt.league) ctxParts.push(prompt.league);
-    setText(el.secondary, ctxParts.filter(Boolean).join(' \u00b7 '));
+    setSecondary(ctxParts.filter(Boolean).join(' \u00b7 '));
     setText(el.meta, 'confirm map start');
   }
 
@@ -137,8 +193,8 @@
   /* ── Mode: Character Prompt ── */
   function renderCharacterPrompt(state) {
     setText(el.kickerLabel, 'Playing as');
-    setText(el.primary, state.primaryLine || '');
-    setText(el.secondary, state.secondaryLine || '');
+    setPrimary(state.primaryLine || '');
+    setSecondary(state.secondaryLine || '');
     setText(el.meta, state.metaLine || '');
   }
 
@@ -186,6 +242,12 @@
       el.card.dataset.overlayState = visibility;
       el.card.dataset.overlayMode = mode;
       el.card.dataset.overlayTone = tone;
+      var profitTier = mode === 'map-result' ? getMapResultTier(state) : '';
+      if (profitTier) {
+        el.card.dataset.profitTier = profitTier;
+      } else {
+        delete el.card.dataset.profitTier;
+      }
 
       if (isExiting) {
         el.card.setAttribute('data-overlay-exiting', 'true');

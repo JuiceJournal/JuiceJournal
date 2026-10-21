@@ -5,17 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none';">
   <title>Juice Journal Overlay</title>
+  <link rel="stylesheet" href="assets/fonts/fonts.css">
+  <link rel="stylesheet" href="tokens.css">
   <style>
+    /* Overlay card (Ember Forge): an opaque forged plate, so it stays readable over any game scene.
+       No backdrop-filter or ambient animation; text is 11px or larger and click targets are 28px or larger. */
     :root {
-      --jj-bg: rgba(6, 8, 12, 0.76);
-      --jj-border: rgba(200, 155, 60, 0.28);
-      --jj-glow: rgba(200, 155, 60, 0.10);
-      --jj-text: #e8dcc8;
-      --jj-muted: #8a7a60;
-      --jj-accent: #c8a84e;
-      --jj-positive: #6dd48d;
-      --jj-negative: #e8746c;
-      --jj-radius: 14px;
+      --card-chamfer: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px);
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; }
@@ -24,10 +20,10 @@
       width: 100%; height: 100%;
       overflow: hidden;
       background: transparent;
-      color: var(--jj-text);
-      font-family: "Inter", "Segoe UI", system-ui, sans-serif;
-      font-size: 12px;
-      line-height: 1.4;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      line-height: 1.35;
       pointer-events: none;
       user-select: none;
       -webkit-user-select: none;
@@ -37,93 +33,69 @@
       display: flex;
       align-items: flex-start;
       justify-content: flex-end;
-      padding: 16px;
+      padding: 8px;
     }
 
-    /* ── Card Shell ── */
+    /* ── Card shell: frame with tone-coloured corner brackets around an opaque plate ── */
     .jj-card {
-      position: relative;
-      min-width: 320px;
-      max-width: 440px;
-      border: 1px solid var(--jj-border);
-      border-radius: var(--jj-radius);
+      --tone: var(--ember-hot);
+      width: 100%;
+      padding: 1px;
+      clip-path: var(--card-chamfer);
       background:
-        radial-gradient(ellipse at 80% 0%, rgba(200, 155, 60, 0.08), transparent 60%),
-        linear-gradient(160deg, rgba(10, 12, 16, 0.82), var(--jj-bg));
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-      box-shadow:
-        0 0 0 1px rgba(200, 155, 60, 0.06),
-        0 8px 32px rgba(0, 0, 0, 0.48),
-        0 0 60px var(--jj-glow);
-      overflow: hidden;
-      transition: transform 250ms cubic-bezier(0.22, 0.84, 0.24, 1),
-                  opacity 200ms ease;
+        linear-gradient(135deg, var(--tone) 0 18px, transparent 18px) top left / 50% 50% no-repeat,
+        linear-gradient(225deg, var(--tone) 0 18px, transparent 18px) top right / 50% 50% no-repeat,
+        linear-gradient(45deg, var(--tone) 0 18px, transparent 18px) bottom left / 50% 50% no-repeat,
+        linear-gradient(315deg, var(--tone) 0 18px, transparent 18px) bottom right / 50% 50% no-repeat,
+        var(--line-strong);
     }
 
-    .jj-card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      background: linear-gradient(105deg, rgba(200, 155, 60, 0.10), transparent 40%, rgba(255, 255, 255, 0.03));
-      pointer-events: none;
+    .jj-content {
+      display: grid;
+      gap: 4px;
+      padding: 9px 13px 10px;
+      clip-path: var(--card-chamfer);
+      background: linear-gradient(180deg, rgb(var(--plate-rgb) / 0.97), rgb(var(--obsidian-rgb) / 0.97));
     }
 
-    /* ── States ── */
+    /* ── States and tones ── */
     [data-overlay-state="hidden"] { display: none; }
+    [data-overlay-state="waiting"] { --tone: var(--smoke); }
 
-    [data-overlay-state="waiting"] {
-      opacity: 0.7;
-      --jj-accent: #8aadd4;
-      --jj-border: rgba(138, 173, 212, 0.22);
-      --jj-glow: rgba(138, 173, 212, 0.06);
-    }
+    [data-overlay-mode="map-result"][data-overlay-tone="positive"] { --tone: var(--gain); }
+    [data-overlay-mode="map-result"][data-overlay-tone="negative"] { --tone: var(--loss); }
+    [data-overlay-mode="map-result"][data-profit-tier="loss"] { --tone: var(--loss); }
+    [data-overlay-mode="map-result"][data-profit-tier="normal"] { --tone: var(--tier-normal); }
+    [data-overlay-mode="map-result"][data-profit-tier="magic"] { --tone: var(--tier-magic); }
+    [data-overlay-mode="map-result"][data-profit-tier="rare"] { --tone: var(--tier-rare); }
+    [data-overlay-mode="map-result"][data-profit-tier="unique"] { --tone: var(--tier-unique); }
+    [data-overlay-mode="map-result"][data-profit-tier="mirror"] { --tone: var(--tier-mirror); }
 
-    /* ── Slide animation from right ── */
+    [data-overlay-mode="start-map-prompt"],
+    [data-overlay-mode="character-prompt"] { --tone: var(--brass); }
+
+    /* ── Short enter/exit for the result card: transform and opacity only ── */
     [data-overlay-mode="map-result"][data-overlay-state="visible"] {
-      animation: jj-slide-in 250ms cubic-bezier(0.22, 0.84, 0.24, 1) both;
+      animation: jj-slide-in var(--duration-enter) var(--ease-out) both;
     }
 
     [data-overlay-exiting="true"] {
-      animation: jj-slide-out 200ms ease-in both;
+      animation: jj-slide-out var(--duration-fast) ease-in both;
     }
 
     @keyframes jj-slide-in {
-      from { opacity: 0; transform: translateX(60px); }
+      from { opacity: 0; transform: translateX(24px); }
       to   { opacity: 1; transform: translateX(0); }
     }
 
     @keyframes jj-slide-out {
       from { opacity: 1; transform: translateX(0); }
-      to   { opacity: 0; transform: translateX(60px); }
+      to   { opacity: 0; transform: translateX(24px); }
     }
 
-    /* ── Tone variants ── */
-    [data-overlay-mode="map-result"][data-overlay-tone="positive"] {
-      --jj-accent: var(--jj-positive);
-      --jj-border: rgba(109, 212, 141, 0.30);
-      --jj-glow: rgba(109, 212, 141, 0.08);
-    }
-
-    [data-overlay-mode="map-result"][data-overlay-tone="negative"] {
-      --jj-accent: var(--jj-negative);
-      --jj-border: rgba(232, 116, 108, 0.30);
-      --jj-glow: rgba(232, 116, 108, 0.08);
-    }
-
-    [data-overlay-mode="start-map-prompt"][data-overlay-state="visible"],
-    [data-overlay-mode="character-prompt"][data-overlay-state="visible"] {
-      --jj-accent: #d4af60;
-      --jj-border: rgba(212, 175, 96, 0.38);
-    }
-
-    /* ── Content ── */
-    .jj-content {
-      position: relative;
-      display: grid;
-      gap: 8px;
-      padding: 14px 16px;
+    @media (prefers-reduced-motion: reduce) {
+      [data-overlay-mode="map-result"][data-overlay-state="visible"],
+      [data-overlay-exiting="true"] { animation: none; }
     }
 
     /* ── Header row ── */
@@ -132,26 +104,27 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
+      min-height: 18px;
     }
 
     .jj-label {
       display: inline-flex;
       align-items: center;
       gap: 7px;
-      color: var(--jj-accent);
-      font-size: 9px;
-      font-weight: 700;
-      letter-spacing: 0.22em;
+      color: var(--tone);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
+      white-space: nowrap;
     }
 
     .jj-label::before {
       content: "";
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
+      width: 7px;
+      height: 7px;
       background: currentColor;
-      box-shadow: 0 0 10px currentColor;
+      transform: rotate(45deg);
     }
 
     .jj-actions {
@@ -160,83 +133,118 @@
       pointer-events: auto;
     }
 
-    .jj-btn {
-      border: 1px solid rgba(200, 155, 60, 0.25);
-      border-radius: 999px;
-      background: rgba(8, 10, 14, 0.70);
-      color: var(--jj-text);
-      padding: 3px 10px;
-      font: inherit;
-      font-size: 9px;
-      font-weight: 600;
-      letter-spacing: 0.10em;
-      text-transform: uppercase;
+    .jj-btn,
+    .jj-form-btn,
+    .jj-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 28px;
+      border: none;
+      clip-path: var(--chamfer-sm);
+      background: var(--plate-raised);
+      box-shadow: inset 0 0 0 1px var(--line-strong);
+      color: var(--text);
       cursor: pointer;
       pointer-events: auto;
-      transition: border-color 120ms, background 120ms;
+      font-family: var(--font);
       white-space: nowrap;
+      transition: background-color var(--duration-fast), box-shadow var(--duration-fast);
     }
 
-    .jj-btn:hover {
-      border-color: rgba(200, 155, 60, 0.55);
-      background: rgba(12, 14, 18, 0.88);
+    .jj-btn {
+      padding: 0 10px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .jj-btn:hover,
+    .jj-form-btn:hover,
+    .jj-chip:hover {
+      box-shadow: inset 0 0 0 1px var(--gold-dim);
     }
 
     .jj-btn[aria-pressed="true"] {
-      border-color: rgba(232, 220, 200, 0.50);
-      background: rgba(200, 155, 60, 0.20);
-    }
-
-    .jj-btn-dismiss {
-      border-color: rgba(232, 116, 108, 0.25);
+      color: var(--text-bright);
+      background: rgb(var(--brass-rgb) / 0.22);
+      box-shadow: inset 0 0 0 1px var(--brass);
     }
 
     .jj-btn-dismiss:hover {
-      border-color: rgba(232, 116, 108, 0.55);
+      box-shadow: inset 0 0 0 1px var(--loss);
     }
 
     .jj-btn[hidden] { display: none; }
 
-    /* ── Primary line ── */
+    /* ── Primary line: name in the display face, value in tabular figures ── */
     .jj-primary {
-      font-size: 15px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+      color: var(--text-bright);
+      font-family: var(--font-display);
+      font-size: 17px;
       font-weight: 700;
-      letter-spacing: 0.01em;
       line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .jj-primary-name {
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
-      white-space: nowrap;
+    }
+
+    .jj-value {
+      flex-shrink: 0;
+      color: var(--tone);
+      font-family: var(--font);
+      font-size: 20px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
     }
 
     /* ── Secondary row ── */
     .jj-secondary-row {
       display: flex;
-      align-items: baseline;
+      align-items: center;
       justify-content: space-between;
       gap: 12px;
-      color: var(--jj-muted);
-      font-size: 11px;
+      color: var(--text-secondary);
+      font-size: 12.5px;
     }
 
     .jj-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
+    .jj-secondary img {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
     .jj-meta {
       flex-shrink: 0;
-      color: var(--jj-accent);
+      color: var(--text-secondary);
       font-variant-numeric: tabular-nums;
     }
 
-    /* ── Start Map Form ── */
+    /* ── Prompt forms (mouse only: the overlay never takes focus) ── */
     .jj-form {
       display: grid;
-      gap: 10px;
-      margin-top: 6px;
+      gap: 8px;
+      margin-top: 4px;
       pointer-events: auto;
     }
 
@@ -244,11 +252,11 @@
 
     .jj-field {
       display: grid;
-      gap: 4px;
-      color: var(--jj-muted);
-      font-size: 8px;
-      font-weight: 700;
-      letter-spacing: 0.18em;
+      gap: 6px;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
     }
 
@@ -261,20 +269,18 @@
     }
 
     .jj-chip {
-      border: 1px solid rgba(212, 175, 96, 0.32);
-      border-radius: 999px;
-      background: rgba(4, 5, 7, 0.88);
-      color: var(--jj-text);
-      cursor: pointer;
-      font: 600 12px "Inter", "Segoe UI", system-ui, sans-serif;
-      letter-spacing: 0.02em;
-      padding: 6px 10px;
-      transition: border-color 120ms, background 120ms;
+      padding: 0 11px;
+      color: var(--text-secondary);
+      font-size: 12.5px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      text-transform: none;
     }
 
     .jj-chip[aria-pressed="true"] {
-      border-color: rgba(232, 220, 200, 0.72);
-      background: rgba(212, 175, 96, 0.22);
+      color: var(--text-bright);
+      background: rgb(var(--ember-rgb) / 0.2);
+      box-shadow: inset 0 0 0 1px var(--ember-hot);
     }
 
     .jj-form-actions {
@@ -284,42 +290,27 @@
     }
 
     .jj-form-btn {
-      border: 1px solid rgba(212, 175, 96, 0.35);
-      border-radius: 999px;
-      background: rgba(8, 10, 14, 0.78);
-      color: var(--jj-text);
-      cursor: pointer;
-      font: 700 10px "Inter", "Segoe UI", system-ui, sans-serif;
-      letter-spacing: 0.12em;
-      padding: 8px 14px;
+      min-height: 32px;
+      padding: 0 14px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
-      transition: background 120ms, border-color 120ms;
-    }
-
-    .jj-form-btn:hover {
-      border-color: rgba(212, 175, 96, 0.65);
     }
 
     .jj-form-btn.primary {
-      background: linear-gradient(135deg, #c8a84e, #8b6914);
-      color: #0e0a04;
-      border-color: transparent;
+      background: linear-gradient(180deg, var(--ember-hot), var(--ember-deep));
+      box-shadow: none;
+      color: var(--on-accent);
     }
 
     .jj-form-btn.primary:hover {
-      background: linear-gradient(135deg, #d4b860, #9e7a1e);
+      filter: brightness(1.08);
     }
 
     .jj-form-btn:disabled {
       cursor: wait;
-      opacity: 0.60;
-    }
-
-    /* ── Profit highlight ── */
-    .jj-profit {
-      font-size: 15px;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
+      opacity: 0.6;
     }
   </style>
 </head>
@@ -361,6 +352,7 @@
   </main>
   <script src="modules/overlayStateModel.js"></script>
   <script src="modules/profitCurrencyModel.js"></script>
+  <script src="modules/profitTierModel.js"></script>
   <script src="overlay.js"></script>
 </body>
 </html>
