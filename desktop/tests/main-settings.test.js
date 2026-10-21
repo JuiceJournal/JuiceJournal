@@ -1164,3 +1164,60 @@ test('language migration backfills english only when no saved locale exists', ()
     ['_langMigrated', true]
   ]);
 });
+
+test('setupLogParser forwards game session events from Client.txt to the renderer', () => {
+  const { EventEmitter } = require('node:events');
+  const messages = [];
+  const storeState = {
+    poePath: 'F:/SteamLibrary/steamapps/common/Path of Exile 2/logs/Client.txt',
+    lastDetectedPoeVersion: 'poe2'
+  };
+
+  class FakeLogParser extends EventEmitter {
+    constructor(logPath, options) {
+      super();
+      this.logPath = logPath;
+      this.poeVersion = options.poeVersion;
+    }
+
+    start() { }
+
+    bootstrapFromTail() {
+      return false;
+    }
+  }
+
+  const context = loadFunctions(['setupLogParser'], {
+    store: {
+      get(key) {
+        return storeState[key];
+      },
+      set(key, value) {
+        storeState[key] = value;
+      }
+    },
+    require: () => ({ existsSync: () => true }),
+    DEFAULT_POE_LOG_PATH: 'C:/Client.txt',
+    LogParser: FakeLogParser,
+    normalizePoeVersion: (version) => version || null,
+    mainWindow: {
+      webContents: {
+        send(channel, payload) {
+          messages.push({ channel, payload });
+        }
+      }
+    }
+  });
+
+  context.setupLogParser();
+  context.logParser.emit('gameSessionEntered', { poeVersion: 'poe2' });
+  context.logParser.emit('gameSessionLeft', { poeVersion: 'poe2', reason: 'character_select' });
+  context.logParser.emit('characterLogLine', { poeVersion: 'poe2', name: 'ExampleRanger', kind: 'level_up' });
+
+  assert.equal(context.logParser.poeVersion, 'poe2');
+  assert.deepEqual(messages, [
+    { channel: 'game-session-entered', payload: { poeVersion: 'poe2' } },
+    { channel: 'game-session-left', payload: { poeVersion: 'poe2', reason: 'character_select' } },
+    { channel: 'character-log-line', payload: { poeVersion: 'poe2', name: 'ExampleRanger', kind: 'level_up' } }
+  ]);
+});

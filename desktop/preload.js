@@ -122,6 +122,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onGameClosed: (callback) => {
     ipcRenderer.on('game-closed', (event, data) => callback(data));
   },
+  onGameSessionEntered: (callback) => {
+    ipcRenderer.on('game-session-entered', (event, data) => callback(data));
+  },
+  onGameSessionLeft: (callback) => {
+    ipcRenderer.on('game-session-left', (event, data) => callback(data));
+  },
+  onCharacterLogLine: (callback) => {
+    ipcRenderer.on('character-log-line', (event, data) => callback(data));
+  },
   onAppUpdateStateChanged: (callback) => {
     ipcRenderer.on('app-update-state-changed', (event, data) => callback(data));
   },
@@ -138,6 +147,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'loot-added', 'pending-loot-updated', 'pending-sync-updated',
       'audit-trail-updated', 'navigate', 'stash-snapshot-taken',
       'profit-calculated', 'game-version-changed', 'game-closed',
+      'game-session-entered', 'game-session-left', 'character-log-line',
       'app-update-state-changed',
       'start-map-prompt-overlay-result'
     ];

@@ -3266,6 +3266,21 @@ function setupLogParser() {
     }
   });
 
+  // Play, back to character select, and character names from level-up/death lines (party members included);
+  // the renderer matches names against the account's own characters.
+  const gameSessionChannels = {
+    gameSessionEntered: 'game-session-entered',
+    gameSessionLeft: 'game-session-left',
+    characterLogLine: 'character-log-line'
+  };
+  for (const [eventName, channel] of Object.entries(gameSessionChannels)) {
+    logParser.on(eventName, (data) => {
+      if (mainWindow) {
+        mainWindow.webContents.send(channel, data);
+      }
+    });
+  }
+
   logParser.start();
   try {
     logParser.bootstrapFromTail({

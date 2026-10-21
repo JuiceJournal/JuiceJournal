@@ -12,6 +12,14 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const { EventEmitter } = require('events');
+const { StringDecoder } = require('string_decoder');
+const { createGameSessionState, applyGameSessionLine } = require('./gameSessionModel');
+
+const GAME_SESSION_EVENT_NAMES = {
+  session_entered: 'gameSessionEntered',
+  session_left: 'gameSessionLeft',
+  character_line: 'characterLogLine'
+};
 
 const SAFE_AREA_NAMES = new Set([
   'hideout',
@@ -68,6 +76,8 @@ class LogParser extends EventEmitter {
     this.tail = null;
     this.isRunning = false;
     this.lastPosition = 0;
+    this.partialLine = '';
+    this.decoder = new StringDecoder('utf8');
     this.watchInterval = null;
     this.pendingInstanceExitTimer = null;
     this.pendingInstanceExitData = null;
@@ -76,6 +86,9 @@ class LogParser extends EventEmitter {
     this.currentMap = null;
     this.mapStartTime = null;
     this.currentMapIdentity = null;
+
+    // Login -> character select -> in game, from Client.txt (see gameSessionModel)
+    this.gameSession = createGameSessionState();
   }
 
   /**
@@ -98,6 +111,7 @@ class LogParser extends EventEmitter {
     // Read the file size and start from the last position.
     const stats = fs.statSync(this.logPath);
     this.lastPosition = stats.size;
+    this.resetLineBuffer();
 
     // Watch the file.
     this.watchInterval = setInterval(() => {
@@ -135,6 +149,7 @@ class LogParser extends EventEmitter {
       // Restart from the beginning if the file shrank during log rotation.
       if (stats.size < this.lastPosition) {
         this.lastPosition = 0;
+        this.resetLineBuffer();
       }
 
       // Exit early when there is no new data.
@@ -151,10 +166,7 @@ class LogParser extends EventEmitter {
 
       this.lastPosition = stats.size;
 
-      // Split the buffer into lines.
-      const lines = buffer.toString().split('\n');
-
-      for (const line of lines) {
+      for (const line of this.takeCompleteLines(buffer)) {
         if (line.trim()) {
           this.parseLine(line.trim());
         }
@@ -168,10 +180,27 @@ class LogParser extends EventEmitter {
     }
   }
 
+  resetLineBuffer() {
+    this.partialLine = '';
+    this.decoder = new StringDecoder('utf8');
+  }
+
+  /**
+   * Split newly read bytes into complete lines. The game can flush a line in two writes, so the
+   * unterminated tail (and any split UTF-8 sequence) is held until the next read.
+   */
+  takeCompleteLines(buffer) {
+    const lines = (this.partialLine + this.decoder.write(buffer)).split('\n');
+    this.partialLine = lines.pop();
+    return lines;
+  }
+
   /**
    * Parse a single line
    */
   parseLine(line) {
+    this.trackGameSession(line);
+
     if (this.reconcilePendingInstanceExit(line)) {
       return;
     }
@@ -332,6 +361,19 @@ class LogParser extends EventEmitter {
           return;
         }
       }
+    }
+  }
+
+  trackGameSession(line) {
+    const { state, events } = applyGameSessionLine(this.gameSession, line);
+    this.gameSession = state;
+    if (events.length === 0) {
+      return;
+    }
+
+    const timestamp = this.extractTimestamp(line);
+    for (const { type, ...data } of events) {
+      this.emit(GAME_SESSION_EVENT_NAMES[type], { ...data, poeVersion: this.poeVersion, timestamp });
     }
   }
 
@@ -559,6 +601,9 @@ class LogParser extends EventEmitter {
         probe.parseLine(String(line).trim());
       }
     }
+
+    // Resume the session phase without replaying its events, so a Play after startup is still detected.
+    this.gameSession = probe.gameSession;
 
     if (!probe.currentMap || !lastEntry) {
       return false;

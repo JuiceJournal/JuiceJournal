@@ -1,5 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const LogParser = require('../src/modules/logParser');
 
@@ -227,4 +230,69 @@ test('log parser still exits PoE1 maps on unresolved instance changes after debo
   assert.equal(exits[0].mapName, 'Dunes Map');
   assert.equal(exits[0].location, 'instance_change');
   assert.equal(parser.getCurrentMap().mapName, null);
+});
+
+test('log parser emits game session events with the parser version and log timestamp', () => {
+  const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
+  const events = [];
+
+  parser.on('gameSessionEntered', (payload) => events.push(['entered', payload]));
+  parser.on('gameSessionLeft', (payload) => events.push(['left', payload]));
+  parser.on('characterLogLine', (payload) => events.push(['character', payload]));
+
+  parser.parseLine('2026/10/21 13:10:03 9555953 4f3e4d2c [INFO Client 46216] Async connecting to mil.login.pathofexile2.com:21270');
+  parser.parseLine('2026/10/21 13:10:52 9604750 2d8e64dd [DEBUG Client 46216] Got Instance Details from login server');
+  parser.parseLine('2026/10/21 13:11:30 9642000 3ef23348 [INFO Client 46216] : ExampleRanger (Deadeye) is now level 95');
+  parser.parseLine('2026/10/21 13:12:53 9725000 4f3e4d2c [INFO Client 46216] Async connecting to mil.login.pathofexile2.com:21270');
+
+  assert.deepEqual(events.map(([kind]) => kind), ['entered', 'character', 'left']);
+  assert.equal(events[0][1].poeVersion, 'poe2');
+  assert.equal(events[0][1].timestamp.getTime(), new Date('2026-10-21 13:10:52').getTime());
+  assert.deepEqual(
+    { name: events[1][1].name, className: events[1][1].className, level: events[1][1].level, kind: events[1][1].kind },
+    { name: 'ExampleRanger', className: 'Deadeye', level: 95, kind: 'level_up' }
+  );
+  assert.equal(events[2][1].reason, 'character_select');
+});
+
+test('log parser resumes the session phase from the startup tail without replaying its events', () => {
+  const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
+  const entered = [];
+
+  parser.on('gameSessionEntered', (payload) => entered.push(payload));
+
+  parser.bootstrapFromRecentLines([
+    '2026/10/21 13:09:53 ***** LOG FILE OPENING *****',
+    '2026/10/21 13:10:03 9555953 4f3e4d2c [INFO Client 46216] Async connecting to mil.login.pathofexile2.com:21270'
+  ]);
+  assert.deepEqual(entered, []);
+
+  parser.parseLine('2026/10/21 13:10:52 9604750 2d8e64dd [DEBUG Client 46216] Got Instance Details from login server');
+  assert.equal(entered.length, 1);
+});
+
+test('log parser joins a Client.txt line that was flushed in two writes', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jj-log-'));
+  const logPath = path.join(dir, 'Client.txt');
+  fs.writeFileSync(logPath, '');
+
+  const parser = new LogParser(logPath, { poeVersion: 'poe2' });
+  const entered = [];
+  parser.on('gameSessionEntered', (payload) => entered.push(payload));
+  parser.start();
+  clearInterval(parser.watchInterval);
+
+  try {
+    fs.appendFileSync(logPath, '2026/10/21 13:10:03 1 4f3e4d2c [INFO Client 1] Async connecting to mil.login.pathofexile2.com:21270\r\n');
+    fs.appendFileSync(logPath, '2026/10/21 13:10:52 2 2d8e64dd [DEBUG Client 1] Got Instance Det');
+    await parser.readNewLines();
+    assert.equal(entered.length, 0);
+
+    fs.appendFileSync(logPath, 'ails from login server\r\n');
+    await parser.readNewLines();
+    assert.equal(entered.length, 1);
+  } finally {
+    parser.stop();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
