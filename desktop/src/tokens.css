@@ -82,14 +82,17 @@
   --orange: var(--warn);
   --orange-dim: rgb(var(--warn-rgb) / 0.12);
 
-  /* Shape and motion */
-  --radius-sm: 6px;
-  --radius: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
+  /* Shape: every corner is a 45deg bevel, so borders, shadows and focus rings follow the cut.
+     xs for chips and slots, sm for controls and rows, base for panels, lg for modal and overlay frames.
+     --bracket is how far a card's corner bracket runs past the bevel. */
+  --corner-shape: bevel;
+  --bevel-xs: 3px;
+  --bevel-sm: 5px;
+  --bevel: 8px;
+  --bevel-lg: 10px;
+  --bracket: 16px;
 
-  --chamfer-sm: polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px);
-
+  /* Motion */
   --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
