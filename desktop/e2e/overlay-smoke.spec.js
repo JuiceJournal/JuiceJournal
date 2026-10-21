@@ -529,7 +529,7 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     await expect(page.locator('#stash-tracker-card')).toBeVisible();
     await expect(page.locator('#active-session')).toBeVisible();
 
-    const overlayWindow = await waitForOverlayWindow(electronApp);
+    // The overlay window is created lazily once there is visible state to show.
     await showRuntimeOverlayPreview(page, {
       summary: {
         status: 'active',
@@ -538,6 +538,7 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
         totalActiveSeconds: 60
       }
     });
+    const overlayWindow = await waitForOverlayWindow(electronApp);
 
     await expect(overlayWindow.locator('[data-overlay-state="visible"]')).toBeVisible();
     await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText(SMOKE_USER.selectedCharacter.name);
@@ -586,6 +587,27 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     await overlayWindow.locator('[data-overlay-dismiss]').click();
     await expect(overlayWindow.locator('main[data-overlay-mode="runtime"]')).toBeVisible({ timeout: 2000 });
     await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText(SMOKE_USER.selectedCharacter.name);
+
+    // The start-map prompt is mouse-only: no text input, farm type picked from buttons, map name from the prompt.
+    await page.evaluate(() => {
+      window.__overlayPromptResults = [];
+      window.electronAPI.onStartMapPromptOverlayResult((result) => window.__overlayPromptResults.push(result));
+      return window.electronAPI.showStartMapPromptOverlay({
+        mapName: 'Cemetery Map',
+        farmTypeOptions: [{ id: 'ritual', label: 'Ritual' }, { id: 'expedition', label: 'Expedition' }]
+      });
+    });
+    await expect(overlayWindow.locator('main[data-overlay-mode="start-map-prompt"]')).toBeVisible();
+    await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText('Cemetery Map');
+    await expect(overlayWindow.locator('[data-overlay-start-form] input, [data-overlay-start-form] select')).toHaveCount(0);
+    await expect(overlayWindow.locator('[data-farm-type-id]')).toHaveCount(3);
+    await overlayWindow.locator('[data-farm-type-id="expedition"]').click();
+    await expect(overlayWindow.locator('[data-farm-type-id="expedition"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(overlayWindow.locator('[data-farm-type-id=""]')).toHaveAttribute('aria-pressed', 'false');
+    await overlayWindow.locator('[data-overlay-start-submit]').click();
+    await expect.poll(() => page.evaluate(() => window.__overlayPromptResults)).toEqual([
+      { action: 'confirm', mapName: 'Cemetery Map', farmTypeId: 'expedition', source: 'map-detected' }
+    ]);
   } catch (error) {
     testError = error;
   } finally {

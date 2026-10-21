@@ -8,15 +8,18 @@
     secondary: document.querySelector('[data-overlay-secondary]'),
     meta: document.querySelector('[data-overlay-meta]'),
     startForm: document.querySelector('[data-overlay-start-form]'),
-    startMapName: document.querySelector('[data-overlay-start-map-name]'),
-    startFarmType: document.querySelector('[data-overlay-start-farm-type]'),
+    startFarmTypes: document.querySelector('[data-overlay-start-farm-types]'),
     startSubmit: document.querySelector('[data-overlay-start-submit]'),
     startCancel: document.querySelector('[data-overlay-start-cancel]')
   };
 
-  var passthroughEnabled = true;
   var lastRenderedMode = 'runtime';
   var animFrameId = null;
+  // The overlay never takes focus, so the prompt is mouse-only: the map name comes from the prompt state
+  // and the farm type is picked from buttons.
+  var startPromptKey = null;
+  var renderedChipsKey = null;
+  var selectedFarmTypeId = '';
 
   function setText(element, value) {
     if (element) { element.textContent = value || ''; }
@@ -24,15 +27,6 @@
 
   function escapeHTML(value) {
     return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  function setPointerPassthrough(ignore) {
-    var nextValue = ignore !== false;
-    if (passthroughEnabled === nextValue) return;
-    passthroughEnabled = nextValue;
-    if (typeof root.electronAPI && typeof root.electronAPI.setOverlayPointerPassthrough === 'function') {
-      root.electronAPI.setOverlayPointerPassthrough(nextValue).catch(function () {});
-    }
   }
 
   function normalizeFarmTypeOptions(value) {
@@ -108,16 +102,31 @@
     el.startForm.hidden = !showForm;
     if (!showForm) return;
     var prompt = (state.startMapPrompt && typeof state.startMapPrompt === 'object') ? state.startMapPrompt : {};
-    if (el.startMapName && document.activeElement !== el.startMapName) {
-      el.startMapName.value = prompt.mapName || state.primaryLine || 'Unknown Map';
+    var opts = normalizeFarmTypeOptions(prompt.farmTypeOptions);
+    // A new prompt (entering the prompt mode, or a different map) resets the selection to its default.
+    var promptKey = String(prompt.mapName || '') + '|' + String(prompt.farmTypeId || '');
+    if (lastRenderedMode !== 'start-map-prompt' || promptKey !== startPromptKey) {
+      startPromptKey = promptKey;
+      renderedChipsKey = null;
+      selectedFarmTypeId = opts.some(function (e) { return e.id === prompt.farmTypeId; }) ? prompt.farmTypeId : '';
     }
-    if (el.startFarmType) {
-      var opts = normalizeFarmTypeOptions(prompt.farmTypeOptions);
-      var selId = opts.some(function (e) { return e.id === prompt.farmTypeId; }) ? prompt.farmTypeId : '';
-      el.startFarmType.innerHTML = '<option value="">No farm type</option>' +
-        opts.map(function (e) { return '<option value="' + escapeHTML(e.id) + '">' + escapeHTML(e.label) + '</option>'; }).join('');
-      el.startFarmType.value = selId;
+    // Rebuild the buttons only when they change, so state pushes cannot swallow a click in progress.
+    var chipsKey = JSON.stringify(opts);
+    if (el.startFarmTypes && chipsKey !== renderedChipsKey) {
+      renderedChipsKey = chipsKey;
+      el.startFarmTypes.innerHTML = [{ id: '', label: 'No farm type' }].concat(opts).map(function (e) {
+        return '<button class="jj-chip" type="button" data-farm-type-id="' + escapeHTML(e.id) + '" aria-pressed="' +
+          (e.id === selectedFarmTypeId ? 'true' : 'false') + '">' + escapeHTML(e.label) + '</button>';
+      }).join('');
     }
+  }
+
+  function selectFarmType(farmTypeId) {
+    selectedFarmTypeId = farmTypeId;
+    if (!el.startFarmTypes) return;
+    Array.prototype.forEach.call(el.startFarmTypes.querySelectorAll('[data-farm-type-id]'), function (button) {
+      button.setAttribute('aria-pressed', button.getAttribute('data-farm-type-id') === farmTypeId ? 'true' : 'false');
+    });
   }
 
   function clearExitingAnimation() {
@@ -168,9 +177,6 @@
       el.pin.hidden = !showPin;
       el.pin.setAttribute('aria-pressed', showPin && (state.mapResult && state.mapResult.pinned) ? 'true' : 'false');
       if (el.dismiss) el.dismiss.hidden = !showPin;
-      if (!showPin) {
-        setPointerPassthrough(mode === 'start-map-prompt' && visibility !== 'hidden' ? false : true);
-      }
     }
 
     lastRenderedMode = mode;
@@ -178,14 +184,12 @@
 
   /* ── IPC helpers ── */
   function getStartMapPromptPayload() {
-    return {
-      mapName: String(el.startMapName ? el.startMapName.value : '').trim() || 'Unknown Map',
-      farmTypeId: String(el.startFarmType ? el.startFarmType.value : '').trim() || null
-    };
+    return { farmTypeId: selectedFarmTypeId || null };
   }
 
   function setStartMapPromptBusy(busy) {
-    [el.startMapName, el.startFarmType, el.startSubmit, el.startCancel].filter(Boolean).forEach(function (e) { e.disabled = busy; });
+    var chips = el.startFarmTypes ? Array.prototype.slice.call(el.startFarmTypes.querySelectorAll('button')) : [];
+    chips.concat([el.startSubmit, el.startCancel]).filter(Boolean).forEach(function (e) { e.disabled = busy; });
   }
 
   /* ── Event bindings ── */
@@ -193,7 +197,7 @@
     el.pin.addEventListener('click', function () {
       if (typeof root.electronAPI === 'undefined' || typeof root.electronAPI.toggleMapResultOverlayPin !== 'function') return;
       el.pin.disabled = true;
-      root.electronAPI.toggleMapResultOverlayPin().finally(function () { el.pin.disabled = false; setPointerPassthrough(true); });
+      root.electronAPI.toggleMapResultOverlayPin().finally(function () { el.pin.disabled = false; });
     });
   }
 
@@ -201,7 +205,14 @@
     el.dismiss.addEventListener('click', function () {
       if (typeof root.electronAPI === 'undefined' || typeof root.electronAPI.dismissMapResultOverlay !== 'function') return;
       el.dismiss.disabled = true;
-      root.electronAPI.dismissMapResultOverlay().finally(function () { el.dismiss.disabled = false; setPointerPassthrough(true); });
+      root.electronAPI.dismissMapResultOverlay().finally(function () { el.dismiss.disabled = false; });
+    });
+  }
+
+  if (el.startFarmTypes) {
+    el.startFarmTypes.addEventListener('click', function (event) {
+      var button = event.target && event.target.closest ? event.target.closest('[data-farm-type-id]') : null;
+      if (button) selectFarmType(button.getAttribute('data-farm-type-id') || '');
     });
   }
 
@@ -222,25 +233,12 @@
     });
   }
 
-  /* ── Pointer passthrough ── */
-  root.addEventListener('mousemove', function (event) {
-    var isInteractive = el.card && el.card.dataset.overlayMode === 'start-map-prompt' && el.card.dataset.overlayState !== 'hidden';
-    if (isInteractive) { setPointerPassthrough(false); return; }
-    if (!el.pin || el.pin.hidden) { setPointerPassthrough(true); return; }
-    var btns = [el.pin, el.dismiss].filter(Boolean).filter(function (b) { return !b.hidden; });
-    var hovering = btns.some(function (b) {
-      var r = b.getBoundingClientRect();
-      return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
-    });
-    setPointerPassthrough(!hovering);
-  });
-
-  root.addEventListener('mouseleave', function () {
-    setPointerPassthrough(true);
-  });
-
   /* ── Public API ── */
   root.JuiceOverlay = { renderState: renderState };
+
+  if (root.electronAPI && typeof root.electronAPI.onOverlayState === 'function') {
+    root.electronAPI.onOverlayState(renderState);
+  }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () { renderState(root.__JUICE_OVERLAY_INITIAL_STATE__ || null); }, { once: true });

@@ -29,6 +29,7 @@ const PoeApiClient = require('./src/modules/poeApiClient');
 const PriceService = require('./src/modules/priceService');
 const StashAnalyzer = require('./src/modules/stashAnalyzer');
 const GameDetector = require('./src/modules/gameDetector');
+const win32Probe = require('./src/modules/win32Probe');
 const {
   createRuntimeSessionState,
   applyRuntimeEvent,
@@ -56,6 +57,7 @@ const APP_NAME = 'Juice Journal';
 const APP_ID = 'JuiceJournal.Desktop';
 const DEFAULT_STRATEGY_PRESETS = ['Strongbox', 'Legion', 'Ritual', 'Expedition', 'Harvest', 'Boss Rush'];
 const MAP_RESULT_OVERLAY_DURATION_MS = 10_000;
+const OVERLAY_CLICKABLE_MODES = new Set(['start-map-prompt', 'map-result']);
 const MAX_PENDING_LOOT_ACTIONS = 100;
 const MAX_PENDING_SESSION_ACTIONS = 20;
 const MAX_AUDIT_TRAIL_ENTRIES = 200;
@@ -71,7 +73,6 @@ const IPC_RENDERER_SCOPES = Object.freeze({
   'toggle-map-result-overlay-pin': ['main', 'overlay'],
   'dismiss-map-result-overlay': ['main', 'overlay'],
   'get-overlay-cursor-position': ['main', 'overlay'],
-  'set-overlay-pointer-passthrough': ['main', 'overlay'],
   'confirm-start-map-prompt-overlay': ['overlay'],
   'cancel-start-map-prompt-overlay': ['overlay']
 });
@@ -298,6 +299,7 @@ let gameDetector = null;
 let currentSession = null;
 let runtimeSessionState = createRuntimeSessionState();
 let overlayWindow = null;
+let overlayWindowIgnoresMouse = null;
 let overlayCharacterState = null;
 let overlayRuntimeState = null;
 let overlayMapResultState = null;
@@ -2212,8 +2214,23 @@ function createMainWindow() {
   });
 }
 
+// The overlay sits on the monitor that shows the game window; primary display when the window is unknown.
+function getOverlayDisplay() {
+  try {
+    const processes = gameDetector ? gameDetector.getDetectedProcesses() : [];
+    const gameWindow = win32Probe.findProcessWindow(processes.map((entry) => entry.ProcessId));
+    if (gameWindow && !gameWindow.minimized && gameWindow.width > 0 && gameWindow.height > 0) {
+      const { x, y, width, height } = gameWindow;
+      return screen.getDisplayMatching(screen.screenToDipRect(null, { x, y, width, height }));
+    }
+  } catch (error) {
+    console.error('[Overlay] Game window lookup failed:', error.message);
+  }
+  return screen.getPrimaryDisplay();
+}
+
 function getOverlayWindowBounds(overlayState = {}) {
-  const display = screen.getPrimaryDisplay();
+  const display = getOverlayDisplay();
   const workArea = display.workArea || display.bounds;
   const isInteractivePrompt = overlayState.mode === 'start-map-prompt';
   const width = isInteractivePrompt ? 440 : 360;
@@ -2258,7 +2275,8 @@ function createOverlayWindow() {
     title: `${APP_NAME} Overlay`
   });
 
-  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  overlayWindow.setIgnoreMouseEvents(true);
+  overlayWindowIgnoresMouse = true;
   overlayWindow.setAlwaysOnTop(true, 'screen-saver');
   hardenWindowNavigation(overlayWindow, TRUSTED_RENDERER_FILES.overlay);
   overlayWindow.loadFile(path.join(__dirname, 'src', 'overlay.html'));
@@ -2267,6 +2285,7 @@ function createOverlayWindow() {
   });
   overlayWindow.on('closed', () => {
     overlayWindow = null;
+    overlayWindowIgnoresMouse = null;
   });
 
   return overlayWindow;
@@ -2529,12 +2548,19 @@ function applyOverlayWindowVisibility(overlayState) {
     return;
   }
 
-  const interactive = overlayState.mode === 'start-map-prompt';
-  if (typeof overlayWindow.setFocusable === 'function') {
-    overlayWindow.setFocusable(interactive);
+  // The window is never focusable, so clicking the prompt or the result card leaves the game in the
+  // foreground. Passive states are fully click-through.
+  const ignoreMouse = !OVERLAY_CLICKABLE_MODES.has(overlayState.mode);
+  if (overlayWindowIgnoresMouse !== ignoreMouse) {
+    overlayWindow.setIgnoreMouseEvents(ignoreMouse);
+    overlayWindowIgnoresMouse = ignoreMouse;
   }
-  overlayWindow.setIgnoreMouseEvents(!interactive, { forward: true });
-  overlayWindow.setBounds(getOverlayWindowBounds(overlayState));
+
+  const bounds = getOverlayWindowBounds(overlayState);
+  const current = overlayWindow.getBounds();
+  if (current.x !== bounds.x || current.y !== bounds.y || current.width !== bounds.width || current.height !== bounds.height) {
+    overlayWindow.setBounds(bounds);
+  }
   if (!overlayWindow.isVisible()) {
     overlayWindow.showInactive();
   }
@@ -2567,12 +2593,7 @@ function updateOverlayWindow({ character, runtimeSession } = {}) {
   }
 
   applyOverlayWindowVisibility(overlayState);
-
-  const serializedState = JSON.stringify(overlayState).replace(/</g, '\\u003c');
-  overlayWindow.webContents.executeJavaScript(
-    `window.JuiceOverlay && window.JuiceOverlay.renderState(${serializedState});`,
-    true
-  ).catch(() => { });
+  overlayWindow.webContents.send('overlay-render-state', overlayState);
 
   return overlayState;
 }
@@ -4252,13 +4273,6 @@ function setupIPC() {
       clientX: cursorPoint.x - bounds.x,
       clientY: cursorPoint.y - bounds.y
     };
-  });
-
-  ipcMain.handle('set-overlay-pointer-passthrough', async (event, ignore = true) => {
-    if (overlayWindow && !overlayWindow.isDestroyed()) {
-      overlayWindow.setIgnoreMouseEvents(ignore !== false, { forward: true });
-    }
-    return true;
   });
 
   ipcMain.handle('save-map-result', async (event, result) => {

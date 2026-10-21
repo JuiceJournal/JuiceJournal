@@ -2338,6 +2338,7 @@ async function handleMapEnteredEvent(data = {}) {
   try {
     if (window.electronAPI?.showStartMapPromptOverlay) {
       let stopWaitingForOverlayResult = () => {};
+      let startOverlayResultTimeout = () => {};
       try {
         const trackerContext = typeof getSelectedTrackerContext === 'function'
           ? getSelectedTrackerContext()
@@ -2395,9 +2396,12 @@ async function handleMapEnteredEvent(data = {}) {
               settle(result);
             }) || (() => {});
 
-            if (typeof setTimeout === 'function') {
-              timeoutId = setTimeout(() => settle(null), 2500);
-            }
+            // The overlay prompt is mouse-only, so give the player the spec'd 7 s once it is on screen.
+            startOverlayResultTimeout = () => {
+              if (!settled && typeof setTimeout === 'function') {
+                timeoutId = setTimeout(() => settle(null), 7000);
+              }
+            };
           })
           : null;
 
@@ -2416,6 +2420,7 @@ async function handleMapEnteredEvent(data = {}) {
           && typeof window.electronAPI?.onStartMapPromptOverlayResult === 'function';
 
         if (canUseInteractiveOverlay) {
+          startOverlayResultTimeout();
           const overlayResult = await overlayResultPromise;
 
           if (overlayResult?.action === 'confirm') {
@@ -2438,6 +2443,13 @@ async function handleMapEnteredEvent(data = {}) {
           }
         } else {
           stopWaitingForOverlayResult();
+        }
+
+        // Unanswered, or not shown yet (e.g. behind a map-result card): take the prompt down before the
+        // desktop modal opens so it cannot surface later and swallow clicks nobody is listening for.
+        if (window.electronAPI?.hideStartMapPromptOverlay) {
+          await window.electronAPI.hideStartMapPromptOverlay();
+          startPromptOverlayShown = false;
         }
       } catch (error) {
         stopWaitingForOverlayResult();

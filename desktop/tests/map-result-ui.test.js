@@ -922,7 +922,7 @@ test('map-entered events show an in-game start-map overlay prompt before opening
           overlayPrompts.push(payload);
         },
         hideStartMapPromptOverlay: async () => {
-          overlayPrompts.push({ hidden: true });
+          overlayPrompts.push({ hidden: true, beforeDesktopModal: startCalls.length === 0 });
         }
       }
     },
@@ -948,7 +948,7 @@ test('map-entered events show an in-game start-map overlay prompt before opening
       ],
       source: 'map-detected'
     },
-    { hidden: true }
+    { hidden: true, beforeDesktopModal: true }
   ]);
   assert.deepEqual(startCalls, [{ defaultMapName: 'Channel', source: 'map-detected' }]);
 });
@@ -1030,6 +1030,7 @@ test('map-entered events can start a session from the in-game start-map overlay 
 test('map-entered events fall back to the desktop modal when the in-game prompt is not answered quickly', async () => {
   const overlayPrompts = [];
   const startCalls = [];
+  const timeoutDelays = [];
   let overlayResultHandler = null;
   const context = loadFunctions(['handleMapEnteredEvent'], {
     state: {
@@ -1043,7 +1044,8 @@ test('map-entered events fall back to the desktop modal when the in-game prompt 
     },
     setRuntimeSessionState: () => {},
     showToast: () => {},
-    setTimeout: (callback) => {
+    setTimeout: (callback, delay) => {
+      timeoutDelays.push({ delay, promptShown: overlayPrompts.length > 0 });
       callback();
       return 1;
     },
@@ -1069,7 +1071,7 @@ test('map-entered events fall back to the desktop modal when the in-game prompt 
           return { visibility: 'visible', mode: 'start-map-prompt' };
         },
         hideStartMapPromptOverlay: async () => {
-          overlayPrompts.push({ hidden: true });
+          overlayPrompts.push({ hidden: true, beforeDesktopModal: startCalls.length === 0 });
         },
         onStartMapPromptOverlayResult: (callback) => {
           overlayResultHandler = callback;
@@ -1102,8 +1104,9 @@ test('map-entered events fall back to the desktop modal when the in-game prompt 
       ],
       source: 'map-detected'
     },
-    { hidden: true }
+    { hidden: true, beforeDesktopModal: true }
   ]);
+  assert.deepEqual(timeoutDelays, [{ delay: 7000, promptShown: true }]);
   assert.deepEqual(startCalls, [{ defaultMapName: 'Dunes Map', source: 'map-detected' }]);
 });
 

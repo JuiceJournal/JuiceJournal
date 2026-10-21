@@ -305,9 +305,8 @@ test('main overlay window is created lazily only when overlay state is visible',
   const overlayWindow = {
     isDestroyed: () => false,
     webContents: {
-      executeJavaScript: () => {
-        calls.push(['executeJavaScript']);
-        return Promise.resolve();
+      send: (channel) => {
+        calls.push(['send', channel]);
       }
     }
   };
@@ -357,8 +356,120 @@ test('main overlay window is created lazily only when overlay state is visible',
     ['isReady'],
     ['createOverlayWindow'],
     ['applyOverlayWindowVisibility', 'visible'],
-    ['executeJavaScript']
+    ['send', 'overlay-render-state']
   ]);
+});
+
+function createOverlayWindowMock(calls, { visible = false, bounds = { x: 0, y: 0, width: 0, height: 0 } } = {}) {
+  let currentBounds = bounds;
+  let isVisible = visible;
+  return {
+    isDestroyed: () => false,
+    isVisible: () => isVisible,
+    hide() { calls.push(['hide']); isVisible = false; },
+    showInactive() { calls.push(['showInactive']); isVisible = true; },
+    getBounds: () => currentBounds,
+    setBounds(next) { calls.push(['setBounds', next]); currentBounds = next; },
+    setIgnoreMouseEvents(...args) { calls.push(['setIgnoreMouseEvents', ...args]); },
+    setFocusable(value) { calls.push(['setFocusable', value]); }
+  };
+}
+
+test('main overlay never becomes focusable and only clickable modes take mouse input', () => {
+  const calls = [];
+  const bounds = { x: 10, y: 20, width: 360, height: 112 };
+  const context = loadFunctions(['applyOverlayWindowVisibility'], {
+    OVERLAY_CLICKABLE_MODES: new Set(['start-map-prompt', 'map-result']),
+    overlayWindowIgnoresMouse: true,
+    overlayWindow: createOverlayWindowMock(calls, { bounds }),
+    getOverlayWindowBounds: () => bounds
+  });
+
+  context.applyOverlayWindowVisibility({ visibility: 'visible', mode: 'runtime' });
+  context.applyOverlayWindowVisibility({ visibility: 'visible', mode: 'start-map-prompt' });
+  context.applyOverlayWindowVisibility({ visibility: 'visible', mode: 'map-result' });
+  context.applyOverlayWindowVisibility({ visibility: 'visible', mode: 'runtime' });
+
+  assert.deepEqual(calls, [
+    ['showInactive'],
+    ['setIgnoreMouseEvents', false],
+    ['setIgnoreMouseEvents', true]
+  ]);
+});
+
+test('main overlay applies bounds only when they change', () => {
+  const calls = [];
+  let nextBounds = { x: 10, y: 20, width: 360, height: 112 };
+  const context = loadFunctions(['applyOverlayWindowVisibility'], {
+    OVERLAY_CLICKABLE_MODES: new Set(['start-map-prompt', 'map-result']),
+    overlayWindowIgnoresMouse: true,
+    overlayWindow: createOverlayWindowMock(calls, { visible: true, bounds: { ...nextBounds } }),
+    getOverlayWindowBounds: () => nextBounds
+  });
+
+  context.applyOverlayWindowVisibility({ visibility: 'visible', mode: 'runtime' });
+  nextBounds = { x: -1500, y: 20, width: 360, height: 112 };
+  context.applyOverlayWindowVisibility({ visibility: 'visible', mode: 'runtime' });
+  context.applyOverlayWindowVisibility({ visibility: 'hidden', mode: 'runtime' });
+
+  assert.deepEqual(calls, [
+    ['setBounds', { x: -1500, y: 20, width: 360, height: 112 }],
+    ['hide']
+  ]);
+});
+
+test('main overlay is placed on the display that shows the game window', () => {
+  const primary = { id: 1, workArea: { x: 0, y: 0, width: 2560, height: 1400 } };
+  const secondary = { id: 2, workArea: { x: -1920, y: 0, width: 1920, height: 1040 } };
+  const lookups = [];
+  let gameWindow = { x: -1920, y: 0, width: 1920, height: 1080, minimized: false };
+  const context = loadFunctions(['getOverlayDisplay'], {
+    gameDetector: { getDetectedProcesses: () => [{ Name: 'PathOfExileSteam.exe', ProcessId: 4242 }] },
+    win32Probe: {
+      findProcessWindow(pids) {
+        lookups.push(pids);
+        return gameWindow;
+      }
+    },
+    screen: {
+      getPrimaryDisplay: () => primary,
+      screenToDipRect: (_window, rect) => rect,
+      getDisplayMatching: (rect) => (rect.x < 0 ? secondary : primary)
+    }
+  });
+
+  assert.equal(context.getOverlayDisplay(), secondary);
+  gameWindow = { ...gameWindow, minimized: true };
+  assert.equal(context.getOverlayDisplay(), primary);
+  gameWindow = null;
+  assert.equal(context.getOverlayDisplay(), primary);
+  assert.deepEqual(lookups, [[4242], [4242], [4242]]);
+});
+
+test('main overlay falls back to the primary display when the game window lookup throws', () => {
+  const primary = { id: 1, workArea: { x: 0, y: 0, width: 2560, height: 1400 } };
+  const context = loadFunctions(['getOverlayDisplay'], {
+    console: { error() { } },
+    gameDetector: { getDetectedProcesses: () => [{ ProcessId: 1 }] },
+    win32Probe: { findProcessWindow() { throw new Error('koffi missing'); } },
+    screen: { getPrimaryDisplay: () => primary }
+  });
+
+  assert.equal(context.getOverlayDisplay(), primary);
+});
+
+test('overlay has no mouse forwarding hook, focus toggle or script injection path', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+  const overlayPreload = fs.readFileSync(path.join(__dirname, '..', 'overlay-preload.js'), 'utf8');
+  const mainPreload = fs.readFileSync(preloadJsPath, 'utf8');
+
+  assert.doesNotMatch(source, /forward:\s*true/);
+  assert.doesNotMatch(source, /overlayWindow\.setFocusable/);
+  assert.doesNotMatch(source, /executeJavaScript/);
+  assert.doesNotMatch(source, /set-overlay-pointer-passthrough/);
+  assert.doesNotMatch(overlayPreload, /setOverlayPointerPassthrough/);
+  assert.doesNotMatch(mainPreload, /setOverlayPointerPassthrough|set-overlay-pointer-passthrough/);
+  assert.match(overlayPreload, /ipcRenderer\.on\('overlay-render-state'/);
 });
 
 test('openAuthUrlInBrowser uses shell.openExternal when it succeeds', async () => {

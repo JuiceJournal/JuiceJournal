@@ -76,7 +76,7 @@ test('game detector builds a targeted Windows process query instead of enumerati
   assert.match(command, /pathofexile\.exe/);
   assert.match(command, /pathofexile2\.exe/);
   assert.match(command, /pathofexilesteam\.exe/);
-  assert.match(command, /Select-Object Name,ExecutablePath,CommandLine/);
+  assert.match(command, /Select-Object Name,ProcessId,ExecutablePath,CommandLine/);
   assert.match(command, /ConvertTo-Json -Compress/);
 });
 
@@ -188,4 +188,81 @@ test('game detector includes detected process details in launch events', async (
 
   assert.equal(payload.version, 'poe2');
   assert.deepEqual(payload.processes, [process]);
+});
+
+test('game detector scans processes with the native probe instead of PowerShell when it is available', async () => {
+  const requestedNames = [];
+  const detector = new GameDetector({
+    processProbe: {
+      scanProcesses(names) {
+        requestedNames.push(...names);
+        return [{
+          Name: 'PathOfExileSteam.exe',
+          ProcessId: 4242,
+          ExecutablePath: 'D:\\steam\\steamapps\\common\\Path of Exile 2\\PathOfExileSteam.exe'
+        }];
+      }
+    }
+  });
+  detector._getRunningProcessesFromPowerShell = async () => assert.fail('PowerShell should not run');
+
+  await detector._poll();
+
+  assert.equal(detector.getDetectedGame(), 'poe2');
+  assert.deepEqual(detector.getDetectedProcesses().map((entry) => entry.ProcessId), [4242]);
+  assert.ok(requestedNames.includes('pathofexilesteam.exe'));
+  assert.ok(requestedNames.includes('pathofexile2_x64steam.exe'));
+});
+
+test('game detector falls back to PowerShell when the native probe is unavailable or fails', async () => {
+  let probeCalls = 0;
+  let powerShellCalls = 0;
+  const warnings = [];
+  const unavailable = new GameDetector({
+    processProbe: { scanProcesses: () => null, getLoadError: () => new Error('koffi.node missing') }
+  });
+  unavailable._getRunningProcessesFromPowerShell = async () => { powerShellCalls += 1; return []; };
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(' '));
+  try {
+    await unavailable._poll();
+    await unavailable._poll();
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.deepEqual(warnings, ['Native process probe unavailable, using PowerShell: koffi.node missing']);
+
+  const failing = new GameDetector({
+    processProbe: {
+      scanProcesses() {
+        probeCalls += 1;
+        throw new Error('koffi failed to load');
+      }
+    }
+  });
+  failing._getRunningProcessesFromPowerShell = async () => { powerShellCalls += 1; return []; };
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    await failing._poll();
+    await failing._poll();
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(probeCalls, 1, 'a failing probe is not retried in the same session');
+  assert.equal(powerShellCalls, 4);
+});
+
+test('game detector clears detected processes when the game closes', async () => {
+  let processes = [{ Name: 'PathOfExile_x64.exe', ProcessId: 7, ExecutablePath: 'C:\\Games\\Path of Exile\\PathOfExile_x64.exe' }];
+  const detector = new GameDetector({ processProbe: { scanProcesses: () => processes } });
+
+  await detector._poll();
+  assert.equal(detector.getDetectedProcesses().length, 1);
+
+  processes = [];
+  await detector._poll();
+  assert.equal(detector.getDetectedGame(), null);
+  assert.deepEqual(detector.getDetectedProcesses(), []);
 });
