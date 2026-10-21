@@ -3992,7 +3992,9 @@ function updateActiveSessionUI() {
   const profitChaos = parseFloat(state.currentSession?.profitChaos || 0);
   const itemCount = lootEntries.reduce((sum, loot) => sum + parseInt(loot.quantity || 0, 10), 0);
   const liveDuration = getLiveDuration(state.currentSession);
-  const profitClass = profitChaos >= 0 ? 'session-info-value positive' : 'session-info-value negative';
+  const profitTier = typeof getProfitTierFor === 'function'
+    ? getProfitTierFor(profitChaos, state.currentSession?.poeVersion || state.settings.poeVersion || 'poe1')
+    : (profitChaos < 0 ? 'loss' : 'normal');
   const formatProfit = typeof profitCurrencyHTML === 'function'
     ? profitCurrencyHTML
     : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
@@ -4030,7 +4032,7 @@ function updateActiveSessionUI() {
         </div>
         <div class="session-info-item session-info-item--metric">
           <span class="session-info-label">${window.t('dashboard.liveProfit')}</span>
-          <span class="${profitClass}">${formatProfit(profitChaos, 16, state.currentSession.poeVersion || state.settings.poeVersion || 'poe1')}</span>
+          <span class="session-info-value" data-profit-tier="${profitTier}">${formatProfit(profitChaos, 16, state.currentSession.poeVersion || state.settings.poeVersion || 'poe1')}</span>
         </div>
         <div class="session-info-item">
           <span class="session-info-label">${window.t('dashboard.itemsCollected')}</span>

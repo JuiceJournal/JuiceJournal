@@ -761,7 +761,7 @@ body {
 }
 
 /* Character Summary Card */
-.character-card {
+.card.character-card {
   grid-column: 1 / -1;
   padding: 0;
   background: transparent;
@@ -781,7 +781,7 @@ body {
 .character-banner {
   position: relative;
   min-height: 228px;
-  border-radius: 24px;
+  border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--border-gold);
   background:
@@ -948,7 +948,7 @@ body {
   z-index: 3;
   min-width: 4rem;
   padding: 0.24rem 0.7rem;
-  border-radius: 999px;
+  clip-path: var(--chamfer-sm);
   transform: translateX(-50%);
   background: linear-gradient(180deg, rgb(var(--obsidian-rgb) / 0.94), rgb(var(--plate-deep-rgb) / 0.94));
   border: 1px solid rgb(var(--brass-rgb) / 0.42);
@@ -1014,7 +1014,7 @@ body {
   align-items: center;
   min-height: 28px;
   padding: 0.25rem 0.7rem;
-  border-radius: 999px;
+  clip-path: var(--chamfer-sm);
   background: rgb(var(--plate-deep-rgb) / 0.42);
   border: 1px solid rgb(var(--ink-rgb) / 0.1);
   color: rgb(var(--ink-rgb) / 0.88);
@@ -1042,7 +1042,7 @@ body {
 .character-meta {
   padding: 0.72rem 0.85rem;
   border: 1px solid rgb(var(--ink-rgb) / 0.08);
-  border-radius: 14px;
+  border-radius: 4px;
   background: rgb(var(--shadow-rgb) / 0.26);
   backdrop-filter: blur(8px);
 }
@@ -1137,7 +1137,7 @@ body {
   padding: 1rem;
   background: var(--bg-base);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
   margin-bottom: 1rem;
   min-height: 120px;
   display: flex;
@@ -1169,23 +1169,16 @@ body {
 .session-info-value {
   font-size: 1rem;
   font-weight: 700;
-  font-family: var(--font-mono);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
   color: var(--text-bright);
-}
-
-.session-info-value.positive {
-  color: var(--green);
-}
-
-.session-info-value.negative {
-  color: var(--red);
 }
 
 .session-info-item--metric {
   padding: 0.75rem 0.85rem;
   background: rgb(var(--ink-rgb) / 0.025);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
 }
 
 .session-actions {
@@ -1212,7 +1205,7 @@ body {
   padding: 0.8rem 1rem;
   background: var(--bg-base);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
   transition: var(--transition);
 }
 
@@ -1231,7 +1224,8 @@ body {
 .stat-value {
   font-size: 1.1rem;
   font-weight: 800;
-  font-family: var(--font-mono);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
   color: var(--gold-light);
 }
 
@@ -1308,7 +1302,7 @@ body {
   padding: 1rem;
   background: var(--bg-base);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
 }
 
 .hotkey-badge {
@@ -1352,7 +1346,7 @@ body {
     radial-gradient(circle at top right, rgb(var(--brass-rgb) / 0.12), transparent 28%),
     var(--bg-base);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
 }
 
 .map-result-summary strong,
@@ -1385,7 +1379,7 @@ body {
 
 /* Map Result History */
 .map-result-history-card {
-  grid-column: 1 / -1;
+  grid-column: 1;
   grid-row: 4;
 }
 
@@ -1401,7 +1395,7 @@ body {
   padding: 0.55rem 0.75rem;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 4px;
   color: var(--text);
   font-family: var(--font);
   font-size: 0.8rem;
@@ -1420,7 +1414,7 @@ body {
   gap: 1rem;
   padding: 0.9rem 1rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
   background:
     radial-gradient(circle at top right, rgb(var(--brass-rgb) / 0.08), transparent 26%),
     var(--bg-card);
@@ -1449,10 +1443,10 @@ body {
   width: fit-content;
   padding: 0.18rem 0.48rem;
   border: 1px solid rgb(var(--brass-rgb) / 0.22);
-  border-radius: 999px;
+  clip-path: var(--chamfer-sm);
   background: rgb(var(--brass-rgb) / 0.08);
   color: var(--gold-light) !important;
-  font-family: var(--font-mono);
+  font-family: var(--font);
   font-size: 0.68rem !important;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1478,10 +1472,10 @@ body {
 .map-result-publish-btn {
   padding: 0.38rem 0.66rem;
   border: 1px solid rgb(var(--brass-rgb) / 0.28);
-  border-radius: 999px;
+  clip-path: var(--chamfer-sm);
   background: rgb(var(--brass-rgb) / 0.08);
   color: var(--gold-light);
-  font-family: var(--font-mono);
+  font-family: var(--font);
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -1501,14 +1495,14 @@ body {
 
 .profit-unavailable {
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font);
   letter-spacing: 0.03em;
 }
 
 /* Recent Loot Card */
 .recent-loot-card {
   grid-column: 2;
-  grid-row: 5;
+  grid-row: 4;
 }
 
 #recent-loot-list {
@@ -1524,7 +1518,7 @@ body {
   gap: 0.9rem;
   padding: 0.85rem 0.95rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 4px;
   background: var(--bg-card);
 }
 
@@ -1554,11 +1548,12 @@ body {
   justify-content: center;
   min-width: 2rem;
   padding: 0.2rem 0.45rem;
-  border-radius: 999px;
+  clip-path: var(--chamfer-sm);
   background: rgb(var(--brass-rgb) / 0.12);
   color: var(--gold-light);
   font-size: 0.72rem;
-  font-family: var(--font-mono);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
 }
 
 .recent-loot-name {
@@ -1577,7 +1572,8 @@ body {
 }
 
 .recent-loot-value {
-  font-family: var(--font-mono);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
   color: var(--text-bright);
 }
 
@@ -2971,7 +2967,7 @@ body {
   font-size: 0.7rem;
   color: var(--text-muted);
   padding: 0.2rem 0.5rem;
-  border-radius: 999px;
+  clip-path: var(--chamfer-sm);
   background: var(--bg-input);
   border: 1px solid var(--border);
   transition: all 0.3s;
@@ -3022,7 +3018,7 @@ body {
   justify-content: space-between;
   padding: 0.5rem 0.75rem;
   background: var(--bg-input);
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
 }
 
@@ -3057,7 +3053,7 @@ body {
   gap: 0.5rem;
   padding: 0.75rem;
   background: var(--bg-input);
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   transition: border-color 0.2s;
 }
@@ -3086,7 +3082,7 @@ body {
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  clip-path: var(--chamfer-sm);
   background: var(--gold-dim);
   color: var(--gold-light);
   font-size: 0.7rem;
@@ -3136,7 +3132,7 @@ body {
 .stash-profit-result {
   padding: 0.75rem;
   background: var(--bg-input);
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border);
 }
 
