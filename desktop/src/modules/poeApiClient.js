@@ -167,7 +167,8 @@ class PoeApiClient {
     });
     this._notifyTokens();
 
-    return { scope: data.scope || scope };
+    // `sub` is the account's stable GGG id, `username` its account name.
+    return { scope: data.scope || scope, sub: data.sub || null, username: data.username || null };
   }
 
   // ─── Rate Limiting ──────────────────────────────────────────

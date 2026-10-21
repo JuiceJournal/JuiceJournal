@@ -146,7 +146,9 @@ const MAIN_PROCESS_TRANSLATIONS = {
     profitCalculated: 'Kar hesaplandi: {value}c',
     gameDetected: '{game} algilandi',
     gameClosed: '{game} kapatildi',
-    gameSwitched: '{from} → {to} gecis yapildi'
+    gameSwitched: '{from} → {to} gecis yapildi',
+    poeNoAccountId: 'Path of Exile hesap kimligini gondermedi.',
+    poeDifferentAccount: 'Bu farkli bir Path of Exile hesabi. Hesap degistirmek icin cikis yap.'
   },
   en: {
     trayStillRunning: 'The app is still running in the system tray.',
@@ -200,7 +202,9 @@ const MAIN_PROCESS_TRANSLATIONS = {
     profitCalculated: 'Profit calculated: {value}c',
     gameDetected: '{game} detected',
     gameClosed: '{game} closed',
-    gameSwitched: 'Switched {from} → {to}'
+    gameSwitched: 'Switched {from} → {to}',
+    poeNoAccountId: 'Path of Exile did not return an account id.',
+    poeDifferentAccount: 'That is a different Path of Exile account. Sign out to switch accounts.'
   }
 };
 
@@ -220,6 +224,8 @@ const store = new Store({
     stashScanHotkey: DEFAULT_STASH_SCAN_HOTKEY,
     overlayEnabled: false,
     currentUserId: null,
+    localProfiles: {},
+    activeProfileId: null,
     pendingSessionActions: [],
     pendingLootActions: [],
     activeFarmTypeId: null,
@@ -674,8 +680,53 @@ function getCurrentUserId() {
   return store.get('currentUserId') || null;
 }
 
+function getActiveProfile() {
+  return (store.get('localProfiles') || {})[store.get('activeProfileId')] || null;
+}
+
+// Each Path of Exile account gets one local profile on this machine, found again by GGG's account id.
+function findOrCreateLocalProfile({ sub, username }) {
+  const profiles = store.get('localProfiles') || {};
+  const existing = Object.values(profiles).find((profile) => profile.poeSub === sub);
+  const now = new Date().toISOString();
+  const profile = {
+    ...(existing || { id: crypto.randomUUID(), poeSub: sub, createdAt: now }),
+    accountName: username || existing?.accountName || null,
+    lastSignedInAt: now
+  };
+  store.set('localProfiles', { ...profiles, [profile.id]: profile });
+  return profile;
+}
+
+// Moves what an earlier backend sign-in kept on this machine into the first local profile, once. Throws if the
+// journal folder cannot be moved; nothing is marked done then, so the next sign-in tries again.
+function migrateLegacyUserData(profile) {
+  const legacyUserId = getCurrentUserId();
+  if (!legacyUserId || store.get('legacyUserMigratedTo')) {
+    return;
+  }
+
+  const profilesDir = path.join(app.getPath('userData'), 'profiles');
+  const legacyDir = path.join(profilesDir, legacyUserId);
+  const profileDir = path.join(profilesDir, profile.id);
+  const hasLegacyDir = /^[A-Za-z0-9_-]{1,64}$/.test(legacyUserId) && fs.existsSync(legacyDir);
+  if (hasLegacyDir && !fs.existsSync(profileDir)) {
+    fs.renameSync(legacyDir, profileDir);
+  }
+
+  const legacyResults = store.get(`mapResults:${legacyUserId}`);
+  if (Array.isArray(legacyResults) && !store.get(`mapResults:${profile.id}`)) {
+    store.set(`mapResults:${profile.id}`, legacyResults);
+    store.delete(`mapResults:${legacyUserId}`);
+  }
+
+  if (!hasLegacyDir || !fs.existsSync(legacyDir)) {
+    store.set('legacyUserMigratedTo', profile.id);
+  }
+}
+
 function assertDesktopUserAuthenticated() {
-  if (!getDecryptedAuthToken() || !getCurrentUserId()) {
+  if (!getActiveProfile()) {
     throw new Error('Local desktop sign-in is required');
   }
 }
@@ -742,21 +793,21 @@ function setActiveFarmTypeId(farmTypeId) {
   return normalized;
 }
 
-function getMapResultsStoreKey(userId = getCurrentUserId()) {
-  return userId ? `mapResults:${userId}` : null;
+function getMapResultsStoreKey(profileId = getActiveProfile()?.id) {
+  return profileId ? `mapResults:${profileId}` : null;
 }
 
-// Sessions and loot stay on this machine: one journal file per signed-in user under userData/profiles.
+// Sessions and loot stay on this machine: one journal file per local profile under userData/profiles.
 function getJournalStore() {
-  const userId = getCurrentUserId();
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(userId || '')) {
+  const profileId = getActiveProfile()?.id;
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(profileId || '')) {
     throw new Error('Local desktop sign-in is required');
   }
 
-  if (journalStore?.userId !== userId) {
+  if (journalStore?.profileId !== profileId) {
     journalStore = {
-      userId,
-      store: new Store({ name: 'journal', cwd: path.join(app.getPath('userData'), 'profiles', userId) })
+      profileId,
+      store: new Store({ name: 'journal', cwd: path.join(app.getPath('userData'), 'profiles', profileId) })
     };
   }
   return journalStore.store;
@@ -2101,7 +2152,38 @@ async function connectPoeDevice() {
     redirectUri,
     expectedState: state
   });
-  await poeApiClient.exchangeCode({ code, codeVerifier, redirectUri });
+  return await poeApiClient.exchangeCode({ code, codeVerifier, redirectUri });
+}
+
+function dropPoeDeviceConnection() {
+  poeApiClient.clearTokens();
+  persistPoeClientTokens(null);
+}
+
+// Signing in on this device opens (or creates) the account's local profile.
+async function signInWithPoe() {
+  const account = await connectPoeDevice();
+  if (!account?.sub) {
+    dropPoeDeviceConnection();
+    throw new Error(t('poeNoAccountId'));
+  }
+
+  const profile = findOrCreateLocalProfile(account);
+  // The profile becomes active only after the old data has moved, so a failed move is retried next time.
+  migrateLegacyUserData(profile);
+  store.set('activeProfileId', profile.id);
+  loadActiveSession();
+  appendAuditTrail('auditLogin');
+  return profile;
+}
+
+// Reconnecting keeps the profile, so it must be the same Path of Exile account.
+async function reconnectPoeDevice() {
+  const account = await connectPoeDevice();
+  if (account?.sub !== getActiveProfile()?.poeSub) {
+    dropPoeDeviceConnection();
+    throw new Error(t('poeDifferentAccount'));
+  }
 }
 
 function normalizeDeviceCharacter(character, poeVersion) {
@@ -3450,6 +3532,7 @@ function handleLogout() {
   store.set('authToken', null);
   store.set('authTokenEncrypted', null);
   store.set('currentUserId', null);
+  store.set('activeProfileId', null);
   apiClient.setToken(null);
   currentSession = null;
   if (stashAnalyzer) {
@@ -3511,6 +3594,8 @@ function setupIPC() {
     delete allSettings.poeOAuthTokens;
     delete allSettings.poeOAuthTokensEncrypted;
     delete allSettings.currentUserId;
+    delete allSettings.localProfiles;
+    delete allSettings.activeProfileId;
     allSettings.scanHotkey = allSettings.scanHotkey || DEFAULT_SCAN_HOTKEY;
     allSettings.stashScanHotkey = allSettings.stashScanHotkey || DEFAULT_STASH_SCAN_HOTKEY;
     return allSettings;
@@ -3520,10 +3605,7 @@ function setupIPC() {
     return applyDesktopSettings(settings);
   });
 
-  // Auth token kontrolu (token'i aciga cikarmadan)
-  ipcMain.handle('has-auth-token', () => {
-    return !!getDecryptedAuthToken();
-  });
+  ipcMain.handle('get-local-profile', () => getActiveProfile());
 
   ipcMain.handle('get-runtime-mode', () => ({
     isPackaged: app.isPackaged,
@@ -3664,7 +3746,7 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-sync-status', () => {
-    if (!getDecryptedAuthToken() || !getCurrentUserId()) {
+    if (!getActiveProfile()) {
       return {
         pendingSession: 0,
         pendingLoot: 0,
@@ -3680,7 +3762,7 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-audit-trail', () => {
-    if (!getDecryptedAuthToken() || !getCurrentUserId()) {
+    if (!getActiveProfile()) {
       return { entries: [] };
     }
     return {
@@ -3962,7 +4044,7 @@ function setupIPC() {
 
   // Get price service status
   ipcMain.handle('get-price-status', async () => {
-    if (!getDecryptedAuthToken() || !getCurrentUserId()) {
+    if (!getActiveProfile()) {
       return {
         itemCount: 0,
         lastSync: null,
@@ -4267,14 +4349,28 @@ function setupIPC() {
     };
   });
 
+  ipcMain.handle('sign-in-with-poe', async () => {
+    try {
+      return { success: true, profile: await signInWithPoe(), error: null };
+    } catch (error) {
+      return { success: false, profile: null, error: normalizeErrorMessage(error, 'Path of Exile sign-in failed') };
+    }
+  });
+
   ipcMain.handle('connect-poe-device', async () => {
     assertDesktopUserAuthenticated();
     try {
-      await connectPoeDevice();
+      await reconnectPoeDevice();
       return { success: true, error: null };
     } catch (error) {
       return { success: false, error: normalizeErrorMessage(error, 'Path of Exile sign-in failed') };
     }
+  });
+
+  ipcMain.handle('disconnect-poe-device', async () => {
+    assertDesktopUserAuthenticated();
+    dropPoeDeviceConnection();
+    return true;
   });
 
   ipcMain.handle('get-poe-device-characters', async (event, poeVersion) => {

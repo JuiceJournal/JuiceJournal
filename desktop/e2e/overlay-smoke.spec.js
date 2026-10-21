@@ -34,117 +34,9 @@ function writeJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload));
 }
 
-function writeJsonWithAuthCookie(response, statusCode, payload, token) {
-  response.writeHead(statusCode, {
-    'Content-Type': 'application/json',
-    'Set-Cookie': `juice_journal_auth=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`
-  });
-  response.end(JSON.stringify(payload));
-}
-
-function parseJsonBody(request) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-
-    request.on('data', (chunk) => {
-      body += chunk;
-    });
-
-    request.on('end', () => {
-      if (!body) {
-        resolve({});
-        return;
-      }
-
-      try {
-        resolve(JSON.parse(body));
-      } catch (error) {
-        reject(error);
-      }
-    });
-
-    request.on('error', reject);
-  });
-}
-
-function createSmokeUserPayload() {
-  return {
-    id: SMOKE_USER.id,
-    username: SMOKE_USER.username,
-    accountName: SMOKE_USER.accountName,
-    poeAccountName: SMOKE_USER.accountName,
-    selectedCharacterId: SMOKE_USER.selectedCharacter.id,
-    selectedCharacter: SMOKE_USER.selectedCharacter,
-    characters: [SMOKE_USER.selectedCharacter],
-    poe: {
-      accountName: SMOKE_USER.accountName,
-      selectedCharacter: SMOKE_USER.selectedCharacter,
-      characters: [SMOKE_USER.selectedCharacter]
-    }
-  };
-}
-
 async function startSmokeBackend() {
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url || '/', 'http://127.0.0.1');
-
-    if (request.method === 'POST' && url.pathname === '/api/auth/poe/login/start') {
-      writeJson(response, 200, {
-        success: true,
-        data: {
-          mode: 'mock',
-          requiresBrowser: false,
-          mockCode: 'smoke-oauth-code'
-        },
-        error: null
-      });
-      return;
-    }
-
-    if (request.method === 'POST' && url.pathname === '/api/auth/poe/login/complete') {
-      const body = await parseJsonBody(request);
-      if (body.code !== 'smoke-oauth-code') {
-        writeJson(response, 400, {
-          success: false,
-          data: null,
-          error: 'Unexpected OAuth code',
-          errorCode: 'OAUTH_CODE_MISMATCH'
-        });
-        return;
-      }
-
-      writeJsonWithAuthCookie(response, 200, {
-        success: true,
-        data: {
-          token: SMOKE_USER.token,
-          user: createSmokeUserPayload(),
-          capabilities: {
-            canSyncPrices: true
-          },
-          poe: {
-            accountName: SMOKE_USER.accountName,
-            mock: true
-          }
-        },
-        error: null
-      }, SMOKE_USER.token);
-      return;
-    }
-
-    if (request.method === 'GET' && url.pathname === '/api/auth/poe/status') {
-      writeJson(response, 200, {
-        success: true,
-        data: {
-          poe: {
-            linked: true,
-            mock: true,
-            accountName: SMOKE_USER.accountName
-          }
-        },
-        error: null
-      });
-      return;
-    }
 
     if (request.method === 'GET' && url.pathname === '/api/prices/leagues') {
       writeJson(response, 200, {
@@ -206,6 +98,11 @@ function createIsolatedProfile(testInfo, apiUrl) {
       JUICE_JOURNAL_E2E_APP_DATA_DIR: appDataDir,
       JUICE_JOURNAL_E2E_USER_DATA_DIR: userDataDir,
       JUICE_JOURNAL_E2E_API_URL: apiUrl,
+      JUICE_JOURNAL_E2E_POE_ACCOUNT: JSON.stringify({
+        sub: `${SMOKE_USER.id}-ggg`,
+        username: SMOKE_USER.username,
+        characters: { poe1: [{ ...SMOKE_USER.selectedCharacter, current: true }] }
+      }),
       JUICE_JOURNAL_E2E_POE_LOG_PATH: poeLogPath,
       TMP: tempDir,
       TEMP: tempDir
@@ -222,6 +119,7 @@ function createBootstrapScript(testInfo) {
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
+require(${JSON.stringify(path.join(__dirname, 'poe-device-stub.cjs'))});
 
 const appDataDir = process.env.JUICE_JOURNAL_E2E_APP_DATA_DIR;
 const userDataDir = process.env.JUICE_JOURNAL_E2E_USER_DATA_DIR;

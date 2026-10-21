@@ -884,13 +884,13 @@ test('poe1 fallback map result preserves enough data to close a run without stas
   assert.match(result.id, /^fallback-session-1-\d+$/);
 });
 
-test('main map-result history is stored per desktop user', () => {
+test('main map-result history is stored per local profile', () => {
   const writes = [];
   const context = loadMainFunctions(['getMapResultsStoreKey', 'getStoredMapResults', 'saveMapResultHistory'], {
-    getCurrentUserId: () => 'user-2',
+    getActiveProfile: () => ({ id: 'profile-2' }),
     store: {
       get(key) {
-        if (key === 'mapResults:user-2') return [{ id: 'old-1' }];
+        if (key === 'mapResults:profile-2') return [{ id: 'old-1' }];
         return null;
       },
       set(key, value) {
@@ -903,9 +903,9 @@ test('main map-result history is stored per desktop user', () => {
 
   const results = context.saveMapResultHistory({ id: 'new-1' });
 
-  assert.equal(context.getMapResultsStoreKey(), 'mapResults:user-2');
+  assert.equal(context.getMapResultsStoreKey(), 'mapResults:profile-2');
   assert.deepEqual(results, [{ id: 'new-1', localRunId: 'new-1', calculationStatus: 'calculated' }, { id: 'old-1' }]);
-  assert.deepEqual(writes, [['mapResults:user-2', [{ id: 'new-1', localRunId: 'new-1', calculationStatus: 'calculated' }, { id: 'old-1' }]]]);
+  assert.deepEqual(writes, [['mapResults:profile-2', [{ id: 'new-1', localRunId: 'new-1', calculationStatus: 'calculated' }, { id: 'old-1' }]]]);
 });
 
 test('after-snapshot context merge preserves an existing session id when runtime updates omit it', async () => {

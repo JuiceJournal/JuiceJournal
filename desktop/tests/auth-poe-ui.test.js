@@ -171,7 +171,7 @@ test('desktop login surface exposes only Path of Exile OAuth entry', () => {
   assert.match(html, /id="poe-oauth-login"/);
 });
 
-test('successful poe oauth login initializes a local session and dashboard bootstrap', async () => {
+test('device sign-in opens the local profile and loads its history', async () => {
   const calls = [];
   const button = {
     disabled: false,
@@ -180,7 +180,7 @@ test('successful poe oauth login initializes a local session and dashboard boots
       remove: () => calls.push(['buttonLoadingOff'])
     }
   };
-  const context = loadFunctions(['handlePoeOAuthLogin'], {
+  const context = loadFunctions(['toProfileUser', 'handlePoeOAuthLogin'], {
     document: {
       getElementById: (id) => {
         if (id === 'poe-oauth-login') {
@@ -199,17 +199,15 @@ test('successful poe oauth login initializes a local session and dashboard boots
     },
     window: {
       electronAPI: {
-        startPoeLogin: async () => ({ mode: 'mock', requiresBrowser: false, state: 'oauth-state', mockCode: 'code' }),
-        completePoeConnect: async () => { throw new Error('wrong endpoint'); },
-        completePoeLogin: async (payload) => {
-          calls.push(['completePoeLogin', payload.code, payload.state]);
-          return { success: true, data: { user: { username: 'RangerMain' }, capabilities: {} } };
+        signInWithPoe: async () => {
+          calls.push(['signInWithPoe']);
+          return { success: true, profile: { id: 'profile-1', accountName: 'Exile#1234' }, error: null };
         }
       },
       t: (key) => key
     },
-    setCurrentUser: (user) => calls.push(['setCurrentUser', user.username]),
-    loadPoeLinkStatus: async () => calls.push(['loadPoeLinkStatus']),
+    setCurrentUser: (user) => calls.push(['setCurrentUser', user.username, user.accountName]),
+    loadMapResultHistory: async () => calls.push(['loadMapResultHistory']),
     syncPoeDeviceConnection: async () => calls.push(['syncPoeDeviceConnection']),
     refreshTrackerData: async () => calls.push(['refreshTrackerData']),
     showToast: (...args) => calls.push(['showToast', ...args]),
@@ -220,22 +218,24 @@ test('successful poe oauth login initializes a local session and dashboard boots
 
   assert.deepEqual(
     calls.filter(([name]) => [
-      'completePoeLogin', 'setCurrentUser', 'loadPoeLinkStatus', 'syncPoeDeviceConnection', 'refreshTrackerData'
+      'signInWithPoe', 'setCurrentUser', 'hideLoginModal', 'loadMapResultHistory', 'syncPoeDeviceConnection', 'refreshTrackerData'
     ].includes(name)),
     [
-      ['completePoeLogin', 'code', 'oauth-state'],
-      ['setCurrentUser', 'RangerMain'],
-      ['loadPoeLinkStatus'],
+      ['signInWithPoe'],
+      ['setCurrentUser', 'Exile#1234', 'Exile#1234'],
+      ['hideLoginModal', 'hidden'],
+      ['loadMapResultHistory'],
       ['syncPoeDeviceConnection'],
       ['refreshTrackerData']
     ]
   );
 });
 
-test('bootstrapCurrentUserSession requires login when no auth token exists', async () => {
+test('bootstrapCurrentUserSession requires login when no local profile exists', async () => {
   const calls = [];
   const state = { mapResults: [{ id: 'map-1' }] };
-  const context = loadFunctions(['hideLoginModal', 'isServerUnavailableError', 'bootstrapCurrentUserSession'], {
+  const profileLookup = async () => null;
+  const context = loadFunctions(['hideLoginModal', 'toProfileUser', 'bootstrapCurrentUserSession'], {
     state,
     elements: {
       loginModal: {
@@ -251,16 +251,14 @@ test('bootstrapCurrentUserSession requires login when no auth token exists', asy
     },
     window: {
       electronAPI: {
-        hasAuthToken: async () => false,
-        getRuntimeMode: async () => ({ isPackaged: false, isDev: true })
+        getLocalProfile: async () => profileLookup()
       },
       t: (key) => key
     },
     showLoginModal: () => calls.push(['showLoginModal']),
-    showToast: (...args) => calls.push(['showToast', ...args]),
-    setCurrentUser: () => calls.push(['setCurrentUser']),
+    setCurrentUser: (user) => calls.push(['setCurrentUser', user.username]),
     loadMapResultHistory: async () => calls.push(['loadMapResultHistory']),
-    loadPoeLinkStatus: async () => calls.push(['loadPoeLinkStatus'])
+    syncPoeDeviceConnection: async () => calls.push(['syncPoeDeviceConnection'])
   });
 
   const result = await context.bootstrapCurrentUserSession();
@@ -272,10 +270,11 @@ test('bootstrapCurrentUserSession requires login when no auth token exists', asy
   ]);
 });
 
-test('bootstrapCurrentUserSession requires login when backend is unavailable', async () => {
+test('bootstrapCurrentUserSession opens a stored profile without the server or a live sign-in', async () => {
   const calls = [];
-  const state = { mapResults: [{ id: 'map-1' }] };
-  const context = loadFunctions(['hideLoginModal', 'isServerUnavailableError', 'bootstrapCurrentUserSession'], {
+  const state = { mapResults: [] };
+  const profileLookup = async () => ({ id: 'profile-1', accountName: 'Exile#1234' });
+  const context = loadFunctions(['hideLoginModal', 'toProfileUser', 'bootstrapCurrentUserSession'], {
     state,
     elements: {
       loginModal: {
@@ -291,34 +290,35 @@ test('bootstrapCurrentUserSession requires login when backend is unavailable', a
     },
     window: {
       electronAPI: {
-        hasAuthToken: async () => true,
-        getRuntimeMode: async () => ({ isPackaged: false, isDev: true }),
-        getCurrentUser: async () => {
-          throw new Error('Unable to reach the server');
-        }
+        getLocalProfile: async () => profileLookup()
       },
       t: (key) => key
     },
     showLoginModal: () => calls.push(['showLoginModal']),
-    showToast: (...args) => calls.push(['showToast', ...args]),
-    setCurrentUser: () => calls.push(['setCurrentUser']),
+    setCurrentUser: (user) => calls.push(['setCurrentUser', user.username]),
     loadMapResultHistory: async () => calls.push(['loadMapResultHistory']),
-    loadPoeLinkStatus: async () => calls.push(['loadPoeLinkStatus'])
+    syncPoeDeviceConnection: async () => calls.push(['syncPoeDeviceConnection'])
   });
 
   const result = await context.bootstrapCurrentUserSession();
 
-  assert.equal(result.mode, 'login-required');
-  assert.equal(state.mapResults.length, 0);
+  assert.equal(result.mode, 'authenticated');
   assert.deepEqual(calls, [
-    ['showLoginModal']
+    ['setCurrentUser', 'Exile#1234'],
+    ['hideLoginModal', 'hidden'],
+    ['hideRegisterModal', 'hidden'],
+    ['loadMapResultHistory'],
+    ['syncPoeDeviceConnection']
   ]);
 });
 
-test('bootstrapCurrentUserSession keeps the login modal for packaged live mode without a token', async () => {
+test('bootstrapCurrentUserSession requires login when the profile cannot be read', async () => {
   const calls = [];
   const state = { mapResults: [{ id: 'map-1' }] };
-  const context = loadFunctions(['hideLoginModal', 'isServerUnavailableError', 'bootstrapCurrentUserSession'], {
+  const profileLookup = async () => {
+    throw new Error('IPC unavailable');
+  };
+  const context = loadFunctions(['hideLoginModal', 'toProfileUser', 'bootstrapCurrentUserSession'], {
     state,
     elements: {
       loginModal: {
@@ -334,63 +334,21 @@ test('bootstrapCurrentUserSession keeps the login modal for packaged live mode w
     },
     window: {
       electronAPI: {
-        hasAuthToken: async () => false,
-        getRuntimeMode: async () => ({ isPackaged: true, isDev: false })
+        getLocalProfile: async () => profileLookup()
       },
       t: (key) => key
     },
     showLoginModal: () => calls.push(['showLoginModal']),
-    showToast: (...args) => calls.push(['showToast', ...args]),
-    setCurrentUser: () => calls.push(['setCurrentUser']),
+    setCurrentUser: (user) => calls.push(['setCurrentUser', user.username]),
     loadMapResultHistory: async () => calls.push(['loadMapResultHistory']),
-    loadPoeLinkStatus: async () => calls.push(['loadPoeLinkStatus'])
+    syncPoeDeviceConnection: async () => calls.push(['syncPoeDeviceConnection'])
   });
 
   const result = await context.bootstrapCurrentUserSession();
 
   assert.equal(result.mode, 'login-required');
-  assert.equal(state.mapResults.length, 0);
   assert.deepEqual(calls, [
     ['showLoginModal']
   ]);
 });
 
-test('bootstrapCurrentUserSession keeps the login modal when forceLiveAuth is enabled locally', async () => {
-  const calls = [];
-  const state = { mapResults: [{ id: 'map-1' }] };
-  const context = loadFunctions(['hideLoginModal', 'isServerUnavailableError', 'bootstrapCurrentUserSession'], {
-    state,
-    elements: {
-      loginModal: {
-        classList: {
-          add: (className) => calls.push(['hideLoginModal', className])
-        }
-      },
-      registerModal: {
-        classList: {
-          add: (className) => calls.push(['hideRegisterModal', className])
-        }
-      }
-    },
-    window: {
-      electronAPI: {
-        hasAuthToken: async () => false,
-        getRuntimeMode: async () => ({ isPackaged: false, isDev: true, forceLiveAuth: true })
-      },
-      t: (key) => key
-    },
-    showLoginModal: () => calls.push(['showLoginModal']),
-    showToast: (...args) => calls.push(['showToast', ...args]),
-    setCurrentUser: () => calls.push(['setCurrentUser']),
-    loadMapResultHistory: async () => calls.push(['loadMapResultHistory']),
-    loadPoeLinkStatus: async () => calls.push(['loadPoeLinkStatus'])
-  });
-
-  const result = await context.bootstrapCurrentUserSession();
-
-  assert.equal(result.mode, 'login-required');
-  assert.equal(state.mapResults.length, 0);
-  assert.deepEqual(calls, [
-    ['showLoginModal']
-  ]);
-});

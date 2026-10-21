@@ -413,7 +413,7 @@ test('signed-out poe account chrome uses dedicated signed-out copy instead of mo
     elements,
     state: {
       currentUser: null,
-      poeLink: null
+      poeDeviceConnected: false
     },
     window: {
       t: (key) => key
@@ -448,12 +448,8 @@ test('generic translation passes reapply authenticated chrome after static copy 
   ], {
     elements,
     state: {
-      currentUser: { username: 'Esquetta4179' },
-      poeLink: {
-        linked: true,
-        mock: false,
-        accountName: 'RangerMain'
-      }
+      currentUser: { username: 'Esquetta4179', accountName: 'RangerMain' },
+      poeDeviceConnected: true
     },
     window: {
       t: (key) => key,
@@ -574,11 +570,7 @@ test('reset settings persists only resettable settings and preserves signed-in h
         defaultLeaguePoe1: 'Mercenaries',
         defaultLeaguePoe2: 'Dawn of the Hunt'
       },
-      poeLink: {
-        linked: true,
-        mock: true,
-        accountName: 'RangerMain'
-      }
+      poeDeviceConnected: true
     },
     activeLeagueInputState: {
       dirty: true,
@@ -659,8 +651,8 @@ test('reset settings persists only resettable settings and preserves signed-in h
   assert.equal(context.state.currentUser.username, 'Esquetta4179');
   assert.equal(elements.username.textContent, 'Esquetta4179');
   assert.equal(elements.userAvatar.textContent, 'E');
-  assert.equal(elements.poeLinkStatus.textContent, 'settings.poeLinkedMock');
-  assert.equal(elements.poeLinkMode.textContent, 'settings.poeMockMode');
+  assert.equal(elements.poeLinkStatus.textContent, 'settings.poeLinked');
+  assert.equal(elements.poeLinkMode.textContent, 'settings.poeLiveMode');
   assert.deepEqual(capabilityCalls, [{
     detectedGameVersion: undefined,
     settingsVersion: 'poe1'

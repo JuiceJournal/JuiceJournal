@@ -18,7 +18,6 @@ const state = {
   farmingHubRuns: [],
   mapResults: [],
   recentLoot: [],
-  poeLink: null,
   account: null,
   characterSession: null,
   deviceCharactersByGame: {},
@@ -384,29 +383,16 @@ function clearActiveCharacterRefreshTimers() {
   activeCharacterRefreshRequestId += 1;
 }
 
-async function runActiveCharacterRefresh({ requestId } = {}) {
+async function runActiveCharacterRefresh({ requestId, version } = {}) {
   const expectedRequestId = typeof requestId === 'number'
     ? requestId
     : (typeof activeCharacterRefreshRequestId === 'number' ? activeCharacterRefreshRequestId : 0);
 
-  try {
-    const result = await window.electronAPI.getCurrentUser();
-    if (
-      expectedRequestId !== activeCharacterRefreshRequestId
-      || !state.currentUser
-      || !result?.user
-    ) {
-      return false;
-    }
-
-    setCurrentUser({
-      ...result.user,
-      capabilities: result.capabilities || {}
-    });
-    return true;
-  } catch {
+  if (expectedRequestId !== activeCharacterRefreshRequestId || !state.currentUser) {
     return false;
   }
+
+  return refreshDeviceCharacters(version);
 }
 
 function ensureSettingsModelLoaded() {
@@ -1104,12 +1090,12 @@ function scheduleActiveCharacterRefresh({ version } = {}) {
 
   activeCharacterRefreshTimer = setTimeout(async () => {
     activeCharacterRefreshTimer = null;
-    const refreshed = await runActiveCharacterRefresh({ requestId });
+    const refreshed = await runActiveCharacterRefresh({ requestId, version });
 
     if (!refreshed && requestId === activeCharacterRefreshRequestId && state.currentUser) {
       activeCharacterRefreshRetryTimer = setTimeout(async () => {
         activeCharacterRefreshRetryTimer = null;
-        await runActiveCharacterRefresh({ requestId });
+        await runActiveCharacterRefresh({ requestId, version });
       }, 5000);
     }
   }, 3000);
@@ -2099,7 +2085,7 @@ function setupEventListeners() {
   // Settings
   elements.saveSettingsBtn.addEventListener('click', handleSaveSettings);
   elements.resetSettingsBtn.addEventListener('click', handleResetSettings);
-  if (elements.poeConnectBtn) elements.poeConnectBtn.addEventListener('click', handlePoeConnect);
+  if (elements.poeConnectBtn) elements.poeConnectBtn.addEventListener('click', handleConnectPoeDevice);
   if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.addEventListener('click', handlePoeDisconnect);
 
   // Settings tab navigation
@@ -2609,38 +2595,21 @@ function isServerUnavailableError(error) {
   return /unable to reach the server|sunucuya ulasilamadi|request timed out|yanit vermekte gecikti|econnrefused|network/i.test(rawMessage);
 }
 
+// The local profile outlives the 10-hour Path of Exile sign-in, so the app opens straight to the dashboard.
 async function bootstrapCurrentUserSession() {
-  const hasToken = await window.electronAPI.hasAuthToken();
+  const profile = await window.electronAPI.getLocalProfile().catch(() => null);
 
-  if (!hasToken) {
+  if (!profile) {
     state.mapResults = [];
     showLoginModal();
     return { mode: 'login-required' };
   }
 
-  try {
-    const me = await window.electronAPI.getCurrentUser();
-    if (me?.user) {
-      setCurrentUser({
-        ...me.user,
-        capabilities: me.capabilities || {}
-      });
-      hideLoginModal();
-      await loadMapResultHistory();
-      await loadPoeLinkStatus();
-      void syncPoeDeviceConnection();
-      return { mode: 'authenticated' };
-    }
-
-    state.mapResults = [];
-    showLoginModal();
-    return { mode: 'login-required' };
-  } catch (error) {
-    state.mapResults = [];
-
-    showLoginModal();
-    return { mode: 'login-required' };
-  }
+  setCurrentUser(toProfileUser(profile));
+  hideLoginModal();
+  await loadMapResultHistory();
+  void syncPoeDeviceConnection();
+  return { mode: 'authenticated' };
 }
 
 /**
@@ -2674,7 +2643,6 @@ async function handleLogin(e) {
         capabilities: result.data.capabilities || {}
       });
       elements.loginModal.classList.add('hidden');
-      await loadPoeLinkStatus();
       void syncPoeDeviceConnection();
       await refreshTrackerData();
       showToast(window.t('login.title'), window.t('toast.loginSuccess'));
@@ -2699,26 +2667,14 @@ async function handlePoeOAuthLogin() {
   }
 
   try {
-    const startResult = await window.electronAPI.startPoeLogin();
-    const canCompleteLogin = typeof window.electronAPI.completePoeLogin === 'function';
-    const result = !startResult?.success && canCompleteLogin
-      ? await window.electronAPI.completePoeLogin({
-        code: startResult?.mockCode || startResult?.code || null,
-        state: startResult?.state || null,
-        codeVerifier: startResult?.codeVerifier || null,
-        redirectUri: startResult?.redirectUri || null
-      })
-      : startResult;
+    const result = await window.electronAPI.signInWithPoe();
 
     if (result?.success) {
-      setCurrentUser({
-        ...result.data.user,
-        capabilities: result.data.capabilities || {}
-      });
+      setCurrentUser(toProfileUser(result.profile));
       if (elements.loginModal) {
         elements.loginModal.classList.add('hidden');
       }
-      await loadPoeLinkStatus();
+      await loadMapResultHistory();
       void syncPoeDeviceConnection();
       await refreshTrackerData();
       showToast(window.t('login.title'), window.t('toast.loginSuccess'));
@@ -2758,7 +2714,6 @@ async function handleRegister(e) {
         capabilities: result.data.capabilities || {}
       });
       elements.registerModal.classList.add('hidden');
-      await loadPoeLinkStatus();
       await refreshTrackerData();
       showToast(window.t('register.title'), window.t('toast.registerSuccess'));
     } else {
@@ -2783,7 +2738,6 @@ async function handleLogout() {
   state.sessions = [];
   state.mapResults = [];
   state.recentLoot = [];
-  state.poeLink = null;
   state.account = null;
   state.runtimeSession = null;
   state.overlay = null;
@@ -2843,6 +2797,16 @@ function applyLocalizedChrome() {
 
   renderUserIdentity();
   renderPoeLinkStatus();
+}
+
+// The renderer reads the local profile through the fields the server account used to fill.
+function toProfileUser(profile) {
+  return {
+    id: profile.id,
+    username: profile.accountName,
+    accountName: profile.accountName,
+    capabilities: {}
+  };
 }
 
 /**
@@ -2981,8 +2945,14 @@ async function refreshDeviceCharacters(poeVersion) {
     return false;
   }
 
+  const profileId = state.currentUser.id;
   const result = await window.electronAPI.getPoeDeviceCharacters(version).catch(() => null);
+  // Signed out (or another profile) while GGG answered: the result belongs to nobody now.
+  if (state.currentUser?.id !== profileId) {
+    return false;
+  }
   state.poeDeviceConnected = Boolean(result?.connected);
+  renderPoeLinkStatus();
   if (!Array.isArray(result?.characters)) {
     renderCharacterSummaryCard();
     return false;
@@ -3011,16 +2981,22 @@ async function refreshDeviceCharacters(poeVersion) {
 async function syncPoeDeviceConnection() {
   const status = await window.electronAPI.getPoeAuthStatus().catch(() => null);
   state.poeDeviceConnected = Boolean(status?.authenticated);
+  renderPoeLinkStatus();
   renderCharacterSummaryCard();
   if (state.poeDeviceConnected) {
     await refreshDeviceCharacters(state.account?.activePoeVersion);
   }
 }
 
+// The card and Settings both connect; one sign-in at a time, since a second loopback flow would wait for nothing.
 async function handleConnectPoeDevice() {
-  if (elements.characterConnectBtn) {
-    elements.characterConnectBtn.disabled = true;
+  const buttons = [elements.characterConnectBtn, elements.poeConnectBtn].filter(Boolean);
+  if (buttons.some((button) => button.disabled)) {
+    return;
   }
+  buttons.forEach((button) => {
+    button.disabled = true;
+  });
 
   try {
     const result = await window.electronAPI.connectPoeDevice();
@@ -3030,10 +3006,13 @@ async function handleConnectPoeDevice() {
     }
     state.poeDeviceConnected = true;
     await refreshDeviceCharacters(state.account?.activePoeVersion);
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
   } finally {
-    if (elements.characterConnectBtn) {
-      elements.characterConnectBtn.disabled = false;
-    }
+    buttons.forEach((button) => {
+      button.disabled = false;
+    });
+    renderPoeLinkStatus();
     renderCharacterSummaryCard();
   }
 }
@@ -3075,9 +3054,8 @@ function canCurrentUserSyncPrices() {
   return Boolean(state.currentUser?.capabilities?.canSyncPrices);
 }
 
+// Settings shows this device's Path of Exile connection for the signed-in profile.
 function renderPoeLinkStatus() {
-  const status = state.poeLink;
-
   if (!elements.poeLinkStatus || !elements.poeAccountName || !elements.poeLinkMode) return;
 
   if (!state.currentUser) {
@@ -3089,64 +3067,20 @@ function renderPoeLinkStatus() {
     return;
   }
 
-  if (status?.linked) {
-    elements.poeLinkStatus.textContent = status.mock ? window.t('settings.poeLinkedMock') : window.t('settings.poeLinked');
-    elements.poeAccountName.textContent = status.accountName || window.t('settings.poeLinked');
-    elements.poeLinkMode.textContent = status.mock
-      ? window.t('settings.poeMockMode')
-      : window.t('settings.poeLiveMode');
+  if (state.poeDeviceConnected) {
+    elements.poeLinkStatus.textContent = window.t('settings.poeLinked');
+    elements.poeAccountName.textContent = state.currentUser.accountName || window.t('settings.poeLinked');
+    elements.poeLinkMode.textContent = window.t('settings.poeLiveMode');
     if (elements.poeConnectBtn) elements.poeConnectBtn.classList.add('hidden');
     if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.classList.remove('hidden');
     return;
   }
 
   elements.poeLinkStatus.textContent = window.t('settings.poeNotLinked');
-  elements.poeAccountName.textContent = window.t('settings.poeNoAccount');
-  elements.poeLinkMode.textContent = window.t('settings.poeMockMode');
+  elements.poeAccountName.textContent = state.currentUser.accountName || window.t('settings.poeNoAccount');
+  elements.poeLinkMode.textContent = window.t('settings.poeReconnectHint');
   if (elements.poeConnectBtn) elements.poeConnectBtn.classList.remove('hidden');
   if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.classList.add('hidden');
-}
-
-async function loadPoeLinkStatus() {
-  if (!state.currentUser) {
-    renderPoeLinkStatus();
-    return;
-  }
-
-  try {
-    const response = await window.electronAPI.getPoeLinkStatus();
-    state.poeLink = response?.poe || null;
-  } catch (error) {
-    state.poeLink = null;
-  } finally {
-    renderPoeLinkStatus();
-  }
-}
-
-async function handlePoeConnect() {
-  if (!state.currentUser) {
-    showToast(window.t('toast.error'), window.t('toast.poeSignInFirst'), 'warning');
-    return;
-  }
-
-  if (elements.poeConnectBtn) {
-    elements.poeConnectBtn.disabled = true;
-    elements.poeConnectBtn.textContent = `${window.t('settings.connectPoe')}...`;
-  }
-
-  try {
-    const response = await window.electronAPI.startPoeConnect();
-    state.poeLink = response?.poe || null;
-    renderPoeLinkStatus();
-    showToast(window.t('toast.poeTitle'), state.poeLink?.mock ? window.t('toast.poeLinkedMock') : window.t('toast.poeLinked'), 'success');
-  } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.poeConnectError'), 'error');
-  } finally {
-    if (elements.poeConnectBtn) {
-      elements.poeConnectBtn.disabled = false;
-      elements.poeConnectBtn.textContent = window.t('settings.connectPoe');
-    }
-  }
 }
 
 async function handlePoeDisconnect() {
@@ -3158,9 +3092,10 @@ async function handlePoeDisconnect() {
   }
 
   try {
-    const response = await window.electronAPI.disconnectPoeAccount();
-    state.poeLink = response?.poe || null;
+    await window.electronAPI.disconnectPoeDevice();
+    state.poeDeviceConnected = false;
     renderPoeLinkStatus();
+    renderCharacterSummaryCard();
     showToast(window.t('toast.poeTitle'), window.t('toast.poeDisconnected'), 'success');
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.poeDisconnectError'), 'error');

@@ -17,7 +17,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setSettings: (settings) => ipcRenderer.invoke('set-settings', settings),
 
   // Auth
-  hasAuthToken: () => ipcRenderer.invoke('has-auth-token'),
+  getLocalProfile: () => ipcRenderer.invoke('get-local-profile'),
+  signInWithPoe: () => ipcRenderer.invoke('sign-in-with-poe'),
   getRuntimeMode: () => ipcRenderer.invoke('get-runtime-mode'),
   getAppUpdateState: () => ipcRenderer.invoke('get-app-update-state'),
   checkForAppUpdate: () => ipcRenderer.invoke('check-for-app-update'),
@@ -85,6 +86,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   disconnectPoeAccount: () => ipcRenderer.invoke('disconnect-poe-account'),
   startPoeLogin: () => ipcRenderer.invoke('start-poe-login'),
   connectPoeDevice: () => ipcRenderer.invoke('connect-poe-device'),
+  disconnectPoeDevice: () => ipcRenderer.invoke('disconnect-poe-device'),
   getPoeDeviceCharacters: (poeVersion) => ipcRenderer.invoke('get-poe-device-characters', poeVersion),
   getPoeAuthStatus: () => ipcRenderer.invoke('get-poe-auth-status'),
 

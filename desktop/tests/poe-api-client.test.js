@@ -21,7 +21,16 @@ function createClient({ characters = [], status = 200, retryAfter = '60' } = {})
     },
     async post(url, body) {
       posts.push({ url, body: new URLSearchParams(body) });
-      return { data: { access_token: 'access', refresh_token: 'refresh', expires_in: 36000, scope: 'account:characters' } };
+      return {
+        data: {
+          access_token: 'access',
+          refresh_token: 'refresh',
+          expires_in: 36000,
+          scope: 'account:characters',
+          sub: 'account-uuid',
+          username: 'Exile#1234'
+        }
+      };
     }
   };
   client.lastRequestAt = 0;
@@ -62,7 +71,9 @@ test('poe api client exchanges the code itself and hands the tokens to the liste
   const persisted = [];
   client.setTokenListener((tokens) => persisted.push(tokens));
 
-  await client.exchangeCode({ code: 'code-1', codeVerifier: 'verifier', redirectUri: 'http://127.0.0.1:34127/oauth/poe/callback' });
+  const account = await client.exchangeCode({ code: 'code-1', codeVerifier: 'verifier', redirectUri: 'http://127.0.0.1:34127/oauth/poe/callback' });
+
+  assert.deepEqual(account, { scope: 'account:characters', sub: 'account-uuid', username: 'Exile#1234' });
 
   assert.equal(posts[0].url, 'https://www.pathofexile.com/oauth/token');
   assert.equal(posts[0].body.get('grant_type'), 'authorization_code');
