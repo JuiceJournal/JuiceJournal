@@ -442,10 +442,7 @@ test('renderer setCurrentUser stores normalized account state for later dashboar
       }
     },
     renderUserIdentity: () => calls.push(['renderUserIdentity']),
-    getAccountStateModel: () => ({
-      deriveAccountState: require('../src/modules/accountStateModel').deriveAccountState,
-      createAccountStateCache: require('../src/modules/accountStateModel').createAccountStateCache
-    })
+    getAccountStateModel: () => require('../src/modules/accountStateModel')
   });
 
   context.setCurrentUser({
@@ -490,10 +487,7 @@ test('renderer uses the last detected game for cached dashboard character when n
       }
     },
     renderUserIdentity: () => {},
-    getAccountStateModel: () => ({
-      deriveAccountState: require('../src/modules/accountStateModel').deriveAccountState,
-      createAccountStateCache: require('../src/modules/accountStateModel').createAccountStateCache
-    })
+    getAccountStateModel: () => require('../src/modules/accountStateModel')
   });
 
   context.setCurrentUser({
@@ -508,9 +502,11 @@ test('renderer uses the last detected game for cached dashboard character when n
   assert.equal(persistedSettings.length, 1);
 });
 
-function loadCharacterSessionRenderer({ lastKnownAccountState } = {}) {
+function loadCharacterSessionRenderer({ lastKnownAccountState, poeDeviceConnected = false, deviceCharacters = null } = {}) {
   const calls = [];
   const persistedSettings = [];
+  const timers = [];
+  const deviceRequests = [];
   const accountStateModel = require('../src/modules/accountStateModel');
   const state = {
     currentUser: {
@@ -524,7 +520,9 @@ function loadCharacterSessionRenderer({ lastKnownAccountState } = {}) {
     },
     settings: { lastKnownAccountState },
     detectedGameVersion: 'poe2',
-    characterSession: null
+    characterSession: null,
+    deviceCharactersByGame: {},
+    poeDeviceConnected
   };
   const overlayCharacters = [];
   const characterPrompts = [];
@@ -535,10 +533,15 @@ function loadCharacterSessionRenderer({ lastKnownAccountState } = {}) {
     'handleGameSessionEntered',
     'handleCharacterChosen',
     'handleCharacterLogLine',
+    'refreshDeviceCharacters',
     'confirmActiveCharacter'
   ], {
     state,
     normalizePoeVersion: (value) => value === 'poe1' || value === 'poe2' ? value : null,
+    characterReconcileTimer: null,
+    CHARACTER_RECONCILE_DELAY_MS: 660000,
+    setTimeout: (callback, delay) => timers.push({ callback, delay }),
+    clearTimeout: () => {},
     window: {
       electronAPI: {
         setSettings: async (settings) => {
@@ -549,6 +552,10 @@ function loadCharacterSessionRenderer({ lastKnownAccountState } = {}) {
         },
         showCharacterPromptOverlay: async (prompt) => {
           characterPrompts.push(prompt);
+        },
+        getPoeDeviceCharacters: async (poeVersion) => {
+          deviceRequests.push(poeVersion);
+          return { connected: true, characters: deviceCharacters };
         }
       }
     },
@@ -560,8 +567,79 @@ function loadCharacterSessionRenderer({ lastKnownAccountState } = {}) {
   context.refreshAccountStateFromCurrentUser();
   persistedSettings.length = 0;
   overlayCharacters.length = 0;
-  return { context, state, calls, persistedSettings, overlayCharacters, characterPrompts };
+  return { context, state, calls, persistedSettings, overlayCharacters, characterPrompts, timers, deviceRequests };
 }
+
+const DEVICE_POE2_CHARACTERS = [
+  { id: 'poe2-high', name: 'HighLevelDeadeye', level: 94, class: 'Deadeye', poeVersion: 'poe2', current: false },
+  { id: 'poe2-alt', name: 'AltShaman', level: 89, class: 'Shaman', poeVersion: 'poe2', current: true },
+  { id: 'poe2-new', name: 'FreshMonk', level: 2, class: 'Monk', poeVersion: 'poe2', current: false }
+];
+
+test('renderer adopts the GGG current flag only when it moved and this Play is not confirmed', async () => {
+  const { context, state } = loadCharacterSessionRenderer({
+    lastKnownAccountState: { confirmedCharacterByGame: { poe2: 'poe2-high' }, apiCurrentByGame: { poe2: 'poe2-high' } },
+    poeDeviceConnected: true,
+    deviceCharacters: DEVICE_POE2_CHARACTERS
+  });
+
+  assert.equal(await context.refreshDeviceCharacters('poe2'), true);
+  assert.equal(state.account.summary.name, 'AltShaman');
+  assert.equal(state.account.summary.level, 89);
+  assert.equal(state.settings.lastKnownAccountState.apiCurrentByGame.poe2, 'poe2-alt');
+
+  // Same flag again: the player's own later pick stays.
+  context.handleCharacterChosen({ poeVersion: 'poe2', characterId: 'poe2-high' });
+  await context.refreshDeviceCharacters('poe2');
+  assert.equal(state.account.summary.name, 'HighLevelDeadeye');
+});
+
+test('renderer keeps a confirmed Play when GGG still reports the previous character', async () => {
+  const { context, state } = loadCharacterSessionRenderer({
+    lastKnownAccountState: { apiCurrentByGame: { poe2: 'poe2-high' } },
+    poeDeviceConnected: true,
+    deviceCharacters: DEVICE_POE2_CHARACTERS
+  });
+
+  context.handleGameSessionEntered({ poeVersion: 'poe2' });
+  context.handleCharacterChosen({ poeVersion: 'poe2', characterId: 'poe2-high' });
+  await context.refreshDeviceCharacters('poe2');
+
+  assert.equal(state.account.summary.name, 'HighLevelDeadeye');
+});
+
+test('renderer reconciles an unconfirmed Play with GGG eleven minutes later', async () => {
+  const { context, state, timers, deviceRequests } = loadCharacterSessionRenderer({
+    lastKnownAccountState: { confirmedCharacterByGame: { poe2: 'poe2-high' }, apiCurrentByGame: { poe2: 'poe2-high' } },
+    poeDeviceConnected: true,
+    deviceCharacters: DEVICE_POE2_CHARACTERS
+  });
+
+  context.handleGameSessionEntered({ poeVersion: 'poe2' });
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].delay, 660000);
+  assert.deepEqual(deviceRequests, []);
+
+  timers[0].callback();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(deviceRequests, ['poe2']);
+  assert.equal(state.account.summary.name, 'AltShaman');
+});
+
+test('renderer fetches once for a level 2 character it does not know yet', async () => {
+  const { context, state, deviceRequests } = loadCharacterSessionRenderer({
+    poeDeviceConnected: true,
+    deviceCharacters: DEVICE_POE2_CHARACTERS.map((character) => ({ ...character, current: false }))
+  });
+
+  await context.handleCharacterLogLine({ poeVersion: 'poe2', name: 'PartyFriend', kind: 'level_up', level: 40 });
+  assert.deepEqual(deviceRequests, []);
+
+  await context.handleCharacterLogLine({ poeVersion: 'poe2', name: 'FreshMonk', kind: 'level_up', level: 2 });
+  assert.deepEqual(deviceRequests, ['poe2']);
+  assert.equal(state.account.summary.name, 'FreshMonk');
+});
 
 test('renderer keeps the last confirmed character on Play and marks the session unconfirmed', () => {
   const { context, state, calls } = loadCharacterSessionRenderer({
@@ -657,6 +735,8 @@ test('renderer logout clears normalized account state', async () => {
     state,
     stashState,
     clearActiveCharacterRefreshTimers: () => calls.push(['clearActiveCharacterRefreshTimers']),
+    clearTimeout: () => {},
+    characterReconcileTimer: null,
     window: {
       electronAPI: {
         logout: async () => calls.push(['logout'])

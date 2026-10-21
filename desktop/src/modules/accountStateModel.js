@@ -139,6 +139,7 @@
       characters: allCharacters,
       charactersByGame,
       confirmedCharacterByGame,
+      apiCurrentByGame: normalizeCharacterIdByGame(cachedAccountState?.apiCurrentByGame),
       activePoeVersion: normalizedActivePoeVersion,
       selectedCharacter,
       summary: selectedCharacter
@@ -192,13 +193,26 @@
       charactersByGame,
       selectedCharacterByGame,
       confirmedCharacterByGame: normalizeCharacterIdByGame(accountState.confirmedCharacterByGame),
+      apiCurrentByGame: normalizeCharacterIdByGame(accountState.apiCurrentByGame),
       cachedAt: new Date().toISOString()
     };
+  }
+
+  // Characters this device fetched from GGG replace the account payload's list for that realm.
+  function withDeviceCharacters(characters, deviceCharactersByGame = {}) {
+    const realms = ['poe1', 'poe2'].filter((poeVersion) => Array.isArray(deviceCharactersByGame?.[poeVersion]));
+    const accountCharacters = Array.isArray(characters) ? characters : [];
+
+    return [
+      ...accountCharacters.filter((character) => !realms.includes(normalizePoeVersion(character?.poeVersion))),
+      ...realms.flatMap((poeVersion) => deviceCharactersByGame[poeVersion])
+    ];
   }
 
   return {
     deriveAccountState,
     createAccountStateCache,
-    findCharacterByName
+    findCharacterByName,
+    withDeviceCharacters
   };
 });

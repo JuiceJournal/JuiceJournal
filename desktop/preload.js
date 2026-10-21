@@ -83,6 +83,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPoeLinkStatus: () => ipcRenderer.invoke('get-poe-link-status'),
   disconnectPoeAccount: () => ipcRenderer.invoke('disconnect-poe-account'),
   startPoeLogin: () => ipcRenderer.invoke('start-poe-login'),
+  connectPoeDevice: () => ipcRenderer.invoke('connect-poe-device'),
+  getPoeDeviceCharacters: (poeVersion) => ipcRenderer.invoke('get-poe-device-characters', poeVersion),
+  getPoeAuthStatus: () => ipcRenderer.invoke('get-poe-auth-status'),
 
   // Olay dinleyicileri
   onMapEntered: (callback) => {

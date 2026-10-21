@@ -210,6 +210,7 @@ test('successful poe oauth login initializes a local session and dashboard boots
     },
     setCurrentUser: (user) => calls.push(['setCurrentUser', user.username]),
     loadPoeLinkStatus: async () => calls.push(['loadPoeLinkStatus']),
+    syncPoeDeviceConnection: async () => calls.push(['syncPoeDeviceConnection']),
     refreshTrackerData: async () => calls.push(['refreshTrackerData']),
     showToast: (...args) => calls.push(['showToast', ...args]),
     getUserFacingErrorMessage: (error) => String(error?.error || error?.message || error)
@@ -218,11 +219,14 @@ test('successful poe oauth login initializes a local session and dashboard boots
   await context.handlePoeOAuthLogin();
 
   assert.deepEqual(
-    calls.filter(([name]) => ['completePoeLogin', 'setCurrentUser', 'loadPoeLinkStatus', 'refreshTrackerData'].includes(name)),
+    calls.filter(([name]) => [
+      'completePoeLogin', 'setCurrentUser', 'loadPoeLinkStatus', 'syncPoeDeviceConnection', 'refreshTrackerData'
+    ].includes(name)),
     [
       ['completePoeLogin', 'code', 'oauth-state'],
       ['setCurrentUser', 'RangerMain'],
       ['loadPoeLinkStatus'],
+      ['syncPoeDeviceConnection'],
       ['refreshTrackerData']
     ]
   );
