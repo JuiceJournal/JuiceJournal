@@ -21,6 +21,9 @@ const VISUAL_USER = {
   }
 };
 
+// The local profile the visual QA journal belongs to.
+const VISUAL_PROFILE_ID = 'adaptive-profit-visual-profile';
+
 const PROFIT_RATES = {
   divineChaos: 100,
   mirrorChaos: 300000
@@ -107,9 +110,9 @@ function createVisualSession() {
   };
 }
 
-// Sessions live in the signed-in user's local journal, not on the API.
+// Sessions live in the local profile's journal, not on the API.
 function seedLocalJournal(userDataDir, sessions) {
-  const journalDir = path.join(userDataDir, 'profiles', VISUAL_USER.id);
+  const journalDir = path.join(userDataDir, 'profiles', VISUAL_PROFILE_ID);
   fs.mkdirSync(journalDir, { recursive: true });
   fs.writeFileSync(path.join(journalDir, 'journal.json'), JSON.stringify({ sessions }));
 }
@@ -117,64 +120,6 @@ function seedLocalJournal(userDataDir, sessions) {
 async function startVisualBackend() {
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url || '/', 'http://127.0.0.1');
-
-    if (request.method === 'POST' && url.pathname === '/api/auth/poe/login/start') {
-      writeJson(response, 200, {
-        success: true,
-        data: {
-          mode: 'mock',
-          requiresBrowser: false,
-          mockCode: 'visual-oauth-code'
-        },
-        error: null
-      });
-      return;
-    }
-
-    if (request.method === 'POST' && url.pathname === '/api/auth/poe/login/complete') {
-      const body = await parseJsonBody(request);
-      if (body.code !== 'visual-oauth-code') {
-        writeJson(response, 400, {
-          success: false,
-          data: null,
-          error: 'Unexpected OAuth code',
-          errorCode: 'OAUTH_CODE_MISMATCH'
-        });
-        return;
-      }
-
-      writeJsonWithAuthCookie(response, 200, {
-        success: true,
-        data: {
-          token: VISUAL_USER.token,
-          user: createVisualUserPayload(),
-          capabilities: {
-            canSyncPrices: true
-          },
-          poe: {
-            accountName: VISUAL_USER.accountName,
-            mock: true
-          }
-        },
-        error: null
-      }, VISUAL_USER.token);
-      return;
-    }
-
-    if (request.method === 'GET' && url.pathname === '/api/auth/poe/status') {
-      writeJson(response, 200, {
-        success: true,
-        data: {
-          poe: {
-            linked: true,
-            mock: true,
-            accountName: VISUAL_USER.accountName
-          }
-        },
-        error: null
-      });
-      return;
-    }
 
     if (request.method === 'GET' && url.pathname === '/api/prices/leagues') {
       writeJson(response, 200, {
@@ -254,6 +199,11 @@ function createIsolatedProfile(testInfo, apiUrl) {
       JUICE_JOURNAL_E2E_APP_DATA_DIR: appDataDir,
       JUICE_JOURNAL_E2E_USER_DATA_DIR: userDataDir,
       JUICE_JOURNAL_E2E_API_URL: apiUrl,
+      JUICE_JOURNAL_E2E_POE_ACCOUNT: JSON.stringify({
+        sub: `${VISUAL_USER.id}-ggg`,
+        username: VISUAL_USER.username,
+        characters: { poe1: [{ ...VISUAL_USER.selectedCharacter, current: true }] }
+      }),
       JUICE_JOURNAL_E2E_POE_LOG_PATH: poeLogPath,
       TMP: tempDir,
       TEMP: tempDir
@@ -270,6 +220,7 @@ function createBootstrapScript(testInfo) {
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
+require(${JSON.stringify(path.join(__dirname, 'poe-device-stub.cjs'))});
 
 const appDataDir = process.env.JUICE_JOURNAL_E2E_APP_DATA_DIR;
 const userDataDir = process.env.JUICE_JOURNAL_E2E_USER_DATA_DIR;
@@ -301,7 +252,10 @@ fs.writeFileSync(configPath, JSON.stringify({
   },
   authToken: null,
   authTokenEncrypted: null,
-  currentUserId: null
+  currentUserId: null,
+  localProfiles: ${JSON.stringify({
+    [VISUAL_PROFILE_ID]: { id: VISUAL_PROFILE_ID, poeSub: `${VISUAL_USER.id}-ggg`, accountName: VISUAL_USER.username }
+  })}
 }, null, '\\t'));
 `, 'utf8');
 

@@ -1057,7 +1057,8 @@ test('main logout clears desktop auth state', () => {
   assert.deepEqual(writes, [
     ['authToken', null],
     ['authTokenEncrypted', null],
-    ['currentUserId', null]
+    ['currentUserId', null],
+    ['activeProfileId', null]
   ]);
   assert.equal(apiToken, null);
   assert.equal(context.currentSession, null);

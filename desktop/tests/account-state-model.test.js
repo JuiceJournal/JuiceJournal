@@ -559,6 +559,7 @@ function loadCharacterSessionRenderer({ lastKnownAccountState, poeDeviceConnecte
         }
       }
     },
+    renderPoeLinkStatus: () => {},
     renderCharacterSummaryCard: () => calls.push('renderCharacterSummaryCard'),
     refreshRendererOverlayState: () => calls.push('refreshRendererOverlayState'),
     getAccountStateModel: () => accountStateModel
@@ -716,7 +717,7 @@ test('renderer logout clears normalized account state', async () => {
     sessions: [{ id: 'session-1' }],
     mapResults: [{ id: 'map-result-1' }],
     recentLoot: [{ id: 'loot-1' }],
-    poeLink: { linked: true },
+    poeDeviceConnected: true,
     account: {
       accountName: 'KocaGyVeMasha',
       selectedCharacter: { id: 'char-1', name: 'MainOne' }
@@ -756,6 +757,7 @@ test('renderer logout clears normalized account state', async () => {
 
   assert.equal(state.account, null);
   assert.equal(state.currentUser, null);
+  assert.equal(state.poeDeviceConnected, false);
   assert.equal(Array.isArray(state.mapResults), true);
   assert.equal(state.mapResults.length, 0);
   assert.equal(stashState.beforeSnapshotId, null);

@@ -689,12 +689,12 @@ test('legacy queue drain leaves the journal-backed current session alone', async
   assert.equal(context.currentSession, active);
 });
 
-test('journal store is per signed-in user and rejects unsafe ids', () => {
+test('journal store is per local profile and rejects unsafe ids', () => {
   const created = [];
-  let userId = 'user-1';
+  let profileId = 'profile-1';
   const context = loadFunctions(['getJournalStore'], {
     journalStore: null,
-    getCurrentUserId: () => userId,
+    getActiveProfile: () => (profileId === null ? null : { id: profileId }),
     path,
     app: { getPath: () => 'D:/UserData' },
     Store: class {
@@ -707,16 +707,89 @@ test('journal store is per signed-in user and rejects unsafe ids', () => {
 
   const first = context.getJournalStore();
   assert.equal(context.getJournalStore(), first);
-  userId = 'user-2';
+  profileId = 'profile-2';
   const second = context.getJournalStore();
 
   assert.notEqual(second, first);
   assert.deepEqual(JSON.parse(JSON.stringify(created)), [
-    { name: 'journal', cwd: path.join('D:/UserData', 'profiles', 'user-1') },
-    { name: 'journal', cwd: path.join('D:/UserData', 'profiles', 'user-2') }
+    { name: 'journal', cwd: path.join('D:/UserData', 'profiles', 'profile-1') },
+    { name: 'journal', cwd: path.join('D:/UserData', 'profiles', 'profile-2') }
   ]);
-  for (const unsafeId of ['../user-1', 'user/1', '', null]) {
-    userId = unsafeId;
+  for (const unsafeId of ['../profile-1', 'profile/1', '', null]) {
+    profileId = unsafeId;
     assert.throws(() => context.getJournalStore(), /Local desktop sign-in is required/);
   }
+});
+
+function createMemoryStore(initial = {}) {
+  const data = { ...initial };
+  return {
+    data,
+    get: (key) => data[key],
+    set(key, value) {
+      data[key] = value;
+    },
+    delete(key) {
+      delete data[key];
+    }
+  };
+}
+
+test('signing in again with the same GGG account opens the same local profile', () => {
+  const store = createMemoryStore({ localProfiles: {}, activeProfileId: null });
+  let nextId = 0;
+  const context = loadFunctions(['getActiveProfile', 'selectLocalProfile', 'assertDesktopUserAuthenticated'], {
+    store,
+    crypto: { randomUUID: () => `profile-${++nextId}` }
+  });
+
+  assert.throws(() => context.assertDesktopUserAuthenticated(), /Local desktop sign-in is required/);
+
+  const first = context.selectLocalProfile({ sub: 'ggg-account-1', username: 'Exile#1234' });
+  store.set('activeProfileId', null);
+  const again = context.selectLocalProfile({ sub: 'ggg-account-1', username: 'Exile#5678' });
+  const other = context.selectLocalProfile({ sub: 'ggg-account-2', username: 'Alt#0001' });
+
+  assert.equal(first.id, 'profile-1');
+  assert.equal(again.id, 'profile-1');
+  assert.equal(again.accountName, 'Exile#5678');
+  assert.equal(again.createdAt, first.createdAt);
+  assert.equal(other.id, 'profile-2');
+  assert.equal(context.getActiveProfile().id, 'profile-2');
+  assert.deepEqual(Object.keys(store.data.localProfiles), ['profile-1', 'profile-2']);
+  context.assertDesktopUserAuthenticated();
+});
+
+test('the first local profile takes over the legacy user data once', () => {
+  const store = createMemoryStore({
+    currentUserId: 'backend-user-1',
+    'mapResults:backend-user-1': [{ id: 'map-1' }]
+  });
+  const renames = [];
+  const existing = new Set([path.join('D:/UserData', 'profiles', 'backend-user-1')]);
+  const context = loadFunctions(['getCurrentUserId', 'migrateLegacyUserData'], {
+    store,
+    path,
+    app: { getPath: () => 'D:/UserData' },
+    fs: {
+      existsSync: (target) => existing.has(target),
+      renameSync(from, to) {
+        renames.push([from, to]);
+        existing.delete(from);
+        existing.add(to);
+      }
+    }
+  });
+
+  context.migrateLegacyUserData({ id: 'profile-1' });
+  context.migrateLegacyUserData({ id: 'profile-2' });
+
+  assert.deepEqual(store.data['mapResults:profile-1'], [{ id: 'map-1' }]);
+  assert.equal('mapResults:backend-user-1' in store.data, false);
+  assert.equal('mapResults:profile-2' in store.data, false);
+  assert.deepEqual(renames, [[
+    path.join('D:/UserData', 'profiles', 'backend-user-1'),
+    path.join('D:/UserData', 'profiles', 'profile-1')
+  ]]);
+  assert.equal(store.data.legacyUserMigratedTo, 'profile-1');
 });

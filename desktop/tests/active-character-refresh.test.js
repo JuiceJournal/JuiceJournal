@@ -161,28 +161,23 @@ function loadFunctions(functionNames, contextOverrides = {}) {
   return context;
 }
 
-test('game version change schedules a delayed current-user refresh', async () => {
+test('game version change schedules a delayed character refresh from GGG', async () => {
   const timers = [];
   const calls = [];
   const context = loadFunctions(['clearActiveCharacterRefreshTimers', 'runActiveCharacterRefresh', 'scheduleActiveCharacterRefresh'], {
     activeCharacterRefreshTimer: null,
     activeCharacterRefreshRetryTimer: null,
     activeCharacterRefreshRequestId: 0,
-    state: { currentUser: { id: 'user-1' } },
-    window: {
-      electronAPI: {
-        getCurrentUser: async () => {
-          calls.push(['getCurrentUser']);
-          return { user: { username: 'Esquetta4179' }, capabilities: {} };
-        }
-      }
+    state: { currentUser: { id: 'profile-1' } },
+    refreshDeviceCharacters: async (version) => {
+      calls.push(version);
+      return true;
     },
     setTimeout(fn, delay) {
       timers.push({ fn, delay });
       return timers.length;
     },
-    clearTimeout() {},
-    setCurrentUser: (user) => calls.push(['setCurrentUser', user.username])
+    clearTimeout() {}
   });
 
   context.scheduleActiveCharacterRefresh({ version: 'poe2' });
@@ -192,7 +187,7 @@ test('game version change schedules a delayed current-user refresh', async () =>
 
   await timers[0].fn();
 
-  assert.deepEqual(calls.map(([name]) => name), ['getCurrentUser', 'setCurrentUser']);
+  assert.deepEqual(calls, ['poe2']);
 });
 
 test('refresh scheduler does not stack duplicate timers across repeated game-change events', () => {
@@ -202,20 +197,15 @@ test('refresh scheduler does not stack duplicate timers across repeated game-cha
     activeCharacterRefreshTimer: null,
     activeCharacterRefreshRetryTimer: null,
     activeCharacterRefreshRequestId: 0,
-    state: { currentUser: { id: 'user-1' } },
-    window: {
-      electronAPI: {
-        getCurrentUser: async () => ({ user: { username: 'Esquetta4179' }, capabilities: {} })
-      }
-    },
+    state: { currentUser: { id: 'profile-1' } },
+    refreshDeviceCharacters: async () => true,
     setTimeout(fn, delay) {
       timers.push({ fn, delay });
       return `timer-${timers.length}`;
     },
     clearTimeout(timerId) {
       cleared.push(timerId);
-    },
-    setCurrentUser() {}
+    }
   });
 
   context.scheduleActiveCharacterRefresh({ version: 'poe2' });
@@ -249,18 +239,16 @@ test('stale in-flight refresh does not overwrite a newer refresh generation', as
     activeCharacterRefreshTimer: null,
     activeCharacterRefreshRetryTimer: null,
     activeCharacterRefreshRequestId: 0,
-    state: { currentUser: { id: 'user-1' } },
-    window: {
-      electronAPI: {
-        getCurrentUser: async () => ({ user: { username: 'LateUser' }, capabilities: {} })
-      }
+    state: { currentUser: { id: 'profile-1' } },
+    refreshDeviceCharacters: async (version) => {
+      calls.push(version);
+      return true;
     },
     setTimeout(fn, delay) {
       timers.push({ fn, delay });
       return `timer-${timers.length}`;
     },
-    clearTimeout() {},
-    setCurrentUser: (user) => calls.push(user.username)
+    clearTimeout() {}
   });
 
   context.scheduleActiveCharacterRefresh({ version: 'poe2' });
@@ -271,25 +259,17 @@ test('stale in-flight refresh does not overwrite a newer refresh generation', as
 });
 
 test('failed character refresh keeps the previous character visible', async () => {
-  const calls = [];
   const existingUser = { username: 'Esquetta4179' };
   const context = loadFunctions(['runActiveCharacterRefresh'], {
+    activeCharacterRefreshRequestId: 0,
     state: { currentUser: existingUser },
-    window: {
-      electronAPI: {
-        getCurrentUser: async () => {
-          throw new Error('backend unavailable');
-        }
-      }
-    },
-    setCurrentUser: () => calls.push(['setCurrentUser'])
+    refreshDeviceCharacters: async () => false
   });
 
-  const result = await context.runActiveCharacterRefresh();
+  const result = await context.runActiveCharacterRefresh({ version: 'poe2' });
 
   assert.equal(result, false);
   assert.equal(context.state.currentUser, existingUser);
-  assert.deepEqual(calls, []);
 });
 
 test('failed scheduled refresh retries once after 5 seconds', async () => {
@@ -299,21 +279,16 @@ test('failed scheduled refresh retries once after 5 seconds', async () => {
     activeCharacterRefreshTimer: null,
     activeCharacterRefreshRetryTimer: null,
     activeCharacterRefreshRequestId: 0,
-    state: { currentUser: { id: 'user-1' } },
-    window: {
-      electronAPI: {
-        getCurrentUser: async () => {
-          attempts += 1;
-          throw new Error('backend unavailable');
-        }
-      }
+    state: { currentUser: { id: 'profile-1' } },
+    refreshDeviceCharacters: async () => {
+      attempts += 1;
+      return false;
     },
     setTimeout(fn, delay) {
       timers.push({ fn, delay });
       return `timer-${timers.length}`;
     },
-    clearTimeout() {},
-    setCurrentUser() {}
+    clearTimeout() {}
   });
 
   context.scheduleActiveCharacterRefresh({ version: 'poe2' });
