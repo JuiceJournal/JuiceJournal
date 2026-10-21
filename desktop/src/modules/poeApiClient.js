@@ -11,27 +11,38 @@
 
 const axios = require('axios');
 const registry = require('./currencyRegistry');
+const { version: APP_VERSION } = require('../../package.json');
 
 const POE_API_BASE = 'https://api.pathofexile.com';
 const POE_AUTH_BASE = 'https://www.pathofexile.com';
+// Juice Journal's public OAuth client (authorization code + PKCE, loopback redirect). Public clients have no
+// secret, so the id ships with the app; POE_CLIENT_ID overrides it for forks with their own registration.
+const DEFAULT_POE_CLIENT_ID = 'juicejournal';
+const POE_CONTACT = 'https://github.com/JuiceJournal/JuiceJournal';
 
 // Rate limiting: GGG enforces per-endpoint limits via response headers.
 // We implement a simple token-bucket per endpoint pattern.
 const RATE_LIMIT_SAFETY_MS = 200; // minimum gap between requests
+// The character list policy is tight (seen 2026-10-21: 2 per 10 s and 5 per 300 s per account); one request
+// per 300 s is left for other tools on the same account.
+const CHARACTER_LIST_BUDGET = [[2, 10_000], [4, 300_000]];
 
 class PoeApiClient {
   constructor() {
     this.accessToken = null;
     this.refreshToken = null;
     this.tokenExpiresAt = null;
-    this.clientId = null;
+    this.clientId = process.env.POE_CLIENT_ID || DEFAULT_POE_CLIENT_ID;
     this.lastRequestAt = 0;
+    this.tokenListener = null;
+    this.characterListRequests = [];
+    this.characterListBlockedUntil = 0;
 
     this.client = axios.create({
       baseURL: POE_API_BASE,
       timeout: 15000,
       headers: {
-        'User-Agent': 'JuiceJournal/1.0 (contact: juicejournal@github.com)'
+        'User-Agent': `OAuth ${this.clientId}/${APP_VERSION} (contact: ${POE_CONTACT}) JuiceJournal`
       }
     });
   }
@@ -45,12 +56,26 @@ class PoeApiClient {
   /**
    * Set OAuth tokens obtained from PoE OAuth flow
    */
-  setTokens({ accessToken, refreshToken, expiresIn }) {
+  setTokens({ accessToken, refreshToken, expiresIn, tokenExpiresAt }) {
     this.accessToken = accessToken;
     this.refreshToken = refreshToken;
+    // Fresh tokens carry expiresIn; tokens restored from disk carry the absolute tokenExpiresAt.
     this.tokenExpiresAt = expiresIn
       ? Date.now() + expiresIn * 1000 - 60000 // refresh 1 min early
-      : null;
+      : (Number.isFinite(tokenExpiresAt) ? tokenExpiresAt : null);
+  }
+
+  /**
+   * Called with getTokens() whenever tokens are issued, refreshed or dropped, so the caller can persist them.
+   */
+  setTokenListener(listener) {
+    this.tokenListener = typeof listener === 'function' ? listener : null;
+  }
+
+  _notifyTokens() {
+    if (this.tokenListener) {
+      this.tokenListener(this.getTokens());
+    }
   }
 
   getTokens() {
@@ -87,7 +112,7 @@ class PoeApiClient {
       throw new Error('No refresh token available');
     }
 
-    const response = await axios.post(`${POE_AUTH_BASE}/oauth/token`, new URLSearchParams({
+    const response = await this.client.post(`${POE_AUTH_BASE}/oauth/token`, new URLSearchParams({
       grant_type: 'refresh_token',
       client_id: this.clientId,
       refresh_token: this.refreshToken
@@ -102,8 +127,47 @@ class PoeApiClient {
       refreshToken: data.refresh_token || this.refreshToken,
       expiresIn: data.expires_in
     });
+    this._notifyTokens();
 
     return this.getTokens();
+  }
+
+  // ─── Desktop sign-in (public client) ────────────────────────
+
+  buildAuthorizeUrl({ redirectUri, codeChallenge, state, scope = 'account:characters' }) {
+    return `${POE_AUTH_BASE}/oauth/authorize?${new URLSearchParams({
+      client_id: this.clientId,
+      response_type: 'code',
+      scope,
+      state,
+      redirect_uri: redirectUri,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256'
+    })}`;
+  }
+
+  async exchangeCode({ code, codeVerifier, redirectUri, scope = 'account:characters' }) {
+    const response = await this.client.post(`${POE_AUTH_BASE}/oauth/token`, new URLSearchParams({
+      client_id: this.clientId,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri,
+      scope,
+      code_verifier: codeVerifier
+    }).toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 10000
+    });
+
+    const data = response.data;
+    this.setTokens({
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresIn: data.expires_in
+    });
+    this._notifyTokens();
+
+    return { scope: data.scope || scope };
   }
 
   // ─── Rate Limiting ──────────────────────────────────────────
@@ -121,8 +185,14 @@ class PoeApiClient {
    * Make an authenticated request to the PoE API
    */
   async _request(method, url, options = {}) {
-    // Auto-refresh expired tokens
-    if (this.isTokenExpired() && this.refreshToken) {
+    // Auto-refresh expired tokens. GGG issues no refresh token to this public client (checked 2026-10-21),
+    // so an expired desktop sign-in ends here instead of spending a request on a certain 401.
+    if (this.isTokenExpired()) {
+      if (!this.refreshToken) {
+        this.clearTokens();
+        this._notifyTokens();
+        throw Object.assign(new Error('PoE API authentication expired'), { code: 'POE_AUTH_EXPIRED' });
+      }
       await this.refreshAccessToken();
     }
 
@@ -160,6 +230,7 @@ class PoeApiClient {
       if (error.response?.status === 401) {
         // Token expired/invalid
         this.clearTokens();
+        this._notifyTokens();
         throw Object.assign(new Error('PoE API authentication expired'), {
           code: 'POE_AUTH_EXPIRED'
         });
@@ -182,6 +253,37 @@ class PoeApiClient {
     const rules = headers['x-rate-limit-rules'];
     if (policy || rules) {
       this._lastRateInfo = { policy, rules, timestamp: Date.now() };
+    }
+  }
+
+  // ─── Characters ─────────────────────────────────────────────
+
+  /**
+   * List the account's characters for one realm. Each has `current: true` on the last played character.
+   * Throws POE_RATE_LIMITED without a request when the local budget or a server penalty forbids one.
+   */
+  async listCharacters(poeVersion = 'poe1') {
+    const now = Date.now();
+    this.characterListRequests = this.characterListRequests.filter((at) => now - at < 300_000);
+    const withinBudget = CHARACTER_LIST_BUDGET.every(([hits, period]) => (
+      this.characterListRequests.filter((at) => now - at < period).length < hits
+    ));
+    if (now < this.characterListBlockedUntil || !withinBudget) {
+      throw Object.assign(new Error('Character list request budget is used up'), {
+        code: 'POE_RATE_LIMITED',
+        retryAfter: Math.ceil(Math.max(this.characterListBlockedUntil - now, 10_000) / 1000)
+      });
+    }
+
+    this.characterListRequests.push(now);
+    try {
+      const data = await this._request('GET', poeVersion === 'poe2' ? '/character/poe2' : '/character');
+      return Array.isArray(data?.characters) ? data.characters : [];
+    } catch (error) {
+      if (error.code === 'POE_RATE_LIMITED') {
+        this.characterListBlockedUntil = Date.now() + error.retryAfter * 1000;
+      }
+      throw error;
     }
   }
 

@@ -21,6 +21,8 @@ const state = {
   poeLink: null,
   account: null,
   characterSession: null,
+  deviceCharactersByGame: {},
+  poeDeviceConnected: false,
   runtimeSession: null,
   overlay: null,
   profitCurrencyRates: {},
@@ -142,6 +144,7 @@ const elements = {
   characterGameVersion: document.getElementById('character-game-version'),
   characterPickerField: document.getElementById('character-picker-field'),
   characterPicker: document.getElementById('character-picker'),
+  characterConnectBtn: document.getElementById('character-connect-btn'),
   activeSession: document.getElementById('active-session'),
   sessionFarmTypeSelect: document.getElementById('session-farm-type-select'),
   clearFarmTypeBtn: document.getElementById('clear-farm-type-btn'),
@@ -274,6 +277,9 @@ let characterVisualModelPromise = null;
 let activeCharacterRefreshTimer = null;
 let activeCharacterRefreshRetryTimer = null;
 let activeCharacterRefreshRequestId = 0;
+let characterReconcileTimer = null;
+// GGG moved the `current` flag about 10 minutes after Play in a live PoE2 test (2026-10-21).
+const CHARACTER_RECONCILE_DELAY_MS = 11 * 60 * 1000;
 
 function renderAppUpdateState() {
   const update = state.appUpdate;
@@ -1319,6 +1325,9 @@ function renderCharacterSummaryCard() {
     }));
     elements.characterPicker.value = isReady ? summary.id : '';
   }
+  if (elements.characterConnectBtn) {
+    elements.characterConnectBtn.hidden = !state.currentUser || state.poeDeviceConnected === true;
+  }
   if (elements.characterGameVersion) {
     const version = normalizePoeVersion(summary.poeVersion)
       || normalizePoeVersion(account?.selectedCharacter?.poeVersion)
@@ -2011,6 +2020,9 @@ function setupEventListeners() {
     elements.logoutBtn.addEventListener('click', handleLogout);
   }
 
+  if (elements.characterConnectBtn) {
+    elements.characterConnectBtn.addEventListener('click', handleConnectPoeDevice);
+  }
   if (elements.characterPicker) {
     elements.characterPicker.addEventListener('change', () => {
       handleCharacterChosen({ poeVersion: state.account?.activePoeVersion, characterId: elements.characterPicker.value });
@@ -2577,6 +2589,7 @@ async function bootstrapCurrentUserSession() {
       hideLoginModal();
       await loadMapResultHistory();
       await loadPoeLinkStatus();
+      void syncPoeDeviceConnection();
       return { mode: 'authenticated' };
     }
 
@@ -2623,6 +2636,7 @@ async function handleLogin(e) {
       });
       elements.loginModal.classList.add('hidden');
       await loadPoeLinkStatus();
+      void syncPoeDeviceConnection();
       await refreshTrackerData();
       showToast(window.t('login.title'), window.t('toast.loginSuccess'));
     } else {
@@ -2666,6 +2680,7 @@ async function handlePoeOAuthLogin() {
         elements.loginModal.classList.add('hidden');
       }
       await loadPoeLinkStatus();
+      void syncPoeDeviceConnection();
       await refreshTrackerData();
       showToast(window.t('login.title'), window.t('toast.loginSuccess'));
     } else {
@@ -2720,8 +2735,11 @@ async function handleRegister(e) {
  */
 async function handleLogout() {
   clearActiveCharacterRefreshTimers();
+  clearTimeout(characterReconcileTimer);
   await window.electronAPI.logout();
   state.currentUser = null;
+  state.deviceCharactersByGame = {};
+  state.poeDeviceConnected = false;
   state.currentSession = null;
   state.sessions = [];
   state.mapResults = [];
@@ -2810,7 +2828,7 @@ function refreshAccountStateFromCurrentUser() {
     return;
   }
 
-  const { deriveAccountState } = getAccountStateModel();
+  const { deriveAccountState, withDeviceCharacters } = getAccountStateModel();
   const poePayload = user?.poe || {};
   state.account = deriveAccountState({
     activePoeVersion: normalizePoeVersion(state.detectedGameVersion)
@@ -2831,10 +2849,13 @@ function refreshAccountStateFromCurrentUser() {
       || poePayload.selectedCharacter?.id
       || null,
     selectedCharacter: user?.selectedCharacter || poePayload.selectedCharacter || null,
-    characters: user?.characters
-      || user?.poeCharacters
-      || poePayload.characters
-      || [],
+    characters: withDeviceCharacters(
+      user?.characters
+        || user?.poeCharacters
+        || poePayload.characters
+        || [],
+      state.deviceCharactersByGame
+    ),
     cachedAccountState: state.settings?.lastKnownAccountState || null
   });
   persistLastKnownAccountState();
@@ -2865,6 +2886,15 @@ function handleGameSessionEntered({ poeVersion } = {}) {
   renderCharacterSummaryCard();
   refreshRendererOverlayState();
 
+  // If nothing confirms this Play, GGG's `current` flag settles it once it has caught up.
+  clearTimeout(characterReconcileTimer);
+  const session = state.characterSession;
+  characterReconcileTimer = setTimeout(() => {
+    if (state.characterSession === session && !session.confirmed) {
+      void refreshDeviceCharacters(version);
+    }
+  }, CHARACTER_RECONCILE_DELAY_MS);
+
   // Ask in the overlay only when there is a choice to make.
   const characters = state.account?.activePoeVersion === version ? state.account.charactersByGame?.[version] || [] : [];
   const selectedId = state.account?.selectedCharacter?.id;
@@ -2889,11 +2919,83 @@ function handleCharacterChosen({ poeVersion, characterId } = {}) {
 }
 
 // Level-up, death and reward lines also name party members, so only the account's own characters count.
-function handleCharacterLogLine({ poeVersion, name } = {}) {
+async function handleCharacterLogLine({ poeVersion, name, kind, level } = {}) {
   const version = normalizePoeVersion(poeVersion);
-  const character = getAccountStateModel().findCharacterByName(state.account, version, name);
+  const { findCharacterByName } = getAccountStateModel();
+  let character = findCharacterByName(state.account, version, name);
+
+  // A brand-new character reaches level 2 before it is in any list we hold; fetch once to pick it up.
+  if (!character && kind === 'level_up' && level <= 2 && await refreshDeviceCharacters(version)) {
+    character = findCharacterByName(state.account, version, name);
+  }
+
   if (character) {
     confirmActiveCharacter(version, character.id);
+  }
+}
+
+// Reads this realm's characters straight from GGG (device connection). A `current` flag that moved since the
+// last fetch means a Play newer than anything the cache knows, unless this Play is already confirmed.
+async function refreshDeviceCharacters(poeVersion) {
+  const version = normalizePoeVersion(poeVersion);
+  if (!version || !state.currentUser || !state.poeDeviceConnected) {
+    return false;
+  }
+
+  const result = await window.electronAPI.getPoeDeviceCharacters(version).catch(() => null);
+  state.poeDeviceConnected = Boolean(result?.connected);
+  if (!Array.isArray(result?.characters)) {
+    renderCharacterSummaryCard();
+    return false;
+  }
+
+  state.deviceCharactersByGame = { ...state.deviceCharactersByGame, [version]: result.characters };
+  const currentId = result.characters.find((character) => character.current)?.id || null;
+  const cache = state.settings.lastKnownAccountState || {};
+  const previousCurrentId = cache.apiCurrentByGame?.[version] || null;
+  state.settings.lastKnownAccountState = {
+    ...cache,
+    apiCurrentByGame: { ...cache.apiCurrentByGame, [version]: currentId }
+  };
+
+  const sessionConfirmed = state.characterSession?.poeVersion === version && state.characterSession.confirmed;
+  if (currentId && currentId !== previousCurrentId && !sessionConfirmed) {
+    confirmActiveCharacter(version, currentId);
+  } else {
+    refreshAccountStateFromCurrentUser();
+    renderCharacterSummaryCard();
+    refreshRendererOverlayState();
+  }
+  return true;
+}
+
+async function syncPoeDeviceConnection() {
+  const status = await window.electronAPI.getPoeAuthStatus().catch(() => null);
+  state.poeDeviceConnected = Boolean(status?.authenticated);
+  renderCharacterSummaryCard();
+  if (state.poeDeviceConnected) {
+    await refreshDeviceCharacters(state.account?.activePoeVersion);
+  }
+}
+
+async function handleConnectPoeDevice() {
+  if (elements.characterConnectBtn) {
+    elements.characterConnectBtn.disabled = true;
+  }
+
+  try {
+    const result = await window.electronAPI.connectPoeDevice();
+    if (!result?.success) {
+      showToast(window.t('toast.error'), result?.error || window.t('errors.loginFailed'), 'error');
+      return;
+    }
+    state.poeDeviceConnected = true;
+    await refreshDeviceCharacters(state.account?.activePoeVersion);
+  } finally {
+    if (elements.characterConnectBtn) {
+      elements.characterConnectBtn.disabled = false;
+    }
+    renderCharacterSummaryCard();
   }
 }
 

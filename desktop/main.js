@@ -2083,6 +2083,114 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
   });
 }
 
+// Waits on the loopback redirect for one authorization code. The redirect URI is registered with GGG, so only
+// its exact port is used.
+async function waitForPoeAuthorizationCode({ authUrl, redirectUri, expectedState }) {
+  await closePoeAuthServer();
+  const redirectUrl = new URL(redirectUri);
+
+  return await new Promise((resolve, reject) => {
+    const finish = async (error, code) => {
+      clearTimeout(timeout);
+      await closePoeAuthServer();
+      if (error) {
+        reject(error);
+      } else {
+        resolve(code);
+      }
+    };
+    const timeout = setTimeout(() => finish(new Error('Path of Exile sign-in timed out')), 3 * 60 * 1000);
+
+    poeAuthServer = http.createServer((req, res) => {
+      const url = new URL(req.url, redirectUri);
+      if (url.pathname !== redirectUrl.pathname) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not found');
+        return;
+      }
+
+      const code = url.searchParams.get('code');
+      if (url.searchParams.get('error') || !code || url.searchParams.get('state') !== expectedState) {
+        res.writeHead(400, { 'Content-Type': 'text/html' });
+        res.end(renderBrowserCallbackPage('Sign-in Failed', 'Return to Juice Journal and try again.'));
+        finish(new Error(url.searchParams.get('error') || 'Invalid callback state'));
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(renderBrowserCallbackPage('Connected', 'You can close this window and return to Juice Journal.'));
+      finish(null, code);
+    });
+    poeAuthServer.on('error', (error) => finish(error));
+    poeAuthServer.listen(Number(redirectUrl.port), redirectUrl.hostname, () => {
+      Promise.resolve()
+        .then(() => openAuthUrlInBrowser(authUrl))
+        .catch((error) => finish(error));
+    });
+  });
+}
+
+// Signs this device in to Path of Exile with the app's public client (PKCE), so character data goes from GGG
+// straight to this machine. Separate from the account sign-in; the tokens stay here, encrypted with safeStorage.
+async function connectPoeDevice() {
+  const redirectUri = process.env.POE_REDIRECT_URI || 'http://127.0.0.1:34127/oauth/poe/callback';
+  const state = crypto.randomUUID();
+  const codeVerifier = crypto.randomBytes(32).toString('base64url');
+  const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+
+  const code = await waitForPoeAuthorizationCode({
+    authUrl: poeApiClient.buildAuthorizeUrl({ redirectUri, codeChallenge, state }),
+    redirectUri,
+    expectedState: state
+  });
+  await poeApiClient.exchangeCode({ code, codeVerifier, redirectUri });
+}
+
+function normalizeDeviceCharacter(character, poeVersion) {
+  return {
+    id: String(character?.id || ''),
+    name: String(character?.name || ''),
+    level: Number(character?.level) || 0,
+    class: character?.class || null,
+    league: character?.league || null,
+    poeVersion,
+    current: character?.current === true
+  };
+}
+
+async function getPoeDeviceCharacters(poeVersion) {
+  const version = normalizePoeVersion(poeVersion);
+  if (!version || !poeApiClient.isAuthenticated()) {
+    return { connected: poeApiClient.isAuthenticated(), characters: null };
+  }
+
+  try {
+    const characters = (await poeApiClient.listCharacters(version))
+      .map((character) => normalizeDeviceCharacter(character, version))
+      .filter((character) => character.id && character.name);
+    return { connected: true, characters };
+  } catch (error) {
+    if (error.code === 'POE_AUTH_EXPIRED') {
+      return { connected: false, characters: null, error: 'auth_expired' };
+    }
+    return {
+      connected: true,
+      characters: null,
+      error: error.code === 'POE_RATE_LIMITED' ? 'rate_limited' : 'unavailable',
+      retryAfter: error.retryAfter || null
+    };
+  }
+}
+
+function persistPoeClientTokens(tokens) {
+  if (tokens?.accessToken) {
+    persistPoeTokens(tokens);
+    return;
+  }
+  store.delete('poeOAuthTokensEncrypted');
+  store.delete('poeOAuthTokens');
+}
+
 // Development mode controls.
 const isDev = !app.isPackaged;
 const forceLiveAuth = process.env.JUICE_JOURNAL_FORCE_LIVE_AUTH === '1'
@@ -3518,6 +3626,11 @@ function handleLogout() {
   overlayMapResultState = null;
   clearOverlayMapResultDismissTimer();
   updateOverlayWindow({ character: null });
+  // The device's Path of Exile connection belongs to the signed-in player.
+  if (poeApiClient) {
+    poeApiClient.clearTokens();
+  }
+  persistPoeClientTokens(null);
   return true;
 }
 
@@ -4389,6 +4502,21 @@ function setupIPC() {
     };
   });
 
+  ipcMain.handle('connect-poe-device', async () => {
+    assertDesktopUserAuthenticated();
+    try {
+      await connectPoeDevice();
+      return { success: true, error: null };
+    } catch (error) {
+      return { success: false, error: normalizeErrorMessage(error, 'Path of Exile sign-in failed') };
+    }
+  });
+
+  ipcMain.handle('get-poe-device-characters', async (event, poeVersion) => {
+    assertDesktopUserAuthenticated();
+    return getPoeDeviceCharacters(poeVersion);
+  });
+
   // Check if PoE API is authenticated
   ipcMain.handle('get-poe-auth-status', async () => {
     assertDesktopUserAuthenticated();
@@ -4424,6 +4552,7 @@ app.whenReady().then(() => {
     poeApiClient.setTokens(securePoeTokens);
     persistPoeTokens(securePoeTokens);
   }
+  poeApiClient.setTokenListener(persistPoeClientTokens);
 
   // Register IPC handlers before opening the window.
   setupIPC();

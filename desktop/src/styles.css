@@ -1013,6 +1013,10 @@ body {
 
 .character-picker[hidden] { display: none; }
 
+.character-connect { justify-self: start; width: fit-content; }
+
+.character-connect[hidden] { display: none; }
+
 .character-picker select {
   min-width: 12rem;
   padding: 0.4rem 0.6rem;

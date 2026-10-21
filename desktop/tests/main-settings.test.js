@@ -1003,10 +1003,20 @@ test('main logout clears desktop auth state', () => {
   let clearAllCalls = 0;
   let clearDismissTimerCalls = 0;
   const overlayUpdates = [];
+  const poeTokenWrites = [];
+  let poeClearCalls = 0;
   let apiToken = 'token';
   const context = loadFunctions([
     'handleLogout'
   ], {
+    poeApiClient: {
+      clearTokens() {
+        poeClearCalls += 1;
+      }
+    },
+    persistPoeClientTokens(tokens) {
+      poeTokenWrites.push(tokens);
+    },
     appendAuditTrail(key) {
       auditTrail.push(key);
     },
@@ -1055,6 +1065,8 @@ test('main logout clears desktop auth state', () => {
   assert.equal(clearAllCalls, 1);
   assert.equal(clearDismissTimerCalls, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(overlayUpdates)), [{ character: null }]);
+  assert.equal(poeClearCalls, 1);
+  assert.deepEqual(poeTokenWrites, [null]);
 });
 
 test('main app shutdown cleans up main-process resources', () => {
@@ -1321,4 +1333,90 @@ test('main overlay character accepts only short display fields from the renderer
   assert.equal(context.normalizeOverlayCharacter({ level: 5 }), null);
   assert.equal(context.normalizeOverlayCharacter('AltShaman'), null);
   assert.equal(context.normalizeOverlayCharacter({ name: 'AltShaman', level: 1e9 }).level, null);
+});
+
+function loadPoeDeviceAuthMain(onOpen) {
+  return loadFunctions(['closePoeAuthServer', 'waitForPoeAuthorizationCode'], {
+    http: require('node:http'),
+    URL,
+    poeAuthServer: null,
+    setTimeout,
+    clearTimeout,
+    renderBrowserCallbackPage: (title) => `<title>${title}</title>`,
+    openAuthUrlInBrowser: async (url) => onOpen(url)
+  });
+}
+
+function getLoopback(url) {
+  return new Promise((resolve, reject) => {
+    require('node:http').get(url, (res) => {
+      res.resume();
+      res.on('end', () => resolve(res.statusCode));
+    }).on('error', reject);
+  });
+}
+
+test('main device sign-in takes the code from the loopback redirect and closes the listener', async () => {
+  const redirectUri = 'http://127.0.0.1:34991/oauth/poe/callback';
+  let callbackStatus = null;
+  const context = loadPoeDeviceAuthMain(async (url) => {
+    assert.equal(url, 'https://www.pathofexile.com/oauth/authorize?x=1');
+    callbackStatus = await getLoopback(`${redirectUri}?code=code-1&state=state-1`);
+  });
+
+  const code = await context.waitForPoeAuthorizationCode({
+    authUrl: 'https://www.pathofexile.com/oauth/authorize?x=1',
+    redirectUri,
+    expectedState: 'state-1'
+  });
+
+  assert.equal(code, 'code-1');
+  assert.equal(callbackStatus, 200);
+  assert.equal(context.poeAuthServer, null);
+});
+
+test('main device sign-in rejects a redirect with the wrong state', async () => {
+  const redirectUri = 'http://127.0.0.1:34992/oauth/poe/callback';
+  const context = loadPoeDeviceAuthMain(async () => {
+    await getLoopback(`${redirectUri}?code=code-1&state=forged`);
+  });
+
+  await assert.rejects(context.waitForPoeAuthorizationCode({
+    authUrl: 'https://www.pathofexile.com/oauth/authorize',
+    redirectUri,
+    expectedState: 'state-1'
+  }), /Invalid callback state/);
+  assert.equal(context.poeAuthServer, null);
+});
+
+test('main device characters map GGG errors to renderer-safe results', async () => {
+  const outcomes = [
+    { characters: [{ id: 'c1', name: 'AltShaman', level: 89, class: 'Shaman', league: 'Standard', current: true, equipment: [] }] },
+    { error: Object.assign(new Error('limit'), { code: 'POE_RATE_LIMITED', retryAfter: 60 }) },
+    { error: Object.assign(new Error('expired'), { code: 'POE_AUTH_EXPIRED' }) }
+  ];
+  const context = loadFunctions(['normalizeDeviceCharacter', 'getPoeDeviceCharacters'], {
+    normalizePoeVersion: (value) => value === 'poe1' || value === 'poe2' ? value : null,
+    poeApiClient: {
+      isAuthenticated: () => true,
+      async listCharacters() {
+        const outcome = outcomes.shift();
+        if (outcome.error) {
+          throw outcome.error;
+        }
+        return outcome.characters;
+      }
+    }
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(await context.getPoeDeviceCharacters('poe2'))), {
+    connected: true,
+    characters: [{ id: 'c1', name: 'AltShaman', level: 89, class: 'Shaman', league: 'Standard', poeVersion: 'poe2', current: true }]
+  });
+  assert.deepEqual({ ...(await context.getPoeDeviceCharacters('poe2')) }, {
+    connected: true, characters: null, error: 'rate_limited', retryAfter: 60
+  });
+  assert.deepEqual({ ...(await context.getPoeDeviceCharacters('poe2')) }, {
+    connected: false, characters: null, error: 'auth_expired'
+  });
 });
