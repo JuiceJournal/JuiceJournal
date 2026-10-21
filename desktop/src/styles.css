@@ -1,6 +1,6 @@
 /* Juice Journal - Desktop atlas console */
 
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('assets/fonts/fonts.css');
 
 :root {
   --gold: #c6a15b;
@@ -43,7 +43,7 @@
   --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
 
   --font: 'Source Sans 3', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-display: 'Cormorant SC', serif;
+  --font-display: 'Cinzel', Georgia, serif;
   --font-mono: 'JetBrains Mono', 'Consolas', monospace;
 }
 

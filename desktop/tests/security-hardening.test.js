@@ -89,6 +89,26 @@ test('desktop HTML entrypoints keep a restrictive content security policy', () =
   }
 });
 
+test('desktop fonts are bundled locally instead of fetched from Google Fonts', () => {
+  const stylesCss = fs.readFileSync(path.join(desktopRoot, 'src', 'styles.css'), 'utf8');
+  const fontsCss = fs.readFileSync(path.join(desktopRoot, 'src', 'assets', 'fonts', 'fonts.css'), 'utf8');
+
+  for (const source of [indexHtml, stylesCss]) {
+    assert.doesNotMatch(source, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
+  }
+  assert.match(stylesCss, /@import url\('assets\/fonts\/fonts\.css'\);/);
+
+  for (const match of fontsCss.matchAll(/url\('([^']+)'\)/g)) {
+    assert.ok(
+      fs.existsSync(path.join(desktopRoot, 'src', 'assets', 'fonts', match[1])),
+      `Expected bundled font file ${match[1]}`
+    );
+  }
+  for (const family of ['Cinzel', 'SourceSans3', 'JetBrainsMono']) {
+    assert.ok(fs.existsSync(path.join(desktopRoot, 'src', 'assets', 'fonts', `OFL-${family}.txt`)), `Expected OFL licence for ${family}`);
+  }
+});
+
 test('desktop renderer avoids raw HTML for toast and currency table rows', () => {
   const appJs = fs.readFileSync(path.join(desktopRoot, 'src', 'app.js'), 'utf8');
   const toastBody = getFunctionBody(appJs, 'showToast');
