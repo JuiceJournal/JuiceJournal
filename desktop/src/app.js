@@ -20,6 +20,7 @@ const state = {
   recentLoot: [],
   poeLink: null,
   account: null,
+  characterSession: null,
   runtimeSession: null,
   overlay: null,
   profitCurrencyRates: {},
@@ -2235,6 +2236,14 @@ function setupIPCListeners() {
     });
   }
 
+  if (window.electronAPI.onGameSessionEntered) {
+    window.electronAPI.onGameSessionEntered(handleGameSessionEntered);
+  }
+
+  if (window.electronAPI.onCharacterLogLine) {
+    window.electronAPI.onCharacterLogLine(handleCharacterLogLine);
+  }
+
   if (window.electronAPI.onGameClosed) {
     window.electronAPI.onGameClosed((data) => {
       if (data?.runtimeSession) {
@@ -2741,6 +2750,43 @@ function refreshAccountStateFromCurrentUser() {
     cachedAccountState: state.settings?.lastKnownAccountState || null
   });
   persistLastKnownAccountState();
+}
+
+// Play: until a log line confirms this session's character, the card keeps the one last confirmed for this game.
+function handleGameSessionEntered({ poeVersion } = {}) {
+  const version = normalizePoeVersion(poeVersion);
+  if (!version) {
+    return;
+  }
+
+  state.characterSession = { poeVersion: version, confirmed: false };
+  refreshAccountStateFromCurrentUser();
+  renderCharacterSummaryCard();
+  refreshRendererOverlayState();
+}
+
+// Level-up, death and reward lines also name party members, so only the account's own characters count.
+function handleCharacterLogLine({ poeVersion, name } = {}) {
+  const version = normalizePoeVersion(poeVersion);
+  const character = getAccountStateModel().findCharacterByName(state.account, version, name);
+  if (character) {
+    confirmActiveCharacter(version, character.id);
+  }
+}
+
+function confirmActiveCharacter(poeVersion, characterId) {
+  const cache = state.settings.lastKnownAccountState || {};
+  state.settings.lastKnownAccountState = {
+    ...cache,
+    confirmedCharacterByGame: { ...cache.confirmedCharacterByGame, [poeVersion]: characterId }
+  };
+  if (state.characterSession?.poeVersion === poeVersion) {
+    state.characterSession.confirmed = true;
+  }
+
+  refreshAccountStateFromCurrentUser();
+  renderCharacterSummaryCard();
+  refreshRendererOverlayState();
 }
 
 function persistLastKnownAccountState() {

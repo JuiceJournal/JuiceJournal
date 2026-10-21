@@ -77,6 +77,26 @@
       : null;
   }
 
+  function normalizeCharacterIdByGame(value) {
+    const result = {};
+    ['poe1', 'poe2'].forEach((poeVersion) => {
+      const characterId = normalizeString(value?.[poeVersion]);
+      if (characterId) {
+        result[poeVersion] = characterId;
+      }
+    });
+    return result;
+  }
+
+  // Character names are unique within a realm, so a name from Client.txt maps to at most one own character.
+  function findCharacterByName(accountState, poeVersion, name) {
+    const normalizedName = normalizeString(name);
+    const characters = accountState?.charactersByGame?.[normalizePoeVersion(poeVersion)] || [];
+    return normalizedName
+      ? characters.find((character) => character.name === normalizedName) || null
+      : null;
+  }
+
   function deriveAccountState({
     accountName,
     activePoeVersion,
@@ -102,8 +122,11 @@
     const activeGameCharacters = normalizedActivePoeVersion
       ? charactersByGame[normalizedActivePoeVersion]
       : [];
+    // The character last confirmed in game wins over the server's default pick (the highest level).
+    const confirmedCharacterByGame = normalizeCharacterIdByGame(cachedAccountState?.confirmedCharacterByGame);
 
-    const selectedCharacter = findCharacterById(activeGameCharacters, normalizedSelectedCharacterId)
+    const selectedCharacter = findCharacterById(activeGameCharacters, confirmedCharacterByGame[normalizedActivePoeVersion])
+      || findCharacterById(activeGameCharacters, normalizedSelectedCharacterId)
       || findCharacterById(allCharacters, normalizedSelectedCharacterId)
       || (normalizedSelectedCharacter?.poeVersion === normalizedActivePoeVersion ? normalizedSelectedCharacter : null)
       || activeGameCharacters[0]
@@ -115,6 +138,7 @@
       accountName: normalizeString(accountName) || normalizeString(cachedAccountState?.accountName),
       characters: allCharacters,
       charactersByGame,
+      confirmedCharacterByGame,
       activePoeVersion: normalizedActivePoeVersion,
       selectedCharacter,
       summary: selectedCharacter
@@ -167,12 +191,14 @@
       characters: allCharacters,
       charactersByGame,
       selectedCharacterByGame,
+      confirmedCharacterByGame: normalizeCharacterIdByGame(accountState.confirmedCharacterByGame),
       cachedAt: new Date().toISOString()
     };
   }
 
   return {
     deriveAccountState,
-    createAccountStateCache
+    createAccountStateCache,
+    findCharacterByName
   };
 });
