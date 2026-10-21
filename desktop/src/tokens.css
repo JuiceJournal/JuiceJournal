@@ -1,0 +1,89 @@
+/* Juice Journal design tokens - Ember Forge palette.
+   Colors live only here. Components use the semantic names below; translucent
+   variants use the channel tokens, e.g. rgb(var(--brass-rgb) / 0.2). */
+
+:root {
+  /* Palette */
+  --plate-deep: #0d0908;
+  --obsidian: #120d0b;
+  --plate: #1c1411;
+  --plate-raised: #261b16;
+  --ink: #f4ebe0;
+  --ink-bright: #fffaf3;
+  --ash: #c4b2a0;
+  --smoke: #988572;
+  --brass: #e8b65a;
+  --brass-light: #f3d08f;
+  --brass-dim: #8a6534;
+  --ember-hot: #ffa04d;
+  --ember-deep: #e8600f;
+  --ember-ink: #1a0d05;
+  --gain: #5ee08e;
+  --loss: #ff5c7a;
+  --info: #7cc0ff;
+  --warn: #ffb547;
+  --win-close: #e81123;
+
+  --plate-deep-rgb: 13 9 8;
+  --obsidian-rgb: 18 13 11;
+  --plate-rgb: 28 20 17;
+  --plate-raised-rgb: 38 27 22;
+  --umber-rgb: 74 52 32;
+  --ink-rgb: 244 235 224;
+  --ash-rgb: 196 178 160;
+  --brass-rgb: 232 182 90;
+  --brass-light-rgb: 243 208 143;
+  --ember-rgb: 255 122 31;
+  --gain-rgb: 94 224 142;
+  --loss-rgb: 255 92 122;
+  --info-rgb: 124 192 255;
+  --warn-rgb: 255 181 71;
+  --shadow-rgb: 0 0 0;
+
+  /* Semantic */
+  --gold: var(--brass);
+  --gold-light: var(--brass-light);
+  --gold-dim: var(--brass-dim);
+  --gold-glow: rgb(var(--brass-rgb) / 0.18);
+  --gold-glow-strong: rgb(var(--brass-rgb) / 0.35);
+
+  --bg-base: var(--obsidian);
+  --bg-panel: rgb(var(--obsidian-rgb) / 0.92);
+  --bg-card: rgb(var(--plate-rgb) / 0.92);
+  --bg-card-hover: rgb(var(--plate-raised-rgb) / 0.96);
+  --bg-input: rgb(var(--plate-deep-rgb) / 0.92);
+  --bg-elevated: rgb(var(--plate-raised-rgb) / 0.9);
+
+  --border: rgb(var(--ink-rgb) / 0.06);
+  --border-light: rgb(var(--ink-rgb) / 0.1);
+  --border-gold: rgb(var(--brass-rgb) / 0.28);
+
+  --text: var(--ink);
+  --text-secondary: var(--ash);
+  --text-muted: var(--smoke);
+  --text-bright: var(--ink-bright);
+  --on-accent: var(--ember-ink);
+
+  --green: var(--gain);
+  --green-dim: rgb(var(--gain-rgb) / 0.12);
+  --red: var(--loss);
+  --red-dim: rgb(var(--loss-rgb) / 0.12);
+  --blue: var(--info);
+  --blue-dim: rgb(var(--info-rgb) / 0.12);
+  --orange: var(--warn);
+  --orange-dim: rgb(var(--warn-rgb) / 0.12);
+
+  /* Shape and motion */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Type */
+  --font: 'Source Sans 3', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Cinzel', Georgia, serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+}
