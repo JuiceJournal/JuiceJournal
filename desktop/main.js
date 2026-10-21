@@ -37,6 +37,7 @@ const {
   cloneRuntimeSessionState
 } = require('./src/modules/runtimeSessionModel');
 const { appendMapResult, normalizeMapResultForLedger } = require('./src/modules/mapResultStoreModel');
+const localJournal = require('./src/modules/localJournalModel');
 const { deriveMapResultOverlayState } = require('./src/modules/mapResultOverlayModel');
 const { buildFarmPublishPayload } = require('./src/modules/farmPublishPayloadModel');
 const { deriveOverlayState } = require('./src/modules/overlayStateModel');
@@ -299,6 +300,7 @@ let priceService = null;
 let stashAnalyzer = null;
 let gameDetector = null;
 let currentSession = null;
+let journalStore = null;
 let runtimeSessionState = createRuntimeSessionState();
 let overlayWindow = null;
 let overlayWindowIgnoresMouse = null;
@@ -689,52 +691,6 @@ function isRetryableApiError(error) {
     || status >= 500;
 }
 
-function queuePendingLootAction(action) {
-  const queuedActions = getPendingLootActions();
-  queuedActions.push({
-    id: crypto.randomUUID(),
-    ownerUserId: getCurrentUserId(),
-    queuedAt: new Date().toISOString(),
-    ...action
-  });
-  setPendingLootActions(queuedActions);
-}
-
-function queuePendingSessionAction(action) {
-  const queuedActions = getPendingSessionActions();
-  queuedActions.push({
-    id: crypto.randomUUID(),
-    ownerUserId: getCurrentUserId(),
-    queuedAt: new Date().toISOString(),
-    ...action
-  });
-  setPendingSessionActions(queuedActions);
-}
-
-function createQueuedSession(input = {}) {
-  return {
-    id: input.localSessionId || `local-${crypto.randomUUID()}`,
-    ownerUserId: getCurrentUserId(),
-    mapName: input.mapName,
-    mapTier: input.mapTier || null,
-    mapType: input.mapType || null,
-    farmTypeId: input.farmTypeId || input.mapType || null,
-    strategyTag: input.strategyTag || null,
-    notes: input.notes || null,
-    poeVersion: input.poeVersion,
-    league: input.league,
-    costChaos: input.costChaos || 0,
-    status: 'active',
-    startedAt: input.startedAt || new Date().toISOString(),
-    endedAt: null,
-    totalLootChaos: 0,
-    profitChaos: 0,
-    lootEntries: [],
-    localOnly: true,
-    queued: true
-  };
-}
-
 function isLocalSessionId(sessionId) {
   return typeof sessionId === 'string' && sessionId.startsWith('local-');
 }
@@ -789,6 +745,52 @@ function setActiveFarmTypeId(farmTypeId) {
 
 function getMapResultsStoreKey(userId = getCurrentUserId()) {
   return userId ? `mapResults:${userId}` : null;
+}
+
+// Sessions and loot stay on this machine: one journal file per signed-in user under userData/profiles.
+function getJournalStore() {
+  const userId = getCurrentUserId();
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(userId || '')) {
+    throw new Error('Local desktop sign-in is required');
+  }
+
+  if (journalStore?.userId !== userId) {
+    journalStore = {
+      userId,
+      store: new Store({ name: 'journal', cwd: path.join(app.getPath('userData'), 'profiles', userId) })
+    };
+  }
+  return journalStore.store;
+}
+
+function readJournal() {
+  return localJournal.normalizeJournal(getJournalStore().store);
+}
+
+function writeJournal(journal) {
+  getJournalStore().set('sessions', journal.sessions);
+}
+
+// Restores the active session, for example after a restart.
+function loadActiveSession() {
+  currentSession = localJournal.getActiveSession(readJournal());
+  return currentSession;
+}
+
+// Loot without a value is priced from the local poe.ninja cache, as the server used to price it.
+function addLootToCurrentSession(items, source) {
+  const entries = items.map((item) => ({
+    ...item,
+    source: item.source || source,
+    chaosValue: item.chaosValue || readLocalChaosPrice(item.itemName, currentSession.poeVersion) || 0
+  }));
+  const { journal, lootEntries, session } = localJournal.addLoot(readJournal(), currentSession.id, entries, {
+    createId: () => crypto.randomUUID(),
+    now: new Date()
+  });
+  writeJournal(journal);
+  currentSession = session;
+  return { lootEntries, session };
 }
 
 function getStoredMapResults() {
@@ -1147,33 +1149,6 @@ function annotateSyncFailure(action, error, { blocked = false } = {}) {
     lastError: normalizeErrorMessage(error, 'Unexpected sync error'),
     blocked
   };
-}
-
-function appendQueuedLootToCurrentSession(items) {
-  if (!currentSession || !Array.isArray(items) || !items.length) {
-    return;
-  }
-
-  const existingLoot = Array.isArray(currentSession.lootEntries) ? currentSession.lootEntries : [];
-  const normalizedItems = items.map((item) => ({
-    id: `queued-loot-${crypto.randomUUID()}`,
-    itemName: item.itemName,
-    itemType: item.itemType || 'other',
-    quantity: item.quantity || 1,
-    chaosValue: item.chaosValue || 0,
-    divineValue: item.divineValue || null,
-    createdAt: new Date().toISOString()
-  }));
-
-  currentSession.lootEntries = [...normalizedItems, ...existingLoot];
-  const totalLootChaos = currentSession.lootEntries.reduce((sum, loot) => (
-    sum + ((parseFloat(loot.chaosValue) || 0) * (parseInt(loot.quantity || 0, 10) || 0))
-  ), 0);
-  currentSession.totalLootChaos = totalLootChaos;
-  currentSession.profitChaos = totalLootChaos - (parseFloat(currentSession.costChaos) || 0);
-
-  // Always persist the queued state so loot is preserved even for non-local sessions.
-  setQueuedCurrentSession(currentSession);
 }
 
 async function flushPendingSessionActions(forceBlocked = false) {
@@ -1749,21 +1724,6 @@ async function getProfitCurrencyRates(options = {}) {
       mirror: mirror.source
     }
   };
-}
-
-async function getCurrentSessionFromBackend() {
-  try {
-    const session = await apiClient.getActiveSession();
-    currentSession = session || getQueuedCurrentSession() || null;
-    return currentSession;
-  } catch (error) {
-    const queuedSession = getQueuedCurrentSession();
-    if (queuedSession) {
-      currentSession = queuedSession;
-      return currentSession;
-    }
-    throw error;
-  }
 }
 
 async function closePoeAuthServer() {
@@ -2877,60 +2837,19 @@ async function captureAndScan() {
       return;
     }
 
-    if (currentSession.localOnly) {
-      appendQueuedLootToCurrentSession(items);
-      queuePendingLootAction({
-        type: 'bulkLoot',
-        sessionId: currentSession.id,
-        items
-      });
-      appendAuditTrail('auditLootQueued', { count: items.length }, 'warning');
-      showNotification(
-        t('lootQueuedTitle'),
-        t('lootQueuedBody', { count: items.length })
-      );
-      return { queued: true, count: items.length };
+    const result = addLootToCurrentSession(items, 'ocr');
+    const totalValue = result.lootEntries.reduce((sum, loot) => sum + (loot.chaosValue * loot.quantity), 0);
+    showNotification(
+      t('notificationLootAdded'),
+      t('lootAddedBody', { count: result.lootEntries.length, value: totalValue.toFixed(1) })
+    );
+
+    // Renderer'a bilgi gonder
+    if (mainWindow) {
+      mainWindow.webContents.send('loot-added', { items: result.lootEntries, totalValue });
     }
 
-    try {
-      // API'ye gonder
-      const result = await apiClient.addLootBulk(currentSession.id, items);
-
-      // Bildirim goster
-      const totalValue = items.reduce((sum, item) => sum + (item.chaosValue * item.quantity), 0);
-      showNotification(
-        t('notificationLootAdded'),
-        t('lootAddedBody', { count: items.length, value: totalValue.toFixed(1) })
-      );
-
-      // Renderer'a bilgi gonder
-      if (mainWindow) {
-        mainWindow.webContents.send('loot-added', { items, totalValue });
-      }
-
-      return result;
-    } catch (error) {
-      if (isRetryableApiError(error)) {
-        appendQueuedLootToCurrentSession(items);
-        queuePendingLootAction({
-          type: 'bulkLoot',
-          sessionId: currentSession.id,
-          items
-        });
-        appendAuditTrail('auditLootQueued', { count: items.length }, 'warning');
-        const totalValue = items.reduce((sum, item) => sum + ((item.chaosValue || 0) * (item.quantity || 1)), 0);
-        if (mainWindow) {
-          mainWindow.webContents.send('loot-added', { items, totalValue, queued: true });
-        }
-        showNotification(
-          t('lootQueuedTitle'),
-          t('lootQueuedBody', { count: items.length })
-        );
-        return { queued: true, count: items.length };
-      }
-
-      throw error;
-    }
+    return result;
   } catch (error) {
     showNotification(t('notificationError'), t('lootScanFailed'));
   }
@@ -2954,57 +2873,19 @@ async function startNewSession(input = {}) {
     if (!mapName) return;
 
     // Session olustur
-    let session;
-    try {
-      session = await apiClient.startSession({
-        mapName,
-        mapTier: input.mapTier || null,
-        mapType: farmTypeId,
-        farmTypeId,
-        costChaos: input.costChaos || 0,
-        poeVersion,
-        league
-      });
-      setQueuedCurrentSession(null);
-      appendAuditTrail('auditSessionStarted', { mapName });
-    } catch (error) {
-      if (!isRetryableApiError(error)) {
-        throw error;
-      }
-
-      session = createQueuedSession({
-        localSessionId: input.localSessionId,
-        mapName,
-        mapTier: input.mapTier || null,
-        mapType: farmTypeId,
-        farmTypeId,
-        strategyTag: input.strategyTag || null,
-        notes: input.notes || null,
-        costChaos: input.costChaos || 0,
-        poeVersion,
-        league,
-        startedAt: input.startedAt || new Date().toISOString()
-      });
-
-      queuePendingSessionAction({
-        type: 'sessionStart',
-        localSessionId: session.id,
-        startedAt: session.startedAt,
-        payload: {
-          mapName,
-          mapTier: input.mapTier || null,
-          mapType: farmTypeId,
-          farmTypeId,
-          strategyTag: input.strategyTag || null,
-          notes: input.notes || null,
-          costChaos: input.costChaos || 0,
-          poeVersion,
-          league
-        }
-      });
-      setQueuedCurrentSession(session);
-      appendAuditTrail('auditSessionQueued', { mapName }, 'warning');
-    }
+    const { journal, session } = localJournal.startSession(readJournal(), {
+      mapName,
+      mapTier: input.mapTier || null,
+      farmTypeId,
+      strategyTag: input.strategyTag || null,
+      notes: input.notes || null,
+      costChaos: input.costChaos || 0,
+      poeVersion,
+      league,
+      startedAt: input.startedAt
+    }, { id: crypto.randomUUID(), now: new Date() });
+    writeJournal(journal);
+    appendAuditTrail('auditSessionStarted', { mapName });
 
     currentSession = session;
     overlayStartMapPromptState = null;
@@ -3105,7 +2986,7 @@ async function finalizeActiveSessionOnShutdown() {
 
   if (!session) {
     try {
-      session = await getCurrentSessionFromBackend();
+      session = loadActiveSession();
     } catch (error) {
       console.warn('Unable to load active session during shutdown', error);
       session = null;
@@ -3157,25 +3038,15 @@ async function finalizeActiveSessionOnShutdown() {
 async function endCurrentSession(options = {}) {
   try {
     const requestedSessionId = options.sessionId || options.id || null;
-    if (!currentSession) {
-      try {
-        await getCurrentSessionFromBackend();
-      } catch {
-        currentSession = null;
-      }
-    }
+    const journal = readJournal();
+    const activeSession = currentSession || (requestedSessionId
+      ? localJournal.getSession(journal, requestedSessionId)
+      : localJournal.getActiveSession(journal));
+    if (!activeSession) return;
 
-    if (!currentSession && !requestedSessionId) return;
-    let session = currentSession || {
-      id: requestedSessionId,
-      mapName: options.mapName || t('unknownMap'),
-      startedAt: options.startedAt || options.started_at || null,
-      localOnly: false
-    };
-    let queued = false;
     const endedAt = options.endedAt || new Date().toISOString();
     const explicitDurationSeconds = Number(options.durationSeconds);
-    const startedAtMs = Date.parse(session.startedAt || session.started_at);
+    const startedAtMs = Date.parse(activeSession.startedAt);
     const endedAtMs = Date.parse(endedAt);
     const durationSeconds = Number.isFinite(explicitDurationSeconds) && explicitDurationSeconds > 0
       ? Math.round(explicitDurationSeconds)
@@ -3197,47 +3068,10 @@ async function endCurrentSession(options = {}) {
       completionPayload.profitChaos = profitChaos;
     }
 
-    if (session.localOnly) {
-      queuePendingSessionAction({
-        type: 'sessionEnd',
-        sessionId: session.id,
-        ...completionPayload
-      });
-      setQueuedCurrentSession(null);
-      queued = true;
-      session = {
-        ...session,
-        ...completionPayload,
-        status: 'completed'
-      };
-      appendAuditTrail('auditSessionEndQueued', { mapName: session.mapName }, 'warning');
-    } else {
-      try {
-        session = await apiClient.endSession(session.id, completionPayload);
-        session = {
-          ...session,
-          ...completionPayload
-        };
-        appendAuditTrail('auditSessionEnded', { mapName: session.mapName });
-      } catch (error) {
-        if (!isRetryableApiError(error)) {
-          throw error;
-        }
-
-        queuePendingSessionAction({
-          type: 'sessionEnd',
-          sessionId: session.id,
-          ...completionPayload
-        });
-        session = {
-          ...session,
-          ...completionPayload,
-          status: 'completed'
-        };
-        queued = true;
-        appendAuditTrail('auditSessionEndQueued', { mapName: session.mapName }, 'warning');
-      }
-    }
+    const ended = localJournal.endSession(journal, activeSession.id, completionPayload, { now: new Date() });
+    writeJournal(ended.journal);
+    const session = { ...ended.session, ...completionPayload };
+    appendAuditTrail('auditSessionEnded', { mapName: session.mapName });
 
     const profit = parseFloat(session.profitChaos);
     const message = profit >= 0
@@ -3256,7 +3090,7 @@ async function endCurrentSession(options = {}) {
       updateOverlayWindow();
     }
 
-    return queued ? { ...session, queued: true } : session;
+    return session;
   } catch (error) {
     showNotification(t('notificationError'), t('sessionEndFailed'));
     throw toRendererError(error, t('sessionEndFailed'));
@@ -3779,20 +3613,22 @@ function setupIPC() {
 
   // Get the active session.
   ipcMain.handle('get-current-session', () => {
-    return getCurrentSessionFromBackend();
+    return loadActiveSession();
   });
 
   ipcMain.handle('get-session-details', async (event, sessionId) => {
-    try {
-      return await apiClient.getSession(sessionId);
-    } catch (error) {
-      throw toRendererError(error, 'Failed to load session details');
+    const session = localJournal.getSession(readJournal(), sessionId);
+    if (!session) {
+      throw new Error('Session not found');
     }
+    return session;
   });
 
   ipcMain.handle('update-session-details', async (event, sessionId, payload = {}) => {
     try {
-      return await apiClient.updateSession(sessionId, payload);
+      const { journal, session } = localJournal.updateSession(readJournal(), sessionId, payload, { now: new Date() });
+      writeJournal(journal);
+      return session;
     } catch (error) {
       throw toRendererError(error, 'Failed to update session details');
     }
@@ -3803,65 +3639,26 @@ function setupIPC() {
     const requestParams = { ...params };
     delete requestParams.includeAllContexts;
     const trackerContext = includeAllContexts ? {} : getTrackerContextDefaults(requestParams);
-    try {
-      return await apiClient.getSessions({
-        ...requestParams,
-        ...trackerContext
-      });
-    } catch (error) {
-      const queuedSession = getQueuedCurrentSession();
-      if (queuedSession) {
-        return {
-          sessions: [queuedSession],
-          total: 1,
-          limit: requestParams.limit || 50,
-          offset: requestParams.offset || 0
-        };
-      }
-      throw error;
-    }
+    return localJournal.listSessions(readJournal(), {
+      ...requestParams,
+      ...trackerContext
+    });
   });
 
   ipcMain.handle('get-dashboard-stats', async (event, context = {}) => {
-    const trackerContext = getTrackerContextDefaults(context);
-    try {
-      return await apiClient.getPersonalStats('daily', trackerContext);
-    } catch (error) {
-      const queuedSession = getQueuedCurrentSession();
-      if (queuedSession) {
-        return {
-          summary: {
-            totalSessions: 1,
-            totalCost: parseFloat(queuedSession.costChaos || 0),
-            totalLoot: parseFloat(queuedSession.totalLootChaos || 0),
-            totalProfit: parseFloat(queuedSession.profitChaos || 0),
-            totalDuration: 0,
-            avgProfitPerMap: parseFloat(queuedSession.profitChaos || 0),
-            avgProfitPerHour: 0
-          },
-          dailyStats: [],
-          mapStats: []
-        };
-      }
-      throw error;
-    }
+    return localJournal.getPersonalStats(readJournal(), {
+      period: 'daily',
+      ...getTrackerContextDefaults(context),
+      now: new Date()
+    });
   });
 
   ipcMain.handle('get-recent-loot', async (event, params = {}) => {
-    const trackerContext = getTrackerContextDefaults(params);
-    try {
-      return await apiClient.getRecentLoot({
-        limit: 8,
-        ...params,
-        ...trackerContext
-      });
-    } catch (error) {
-      const queuedSession = getQueuedCurrentSession();
-      return {
-        lootEntries: queuedSession?.lootEntries || [],
-        count: queuedSession?.lootEntries?.length || 0
-      };
-    }
+    return localJournal.listRecentLoot(readJournal(), {
+      limit: 8,
+      ...params,
+      ...getTrackerContextDefaults(params)
+    });
   });
 
   ipcMain.handle('get-sync-status', () => {
@@ -3926,53 +3723,15 @@ function setupIPC() {
       throw new Error('No active session');
     }
     try {
-      if (currentSession.localOnly) {
-        appendQueuedLootToCurrentSession([data]);
-        queuePendingLootAction({
-          type: 'singleLoot',
-          sessionId: currentSession.id,
-          data
-        });
-        if (mainWindow) {
-          mainWindow.webContents.send('loot-added', {
-            items: [data],
-            totalValue: parseFloat(data.chaosValue || 0) * parseInt(data.quantity || 1, 10),
-            queued: true
-          });
-        }
-        return {
-          queued: true
-        };
-      }
-
-      const result = await apiClient.addLoot(currentSession.id, data);
+      const { lootEntries: [lootEntry], session } = addLootToCurrentSession([data], 'manual');
       if (mainWindow) {
         mainWindow.webContents.send('loot-added', {
-          items: [result.lootEntry],
-          totalValue: parseFloat(result.lootEntry?.chaosValue || 0) * parseInt(result.lootEntry?.quantity || 1, 10)
+          items: [lootEntry],
+          totalValue: lootEntry.chaosValue * lootEntry.quantity
         });
       }
-      return result;
+      return { lootEntry, session };
     } catch (error) {
-      if (isRetryableApiError(error)) {
-        appendQueuedLootToCurrentSession([data]);
-        queuePendingLootAction({
-          type: 'singleLoot',
-          sessionId: currentSession.id,
-          data
-        });
-        if (mainWindow) {
-          mainWindow.webContents.send('loot-added', {
-            items: [data],
-            totalValue: parseFloat(data.chaosValue || 0) * parseInt(data.quantity || 1, 10),
-            queued: true
-          });
-        }
-        return {
-          queued: true
-        };
-      }
-
       throw toRendererError(error, 'Loot eklenemedi');
     }
   });
@@ -4268,8 +4027,8 @@ function setupIPC() {
       tabIds: options.tabIds,
       allTabs: options.allTabs,
       label: options.label,
-      kind: options.kind,
-      sessionId: options.sessionId
+      // Sessions live in the local journal now, so the server cannot link the snapshot to one.
+      kind: options.kind
     });
 
     return normalizeBackendSnapshotForDesktop(response?.snapshot || response, context);
@@ -4572,7 +4331,11 @@ app.whenReady().then(() => {
   registerStartupGlobalShortcuts();
   setupLogParser();
   setupGameDetector();
-  getCurrentSessionFromBackend().catch(() => { });
+  try {
+    loadActiveSession();
+  } catch {
+    // Nobody is signed in yet.
+  }
   flushPendingActions().catch(() => { });
   pendingLootFlushInterval = setInterval(async () => {
     const result = await flushPendingActions().catch(() => null);

@@ -86,6 +86,8 @@ function createVisualUserPayload() {
 }
 
 function createVisualSession() {
+  // Started today, so it counts in the dashboard's daily stats.
+  const startedAt = new Date(Math.max(Date.now() - 60 * 1000, new Date().setHours(0, 0, 0, 0))).toISOString();
   return {
     id: 'adaptive-profit-session-1',
     mapName: 'Crimson Temple Map',
@@ -97,11 +99,19 @@ function createVisualSession() {
     costChaos: 2000,
     poeVersion: 'poe1',
     league: 'Standard',
-    startedAt: '2026-05-06T11:00:00.000Z',
+    startedAt,
+    endedAt: startedAt,
     lootEntries: [
-      { itemName: 'Mirror of Kalandra', quantity: 2, chaosValue: 300000 }
+      { itemName: 'Mirror of Kalandra', quantity: 2, chaosValue: 300000, createdAt: startedAt }
     ]
   };
+}
+
+// Sessions live in the signed-in user's local journal, not on the API.
+function seedLocalJournal(userDataDir, sessions) {
+  const journalDir = path.join(userDataDir, 'profiles', VISUAL_USER.id);
+  fs.mkdirSync(journalDir, { recursive: true });
+  fs.writeFileSync(path.join(journalDir, 'journal.json'), JSON.stringify({ sessions }));
 }
 
 async function startVisualBackend() {
@@ -190,55 +200,6 @@ async function startVisualBackend() {
         data: {
           price: chaosValue ? { itemName, chaosValue } : null
         },
-        error: null
-      });
-      return;
-    }
-
-    if (request.method === 'GET' && url.pathname === '/api/sessions/active') {
-      writeJson(response, 200, {
-        success: true,
-        data: { session: null },
-        error: null
-      });
-      return;
-    }
-
-    if (request.method === 'GET' && url.pathname === '/api/sessions') {
-      writeJson(response, 200, {
-        success: true,
-        data: {
-          sessions: [createVisualSession()],
-          total: 1,
-          limit: 50,
-          offset: 0
-        },
-        error: null
-      });
-      return;
-    }
-
-    if (request.method === 'GET' && url.pathname === '/api/stats/personal') {
-      writeJson(response, 200, {
-        success: true,
-        data: {
-          summary: {
-            totalSessions: 1,
-            totalProfit: 600000,
-            avgProfitPerMap: 5000
-          },
-          dailyStats: [],
-          mapStats: []
-        },
-        error: null
-      });
-      return;
-    }
-
-    if (request.method === 'GET' && url.pathname === '/api/loot/recent') {
-      writeJson(response, 200, {
-        success: true,
-        data: { lootEntries: [] },
         error: null
       });
       return;
@@ -538,6 +499,7 @@ test('adaptive profit visual QA: captures dashboard, sessions, stash result, and
   const bootstrap = createBootstrapScript(testInfo);
   let electronApp;
   let testError = null;
+  seedLocalJournal(isolatedProfile.userDataDir, [createVisualSession()]);
 
   try {
     electronApp = await electron.launch({
