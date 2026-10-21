@@ -16,7 +16,7 @@ The app asks for one scope: `account:characters`, which lists your characters an
 
 ## Where the token is kept
 
-The access token is encrypted with Windows' data protection through Electron `safeStorage` and stored in `%APPDATA%\Juice Journal\config.json`. If encryption is unavailable on your system, the token is not saved and you sign in again next time.
+The access token is encrypted with Windows' data protection through Electron `safeStorage` and stored in `%APPDATA%\Juice Journal\config.json`. If encryption is unavailable on your system, the token is not saved; after a restart your profile still opens and you reconnect Path of Exile to refresh your characters.
 
 GGG does not issue refresh tokens to this kind of client. When the token expires (about 10 hours), your profile and journal keep working; only the character list asks you to reconnect.
 
