@@ -283,6 +283,25 @@
       box-shadow: inset 0 0 0 1px var(--ember-hot);
     }
 
+    /* ── Farm types: each league's content colour on its name ── */
+    [data-farm-type="abyss"] { --farm-color: var(--farm-abyss); }
+    [data-farm-type="breach"] { --farm-color: var(--farm-breach); }
+    [data-farm-type="expedition"] { --farm-color: var(--farm-expedition); }
+    [data-farm-type="ritual"] { --farm-color: var(--farm-ritual); }
+    [data-farm-type="harbinger"] { --farm-color: var(--farm-harbinger); }
+    [data-farm-type="essence"] { --farm-color: var(--farm-essence); }
+    [data-farm-type="delirium"] { --farm-color: var(--farm-delirium); }
+    [data-farm-type="blight"] { --farm-color: var(--farm-blight); }
+    [data-farm-type="legion"] { --farm-color: var(--farm-legion); }
+    [data-farm-type="harvest"] { --farm-color: var(--farm-harvest); }
+    [data-farm-type="betrayal"] { --farm-color: var(--farm-betrayal); }
+    [data-farm-type="incursion"] { --farm-color: var(--farm-incursion); }
+
+    .jj-primary-name[data-farm-type],
+    .jj-chip[data-farm-type] { color: var(--farm-color); }
+
+    .jj-chip[data-farm-type][aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--farm-color); }
+
     .jj-form-actions {
       display: flex;
       justify-content: flex-end;
@@ -353,6 +372,7 @@
   <script src="modules/overlayStateModel.js"></script>
   <script src="modules/profitCurrencyModel.js"></script>
   <script src="modules/profitTierModel.js"></script>
+  <script src="modules/farmTypeModel.js"></script>
   <script src="overlay.js"></script>
 </body>
 </html>

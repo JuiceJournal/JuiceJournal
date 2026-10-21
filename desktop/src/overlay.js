@@ -46,11 +46,18 @@
     }
   };
 
+  // A farm id or label resolves to the data-farm-type that gives the name its league content colour.
+  function getFarmTypeId(value) {
+    var model = root.farmTypeModel;
+    return model && typeof model.resolveFarmTypeId === 'function' ? model.resolveFarmTypeId(value) : null;
+  }
+
   // The primary line is a name plus an optional value, so the value can carry the profit tier colour.
-  function setPrimary(name, value) {
+  function setPrimary(name, value, farmTypeId) {
     if (!el.primary) return;
     var nameSpan = document.createElement('span');
     nameSpan.className = 'jj-primary-name';
+    if (farmTypeId) { nameSpan.setAttribute('data-farm-type', farmTypeId); }
     nameSpan.textContent = name || '';
     el.primary.replaceChildren(nameSpan);
     if (value) {
@@ -129,7 +136,7 @@
     var topOutput = Array.isArray(result.topOutputs) && result.topOutputs.length > 0 ? result.topOutputs[0] : null;
     var icons = CURRENCY_ICONS[result.poeVersion === 'poe2' ? 'poe2' : 'poe1'];
     setText(el.kickerLabel, 'Map Complete');
-    setPrimary(result.farmType || 'Completed Map', formatSignedProfit(result.netProfit, rates));
+    setPrimary(result.farmType || 'Completed Map', formatSignedProfit(result.netProfit, rates), getFarmTypeId(result.farmType));
     setSecondary(
       topOutput ? (topOutput.label || '') + ' ' + formatSignedProfit(topOutput.valueDelta, rates) : 'Completed map result',
       topOutput ? icons[topOutput.label] : null
@@ -176,7 +183,9 @@
     if (el.startFarmTypes && chipsKey !== renderedChipsKey) {
       renderedChipsKey = chipsKey;
       el.startFarmTypes.innerHTML = [{ id: '', label: 'No farm type' }].concat(opts).map(function (e) {
-        return '<button class="jj-chip" type="button" data-farm-type-id="' + escapeHTML(e.id) + '" aria-pressed="' +
+        var farmTypeId = getFarmTypeId(e.id);
+        return '<button class="jj-chip" type="button" data-farm-type-id="' + escapeHTML(e.id) + '"' +
+          (farmTypeId ? ' data-farm-type="' + farmTypeId + '"' : '') + ' aria-pressed="' +
           (e.id === selectedFarmTypeId ? 'true' : 'false') + '">' + escapeHTML(e.label) + '</button>';
       }).join('');
     }

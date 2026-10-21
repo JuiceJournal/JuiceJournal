@@ -125,3 +125,13 @@ test('farm type model rejects farm ids unsupported by the selected game version'
   assert.equal(getFarmTypeById('blight', { poeVersion: 'poe1' })?.label, 'Blight');
   assert.equal(getFarmTypeById('blight', { poeVersion: 'poe2' }), null);
 });
+
+test('farm type model resolves an id from a stored id or label', () => {
+  const resolveFarmTypeId = getFarmTypeModelExport('resolveFarmTypeId');
+
+  assert.equal(resolveFarmTypeId('ritual'), 'ritual');
+  assert.equal(resolveFarmTypeId('Ritual'), 'ritual');
+  assert.equal(resolveFarmTypeId(' expedition '), 'expedition');
+  assert.equal(resolveFarmTypeId('Unknown farm'), null);
+  assert.equal(resolveFarmTypeId(null), null);
+});

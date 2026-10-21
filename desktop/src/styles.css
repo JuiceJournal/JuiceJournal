@@ -1389,7 +1389,7 @@ body {
 }
 
 #last-map-result-farm-type {
-  color: var(--text-bright);
+  color: var(--farm-color, var(--text-bright));
   font-family: var(--font-display);
   font-size: 1.4rem;
   letter-spacing: 0.05em;
@@ -1463,7 +1463,7 @@ body {
 }
 
 .map-result-history-main strong {
-  color: var(--text-bright);
+  color: var(--farm-color, var(--text-bright));
   font-size: 0.95rem;
 }
 
@@ -1794,7 +1794,7 @@ body {
   margin-top: 0.15rem;
   font-family: var(--font-display);
   font-size: 1.2rem;
-  color: var(--text-bright);
+  color: var(--farm-color, var(--text-bright));
   letter-spacing: 0.06em;
 }
 
@@ -3389,6 +3389,21 @@ body {
 [data-profit-tier="unique"] { --profit-tier-color: var(--tier-unique); }
 [data-profit-tier="mirror"] { --profit-tier-color: var(--tier-mirror); }
 [data-profit-tier] { color: var(--profit-tier-color); }
+
+/* ===== Farm types (each league's content colour on its name) ===== */
+[data-farm-type="abyss"] { --farm-color: var(--farm-abyss); }
+[data-farm-type="breach"] { --farm-color: var(--farm-breach); }
+[data-farm-type="expedition"] { --farm-color: var(--farm-expedition); }
+[data-farm-type="ritual"] { --farm-color: var(--farm-ritual); }
+[data-farm-type="harbinger"] { --farm-color: var(--farm-harbinger); }
+[data-farm-type="essence"] { --farm-color: var(--farm-essence); }
+[data-farm-type="delirium"] { --farm-color: var(--farm-delirium); }
+[data-farm-type="blight"] { --farm-color: var(--farm-blight); }
+[data-farm-type="legion"] { --farm-color: var(--farm-legion); }
+[data-farm-type="harvest"] { --farm-color: var(--farm-harvest); }
+[data-farm-type="betrayal"] { --farm-color: var(--farm-betrayal); }
+[data-farm-type="incursion"] { --farm-color: var(--farm-incursion); }
+[data-farm-type] { color: var(--farm-color); }
 
 /* ===== Meme badges (flask mascot reactions for extreme profit tiers) ===== */
 .meme-badge {
