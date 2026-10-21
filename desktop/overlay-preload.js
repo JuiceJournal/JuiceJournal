@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getOverlayCursorPosition: () => ipcRenderer.invoke('get-overlay-cursor-position'),
   confirmStartMapPromptOverlay: (payload) => ipcRenderer.invoke('confirm-start-map-prompt-overlay', payload),
   cancelStartMapPromptOverlay: () => ipcRenderer.invoke('cancel-start-map-prompt-overlay'),
-  chooseCharacterPromptOverlay: (payload) => ipcRenderer.invoke('choose-character-prompt-overlay', payload)
+  chooseCharacterPromptOverlay: (payload) => ipcRenderer.invoke('choose-character-prompt-overlay', payload),
+  getCachedIcon: (url) => ipcRenderer.invoke('get-cached-icon', url)
 });
