@@ -596,6 +596,36 @@ test('map result model prefers canonical profit report totals when provided', ()
   });
 });
 
+test('map result model keeps item art on top drops for the overlay icon', () => {
+  const deriveMapResult = getMapResultModelExport('deriveMapResult');
+  const divineIcon = 'https://web.poecdn.com/gen/image/divine/CurrencyModValues.png';
+
+  const fromReport = deriveMapResult({
+    farmType: { id: 'ritual', label: 'Ritual' },
+    beforeSnapshot: createSnapshot([]),
+    afterSnapshot: createSnapshot([]),
+    profitReport: {
+      gained: [
+        { name: 'Divine Orb', category: 'currency', quantityDiff: 1, totalChaosValue: 120, icon: divineIcon },
+        { name: 'Chaos Orb', category: 'currency', quantityDiff: 5, totalChaosValue: 5 }
+      ],
+      lost: [],
+      summary: { totalGainedChaos: 125, totalLostChaos: 0, netProfitChaos: 125 }
+    }
+  });
+  assert.equal(fromReport.topOutputs[0].icon, divineIcon);
+  assert.equal('icon' in fromReport.topOutputs[1], false);
+
+  const fromSnapshots = deriveMapResult({
+    farmType: { id: 'ritual', label: 'Ritual' },
+    beforeSnapshot: createSnapshot([]),
+    afterSnapshot: createSnapshot([
+      { itemKey: 'divine::currency', baseType: 'Divine Orb', category: 'currency', quantity: 1, chaosValue: 120, totalChaosValue: 120, icon: divineIcon }
+    ])
+  });
+  assert.equal(fromSnapshots.topOutputs[0].icon, divineIcon);
+});
+
 test('map result model is deterministic for the same snapshot inputs', () => {
   const deriveMapResult = getMapResultModelExport('deriveMapResult');
   const input = {

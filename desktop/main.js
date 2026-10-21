@@ -27,6 +27,7 @@ const OCRScanner = require('./src/modules/ocrScanner');
 const APIClient = require('./src/modules/apiClient');
 const PoeApiClient = require('./src/modules/poeApiClient');
 const PriceService = require('./src/modules/priceService');
+const { IconCache } = require('./src/modules/iconCache');
 const StashAnalyzer = require('./src/modules/stashAnalyzer');
 const GameDetector = require('./src/modules/gameDetector');
 const win32Probe = require('./src/modules/win32Probe');
@@ -77,7 +78,8 @@ const IPC_RENDERER_SCOPES = Object.freeze({
   'get-overlay-cursor-position': ['main', 'overlay'],
   'confirm-start-map-prompt-overlay': ['overlay'],
   'cancel-start-map-prompt-overlay': ['overlay'],
-  'choose-character-prompt-overlay': ['overlay']
+  'choose-character-prompt-overlay': ['overlay'],
+  'get-cached-icon': ['overlay']
 });
 let validatedIpcHandleInstalled = false;
 
@@ -293,6 +295,7 @@ let ocrScanner = null;
 let apiClient = null;
 let poeApiClient = null;
 let priceService = null;
+let iconCache = null;
 let stashAnalyzer = null;
 let gameDetector = null;
 let currentSession = null;
@@ -3976,6 +3979,10 @@ function setupIPC() {
     return getProfitCurrencyRates(options);
   });
 
+  // Local copies of poe.ninja item art; misses download in the background
+  ipcMain.handle('resolve-cached-icons', (event, urls) => iconCache.resolveIconUrls(urls));
+  ipcMain.handle('get-cached-icon', (event, url) => iconCache.ensureIconUrl(url));
+
   // List stash tabs from PoE API
   ipcMain.handle('list-stash-tabs', async (event, league) => {
     try {
@@ -4298,6 +4305,7 @@ app.whenReady().then(() => {
   ocrScanner = new OCRScanner();
   poeApiClient = new PoeApiClient();
   priceService = new PriceService();
+  iconCache = new IconCache({ dir: path.join(app.getPath('userData'), 'icon-cache') });
   stashAnalyzer = new StashAnalyzer();
 
   // Set PoE version for price service

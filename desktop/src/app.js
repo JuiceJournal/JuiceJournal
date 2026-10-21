@@ -1822,6 +1822,21 @@ function normalizeSafeImageSrc(src) {
   }
 }
 
+// Points each <img data-icon-url> at its local icon-cache copy when there is one, else at the remote art.
+async function applyCachedItemIcons(container) {
+  const images = [...container.querySelectorAll('img[data-icon-url]')];
+  const urls = [...new Set(images.map((img) => img.dataset.iconUrl))];
+  let cached = {};
+  if (urls.length > 0 && typeof window.electronAPI?.resolveCachedIcons === 'function') {
+    cached = await window.electronAPI.resolveCachedIcons(urls).catch(() => ({})) || {};
+  }
+
+  images.forEach((img) => {
+    const cachedSrc = String(cached[img.dataset.iconUrl] || '');
+    img.src = cachedSrc.startsWith('file:') ? cachedSrc : normalizeSafeImageSrc(img.dataset.iconUrl);
+  });
+}
+
 function createCurrencyValueElement(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1') {
   const num = parseFloat(value);
   const formatted = isNaN(num) ? '0' : (type === 'divine' || type === 'mirror' ? num.toFixed(2) : num.toFixed(1));
@@ -5732,7 +5747,7 @@ function renderProfitReport(report) {
       const sign = item.changeType === 'gained' ? '+' : '-';
       const cls = item.changeType === 'gained' ? 'gained' : 'lost';
       const iconHtml = item.icon
-        ? `<span class="item-slot item-slot--sm"><img src="${escapeHTML(item.icon)}" alt=""></span>`
+        ? `<span class="item-slot item-slot--sm"><img data-icon-url="${escapeHTML(item.icon)}" alt=""></span>`
         : '';
       return `<div class="profit-item-row">
         <div class="profit-item-left">
@@ -5743,6 +5758,7 @@ function renderProfitReport(report) {
         <span class="profit-item-value ${cls}">${sign}${Math.round(item.totalChaosValue)}c</span>
       </div>`;
     }).join('');
+    applyCachedItemIcons(elements.profitItemsList);
   }
 
   // Update status badge
@@ -6390,7 +6406,7 @@ function renderCurrencyTable() {
     slot.className = 'item-slot';
     if (safeIconUrl) {
       const icon = document.createElement('img');
-      icon.src = safeIconUrl;
+      icon.dataset.iconUrl = safeIconUrl;
       icon.loading = 'lazy';
       icon.alt = item.itemName ? `${item.itemName} icon` : 'Currency icon';
       slot.appendChild(icon);
@@ -6435,6 +6451,7 @@ function renderCurrencyTable() {
   });
 
   tbody.replaceChildren(fragment);
+  applyCachedItemIcons(tbody);
 }
 
 function createSparklineElement(sparkData) {
