@@ -844,9 +844,11 @@ function loadSessionPrices(session) {
   const entry = { key, pending: true, retryAt: 0 };
   entry.load = priceService.syncPrices(session.league)
     .catch((error) => console.warn('Unable to load poe.ninja prices for the session', error))
-    .finally(() => {
+    .then((result) => {
       entry.pending = false;
-      entry.retryAt = Date.now() + SESSION_PRICES_RETRY_MS;
+      if (!result?.itemCount) {
+        entry.retryAt = Date.now() + SESSION_PRICES_RETRY_MS;
+      }
     });
   sessionPrices = entry;
   return entry.load;

@@ -639,6 +639,20 @@ test('main OCR scan waits before asking poe.ninja again after a load found no pr
   assert.equal(backend.journal.sessions[0].lootEntries.length, 2);
 });
 
+test('main OCR scan reloads prices that a game switch cleared', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-switch');
+  const priceService = createFakePriceService();
+  const context = loadOcrScan(backend, session, priceService);
+
+  await context.captureAndScan();
+  priceService.prices = new Map();
+  await context.captureAndScan();
+
+  assert.equal(priceService.syncCalls.length, 2);
+  assert.deepEqual(backend.journal.sessions[0].lootEntries.map((loot) => loot.chaosValue), [12, 12]);
+});
+
 test('main OCR scan does not add loot to a session that ended while it read the screen', async () => {
   const backend = createJournalBackend();
   const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-ended-mid-scan');
