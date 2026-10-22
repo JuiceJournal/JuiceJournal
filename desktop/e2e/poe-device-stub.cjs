@@ -1,12 +1,14 @@
 // Test-only. The e2e bootstrap scripts load this into the Electron main process before the app starts. It plays
 // the browser and pathofexile.com for the device sign-in, so specs sign in without leaving the machine.
 // JUICE_JOURNAL_E2E_POE_ACCOUNT holds the account: { sub, username, characters: { poe1: [], poe2: [] } }.
+// JUICE_JOURNAL_E2E_POE_SCOPE overrides the granted scopes; by default only what the built-in sign-in asks for.
 const http = require('http');
 const path = require('path');
 const { shell } = require('electron');
 
 const axios = require(require.resolve('axios', { paths: [path.join(__dirname, '..')] }));
 const account = JSON.parse(process.env.JUICE_JOURNAL_E2E_POE_ACCOUNT || '{}');
+const grantedScope = process.env.JUICE_JOURNAL_E2E_POE_SCOPE || 'account:characters';
 
 // The "browser" approves at once and calls the app's loopback redirect.
 shell.openExternal = async (authUrl) => {
@@ -35,7 +37,7 @@ axios.create = (config = {}) => {
         access_token: 'e2e-access-token',
         expires_in: 36000,
         token_type: 'bearer',
-        scope: 'account:characters',
+        scope: grantedScope,
         sub: account.sub,
         username: account.username
       }
