@@ -184,12 +184,28 @@
     };
   }
 
+  // The OCR hotkeys are only held while a session runs and the game window has focus, so other apps and
+  // the game itself get those keys the rest of the time. A null foreground pid means it could not be read;
+  // the session alone decides then.
+  function shouldEnableScanHotkeys({ hasActiveSession, foregroundProcessId, gameProcessIds = [] } = {}) {
+    if (!hasActiveSession) {
+      return false;
+    }
+
+    if (foregroundProcessId === null || foregroundProcessId === undefined) {
+      return true;
+    }
+
+    return gameProcessIds.some((processId) => Number(processId) === foregroundProcessId);
+  }
+
   return {
     DEFAULT_SCAN_HOTKEY,
     DEFAULT_STASH_SCAN_HOTKEY,
     formatAcceleratorForDisplay,
     formatKeyboardEventToAccelerator,
     normalizeAccelerator,
+    shouldEnableScanHotkeys,
     validateHotkeys
   };
 });

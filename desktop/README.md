@@ -36,9 +36,10 @@ npm run build:win
 - Stash'teki itemleri tespit eder
 - Fiyatlandirma icin backend'e gonderir
 
-### Global Hotkeys
+### OCR Kisayollari
 - `F9` - Hizli loot ekle
 - `Ctrl+Shift+L` - Stash tarama
+- Yalnizca aktif session varken ve oyun penceresi ondeyken kayitlidir (uygulama ondeki pencereyi okuyamazsa tum session boyunca); diger zamanlarda tuslar oyuna ve diger uygulamalara gider
 
 ### System Tray
 - Windows bildirim alaninda calisir
@@ -133,7 +134,7 @@ Build ciktisi `dist/` klasorunde olusur.
 ## Sorun Giderme
 
 ### OCR calismiyor
-- Tesseract.js ilk kullanimda dil dosyalarini indirir
+- Tesseract.js ilk kullanimda dil dosyasini `%APPDATA%\Juice Journal\ocr-cache\` altina indirir
 - Internet baglantisi gerekli
 - Windows Defender izin vermeli
 

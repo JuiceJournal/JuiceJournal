@@ -1,6 +1,6 @@
 # How tracking works
 
-Juice Journal tracks your farming from the game's log file, the official Path of Exile API and poe.ninja prices. It does not inject into the game, hook it or read its memory. Apart from the log file, it only looks up the game's process and window (to find the log file and place the overlay) and, when you press an OCR hotkey, takes a screenshot of your screen.
+Juice Journal tracks your farming from the game's log file, the official Path of Exile API and poe.ninja prices. It does not inject into the game, hook it or read its memory. Apart from the log file, it only looks up the game's process and window (to find the log file and place the overlay), checks during a session which window is in front (to hold the OCR hotkeys only while the game is) and, when you press an OCR hotkey, takes a screenshot of your screen.
 
 ## Maps and sessions: `Client.txt`
 
