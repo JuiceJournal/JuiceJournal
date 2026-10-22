@@ -774,6 +774,163 @@ test('poe1 end session falls back to not-calculated completion when baseline is 
   assert.deepEqual(calls, [['completeWithoutProfit', 'session-1', 'Missing before-stash baseline']]);
 });
 
+test('poe1 end session completes without stash profit when stash tracking is unavailable', async () => {
+  const calls = [];
+  const state = {
+    currentSession: {
+      id: 'session-1',
+      mapName: 'Dunes Map',
+      poeVersion: 'poe1'
+    }
+  };
+  const context = loadFunctions(['completePoe1SessionWithStashProfit'], {
+    state,
+    window: {
+      t: (key) => key
+    },
+    isActiveSessionPoe1: () => true,
+    isStashTrackingEnabled: () => false,
+    showStashUnavailableToast: () => calls.push('showStashUnavailableToast'),
+    completePoe1SessionWithoutStashProfit: async (session, error) => {
+      calls.push(['completeWithoutProfit', session.id, error ?? null]);
+      return true;
+    }
+  });
+
+  const result = await context.completePoe1SessionWithStashProfit();
+
+  assert.equal(result, true);
+  assert.deepEqual(calls, [['completeWithoutProfit', 'session-1', null]]);
+});
+
+test('poe1 end session without stash profit lets the journal value the recorded loot', async () => {
+  const endSessionCalls = [];
+  const calls = [];
+  const state = {
+    currentSession: {
+      id: 'session-1',
+      mapName: 'Dunes Map',
+      poeVersion: 'poe1',
+      startedAt: '2026-05-06T12:00:00.000Z'
+    }
+  };
+  const context = loadFunctions(['completePoe1SessionWithoutStashProfit'], {
+    state,
+    stashState: { lastMapResult: null },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        async endSession(payload) {
+          endSessionCalls.push(JSON.parse(JSON.stringify(payload)));
+          return { id: 'session-1', status: 'completed', totalLootChaos: 42, profitChaos: 42 };
+        }
+      }
+    },
+    isActiveSessionPoe1: () => true,
+    getLiveDuration: () => 240,
+    persistMapResultHistory: async () => calls.push('persistMapResultHistory'),
+    updateActiveSessionUI: () => calls.push('updateActiveSessionUI'),
+    refreshTrackerData: async () => calls.push('refreshTrackerData'),
+    showToast: (...args) => calls.push(['showToast', ...args]),
+    console: { warn() {} }
+  });
+
+  const result = await context.completePoe1SessionWithoutStashProfit(state.currentSession);
+
+  assert.equal(result, true);
+  assert.deepEqual(endSessionCalls, [{
+    sessionId: 'session-1',
+    mapName: 'Dunes Map',
+    startedAt: '2026-05-06T12:00:00.000Z',
+    durationSeconds: 240
+  }]);
+  assert.equal(state.currentSession, null);
+  // The session-ended event records the result; no stash ran, so there is no stash warning.
+  assert.deepEqual(calls, ['updateActiveSessionUI', 'refreshTrackerData']);
+});
+
+test('poe1 end session after a stash failure still warns that the stash diff was skipped', async () => {
+  const calls = [];
+  const context = loadFunctions(['completePoe1SessionWithoutStashProfit'], {
+    state: { currentSession: { id: 'session-1', poeVersion: 'poe1' } },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        endSession: async () => ({ id: 'session-1', status: 'completed' })
+      }
+    },
+    isActiveSessionPoe1: () => true,
+    getLiveDuration: () => 240,
+    updateActiveSessionUI: () => {},
+    refreshTrackerData: async () => {},
+    showToast: (title, message, type) => calls.push([title, type]),
+    console: { warn() {} }
+  });
+
+  await context.completePoe1SessionWithoutStashProfit(undefined, new Error('Missing before-stash baseline'));
+
+  assert.deepEqual(calls, [['stash.profitTracker', 'warning']]);
+});
+
+test('starting a poe1 session makes no stash request when the sign-in lacks account:stashes', async () => {
+  const calls = [];
+  const state = {
+    poeStashAccess: false,
+    settings: { poeVersion: 'poe1' },
+    detectedGameVersion: 'poe1'
+  };
+  const context = loadFunctions([
+    'getResolvedCapabilityGameVersion',
+    'getStashCapabilityUnavailableKey',
+    'getStashCapabilityUnavailableText',
+    'applyDashboardCapabilities',
+    'isStashTrackingEnabled',
+    'normalizeCompletedSessionPoeVersion',
+    'isActiveSessionPoe1',
+    'takeAutomaticBeforeSnapshotForSession',
+    'scheduleAutomaticBeforeSnapshotForSession'
+  ], {
+    state,
+    stashState: {},
+    elements: {},
+    window: { t: (key) => key },
+    getCapabilityModel: () => require('../src/modules/capabilityModel'),
+    normalizePoeVersion: (value) => value,
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe1' }),
+    updateStashTrackerStatus: () => {},
+    takeStashSnapshotForCurrentRun: async () => calls.push('takeStashSnapshot'),
+    showToast: (...args) => calls.push(['showToast', ...args])
+  });
+
+  const baseline = await context.scheduleAutomaticBeforeSnapshotForSession({ id: 'session-1', poeVersion: 'poe1' });
+
+  assert.equal(baseline, false);
+  assert.deepEqual(calls, []);
+  assert.equal(state.capabilities.stashTracking.reason, 'stash_scope_missing');
+});
+
+test('poe device status refresh records stash access and re-applies the stash capability', async () => {
+  const calls = [];
+  const state = { account: { activePoeVersion: 'poe1' } };
+  const context = loadFunctions(['syncPoeDeviceConnection'], {
+    state,
+    window: {
+      electronAPI: {
+        getPoeAuthStatus: async () => ({ authenticated: true, expired: false, stashAccess: false })
+      }
+    },
+    applyDashboardCapabilities: () => calls.push(['applyDashboardCapabilities', state.poeStashAccess]),
+    renderPoeLinkStatus: () => {},
+    renderCharacterSummaryCard: () => {},
+    refreshDeviceCharacters: async () => {}
+  });
+
+  await context.syncPoeDeviceConnection();
+
+  assert.equal(state.poeStashAccess, false);
+  assert.deepEqual(calls, [['applyDashboardCapabilities', false]]);
+});
+
 test('starting a map session uses the branded modal when runtime map name is missing', async () => {
   const startSessionCalls = [];
   const context = loadFunctions(['normalizeSessionMapName', 'getRuntimeSessionMapName', 'handleStartSession'], {
@@ -1219,6 +1376,111 @@ test('session-ended events persist completed map results for automatic log exits
   assert.deepEqual(refreshCalls, [{ includeSessions: true }]);
 });
 
+function loadSessionEndedListener({ stashState = { lastMapResult: null } } = {}) {
+  const listeners = {};
+  const persisted = [];
+  const overlayResults = [];
+  const context = loadFunctions([
+    'getSessionNumber',
+    'getSessionTimestampMs',
+    'getCompletedSessionDurationSeconds',
+    'getCompletedSessionFarmTypeLabel',
+    'createCompletedSessionMapResult',
+    'normalizeCompletedSessionPoeVersion',
+    'shouldPersistCompletedSessionMapResult',
+    'persistCompletedSessionMapResult',
+    'isPoe1ZeroLifecycleResult',
+    'isDisplayableMapResult',
+    'setupIPCListeners'
+  ], {
+    state: {
+      currentSession: { id: 'session-1' },
+      settings: { poeVersion: 'poe1' },
+      account: {},
+      farmType: {}
+    },
+    stashState,
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        onMapEntered: (handler) => { listeners.mapEntered = handler; },
+        onMapExited: (handler) => { listeners.mapExited = handler; },
+        onSessionStarted: (handler) => { listeners.sessionStarted = handler; },
+        onSessionEnded: (handler) => { listeners.sessionEnded = handler; },
+        onLootAdded: (handler) => { listeners.lootAdded = handler; },
+        onNavigate: (handler) => { listeners.navigate = handler; },
+        async showMapResultOverlay(result) {
+          overlayResults.push(JSON.parse(JSON.stringify(result)));
+        }
+      }
+    },
+    getFarmTypeModel: () => ({
+      getFarmTypeById: (id) => (id === 'breach' ? { id: 'breach', label: 'Breach' } : null),
+      listFarmTypes: () => [{ id: 'breach', label: 'Breach' }]
+    }),
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe1', league: 'Mirage', farmTypeId: 'breach' }),
+    normalizePoeVersion: (value) => value,
+    persistMapResultHistory: async (result) => {
+      persisted.push(JSON.parse(JSON.stringify(result)));
+    },
+    updateActiveSessionUI: () => {},
+    stopSessionClock: () => {},
+    showToast: () => {},
+    refreshTrackerData: async () => {}
+  });
+
+  context.setupIPCListeners();
+  return { context, listeners, persisted, overlayResults };
+}
+
+function createEndedPoe1Session(overrides = {}) {
+  return {
+    id: 'session-1',
+    mapName: 'Dunes Map',
+    farmTypeId: 'breach',
+    poeVersion: 'poe1',
+    league: 'Mirage',
+    startedAt: '2026-05-06T12:00:00.000Z',
+    endedAt: '2026-05-06T12:04:00.000Z',
+    durationSeconds: 240,
+    costChaos: 0,
+    totalLootChaos: 0,
+    profitChaos: 0,
+    ...overrides
+  };
+}
+
+test('session-ended events show the map result overlay with the loot recorded in the session', async () => {
+  const { context, listeners, persisted, overlayResults } = loadSessionEndedListener();
+
+  await listeners.sessionEnded(createEndedPoe1Session({ totalLootChaos: 42, profitChaos: 42 }));
+  await listeners.sessionEnded(createEndedPoe1Session({
+    id: 'session-2',
+    startedAt: '2026-05-06T12:10:00.000Z',
+    endedAt: '2026-05-06T12:13:00.000Z',
+    durationSeconds: 180
+  }));
+
+  assert.deepEqual(
+    overlayResults.map((result) => [result.sessionId, result.farmType, result.durationSeconds, result.netProfit]),
+    [['session-1', 'Breach', 240, 42], ['session-2', 'Breach', 180, 0]]
+  );
+  assert.deepEqual(persisted.map((result) => result.id), overlayResults.map((result) => result.id));
+  // A PoE1 map without loot is still a completed result, so the dashboard lists it.
+  assert.equal(context.isDisplayableMapResult(persisted[1]), true);
+});
+
+test('session-ended events leave sessions completed by a stash diff to that result', async () => {
+  const { listeners, persisted, overlayResults } = loadSessionEndedListener({
+    stashState: { lastMapResult: { id: 'map-result-session-1-1778068800000', sessionId: 'session-1' } }
+  });
+
+  await listeners.sessionEnded(createEndedPoe1Session({ totalLootChaos: 40, profitChaos: 35 }));
+
+  assert.deepEqual(persisted, []);
+  assert.deepEqual(overlayResults, []);
+});
+
 test('poe2 result smoke persists zero-profit map result and projects it into Last Map Result', async () => {
   const listeners = {};
   const savedResults = [];
@@ -1266,7 +1528,6 @@ test('poe2 result smoke persists zero-profit map result and projects it into Las
     'getCompletedSessionFarmTypeLabel',
     'createCompletedSessionMapResult',
     'normalizeCompletedSessionPoeVersion',
-    'hasCompletedSessionValue',
     'shouldPersistCompletedSessionMapResult',
     'persistCompletedSessionMapResult',
     'persistMapResultHistory',

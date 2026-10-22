@@ -462,7 +462,218 @@ test('main session end can target a journal session id after process state is lo
   assert.equal(context.currentSession, null);
 });
 
-test('main shutdown finalizer closes an active session without profit data when calculation is unavailable', async () => {
+// Date fixed at `iso` for code that asks for the current time.
+function createFixedDate(iso) {
+  return class extends Date {
+    constructor(...args) {
+      return args.length ? super(...args) : new global.Date(iso);
+    }
+
+    static now() {
+      return new global.Date(iso).getTime();
+    }
+
+    static parse(value) {
+      return global.Date.parse(value);
+    }
+  };
+}
+
+test('main shutdown finalizer keeps the loot recorded in a PoE1 session without stash profit', async () => {
+  const calls = [];
+  const backend = createJournalBackend();
+  const session = backend.start({ mapType: 'breach', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-shutdown-3');
+  backend.journal = localJournal.addLoot(backend.journal, session.id, [
+    { itemName: 'Divine Orb', quantity: 1, chaosValue: 42, source: 'ocr' }
+  ], { createId: () => 'loot-1', now: new Date('2026-05-06T12:02:00.000Z') }).journal;
+  const context = loadFunctions([
+    'normalizePoeVersion',
+    'normalizeStoredFarmTypeId',
+    'resolveFarmTypeLabel',
+    'getSessionValueNumber',
+    'getSessionNumberValue',
+    'isUuid',
+    'buildSessionShutdownMapResult',
+    'withTimeout',
+    'resolveShutdownSessionCompletion',
+    'endCurrentSession',
+    'finalizeActiveSessionOnShutdown'
+  ], {
+    currentSession: session,
+    calculateSessionProfitFromPersistedSnapshots: async () => null,
+    listFarmTypes: () => [{ id: 'breach', label: 'Breach' }],
+    getActiveFarmTypeId: () => 'breach',
+    saveMapResultHistory(result) {
+      calls.push(['saveMapResultHistory', JSON.parse(JSON.stringify(result))]);
+      return [result];
+    },
+    ...backend.context,
+    appendAuditTrail() {},
+    showNotification() {},
+    t: (key) => key,
+    updateOverlayWindow() {},
+    mainWindow: null,
+    Date: createFixedDate('2026-05-06T12:04:00.000Z'),
+    setTimeout,
+    clearTimeout
+  });
+
+  const result = await context.finalizeActiveSessionOnShutdown();
+
+  assert.equal(result.profitChaos, 42);
+  const stored = backend.journal.sessions[0];
+  assert.deepEqual([stored.status, stored.totalLootChaos, stored.profitChaos], ['completed', 42, 42]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][1].outputValue, 42);
+  assert.equal(calls[0][1].netProfit, 42);
+  assert.equal(calls[0][1].profitUnavailable, false);
+  // Same id the renderer gives the session's result, so the two records of this session collapse into one.
+  assert.equal(calls[0][1].id, `map-result-session-shutdown-3-${Date.parse('2026-05-06T12:04:00.000Z')}`);
+});
+
+// A price service whose sync loads `prices` (or nothing, or never finishes) for the OCR scan tests.
+function createFakePriceService({ prices = { 'Exalted Orb': 12 }, hang = false } = {}) {
+  return {
+    poeVersion: 'poe1',
+    prices: new Map(),
+    syncCalls: [],
+    setPoeVersion(version) {
+      this.poeVersion = version;
+    },
+    async syncPrices(league) {
+      this.syncCalls.push([this.poeVersion, league]);
+      if (hang) {
+        await new Promise(() => {});
+      }
+      this.prices = new Map(Object.entries(prices).map(([name, chaosValue]) => [name, { chaosValue }]));
+      return { itemCount: this.prices.size };
+    },
+    getStatus() {
+      return { itemCount: this.prices.size, poeVersion: this.poeVersion };
+    },
+    getPriceInfo(itemName) {
+      return this.prices.get(itemName) || null;
+    }
+  };
+}
+
+function loadOcrScan(backend, session, priceService, overrides = {}) {
+  let lootId = 0;
+  return loadFunctions([
+    'normalizePositiveRate',
+    'readLocalChaosPrice',
+    'withTimeout',
+    'loadSessionPrices',
+    'addLootToCurrentSession',
+    'captureAndScan'
+  ], {
+    ...backend.context,
+    currentSession: session,
+    sessionPrices: null,
+    priceService,
+    SESSION_PRICES_WAIT_MS: 20,
+    SESSION_PRICES_RETRY_MS: 60_000,
+    crypto: { randomUUID: () => `loot-${++lootId}` },
+    screen: { getPrimaryDisplay: () => ({ size: { width: 1920, height: 1080 } }) },
+    require: () => ({
+      desktopCapturer: { getSources: async () => [{ thumbnail: { toPNG: () => 'png' } }] }
+    }),
+    prepareOCRImage: (image) => image,
+    ocrScanner: { scanImage: async () => [{ itemName: 'Exalted Orb', quantity: 2, itemType: 'currency' }] },
+    showNotification() {},
+    t: (key) => key,
+    mainWindow: null,
+    console: { log() {}, warn() {} },
+    setTimeout,
+    clearTimeout,
+    ...overrides
+  });
+}
+
+test('main prices OCR loot from poe.ninja for the session game and league', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({
+    poeVersion: 'poe2',
+    league: 'Fate of the Vaal',
+    startedAt: '2026-05-06T12:00:00.000Z'
+  }, 'session-poe2');
+  const priceService = createFakePriceService();
+  const syncCalls = priceService.syncCalls;
+  const context = loadOcrScan(backend, session, priceService);
+
+  await context.captureAndScan();
+  await context.captureAndScan();
+
+  // One price load for the session's game and league, reused by the second scan.
+  assert.deepEqual(syncCalls, [['poe2', 'Fate of the Vaal']]);
+  const stored = backend.journal.sessions[0];
+  assert.deepEqual(stored.lootEntries.map((loot) => [loot.itemName, loot.chaosValue, loot.source]), [
+    ['Exalted Orb', 12, 'ocr'],
+    ['Exalted Orb', 12, 'ocr']
+  ]);
+  assert.equal(stored.totalLootChaos, 48);
+});
+
+test('main OCR scan records loot unpriced when poe.ninja does not answer in time', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-slow');
+  const context = loadOcrScan(backend, session, createFakePriceService({ hang: true }));
+
+  await context.captureAndScan();
+
+  assert.deepEqual(backend.journal.sessions[0].lootEntries.map((loot) => [loot.itemName, loot.chaosValue]), [
+    ['Exalted Orb', 0]
+  ]);
+});
+
+test('main OCR scan waits before asking poe.ninja again after a load found no prices', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-offline');
+  const priceService = createFakePriceService({ prices: {} });
+  const context = loadOcrScan(backend, session, priceService);
+
+  await context.captureAndScan();
+  await context.captureAndScan();
+
+  assert.equal(priceService.syncCalls.length, 1);
+  assert.equal(backend.journal.sessions[0].lootEntries.length, 2);
+});
+
+test('main OCR scan reloads prices that a game switch cleared', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-switch');
+  const priceService = createFakePriceService();
+  const context = loadOcrScan(backend, session, priceService);
+
+  await context.captureAndScan();
+  priceService.prices = new Map();
+  await context.captureAndScan();
+
+  assert.equal(priceService.syncCalls.length, 2);
+  assert.deepEqual(backend.journal.sessions[0].lootEntries.map((loot) => loot.chaosValue), [12, 12]);
+});
+
+test('main OCR scan does not add loot to a session that ended while it read the screen', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-ended-mid-scan');
+  const notifications = [];
+  const context = loadOcrScan(backend, session, createFakePriceService(), {
+    ocrScanner: {
+      async scanImage() {
+        context.currentSession = null;
+        return [{ itemName: 'Exalted Orb', quantity: 2, itemType: 'currency' }];
+      }
+    },
+    showNotification: (title, body) => notifications.push([title, body])
+  });
+
+  await context.captureAndScan();
+
+  assert.deepEqual(backend.journal.sessions[0].lootEntries, []);
+  assert.deepEqual(notifications, [['notificationError', 'noActiveSession']]);
+});
+
+test('main shutdown finalizer closes a session without loot at zero when stash profit is unavailable', async () => {
   const calls = [];
   const backend = createJournalBackend();
   const context = loadFunctions([
@@ -525,7 +736,8 @@ test('main shutdown finalizer closes an active session without profit data when 
   assert.equal(calls[0][0], 'saveMapResultHistory');
   assert.equal(calls[0][1].sessionId, 'session-shutdown-1');
   assert.equal(calls[0][1].farmType, 'Breach');
-  assert.equal(calls[0][1].profitUnavailable, true);
+  assert.equal(calls[0][1].profitUnavailable, false);
+  assert.equal(calls[0][1].netProfit, 0);
   assert.equal(calls[0][1].durationSeconds, 240);
   const stored = backend.journal.sessions[0];
   assert.deepEqual([stored.id, stored.status, stored.endedAt, stored.durationSec, stored.totalLootChaos, stored.profitChaos], [

@@ -22,6 +22,8 @@ const state = {
   characterSession: null,
   deviceCharactersByGame: {},
   poeDeviceConnected: false,
+  // Whether the device sign-in may read stashes (account:stashes); the built-in sign-in does not ask for it.
+  poeStashAccess: false,
   runtimeSession: null,
   overlay: null,
   profitCurrencyRates: {},
@@ -1113,6 +1115,10 @@ function getStashCapabilityUnavailableKey(reason, poeVersion) {
     return 'stash.capabilityUnavailable.poe2';
   }
 
+  if (reason === 'stash_scope_missing') {
+    return 'stash.capabilityUnavailable.scope';
+  }
+
   return 'stash.capabilityUnavailable.generic';
 }
 
@@ -1125,7 +1131,9 @@ function getStashCapabilityUnavailableText(reason, poeVersion) {
 
 function applyDashboardCapabilities(version = null) {
   const capabilityVersion = getResolvedCapabilityGameVersion(version);
-  const capabilities = getCapabilityModel().getCapabilitiesForGame(capabilityVersion);
+  const capabilities = getCapabilityModel().getCapabilitiesForGame(capabilityVersion, {
+    stashAccess: state.poeStashAccess
+  });
   const stashCapability = capabilities.stashTracking || { enabled: true, reason: null };
   const stashUnavailable = !stashCapability.enabled;
   const unavailableText = stashUnavailable
@@ -2248,7 +2256,14 @@ function setupIPCListeners() {
     state.currentSession = null;
     updateActiveSessionUI();
     stopSessionClock();
-    await persistCompletedSessionMapResult(session);
+    const mapResult = await persistCompletedSessionMapResult(session);
+    if (mapResult && typeof window.electronAPI.showMapResultOverlay === 'function') {
+      try {
+        await window.electronAPI.showMapResultOverlay(mapResult);
+      } catch (error) {
+        console.warn('Failed to show map result overlay', error);
+      }
+    }
     const rawProfit = parseFloat(session?.profitChaos);
     const profit = Number.isFinite(rawProfit) ? rawProfit : 0;
     const message = profit >= 0
@@ -2734,6 +2749,7 @@ async function handleLogout() {
   state.currentUser = null;
   state.deviceCharactersByGame = {};
   state.poeDeviceConnected = false;
+  state.poeStashAccess = false;
   state.currentSession = null;
   state.sessions = [];
   state.mapResults = [];
@@ -2981,6 +2997,8 @@ async function refreshDeviceCharacters(poeVersion) {
 async function syncPoeDeviceConnection() {
   const status = await window.electronAPI.getPoeAuthStatus().catch(() => null);
   state.poeDeviceConnected = Boolean(status?.authenticated);
+  state.poeStashAccess = status?.stashAccess === true;
+  applyDashboardCapabilities();
   renderPoeLinkStatus();
   renderCharacterSummaryCard();
   if (state.poeDeviceConnected) {
@@ -3234,7 +3252,8 @@ function createCompletedSessionMapResult(session = {}) {
     || new Date().toISOString();
 
   return {
-    id: `map-result-${sessionId}`,
+    // The end time keeps ids unique per run, as stash-diff results are; main's shutdown result uses the same id.
+    id: `map-result-${sessionId}-${Date.parse(createdAt)}`,
     sessionId,
     characterId: characterSummary.id || null,
     characterName: characterSummary.name || null,
@@ -3259,27 +3278,10 @@ function normalizeCompletedSessionPoeVersion(value) {
   return normalized === 'poe1' || normalized === 'poe2' ? normalized : null;
 }
 
-function hasCompletedSessionValue(session = {}) {
-  const totalLootChaos = getSessionNumber(session.totalLootChaos ?? session.total_loot_chaos, 0);
-  const profitChaos = getSessionNumber(session.profitChaos ?? session.profit_chaos, 0);
-  const costChaos = getSessionNumber(session.costChaos ?? session.cost_chaos, 0);
-
-  return totalLootChaos !== 0 || profitChaos !== 0 || costChaos !== 0;
-}
-
 function shouldPersistCompletedSessionMapResult(session = {}) {
-  const poeVersion = normalizeCompletedSessionPoeVersion(session.poeVersion ?? session.poe_version)
-    || getSelectedTrackerContext().poeVersion
-    || state.settings?.poeVersion
-    || 'poe1';
-
-  if (poeVersion !== 'poe1') {
-    return true;
-  }
-
-  // PoE1 has stash API profit tracking. A zero-value completed session is only
-  // a lifecycle marker until the before/after stash diff is calculated.
-  return hasCompletedSessionValue(session);
+  // A PoE1 stash diff records and shows its own, itemised result before it ends the session.
+  const stashResultSessionId = typeof stashState !== 'undefined' ? stashState.lastMapResult?.sessionId : null;
+  return !stashResultSessionId || stashResultSessionId !== (session.id || session.sessionId);
 }
 
 async function persistCompletedSessionMapResult(session = {}) {
@@ -5078,78 +5080,35 @@ async function hydratePoe1StashSnapshotsForSession(session = state.currentSessio
   }
 }
 
-function buildFallbackMapResultForSession(session = state.currentSession) {
-  if (!session) {
-    return null;
-  }
-
-  const trackerContext = typeof getSelectedTrackerContext === 'function'
-    ? getSelectedTrackerContext()
-    : {};
-  const { listFarmTypes } = getFarmTypeModel();
-  const farmTypeId = session.farmTypeId
-    || session.mapType
-    || state.farmType?.selectedFarmTypeId
-    || trackerContext.farmTypeId
-    || null;
-  const farmType = listFarmTypes().find((entry) => entry.id === farmTypeId) || null;
-  const characterSummary = state.account?.summary || {};
-  const poeVersion = normalizeCompletedSessionPoeVersion(session.poeVersion ?? session.poe_version)
-    || trackerContext.poeVersion
-    || 'poe1';
-
-  return {
-    id: `fallback-${session.id || 'session'}-${Date.now()}`,
-    sessionId: session.id || null,
-    characterId: characterSummary.id || null,
-    characterName: characterSummary.name || null,
-    accountName: state.account?.accountName || null,
-    poeVersion,
-    league: session.league || trackerContext.league || characterSummary.league || null,
-    farmType: farmType?.label || session.mapType || 'Unknown farm type',
-    durationSeconds: getLiveDuration(session),
-    inputValue: 0,
-    outputValue: 0,
-    netProfit: 0,
-    profitState: 'neutral',
-    topInputs: [],
-    topOutputs: [],
-    profitUnavailable: true,
-    createdAt: new Date().toISOString()
-  };
-}
-
+// Without stash totals the journal values the session from the loot recorded in it (OCR scan or manual), and
+// the session-ended event records and shows that result.
 async function completePoe1SessionWithoutStashProfit(session = state.currentSession, error = null) {
   if (!session || !isActiveSessionPoe1(session)) {
     return false;
   }
 
-  console.warn('Completing PoE1 session without stash profit after snapshot failure', error);
-  const fallbackResult = buildFallbackMapResultForSession(session);
-  stashState.lastMapResult = fallbackResult;
+  if (error) {
+    console.warn('Completing PoE1 session without stash profit after snapshot failure', error);
+  }
 
   try {
-    if (fallbackResult) {
-      await persistMapResultHistory(fallbackResult);
-    }
-
     const result = await window.electronAPI.endSession({
       sessionId: session.id,
-      mapName: session.mapName || fallbackResult?.farmType || null,
+      mapName: session.mapName || null,
       startedAt: session.startedAt || session.started_at || null,
-      totalLootChaos: 0,
-      profitChaos: 0,
       durationSeconds: Math.max(1, Math.round(getLiveDuration(session)))
     });
 
     state.currentSession = null;
     updateActiveSessionUI();
     await refreshTrackerData({ includeSessions: true });
-    showToast(
-      window.t('stash.profitTracker'),
-      'Stash refresh failed, so the map was completed without profit data.',
-      'warning'
-    );
+    if (error) {
+      showToast(
+        window.t('stash.profitTracker'),
+        'Stash refresh failed, so the map was completed with the loot recorded during it.',
+        'warning'
+      );
+    }
     if (result?.queued) {
       showToast(window.t('dashboard.activeSession'), window.t('toast.sessionEndQueued'), 'warning');
     }
@@ -5167,8 +5126,7 @@ async function completePoe1SessionWithStashProfit() {
   }
 
   if (!isStashTrackingEnabled()) {
-    showStashUnavailableToast();
-    return false;
+    return completePoe1SessionWithoutStashProfit(state.currentSession);
   }
 
   await waitForPendingBeforeSnapshotForSession(state.currentSession);

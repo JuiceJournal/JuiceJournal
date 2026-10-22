@@ -1,7 +1,8 @@
 /**
  * Win32 Probe Module
- * Polling-only Windows queries used for game detection: the process list, a process's image path and
- * the client rectangle of its game window. No hooks, no injection and no access to another process's
+ * Polling-only Windows queries used for game detection: the process list, a process's image path, the
+ * client rectangle of its game window and which process owns the foreground window. No hooks, no
+ * injection, no keyboard or mouse input and no access to another process's
  * memory; the only process handle opened is PROCESS_QUERY_LIMITED_INFORMATION, closed right away.
  *
  * koffi is loaded lazily so that a missing or blocked native module leaves callers on their fallback path.
@@ -48,6 +49,7 @@ function loadApi() {
       QueryFullProcessImageNameW: kernel32.func('int32_t __stdcall QueryFullProcessImageNameW(intptr_t process, uint32_t flags, void *buffer, _Inout_ uint32_t *size)'),
       CloseHandle: kernel32.func('int32_t __stdcall CloseHandle(intptr_t handle)'),
       FindWindowExW: user32.func('intptr_t __stdcall FindWindowExW(intptr_t parent, intptr_t after, str16 className, str16 title)'),
+      GetForegroundWindow: user32.func('intptr_t __stdcall GetForegroundWindow()'),
       GetWindowThreadProcessId: user32.func('uint32_t __stdcall GetWindowThreadProcessId(intptr_t hwnd, _Out_ uint32_t *pid)'),
       IsWindowVisible: user32.func('int32_t __stdcall IsWindowVisible(intptr_t hwnd)'),
       IsIconic: user32.func('int32_t __stdcall IsIconic(intptr_t hwnd)'),
@@ -175,10 +177,30 @@ function findProcessWindow(pids = [], className = 'POEWindowClass') {
   return null;
 }
 
+/**
+ * Process id that owns the foreground window: 0 when no window has focus, null when the probe is unavailable.
+ */
+function getForegroundProcessId() {
+  const win = loadApi();
+  if (!win) {
+    return null;
+  }
+
+  const hwnd = win.GetForegroundWindow();
+  if (!hwnd) {
+    return 0;
+  }
+
+  const owner = [0];
+  win.GetWindowThreadProcessId(hwnd, owner);
+  return owner[0];
+}
+
 module.exports = {
   isAvailable,
   getLoadError,
   scanProcesses,
   findProcessWindow,
+  getForegroundProcessId,
   PROCESSENTRY32W_SIZE
 };

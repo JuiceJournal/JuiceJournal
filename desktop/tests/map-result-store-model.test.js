@@ -370,7 +370,7 @@ test('renderer creates a completed map result directly from an ended session', (
     league: 'Mirage'
   });
 
-  assert.equal(result.id, 'map-result-session-1');
+  assert.equal(result.id, `map-result-session-1-${Date.parse('2026-05-02T15:12:05.000Z')}`);
   assert.equal(result.sessionId, 'session-1');
   assert.equal(result.farmType, 'Expedition');
   assert.equal(result.durationSeconds, 125);
@@ -399,7 +399,6 @@ test('ending a PoE1 map session routes through stash diff completion instead of 
     'getCompletedSessionFarmTypeLabel',
     'createCompletedSessionMapResult',
     'normalizeCompletedSessionPoeVersion',
-    'hasCompletedSessionValue',
     'shouldPersistCompletedSessionMapResult',
     'persistCompletedSessionMapResult',
     'isActiveSessionPoe1',
@@ -832,56 +831,6 @@ test('poe1 after snapshot uses the last available after snapshot when refresh ke
     ['showToast', 'stash.profitTracker', 'warning'],
     ['calculateProfit', 'before', 'after-existing']
   ]);
-});
-
-test('poe1 fallback map result preserves enough data to close a run without stash profit', () => {
-  const context = loadFunctions(['normalizeCompletedSessionPoeVersion', 'buildFallbackMapResultForSession'], {
-    state: {
-      account: {
-        accountName: 'Account',
-        summary: {
-          id: 'char-1',
-          name: 'Mapper',
-          league: 'Mirage'
-        }
-      },
-      farmType: {
-        selectedFarmTypeId: 'breach'
-      }
-    },
-    getSelectedTrackerContext: () => ({
-      poeVersion: 'poe1',
-      league: 'Mirage',
-      farmTypeId: 'breach'
-    }),
-    getFarmTypeModel: () => ({
-      listFarmTypes: () => [{ id: 'breach', label: 'Breach' }]
-    }),
-    getLiveDuration: () => 95,
-    Date: class extends Date {
-      constructor(...args) {
-        return args.length ? super(...args) : new global.Date('2026-05-07T12:00:00.000Z');
-      }
-
-      static now() {
-        return new global.Date('2026-05-07T12:00:00.000Z').getTime();
-      }
-    }
-  });
-
-  const result = context.buildFallbackMapResultForSession({
-    id: 'session-1',
-    poeVersion: 'poe1',
-    league: 'Mirage',
-    mapType: 'breach'
-  });
-
-  assert.equal(result.sessionId, 'session-1');
-  assert.equal(result.farmType, 'Breach');
-  assert.equal(result.durationSeconds, 95);
-  assert.equal(result.netProfit, 0);
-  assert.equal(result.profitUnavailable, true);
-  assert.match(result.id, /^fallback-session-1-\d+$/);
 });
 
 test('main map-result history is stored per local profile', () => {

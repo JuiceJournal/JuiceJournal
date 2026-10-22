@@ -4,10 +4,16 @@
  * and detect PoE items.
  */
 
+const fs = require('fs');
 const Tesseract = require('tesseract.js');
 
 class OCRScanner {
-  constructor() {
+  /**
+   * @param {object} [options]
+   * @param {string} [options.cachePath] - Folder for the downloaded language data; Tesseract.js uses the working folder without it
+   */
+  constructor(options = {}) {
+    this.cachePath = options.cachePath || null;
     this.worker = null;
     this.isInitialized = false;
     this.itemKeywords = {
@@ -56,7 +62,13 @@ class OCRScanner {
     if (this.isInitialized) return;
 
     try {
-      this.worker = await Tesseract.createWorker('eng');
+      const options = {};
+      if (this.cachePath) {
+        // Tesseract.js does not create the folder; without it the language data is downloaded on every start.
+        await fs.promises.mkdir(this.cachePath, { recursive: true });
+        options.cachePath = this.cachePath;
+      }
+      this.worker = await Tesseract.createWorker('eng', Tesseract.OEM.LSTM_ONLY, options);
       this.isInitialized = true;
     } catch (error) {
       console.error('Failed to start Tesseract:', error);
