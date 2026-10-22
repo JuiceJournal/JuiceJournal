@@ -18,14 +18,14 @@ Inspired by [TLI Tracker](https://github.com/Giboork/TLI-tracker-translated) fro
 |---|---|
 | Map and session tracking | Reads the game's `Client.txt` log: map entries and exits, time per map, sessions |
 | Character on Play | Detects when you press Play and which of your characters you are on |
-| In-game overlay | Run status, a "start session?" prompt on map entry and a character picker after Play. Off by default (Settings) |
+| In-game overlay | Run status, a "start session?" prompt on map entry, a character picker after Play and a result card when a session ends. Off by default (Settings) |
 | Local journal | Sessions, loot and map results per Path of Exile account, stored on your PC |
 | Path of Exile sign-in | Official OAuth sign-in on your PC; only reads your character list |
 | Farm types and profit tiers | Tag runs by league content; results are labelled by profit tier |
 | Languages | English and Turkish. German, French, Spanish, Italian, Portuguese (Brazil) and Russian are only partly translated; Japanese, Korean and Chinese can be selected but show English |
-| OCR loot scan | Experimental, during an active session: F9 or Ctrl+Shift+L takes a screenshot of your screen and reads loot names from it. In PoE1 sessions the loot is priced with [poe.ninja](https://poe.ninja); PoE2 loot is not priced yet |
+| OCR loot scan | Experimental, during an active session: F9 or Ctrl+Shift+L takes a screenshot of your screen and reads loot names from it. The loot is priced with [poe.ninja](https://poe.ninja); in PoE2 only currency exchange items have a price |
 
-**Profit is limited for now.** Profit numbers come from loot added by the experimental OCR scan, and only PoE1 loot gets a price. Stash comparison, the reliable source for PoE1, needs the `account:stashes` API scope, which the built-in sign-in does not request yet, and GGG offers no stash API for PoE2. Ending a PoE1 session with the End button, or quitting the app with a session open, currently records 0 profit. Details: [How tracking works](docs/how-tracking-works.md).
+**Profit is limited for now.** Profit is the value of the loot the experimental OCR scan adds to a session. Stash comparison, the reliable source for PoE1, needs the `account:stashes` API scope, which the built-in sign-in does not request yet, so the stash tracker is off; GGG offers no stash API for PoE2. Details: [How tracking works](docs/how-tracking-works.md).
 
 ## Privacy and data
 
@@ -41,7 +41,7 @@ The app talks to these hosts only:
 
 | Host | Why |
 |---|---|
-| `www.pathofexile.com`, `api.pathofexile.com` | Sign-in, your character list, and a stash request when a PoE1 session starts (GGG refuses it without the `account:stashes` scope) |
+| `www.pathofexile.com`, `api.pathofexile.com` | Sign-in and your character list |
 | `poe.ninja` | Item prices (league and category only) |
 | `web.poecdn.com` | Item icons |
 | `cdn.jsdelivr.net` | OCR language data, first scan only |

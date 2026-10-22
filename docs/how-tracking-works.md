@@ -34,14 +34,14 @@ Settings, map results (per profile) and the cached character list are kept in `%
 
 ## Prices: poe.ninja
 
-Item values come from [poe.ninja](https://poe.ninja). The app asks for prices by league and item category only. Prices are cached in memory for 10 minutes. Item icons are downloaded from `web.poecdn.com` the first time they are shown and cached on disk (up to 64 MB).
+Item values come from [poe.ninja](https://poe.ninja). The app asks for prices by league and item category only. Prices for a session's game and league are loaded when the session starts and kept in memory until you switch game or league or restart the app. For PoE2 the app loads only poe.ninja's currency exchange prices, so other PoE2 items are valued at 0. Item icons are downloaded from `web.poecdn.com` the first time they are shown and cached on disk (up to 64 MB).
 
 ## Profit
 
-- **Path of Exile 1:** the intended source is a stash comparison: snapshots of your stash before and after a session. Snapshots need the `account:stashes` API scope, and the built-in sign-in only asks for `account:characters`, so this is not available yet. Today profit is the value of loot added by the experimental OCR scan, and it is kept only when the session ends automatically as you leave the map. Ending a session with the End button records 0 while there is no stash snapshot. The app still asks GGG for a stash snapshot when a PoE1 session starts; without `account:stashes` GGG refuses it and the app shows a "before-stash baseline" warning.
-- **Path of Exile 2:** GGG offers no stash API for PoE2. Juice Journal tracks time, maps and characters for PoE2. The OCR scan can add loot to a PoE2 session, but the app does not load PoE2 prices yet, so that loot is valued at 0.
+- **Path of Exile 1:** the intended source is a stash comparison: snapshots of your stash before and after a session. Snapshots need the `account:stashes` API scope, and the built-in sign-in only asks for `account:characters`, so the stash tracker is turned off and the app sends no stash requests. Profit is the value of the loot the experimental OCR scan adds to the session. A session with no loot stays open when you leave the map; end it with the End button.
+- **Path of Exile 2:** GGG offers no stash API for PoE2. Profit is the value of the loot the OCR scan adds to the session, priced from poe.ninja's currency exchange (see [Prices](#prices-poeninja)).
 
-Quitting the app while a session is open records 0 profit in either game.
+The session keeps this profit however it ends: as you leave the map, with the End button, or when you quit the app. Each completed session is added to your map results and, if the overlay is on, shown as a result card in the overlay (not while the app is quitting).
 
 ## What Juice Journal does not do
 
