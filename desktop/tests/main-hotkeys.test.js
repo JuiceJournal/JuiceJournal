@@ -259,9 +259,9 @@ test('main hotkeys roll back to existing registrations when a new shortcut canno
   ]);
 });
 
-test('startup hotkey registration warns instead of blocking the desktop window', () => {
+test('hotkey registration from the OCR gate warns instead of throwing', () => {
   const warnings = [];
-  const context = loadFunctions(mainJsPath, ['registerStartupGlobalShortcuts'], {
+  const context = loadFunctions(mainJsPath, ['tryRegisterGlobalShortcuts'], {
     registerGlobalShortcuts() {
       throw new Error('Unable to register global shortcut: F9');
     },
@@ -272,8 +272,117 @@ test('startup hotkey registration warns instead of blocking the desktop window',
     }
   });
 
-  assert.doesNotThrow(() => context.registerStartupGlobalShortcuts());
+  assert.doesNotThrow(() => context.tryRegisterGlobalShortcuts());
   assert.deepEqual(warnings, ['[Hotkeys] Unable to register global shortcut: F9']);
+});
+
+function loadScanHotkeyGate(overrides = {}) {
+  const operations = [];
+  const context = loadFunctions(mainJsPath, ['syncScanHotkeys'], {
+    shouldEnableScanHotkeys: require('../src/modules/hotkeyModel').shouldEnableScanHotkeys,
+    currentSession: { id: 'session-1' },
+    scanHotkeysActive: false,
+    win32Probe: {
+      getForegroundProcessId() {
+        operations.push(['getForegroundProcessId']);
+        return context.foregroundProcessId;
+      }
+    },
+    foregroundProcessId: 4120,
+    gameDetector: {
+      getDetectedProcesses: () => [{ Name: 'PathOfExile.exe', ProcessId: 4120 }]
+    },
+    tryRegisterGlobalShortcuts() {
+      operations.push(['register']);
+    },
+    globalShortcut: {
+      unregisterAll() {
+        operations.push(['unregisterAll']);
+      }
+    },
+    ...overrides
+  });
+
+  return { context, operations };
+}
+
+test('OCR hotkeys are registered while the game has focus and released on alt-tab', () => {
+  const { context, operations } = loadScanHotkeyGate();
+
+  context.syncScanHotkeys();
+  context.syncScanHotkeys();
+  context.foregroundProcessId = 9000;
+  context.syncScanHotkeys();
+
+  assert.deepEqual(operations.filter(([name]) => name !== 'getForegroundProcessId'), [
+    ['register'],
+    ['unregisterAll']
+  ]);
+  assert.equal(context.scanHotkeysActive, false);
+});
+
+test('OCR hotkeys are released when the session ends and the foreground is not read without a session', () => {
+  const { context, operations } = loadScanHotkeyGate();
+
+  context.syncScanHotkeys();
+  context.currentSession = null;
+  operations.length = 0;
+  context.syncScanHotkeys();
+  context.syncScanHotkeys();
+
+  assert.deepEqual(operations, [['unregisterAll']]);
+});
+
+test('OCR hotkeys follow the session alone when the foreground window cannot be read', () => {
+  const { context, operations } = loadScanHotkeyGate({
+    win32Probe: {
+      getForegroundProcessId() {
+        throw new Error('user32 unavailable');
+      }
+    },
+    gameDetector: null
+  });
+
+  context.syncScanHotkeys();
+
+  assert.deepEqual(operations, [['register']]);
+  assert.equal(context.scanHotkeysActive, true);
+});
+
+test('saving hotkeys outside the game releases them again after the registration check', () => {
+  const operations = [];
+  const context = loadFunctions(mainJsPath, ['releaseInactiveScanHotkeys', 'applyDesktopSettings'], {
+    SETTINGS_ALLOWLIST: new Set(['scanHotkey', 'stashScanHotkey']),
+    store: {
+      set(key, value) {
+        operations.push(['store', key, value]);
+      }
+    },
+    getValidatedHotkeySettings: () => ({
+      scanHotkey: 'Alt+F10',
+      stashScanHotkey: 'CommandOrControl+Shift+K'
+    }),
+    isValidApiUrl: () => true,
+    apiClient: null,
+    scanHotkeysActive: false,
+    globalShortcut: {
+      unregisterAll() {
+        operations.push(['unregisterAll']);
+      }
+    },
+    registerGlobalShortcuts() {
+      operations.push(['registerGlobalShortcuts']);
+    },
+    refreshTrayMenu() {}
+  });
+
+  context.applyDesktopSettings({ scanHotkey: 'alt+f10' });
+
+  assert.deepEqual(operations, [
+    ['registerGlobalShortcuts'],
+    ['unregisterAll'],
+    ['store', 'scanHotkey', 'Alt+F10']
+  ]);
 });
 
 test('saving desktop settings persists normalized hotkeys and re-registers shortcuts', () => {
@@ -321,6 +430,7 @@ test('saving desktop settings persists normalized hotkeys and re-registers short
     registerGlobalShortcuts() {
       registerGlobalShortcutsCalls += 1;
     },
+    releaseInactiveScanHotkeys() {},
     refreshTrayMenu() {
       refreshTrayMenuCalls += 1;
     }
@@ -394,6 +504,7 @@ test('saving a partial hotkey update preserves the stored custom shortcut for th
     registerGlobalShortcuts(hotkeys) {
       registeredHotkeySets.push({ ...hotkeys });
     },
+    releaseInactiveScanHotkeys() {},
     refreshTrayMenu() {
       refreshTrayMenuCalls += 1;
     }
@@ -413,6 +524,7 @@ test('saving a partial hotkey update preserves the stored custom shortcut for th
 
 test('saving desktop settings does not persist unusable hotkeys when registration fails', () => {
   const writes = [];
+  let releaseCalls = 0;
   const context = loadFunctions(mainJsPath, ['applyDesktopSettings'], {
     SETTINGS_ALLOWLIST: new Set([
       'apiUrl',
@@ -444,6 +556,9 @@ test('saving desktop settings does not persist unusable hotkeys when registratio
     registerGlobalShortcuts() {
       throw new Error('Unable to register global shortcut: CommandOrControl+Shift+K');
     },
+    releaseInactiveScanHotkeys() {
+      releaseCalls += 1;
+    },
     refreshTrayMenu() {}
   });
 
@@ -455,6 +570,7 @@ test('saving desktop settings does not persist unusable hotkeys when registratio
     /unable to register global shortcut/i
   );
   assert.deepEqual(writes, []);
+  assert.equal(releaseCalls, 1);
 });
 
 test('renderer displays friendly hotkey labels, captures input, and saves normalized accelerators', async () => {

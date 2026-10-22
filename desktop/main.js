@@ -46,6 +46,7 @@ const { listFarmTypes } = require('./src/modules/farmTypeModel');
 const {
   DEFAULT_SCAN_HOTKEY,
   DEFAULT_STASH_SCAN_HOTKEY,
+  shouldEnableScanHotkeys,
   validateHotkeys
 } = require('./src/modules/hotkeyModel');
 const {
@@ -324,6 +325,9 @@ let poeAuthServer = null;
 let trayHintShown = false;
 let pendingLootFlushInProgress = false;
 let pendingLootFlushInterval = null;
+const SCAN_HOTKEY_GATE_INTERVAL_MS = 500;
+let scanHotkeyGateInterval = null;
+let scanHotkeysActive = false;
 let pendingSessionFlushInProgress = false;
 let appUpdateState = null;
 let appUpdateInitialized = false;
@@ -2905,11 +2909,46 @@ function registerGlobalShortcuts(overrides = {}) {
   }
 }
 
-function registerStartupGlobalShortcuts() {
+function tryRegisterGlobalShortcuts() {
   try {
     registerGlobalShortcuts();
   } catch (error) {
     console.warn(`[Hotkeys] ${error.message}`);
+  }
+}
+
+// Holds the OCR hotkeys only while a session runs and the game window has focus (see shouldEnableScanHotkeys).
+function syncScanHotkeys() {
+  const hasActiveSession = Boolean(currentSession);
+  let foregroundProcessId = null;
+  if (hasActiveSession) {
+    try {
+      foregroundProcessId = win32Probe.getForegroundProcessId();
+    } catch {
+      // Unreadable: the session alone decides.
+    }
+  }
+
+  const shouldBeActive = shouldEnableScanHotkeys({
+    hasActiveSession,
+    foregroundProcessId,
+    gameProcessIds: (gameDetector ? gameDetector.getDetectedProcesses() : []).map((entry) => entry.ProcessId)
+  });
+  if (shouldBeActive === scanHotkeysActive) {
+    return;
+  }
+
+  scanHotkeysActive = shouldBeActive;
+  if (shouldBeActive) {
+    tryRegisterGlobalShortcuts();
+  } else {
+    globalShortcut.unregisterAll();
+  }
+}
+
+function releaseInactiveScanHotkeys() {
+  if (!scanHotkeysActive) {
+    globalShortcut.unregisterAll();
   }
 }
 
@@ -3515,7 +3554,12 @@ function applyDesktopSettings(settings = {}) {
     : null;
 
   if (shouldRefreshHotkeys) {
-    registerGlobalShortcuts(normalizedHotkeys);
+    // Registering checks that no other app holds the keys; outside the game they are released again.
+    try {
+      registerGlobalShortcuts(normalizedHotkeys);
+    } finally {
+      releaseInactiveScanHotkeys();
+    }
   }
 
   for (const [key, value] of Object.entries(settings)) {
@@ -4436,7 +4480,7 @@ app.whenReady().then(() => {
   // Initialize the API client.
   const resolvedToken = getDecryptedAuthToken();
   apiClient = new APIClient(store.get('apiUrl'), resolvedToken);
-  ocrScanner = new OCRScanner();
+  ocrScanner = new OCRScanner({ cachePath: path.join(app.getPath('userData'), 'ocr-cache') });
   poeApiClient = new PoeApiClient();
   priceService = new PriceService();
   iconCache = new IconCache({ dir: path.join(app.getPath('userData'), 'icon-cache') });
@@ -4469,7 +4513,7 @@ app.whenReady().then(() => {
   }
 
   createTray();
-  registerStartupGlobalShortcuts();
+  scanHotkeyGateInterval = setInterval(syncScanHotkeys, SCAN_HOTKEY_GATE_INTERVAL_MS);
   setupLogParser();
   setupGameDetector();
   try {
@@ -4537,6 +4581,11 @@ function handleAppWillQuit() {
   if (pendingLootFlushInterval) {
     clearInterval(pendingLootFlushInterval);
     pendingLootFlushInterval = null;
+  }
+
+  if (scanHotkeyGateInterval) {
+    clearInterval(scanHotkeyGateInterval);
+    scanHotkeyGateInterval = null;
   }
 }
 

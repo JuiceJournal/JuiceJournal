@@ -15,6 +15,15 @@ test('desktop installs the punycode userland package for patched runtime depende
   assert.match(packageJson.scripts.postinstall, /node scripts\/patch-deprecated-deps\.js/);
 });
 
+test('desktop ships no system-wide keyboard listener', () => {
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  const dependencies = Object.keys({ ...packageJson.dependencies, ...packageJson.devDependencies });
+
+  for (const keyboardHook of ['node-global-key-listener', 'iohook', 'uiohook-napi']) {
+    assert.equal(dependencies.includes(keyboardHook), false, `${keyboardHook} must not be a dependency`);
+  }
+});
+
 test('dependency patcher rewrites tr46 away from deprecated Node built-in punycode', () => {
   const { patchDeprecatedDependencies } = require(patchScriptPath);
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'juice-journal-dep-patch-'));

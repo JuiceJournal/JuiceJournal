@@ -40,3 +40,10 @@ test('win32 probe returns no window for unknown processes', { skip }, () => {
   assert.equal(win32Probe.findProcessWindow([]), null);
   assert.equal(win32Probe.findProcessWindow([process.pid], 'JJNoSuchWindowClass'), null);
 });
+
+test('win32 probe reports the foreground window owner as a process id', { skip }, () => {
+  const processId = win32Probe.getForegroundProcessId();
+
+  assert.equal(Number.isInteger(processId), true);
+  assert.ok(processId >= 0);
+});

@@ -1111,6 +1111,7 @@ test('main app shutdown cleans up main-process resources', () => {
     },
     mainWindow: null,
     pendingLootFlushInterval: 42,
+    scanHotkeyGateInterval: 7,
     clearInterval(intervalId) {
       clearedIntervals.push(intervalId);
     }
@@ -1123,10 +1124,11 @@ test('main app shutdown cleans up main-process resources', () => {
   assert.equal(gameDetectorStopCalls, 1);
   assert.equal(trayDestroyCalls, 1);
   assert.equal(overlayDestroyCalls, 1);
-  assert.deepEqual(clearedIntervals, [42]);
+  assert.deepEqual(clearedIntervals, [42, 7]);
   assert.equal(context.tray, null);
   assert.equal(context.overlayWindow, null);
   assert.equal(context.pendingLootFlushInterval, null);
+  assert.equal(context.scanHotkeyGateInterval, null);
 });
 
 test('language migration preserves an existing saved locale while marking the migration complete', () => {

@@ -23,7 +23,7 @@ Inspired by [TLI Tracker](https://github.com/Giboork/TLI-tracker-translated) fro
 | Path of Exile sign-in | Official OAuth sign-in on your PC; only reads your character list |
 | Farm types and profit tiers | Tag runs by league content; results are labelled by profit tier |
 | Languages | English and Turkish. German, French, Spanish, Italian, Portuguese (Brazil) and Russian are only partly translated; Japanese, Korean and Chinese can be selected but show English |
-| OCR loot scan | Experimental, during an active session: F9 or Ctrl+Shift+L takes a screenshot of your screen and reads loot names from it. The loot is priced with [poe.ninja](https://poe.ninja); in PoE2 only currency exchange items have a price |
+| OCR loot scan | Experimental, during an active session with the game window in front: F9 or Ctrl+Shift+L takes a screenshot of your screen and reads loot names from it. The loot is priced with [poe.ninja](https://poe.ninja); in PoE2 only currency exchange items have a price |
 
 **Profit is limited for now.** Profit is the value of the loot the experimental OCR scan adds to a session. Stash comparison, the reliable source for PoE1, needs the `account:stashes` API scope, which the built-in sign-in does not request yet, so the stash tracker is off; GGG offers no stash API for PoE2. Details: [How tracking works](docs/how-tracking-works.md).
 
@@ -34,8 +34,9 @@ Juice Journal has no accounts and no servers of its own. Your data is stored und
 - `config.json`: settings, your signed-in profile, map results, the cached character list, a short activity log (sign-ins, session starts and ends) and the GGG token (encrypted with Windows data protection)
 - `profiles/<id>/journal.json`: your sessions and loot
 - `icon-cache/`: downloaded item icons
+- `ocr-cache/`: the OCR language data (`eng.traineddata`), downloaded on the first scan
 
-The OCR scan's screenshot is processed on your PC and is not uploaded. Its language data (`eng.traineddata`) is downloaded on the first scan and saved in the app's working folder.
+The OCR scan's screenshot is processed on your PC and is not uploaded.
 
 The app talks to these hosts only:
 
@@ -77,7 +78,7 @@ Good to know:
 
 - You must sign in with Path of Exile (**Continue with Path of Exile**) before you can use the app. It uses local port `34127`, which must be free.
 - If the log file was not found, set the `Client.txt` path in Settings. Turn on the overlay there too.
-- F9 and Ctrl+Shift+L are global hotkeys for the OCR scan, so the game does not receive them while the app runs. Change them in Settings → Hotkeys.
+- The OCR scan hotkeys, F9 and Ctrl+Shift+L, are only held while a session runs and the game window is in front; the game does not receive those two keys then. Change them in Settings → Hotkeys.
 - Closing the window keeps the app running in the tray.
 - Deleting `%APPDATA%\Juice Journal\` removes all of your local data.
 
