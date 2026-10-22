@@ -531,20 +531,20 @@ test('main shutdown finalizer keeps the loot recorded in a PoE1 session without 
   assert.equal(calls[0][1].id, `map-result-session-shutdown-3-${Date.parse('2026-05-06T12:04:00.000Z')}`);
 });
 
-// A price service whose sync loads `prices` (or nothing, or never finishes) for the OCR scan tests.
+// A price service whose queued sync loads `prices` (or nothing, or never finishes) for the OCR scan tests.
 function createFakePriceService({ prices = { 'Exalted Orb': 12 }, hang = false } = {}) {
   return {
     poeVersion: 'poe1',
+    league: null,
     prices: new Map(),
     syncCalls: [],
-    setPoeVersion(version) {
-      this.poeVersion = version;
-    },
-    async syncPrices(league) {
-      this.syncCalls.push([this.poeVersion, league]);
+    async ensureSynced(league, poeVersion, options) {
+      this.syncCalls.push([poeVersion, league, options?.full]);
       if (hang) {
         await new Promise(() => {});
       }
+      this.poeVersion = poeVersion;
+      this.league = league;
       this.prices = new Map(Object.entries(prices).map(([name, chaosValue]) => [name, { chaosValue }]));
       return { itemCount: this.prices.size };
     },
@@ -604,8 +604,8 @@ test('main prices OCR loot from poe.ninja for the session game and league', asyn
   await context.captureAndScan();
   await context.captureAndScan();
 
-  // One price load for the session's game and league, reused by the second scan.
-  assert.deepEqual(syncCalls, [['poe2', 'Fate of the Vaal']]);
+  // One full price load for the session's game and league, reused by the second scan.
+  assert.deepEqual(syncCalls, [['poe2', 'Fate of the Vaal', true]]);
   const stored = backend.journal.sessions[0];
   assert.deepEqual(stored.lootEntries.map((loot) => [loot.itemName, loot.chaosValue, loot.source]), [
     ['Exalted Orb', 12, 'ocr'],
@@ -651,6 +651,19 @@ test('main OCR scan reloads prices that a game switch cleared', async () => {
 
   assert.equal(priceService.syncCalls.length, 2);
   assert.deepEqual(backend.journal.sessions[0].lootEntries.map((loot) => loot.chaosValue), [12, 12]);
+});
+
+test('main OCR scan reloads the session league after the Currency page synced another one', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ league: 'Mirage', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-league');
+  const priceService = createFakePriceService();
+  const context = loadOcrScan(backend, session, priceService);
+
+  await context.captureAndScan();
+  priceService.league = 'Standard';
+  await context.captureAndScan();
+
+  assert.deepEqual(priceService.syncCalls.map(([, league]) => league), ['Mirage', 'Mirage']);
 });
 
 test('main OCR scan does not add loot to a session that ended while it read the screen', async () => {
