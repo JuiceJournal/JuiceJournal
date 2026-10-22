@@ -2,11 +2,11 @@
 
 Thanks for contributing.
 
-This repository contains three active application surfaces:
+Juice Journal is a local-first desktop app. The repository contains:
 
-- `backend/` - Express + PostgreSQL API
-- `web/` - Next.js dashboard
-- `desktop/` - Electron desktop client
+- `desktop/` - the Electron app (the product; works on its own)
+- `backend/` - optional Express + PostgreSQL API for self-hosters
+- `web/` - optional Next.js site
 
 Read this file before opening a PR.
 
@@ -20,37 +20,46 @@ Read this file before opening a PR.
 
 ## Setup
 
-Repository root:
+Desktop (all you need for most changes):
 
 ```bash
-cd backend && npm install
-cd ../web && npm install
-cd ../desktop && npm install
+cd desktop
+npm install
+npm run dev
 ```
 
-Backend environment:
+npm 12 skips dependency install scripts by default. If it warns about that, run `npm install-scripts approve electron koffi` and `npm install` again, or Electron will not be downloaded.
 
-```bash
-cd backend
-cp .env.example .env
-```
-
-Docker services:
+Optional backend (only for backend changes):
 
 ```bash
 cd backend
-docker-compose up -d
+npm install
+cp .env.example .env      # set DB_PASSWORD and JWT_SECRET
+docker-compose up -d postgres
+npm run dev
 ```
+
+`docker-compose up -d` without a service name also starts the API in a container on port 3001 and pgAdmin on port 5050, which conflicts with `npm run dev`.
 
 ## Development Commands
+
+Desktop:
+
+```bash
+cd desktop
+npm run dev
+npm test
+npm run test:e2e
+```
 
 Backend:
 
 ```bash
 cd backend
 npm run dev
-node scripts/build-check.js
-node --test tests/*.test.js
+npm run build
+npm test
 ```
 
 Web:
@@ -58,16 +67,7 @@ Web:
 ```bash
 cd web
 npm run dev
-npm run build
-node --test tests/*.test.js
-```
-
-Desktop:
-
-```bash
-cd desktop
-npm run dev
-node --test tests/*.test.js
+npm test
 ```
 
 Use the smallest verification set that proves your change, then run the broader relevant suite before asking for review.
@@ -111,14 +111,14 @@ Reviewers will primarily look for:
 
 ## Testing Notes
 
-Backend and desktop already have `node:test` coverage.
+All three packages use `node:test`. GitHub Actions runs the desktop, backend and web unit tests on every pull request (`.github/workflows/ci.yml`); the Electron end-to-end tests run locally only for now.
 
 When changing:
 
 - auth or API payloads:
   run backend tests and any affected desktop/web tests
 - desktop main/preload/API client:
-  run `cd desktop && node --test tests/*.test.js`
+  run `cd desktop && npm test`
 - web routing or hooks:
   run `cd web && npm run build`
 
@@ -143,11 +143,8 @@ git status --short
 
 ## External Platform Notes
 
-Some repo areas depend on third-party approval or runtime availability:
-
-- Path of Exile OAuth approval
-
-Do not claim production readiness for those paths unless the external dependency is actually available and verified.
+- Path of Exile sign-in uses GGG's public OAuth client flow. To use your own client, set `POE_CLIENT_ID` and `POE_REDIRECT_URI` when starting the app, or change the defaults for a fork you distribute (see `docs/path-of-exile-sign-in.md`).
+- Only use documented Path of Exile API endpoints and keep the app read-only towards the game: no injection, no memory reading, no input sent to the game, no writes to game files.
 
 ## Questions
 

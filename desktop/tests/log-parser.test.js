@@ -180,7 +180,8 @@ test('log parser bootstraps one PoE1 map-entered event when startup tail is insi
     '2026/05/07 09:31:30 123456 abc [INFO Client 123] : Generating level 83 area "MapWorldsDunes" with seed 3809657038',
     '2026/05/07 09:31:30 123456 abc [INFO Client 123] : You have entered Dunes.'
   ], {
-    now: new Date('2026-05-07T06:32:00.000Z'),
+    // Client.txt timestamps are local time, so the test clock must be local too.
+    now: new Date(2026, 4, 7, 9, 32, 0),
     maxAgeMs: 5 * 60 * 1000
   });
 
@@ -201,7 +202,7 @@ test('log parser does not bootstrap PoE1 map prompt when startup tail ends in hi
     '2026/05/07 09:36:37 123456 abc [INFO Client 123] : Generating level 60 area "HideoutForest" with seed 1',
     '2026/05/07 09:36:38 123456 abc [INFO Client 123] : You have entered Lush Hideout.'
   ], {
-    now: new Date('2026-05-07T06:37:00.000Z'),
+    now: new Date(2026, 4, 7, 9, 37, 0),
     maxAgeMs: 5 * 60 * 1000
   });
 
