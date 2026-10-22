@@ -1002,3 +1002,29 @@ test('desktop main logout clears stored stash snapshots before switching users',
 
   assert.match(source, /if \(stashAnalyzer\) \{\s*stashAnalyzer\.clearAll\(\);/);
 });
+
+test('main profit currency rates come from the local poe.ninja cache for the tracker league', async () => {
+  const syncs = [];
+  const prices = { 'Divine Orb': { chaosValue: 150 }, 'Mirror of Kalandra': { chaosValue: 0 } };
+  const context = loadMainFunctions(['normalizePositiveRate', 'readLocalChaosPrice', 'getProfitCurrencyRates'], {
+    resolveLeagueContext: (options) => ({ activeVersion: options.poeVersion, league: options.league }),
+    priceService: {
+      poeVersion: 'poe1',
+      async ensureSynced(league, poeVersion) {
+        syncs.push([league, poeVersion]);
+      },
+      getPriceInfo: (itemName) => prices[itemName] || null
+    }
+  });
+
+  const rates = await context.getProfitCurrencyRates({ poeVersion: 'poe1', league: 'Mirage' });
+
+  assert.deepEqual(syncs, [['Mirage', 'poe1']]);
+  assert.deepEqual(JSON.parse(JSON.stringify(rates)), {
+    poeVersion: 'poe1',
+    league: 'Mirage',
+    divineChaos: 150,
+    mirrorChaos: null,
+    sources: { divine: 'local-price-service', mirror: 'unavailable' }
+  });
+});

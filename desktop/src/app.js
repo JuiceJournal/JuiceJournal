@@ -2821,7 +2821,8 @@ function toProfileUser(profile) {
     id: profile.id,
     username: profile.accountName,
     accountName: profile.accountName,
-    capabilities: {}
+    // Prices come from poe.ninja on this machine, so every profile may sync them.
+    capabilities: { canSyncPrices: true }
   };
 }
 
@@ -6186,8 +6187,8 @@ async function loadCurrencyLeagues() {
   let activeLeagueNames = [];
 
   try {
+    // res = { activeLeagues: [...] } from poe.ninja
     const res = await window.electronAPI.getCurrencyLeagues(currencyState.poeVersion);
-    // apiClient unwraps: res = { leagues: [...], activeLeagues: [...] }
     const leagueData = res?.data || res || {};
 
     // Use active leagues from poe.ninja if available
@@ -6234,9 +6235,8 @@ async function loadCurrencyPrices() {
     if (currencyState.type) params.type = currencyState.type;
     if (currencyState.search) params.search = currencyState.search;
 
+    // json = { prices: [...], count, league, updatedAt } from the local poe.ninja cache
     const json = await window.electronAPI.getCurrencyPrices(params);
-    // apiClient unwraps response.data twice: axios interceptor strips HTTP envelope,
-    // then getPrices() accesses .data — so json = { prices: [...], count, league }
     currencyState.prices = json?.prices || json?.data?.prices || [];
     renderCurrencyTable();
 
@@ -6409,8 +6409,6 @@ async function handleCurrencySync() {
       league: currencyState.league,
       poeVersion: currencyState.poeVersion
     });
-    // apiClient unwraps: result = { message, league, results } (inner .data of API response)
-    // Sync succeeded if we got here without throwing
     showToast(window.t('toast.currencyTitle'), window.t('currency.syncSuccess'), 'success');
     await refreshProfitCurrencyRates(currencyState.poeVersion, currencyState.league);
     await loadCurrencyLeagues();

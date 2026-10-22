@@ -407,42 +407,6 @@ class APIClient {
   // ==================== PRICES ====================
 
   /**
-   * Get current prices
-   */
-  async getPrices(params = {}) {
-    const response = await this.client.get('/api/prices/current', { params });
-    return response.data;
-  }
-
-  /**
-   * Get the price for a specific item
-   */
-  async getItemPrice(itemName, params = {}) {
-    const response = await this.client.get(`/api/prices/item/${encodeURIComponent(itemName)}`, {
-      params
-    });
-    return response.data?.price;
-  }
-
-  /**
-   * Sync prices
-   */
-  async syncPrices(data = {}) {
-    const response = await this.client.post('/api/prices/sync', data, {
-      timeout: 120000 // Sync fetches many types sequentially, needs longer timeout
-    });
-    return response.data;
-  }
-
-  /**
-   * Get the current leagues
-   */
-  async getLeagues(params = {}) {
-    const response = await this.client.get('/api/prices/leagues', { params });
-    return response.data;
-  }
-
-  /**
    * Get the current item types
    */
   async getTypes(params = {}) {

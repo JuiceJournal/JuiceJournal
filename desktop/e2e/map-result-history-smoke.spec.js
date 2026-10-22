@@ -38,17 +38,6 @@ async function startSmokeBackend() {
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url || '/', 'http://127.0.0.1');
 
-    if (request.method === 'GET' && url.pathname === '/api/prices/leagues') {
-      writeJson(response, 200, {
-        success: true,
-        data: {
-          activeLeagues: ['Standard']
-        },
-        error: null
-      });
-      return;
-    }
-
     writeJson(response, 404, {
       success: false,
       data: null,
@@ -114,7 +103,7 @@ function createBootstrapScript(testInfo) {
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
-require(${JSON.stringify(path.join(__dirname, 'poe-device-stub.cjs'))});
+require(${JSON.stringify(path.join(__dirname, 'network-stub.cjs'))});
 
 const appDataDir = process.env.JUICE_JOURNAL_E2E_APP_DATA_DIR;
 const userDataDir = process.env.JUICE_JOURNAL_E2E_USER_DATA_DIR;

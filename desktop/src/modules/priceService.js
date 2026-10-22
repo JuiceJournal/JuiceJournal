@@ -3,8 +3,9 @@
  * Fetches currency and item prices from poe.ninja
  * Caches prices to avoid hammering the API (12 req / 5 min limit)
  *
- * PoE1: https://poe.ninja/poe1/api/economy/stash/current/{currency|item}/overview?league=X&type=Y
- * PoE2: https://poe.ninja/poe2/api/economy/exchange/{slug}/overview?league=X&type=Y
+ * PoE1 currency types: https://poe.ninja/poe1/api/economy/exchange/{slug}/overview?league=X&type=Y
+ * PoE1 item types:     https://poe.ninja/poe1/api/economy/stash/current/item/overview?league=X&type=Y
+ * PoE2:                https://poe.ninja/poe2/api/economy/exchange/{slug}/overview?league=X&type=Y
  */
 
 const axios = require('axios');
@@ -12,8 +13,57 @@ const registry = require('./currencyRegistry');
 
 const POE1_CURRENCY_URL = 'https://poe.ninja/poe1/api/economy/stash/current/currency/overview';
 const POE1_ITEM_URL = 'https://poe.ninja/poe1/api/economy/stash/current/item/overview';
-const POE2_BASE_URL = 'https://poe.ninja/poe2/api';
-const POE2_INDEX_URL = 'https://poe.ninja/poe2/api/data/index-state';
+const NINJA_API_URLS = {
+  poe1: 'https://poe.ninja/poe1/api',
+  poe2: 'https://poe.ninja/poe2/api'
+};
+
+// poe.ninja overview types (lowercased) → the item types the Currency page filters by.
+const NINJA_ITEM_TYPES = {
+  currency: 'currency',
+  fragment: 'fragment',
+  fragments: 'fragment',
+  scarab: 'scarab',
+  map: 'map',
+  uniquemap: 'map',
+  blightedmap: 'map',
+  blightravagedmap: 'map',
+  invitation: 'map',
+  valdomap: 'map',
+  memory: 'map',
+  divinationcard: 'divination_card',
+  skillgem: 'gem',
+  uncutgems: 'gem',
+  oil: 'oil',
+  catalyst: 'catalyst',
+  incubator: 'incubator',
+  deliriumorb: 'delirium_orb',
+  essence: 'essence',
+  essences: 'essence',
+  fossil: 'fossil',
+  resonator: 'fossil',
+  beast: 'beast',
+  tattoo: 'tattoo',
+  omen: 'omen',
+  runegraft: 'rune',
+  runes: 'rune',
+  clusterjewel: 'unique',
+  forbiddenjewel: 'unique',
+  shrinebelt: 'unique',
+  uniquetincture: 'unique',
+  uniquerelic: 'unique',
+  uniquejewel: 'unique',
+  uniqueflask: 'unique',
+  uniqueweapon: 'unique',
+  uniquearmour: 'unique',
+  uniqueaccessory: 'unique',
+  basetype: 'base_type',
+  soulcores: 'soul_core',
+  idol: 'idol',
+  expedition: 'expedition',
+  ultimatum: 'ultimatum',
+  vaal: 'vaal'
+};
 
 // Cache duration: 10 minutes
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -81,40 +131,6 @@ function normalizeLookupKey(value) {
   return String(value || '').toLowerCase().trim();
 }
 
-// ─── PoE2 league slug resolution ──────────────────────────────
-
-let poe2IndexCache = null;
-let poe2IndexCacheTime = 0;
-
-async function getPoe2IndexState(client) {
-  const now = Date.now();
-  if (poe2IndexCache && (now - poe2IndexCacheTime) < INDEX_CACHE_TTL_MS) {
-    return poe2IndexCache;
-  }
-
-  const response = await client.get(POE2_INDEX_URL);
-  poe2IndexCache = response.data;
-  poe2IndexCacheTime = now;
-  return poe2IndexCache;
-}
-
-async function getPoe2LeagueSlug(client, leagueName) {
-  const indexState = await getPoe2IndexState(client);
-  if (!indexState) return null;
-
-  const allLeagues = [
-    ...(indexState.economyLeagues || []),
-    ...(indexState.oldEconomyLeagues || [])
-  ];
-
-  const match = allLeagues.find(l =>
-    l.name.toLowerCase() === leagueName.toLowerCase() ||
-    (l.displayName && l.displayName.toLowerCase() === leagueName.toLowerCase())
-  );
-
-  return match?.url || null;
-}
-
 function getExchangeDivineToChaos(data) {
   const primary = data?.core?.primary;
   const rates = data?.core?.rates || {};
@@ -136,6 +152,12 @@ class PriceService {
     this.priceMap = new Map();
     this.lastFullSync = null;
     this.poeVersion = 'poe1';
+    // The league priceMap holds, and whether every type was synced for it.
+    this.league = null;
+    this.fullySynced = false;
+    this.syncQueue = Promise.resolve();
+    // poe.ninja's league list per game: poeVersion → { data, fetchedAt }
+    this.indexStates = new Map();
 
     this.client = axios.create({
       timeout: 15000,
@@ -153,31 +175,50 @@ class PriceService {
 
   // ─── Fetching ───────────────────────────────────────────────
 
+  async _getIndexState(poeVersion) {
+    const cached = this.indexStates.get(poeVersion);
+    if (cached && (Date.now() - cached.fetchedAt) < INDEX_CACHE_TTL_MS) {
+      return cached.data;
+    }
+
+    const response = await this.client.get(`${NINJA_API_URLS[poeVersion]}/data/index-state`);
+    this.indexStates.set(poeVersion, { data: response.data, fetchedAt: Date.now() });
+    return response.data;
+  }
+
+  // poe.ninja's exchange URLs name a league by its slug.
+  async _getLeagueSlug(leagueName) {
+    const indexState = await this._getIndexState(this.poeVersion);
+    const wanted = String(leagueName || '').toLowerCase();
+    const match = [...(indexState?.economyLeagues || []), ...(indexState?.oldEconomyLeagues || [])].find((league) => (
+      league.name?.toLowerCase() === wanted || league.displayName?.toLowerCase() === wanted
+    ));
+    return match?.url || null;
+  }
+
   /**
    * Fetch currency overview from poe.ninja
    */
   async _fetchCurrencyOverview(league, type) {
-    const cacheKey = `${league}:currency:${type}`;
+    const cacheKey = `${this.poeVersion}:${league}:currency:${type}`;
     const cached = this.cache.get(cacheKey);
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
       return cached.data;
     }
 
-    let url, params;
-
-    if (this.poeVersion === 'poe2') {
-      const slug = await getPoe2LeagueSlug(this.client, league);
-      if (!slug) {
-        throw new Error(`Unknown PoE2 league: ${league}`);
-      }
-      url = `${POE2_BASE_URL}/economy/exchange/${slug}/overview`;
-      params = { league, type };
+    // Both games' currency-like types come from the exchange API. PoE1's older stash endpoint now returns only a
+    // few lines per type, so it is used only for leagues the exchange does not list.
+    const slug = await this._getLeagueSlug(league);
+    let url;
+    if (slug) {
+      url = `${NINJA_API_URLS[this.poeVersion]}/economy/exchange/${slug}/overview`;
+    } else if (this.poeVersion === 'poe2') {
+      throw new Error(`Unknown PoE2 league: ${league}`);
     } else {
       url = POE1_CURRENCY_URL;
-      params = { league, type };
     }
 
-    const response = await this.client.get(url, { params });
+    const response = await this.client.get(url, { params: { league, type } });
     const data = response.data;
 
     this._enforceCacheLimit();
@@ -189,7 +230,7 @@ class PriceService {
    * Fetch item overview from poe.ninja (PoE1 only)
    */
   async _fetchItemOverview(league, type) {
-    const cacheKey = `${league}:item:${type}`;
+    const cacheKey = `${this.poeVersion}:${league}:item:${type}`;
     const cached = this.cache.get(cacheKey);
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
       return cached.data;
@@ -248,10 +289,69 @@ class PriceService {
     }
 
     this.lastFullSync = Date.now();
+    this.league = league;
+    this.fullySynced = options.full !== false;
     return {
       itemCount: this.priceMap.size,
       syncedAt: this.lastFullSync
     };
+  }
+
+  /**
+   * Syncs a league's prices unless they are already loaded (`force` syncs anyway). Syncs run one at a time, so a
+   * queued call finds the league loaded when an earlier call already synced it.
+   */
+  ensureSynced(league, poeVersion, { full = false, force = false } = {}) {
+    const version = poeVersion === 'poe2' ? 'poe2' : 'poe1';
+    this.syncQueue = this.syncQueue.catch(() => {}).then(async () => {
+      const loaded = this.priceMap.size > 0
+        && this.poeVersion === version
+        && this.league === league
+        && (this.fullySynced || !full);
+      if (force || !loaded) {
+        this.setPoeVersion(version);
+        await this.syncPrices(league, { full });
+      }
+      return { ...this.getStatus(), league: this.league };
+    });
+    return this.syncQueue;
+  }
+
+  /**
+   * poe.ninja's leagues for a game: current economy leagues first, then old ones marked inactive.
+   */
+  async getLeagues(poeVersion) {
+    const indexState = await this._getIndexState(poeVersion === 'poe2' ? 'poe2' : 'poe1');
+    const toLeague = (league, active) => ({
+      name: league.name,
+      displayName: league.displayName || league.name,
+      active,
+      hardcore: Boolean(league.hardcore)
+    });
+
+    return [
+      ...(indexState?.economyLeagues || []).map((league) => toLeague(league, true)),
+      ...(indexState?.oldEconomyLeagues || []).map((league) => toLeague(league, false))
+    ];
+  }
+
+  /**
+   * The synced league's prices in the shape the Currency page reads, most valuable first.
+   */
+  listPrices({ type = '', search = '', limit } = {}) {
+    const query = normalizeLookupKey(search);
+    return [...this.priceMap.values()]
+      .map((entry) => ({
+        itemName: entry.name,
+        itemType: NINJA_ITEM_TYPES[entry.category] || 'other',
+        chaosValue: entry.chaosValue,
+        divineValue: entry.divineValue,
+        iconUrl: entry.icon,
+        sparklineData: { data: entry.sparkline || [] }
+      }))
+      .filter((price) => (!type || price.itemType === type) && (!query || price.itemName.toLowerCase().includes(query)))
+      .sort((left, right) => right.chaosValue - left.chaosValue)
+      .slice(0, Number.parseInt(limit, 10) || 500);
   }
 
   /**
@@ -260,8 +360,8 @@ class PriceService {
   _indexCurrencyData(data, type) {
     const registryBatch = [];
 
-    if (this.poeVersion === 'poe2') {
-      // PoE2 exchange API format:
+    if (Array.isArray(data?.items)) {
+      // Exchange API format:
       //   lines: [{ id, primaryValue, ... }]
       //   items: [{ id, name, image }]
       //   core: { primary: "divine", secondary: "chaos", rates: { chaos: 31.94 } }
@@ -473,6 +573,8 @@ class PriceService {
     this.cache.clear();
     this.priceMap.clear();
     this.lastFullSync = null;
+    this.league = null;
+    this.fullySynced = false;
   }
 }
 
