@@ -59,6 +59,9 @@ const APP_NAME = 'Juice Journal';
 const APP_ID = 'JuiceJournal.Desktop';
 const DEFAULT_STRATEGY_PRESETS = ['Strongbox', 'Legion', 'Ritual', 'Expedition', 'Harvest', 'Boss Rush'];
 const MAP_RESULT_OVERLAY_DURATION_MS = 10_000;
+// An OCR scan waits this long for poe.ninja prices; loot without a price counts as 0.
+const SESSION_PRICES_WAIT_MS = 5_000;
+const SESSION_PRICES_RETRY_MS = 5 * 60_000;
 const CHARACTER_PROMPT_OVERLAY_DURATION_MS = 8_000;
 const OVERLAY_CLICKABLE_MODES = new Set(['start-map-prompt', 'map-result', 'character-prompt']);
 const MAX_PENDING_LOOT_ACTIONS = 100;
@@ -829,20 +832,21 @@ function loadActiveSession() {
 }
 
 // Loads poe.ninja prices for the session's game and league, again when they change or the price list is empty
-// (poe.ninja was unreachable, or a game switch cleared it).
+// (a game switch cleared it, or poe.ninja was unreachable: then only after SESSION_PRICES_RETRY_MS).
 function loadSessionPrices(session) {
   const key = `${session.poeVersion}:${session.league}`;
   const loaded = priceService.poeVersion === session.poeVersion && priceService.getStatus().itemCount > 0;
-  if (sessionPrices?.key === key && (sessionPrices.pending || loaded)) {
+  if (sessionPrices?.key === key && (sessionPrices.pending || loaded || Date.now() < sessionPrices.retryAt)) {
     return sessionPrices.load;
   }
 
   priceService.setPoeVersion(session.poeVersion);
-  const entry = { key, pending: true };
+  const entry = { key, pending: true, retryAt: 0 };
   entry.load = priceService.syncPrices(session.league)
     .catch((error) => console.warn('Unable to load poe.ninja prices for the session', error))
     .finally(() => {
       entry.pending = false;
+      entry.retryAt = Date.now() + SESSION_PRICES_RETRY_MS;
     });
   sessionPrices = entry;
   return entry.load;
@@ -2917,6 +2921,10 @@ async function captureAndScan() {
       return;
     }
 
+    // Prices load while the screen is read; a slow or unreachable poe.ninja holds the scan for a few seconds at most.
+    const scannedSession = currentSession;
+    const prices = withTimeout(loadSessionPrices(scannedSession), SESSION_PRICES_WAIT_MS).catch(() => null);
+
     // Ekran goruntusu al
     const primaryDisplay = screen.getPrimaryDisplay();
     const { width, height } = primaryDisplay.size;
@@ -2941,7 +2949,13 @@ async function captureAndScan() {
       return;
     }
 
-    await loadSessionPrices(currentSession);
+    await prices;
+    // The session may have ended (or another started) while the scan ran.
+    if (currentSession?.id !== scannedSession.id) {
+      showNotification(t('notificationError'), t('noActiveSession'));
+      return;
+    }
+
     const result = addLootToCurrentSession(items, 'ocr');
     const totalValue = result.lootEntries.reduce((sum, loot) => sum + (loot.chaosValue * loot.quantity), 0);
     showNotification(

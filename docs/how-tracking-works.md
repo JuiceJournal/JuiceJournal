@@ -34,7 +34,7 @@ Settings, map results (per profile) and the cached character list are kept in `%
 
 ## Prices: poe.ninja
 
-Item values come from [poe.ninja](https://poe.ninja). The app asks for prices by league and item category only. Prices for a session's game and league are loaded when the session starts and kept in memory until you switch game or league or restart the app. For PoE2 the app loads only poe.ninja's currency exchange prices, so other PoE2 items are valued at 0. Item icons are downloaded from `web.poecdn.com` the first time they are shown and cached on disk (up to 64 MB).
+Item values come from [poe.ninja](https://poe.ninja). The app asks for prices by league and item category only. Prices for a session's game and league are loaded when the session starts (or at the first OCR scan after a restart) and kept in memory until you switch game or league or restart the app. An OCR scan waits up to 5 seconds for them; loot without a price counts as 0, and if poe.ninja could not be reached the app tries again after 5 minutes. For PoE2 the app loads only poe.ninja's currency exchange prices, so other PoE2 items are valued at 0. Item icons are downloaded from `web.poecdn.com` the first time they are shown and cached on disk (up to 64 MB).
 
 ## Profit
 
