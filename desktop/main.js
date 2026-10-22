@@ -305,6 +305,7 @@ let iconCache = null;
 let stashAnalyzer = null;
 let gameDetector = null;
 let currentSession = null;
+let sessionPrices = null;
 let journalStore = null;
 let runtimeSessionState = createRuntimeSessionState();
 let overlayWindow = null;
@@ -827,6 +828,26 @@ function loadActiveSession() {
   return currentSession;
 }
 
+// Loads poe.ninja prices for the session's game and league, again when they change or the price list is empty
+// (poe.ninja was unreachable, or a game switch cleared it).
+function loadSessionPrices(session) {
+  const key = `${session.poeVersion}:${session.league}`;
+  const loaded = priceService.poeVersion === session.poeVersion && priceService.getStatus().itemCount > 0;
+  if (sessionPrices?.key === key && (sessionPrices.pending || loaded)) {
+    return sessionPrices.load;
+  }
+
+  priceService.setPoeVersion(session.poeVersion);
+  const entry = { key, pending: true };
+  entry.load = priceService.syncPrices(session.league)
+    .catch((error) => console.warn('Unable to load poe.ninja prices for the session', error))
+    .finally(() => {
+      entry.pending = false;
+    });
+  sessionPrices = entry;
+  return entry.load;
+}
+
 // Loot without a value is priced from the local poe.ninja cache, as the server used to price it.
 function addLootToCurrentSession(items, source) {
   const entries = items.map((item) => ({
@@ -1074,11 +1095,14 @@ function buildSessionShutdownMapResult(session = {}, options = {}) {
   const outputValue = Number.isFinite(Number(options.totalLootChaos))
     ? Number(options.totalLootChaos)
     : (Number.isFinite(Number(summary.totalGainedChaos)) ? Number(summary.totalGainedChaos) : Math.max(0, netProfit));
-  const inputValue = Number.isFinite(Number(summary.totalLostChaos)) ? Number(summary.totalLostChaos) : 0;
+  const inputValue = Number.isFinite(Number(summary.totalLostChaos))
+    ? Number(summary.totalLostChaos)
+    : getSessionValueNumber(session, 'costChaos', 'cost_chaos');
   const farmTypeId = session.farmTypeId || session.mapType || session.map_type || getActiveFarmTypeId();
 
   return {
-    id: `shutdown-${session.id || 'session'}-${Date.parse(endedAt) || Date.now()}`,
+    // The renderer records the same session under this id when it sees the session end, so one result remains.
+    id: `map-result-${session.id || 'session'}-${Date.parse(endedAt) || Date.now()}`,
     sessionId: session.id || null,
     characterId: null,
     characterName: null,
@@ -2917,6 +2941,7 @@ async function captureAndScan() {
       return;
     }
 
+    await loadSessionPrices(currentSession);
     const result = addLootToCurrentSession(items, 'ocr');
     const totalValue = result.lootEntries.reduce((sum, loot) => sum + (loot.chaosValue * loot.quantity), 0);
     showNotification(
@@ -2971,6 +2996,10 @@ async function startNewSession(input = {}) {
     overlayStartMapPromptState = null;
     if (typeof updateOverlayWindow === 'function') {
       updateOverlayWindow();
+    }
+    // Prices for scanned loot load in the background, so the first OCR scan does not wait for them.
+    if (typeof loadSessionPrices === 'function') {
+      void loadSessionPrices(session);
     }
 
     // Bildirim goster
@@ -3044,21 +3073,16 @@ async function resolveShutdownSessionCompletion(session = {}) {
         return {
           totalLootChaos: Math.max(0, totalLootChaos),
           profitChaos,
-          report,
-          profitUnavailable: false
+          report
         };
       }
     } catch (error) {
-      console.warn('Unable to calculate PoE1 profit during shutdown; closing session without profit data', error);
+      console.warn('Unable to calculate PoE1 stash profit during shutdown; closing session with its recorded loot', error);
     }
   }
 
-  return {
-    totalLootChaos: 0,
-    profitChaos: 0,
-    report: null,
-    profitUnavailable: true
-  };
+  // No stash totals: the journal values the session from the loot recorded in it.
+  return null;
 }
 
 async function finalizeActiveSessionOnShutdown() {
@@ -3084,32 +3108,25 @@ async function finalizeActiveSessionOnShutdown() {
     ? Math.max(1, Math.round((endedAtMs - startedAtMs) / 1000))
     : 1;
   const completion = await resolveShutdownSessionCompletion(session);
-  const mapResult = buildSessionShutdownMapResult(session, {
-    ...completion,
-    endedAt,
-    durationSeconds
-  });
-
-  saveMapResultHistory(mapResult);
-
   const completedSession = await endCurrentSession({
     sessionId: session.id,
     mapName: session.mapName || session.map_name,
     startedAt: session.startedAt || session.started_at,
     endedAt,
     durationSeconds,
-    totalLootChaos: completion.totalLootChaos,
-    profitChaos: completion.profitChaos
-  });
+    totalLootChaos: completion?.totalLootChaos,
+    profitChaos: completion?.profitChaos
+  }) || { ...session, status: 'completed', endedAt, durationSeconds };
 
-  return completedSession || {
-    ...session,
-    status: 'completed',
+  saveMapResultHistory(buildSessionShutdownMapResult(completedSession, {
+    report: completion?.report,
     endedAt,
     durationSeconds,
-    totalLootChaos: completion.totalLootChaos,
-    profitChaos: completion.profitChaos
-  };
+    totalLootChaos: completedSession.totalLootChaos,
+    profitChaos: completedSession.profitChaos
+  }));
+
+  return completedSession;
 }
 
 /**
@@ -4224,6 +4241,10 @@ function setupIPC() {
 
   ipcMain.handle('show-map-result-overlay', async (event, result, options = {}) => {
     assertDesktopUserAuthenticated();
+    // A session closed while quitting is recorded, but the overlay is about to close.
+    if (app.isQuiting) {
+      return null;
+    }
     return showMapResultOverlay(result, options || {});
   });
 
@@ -4383,7 +4404,8 @@ function setupIPC() {
     assertDesktopUserAuthenticated();
     return {
       authenticated: poeApiClient.isAuthenticated(),
-      expired: poeApiClient.isTokenExpired()
+      expired: poeApiClient.isTokenExpired(),
+      stashAccess: poeApiClient.hasScope('account:stashes')
     };
   });
 
