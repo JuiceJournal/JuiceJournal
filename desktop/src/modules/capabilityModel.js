@@ -6,7 +6,8 @@
 
   root.capabilityModel = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createCapabilityModel() {
-  function getCapabilitiesForGame(poeVersion) {
+  // stashAccess: whether the Path of Exile sign-in was granted account:stashes; false turns PoE1 stash tracking off.
+  function getCapabilitiesForGame(poeVersion, { stashAccess } = {}) {
     if (poeVersion === 'poe2') {
       return {
         characterSummary: { enabled: true, reason: null },
@@ -18,7 +19,9 @@
     return {
       characterSummary: { enabled: true, reason: null },
       runtimeTracking: { enabled: true, reason: null },
-      stashTracking: { enabled: true, reason: null }
+      stashTracking: stashAccess === false
+        ? { enabled: false, reason: 'stash_scope_missing' }
+        : { enabled: true, reason: null }
     };
   }
 

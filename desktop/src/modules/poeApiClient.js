@@ -32,6 +32,7 @@ class PoeApiClient {
     this.accessToken = null;
     this.refreshToken = null;
     this.tokenExpiresAt = null;
+    this.scope = null;
     this.clientId = process.env.POE_CLIENT_ID || DEFAULT_POE_CLIENT_ID;
     this.lastRequestAt = 0;
     this.tokenListener = null;
@@ -56,13 +57,15 @@ class PoeApiClient {
   /**
    * Set OAuth tokens obtained from PoE OAuth flow
    */
-  setTokens({ accessToken, refreshToken, expiresIn, tokenExpiresAt }) {
+  setTokens({ accessToken, refreshToken, expiresIn, tokenExpiresAt, scope }) {
     this.accessToken = accessToken;
     this.refreshToken = refreshToken;
     // Fresh tokens carry expiresIn; tokens restored from disk carry the absolute tokenExpiresAt.
     this.tokenExpiresAt = expiresIn
       ? Date.now() + expiresIn * 1000 - 60000 // refresh 1 min early
       : (Number.isFinite(tokenExpiresAt) ? tokenExpiresAt : null);
+    // The granted scopes, space-separated. A refresh does not repeat them.
+    this.scope = typeof scope === 'string' ? scope : this.scope;
   }
 
   /**
@@ -82,7 +85,8 @@ class PoeApiClient {
     return {
       accessToken: this.accessToken,
       refreshToken: this.refreshToken,
-      tokenExpiresAt: this.tokenExpiresAt
+      tokenExpiresAt: this.tokenExpiresAt,
+      scope: this.scope
     };
   }
 
@@ -90,10 +94,26 @@ class PoeApiClient {
     this.accessToken = null;
     this.refreshToken = null;
     this.tokenExpiresAt = null;
+    this.scope = null;
   }
 
   isAuthenticated() {
     return !!this.accessToken;
+  }
+
+  // Tokens saved before the scope was recorded came from the built-in sign-in, which only asks for
+  // account:characters, so an unknown scope grants nothing more.
+  hasScope(scope) {
+    return String(this.scope || '').split(/\s+/).includes(scope);
+  }
+
+  // GGG may answer a missing scope with 401, which would end the sign-in, so the request is not sent at all.
+  _requireScope(scope) {
+    if (!this.hasScope(scope)) {
+      throw Object.assign(new Error(`Missing required PoE API scope (${scope})`), {
+        code: 'POE_SCOPE_MISSING'
+      });
+    }
   }
 
   isTokenExpired() {
@@ -163,7 +183,8 @@ class PoeApiClient {
     this.setTokens({
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
-      expiresIn: data.expires_in
+      expiresIn: data.expires_in,
+      scope: data.scope || scope
     });
     this._notifyTokens();
 
@@ -309,6 +330,7 @@ class PoeApiClient {
    * @returns {Object} { stashes: [{ id, name, type, index, children?, metadata? }] }
    */
   async listStashTabs(league) {
+    this._requireScope('account:stashes');
     return this._request('GET', `/stash/${encodeURIComponent(league)}`);
   }
 
@@ -320,6 +342,7 @@ class PoeApiClient {
    * @returns {Object} { stash: { id, name, type, items: [...] } }
    */
   async getStashItems(league, stashId, substashId = null) {
+    this._requireScope('account:stashes');
     let url = `/stash/${encodeURIComponent(league)}/${encodeURIComponent(stashId)}`;
     if (substashId) {
       url += `/${encodeURIComponent(substashId)}`;

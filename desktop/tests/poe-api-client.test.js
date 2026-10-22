@@ -86,6 +86,49 @@ test('poe api client exchanges the code itself and hands the tokens to the liste
   assert.ok(persisted[0].tokenExpiresAt > Date.now());
 });
 
+test('poe api client makes no stash request when the sign-in lacks account:stashes', async () => {
+  const { client, requests } = createClient();
+  const persisted = [];
+  client.setTokenListener((tokens) => persisted.push(tokens));
+  await client.exchangeCode({ code: 'code-1', codeVerifier: 'verifier', redirectUri: 'http://127.0.0.1:34127/oauth/poe/callback' });
+
+  await assert.rejects(client.listStashTabs('Mirage'), { code: 'POE_SCOPE_MISSING' });
+  await assert.rejects(client.getStashItems('Mirage', 'tab-1'), { code: 'POE_SCOPE_MISSING' });
+
+  assert.equal(requests.length, 0);
+  assert.equal(client.isAuthenticated(), true);
+  assert.equal(client.hasScope('account:stashes'), false);
+  assert.equal(persisted[0].scope, 'account:characters');
+});
+
+test('poe api client keeps the granted scope of tokens restored from disk', async () => {
+  const { client, requests } = createClient();
+  client.setTokens({ accessToken: 'a', tokenExpiresAt: Date.now() + 60_000, scope: 'account:characters account:stashes' });
+
+  await client.listStashTabs('Mirage');
+  assert.deepEqual(requests.map((request) => request.url), ['/stash/Mirage']);
+
+  // A token refresh keeps the scope. Tokens saved before the scope was recorded came from the built-in
+  // sign-in, which never asked for stashes.
+  client.setTokens({ accessToken: 'b', tokenExpiresAt: Date.now() + 60_000 });
+  assert.equal(client.hasScope('account:stashes'), true);
+  client.clearTokens();
+  client.setTokens({ accessToken: 'c', tokenExpiresAt: Date.now() + 60_000 });
+  assert.equal(client.hasScope('account:stashes'), false);
+});
+
+test('poe api client ends the sign-in when GGG rejects the token with 401', async () => {
+  const { client } = createClient({ status: 401 });
+  const persisted = [];
+  client.setTokenListener((tokens) => persisted.push(tokens.accessToken));
+  client.setTokens({ accessToken: 'a', tokenExpiresAt: Date.now() + 60_000 });
+
+  await assert.rejects(client.listCharacters('poe1'), { code: 'POE_AUTH_EXPIRED' });
+
+  assert.equal(client.isAuthenticated(), false);
+  assert.deepEqual(persisted, [null]);
+});
+
 test('poe api client keeps the expiry of tokens restored from disk', () => {
   const client = new PoeApiClient();
   client.setTokens({ accessToken: 'a', refreshToken: 'r', tokenExpiresAt: Date.now() - 1000 });
