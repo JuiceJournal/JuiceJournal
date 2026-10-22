@@ -17,10 +17,16 @@ test('desktop installs the punycode userland package for patched runtime depende
 
 test('desktop ships no system-wide keyboard listener', () => {
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  const lockPackages = JSON.parse(fs.readFileSync(path.join(desktopDir, 'package-lock.json'), 'utf8')).packages;
   const dependencies = Object.keys({ ...packageJson.dependencies, ...packageJson.devDependencies });
 
   for (const keyboardHook of ['node-global-key-listener', 'iohook', 'uiohook-napi']) {
     assert.equal(dependencies.includes(keyboardHook), false, `${keyboardHook} must not be a dependency`);
+    assert.equal(
+      Object.keys(lockPackages).some((entry) => entry.endsWith(`node_modules/${keyboardHook}`)),
+      false,
+      `${keyboardHook} must not be installed`
+    );
   }
 });
 

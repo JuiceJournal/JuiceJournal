@@ -3552,8 +3552,15 @@ function applyDesktopSettings(settings = {}) {
   const normalizedHotkeys = shouldRefreshHotkeys
     ? getValidatedHotkeySettings(hotkeyOverrides)
     : null;
+  // Every save sends both hotkeys. Only new ones are checked, so a key another app holds while the game
+  // is not in front does not block unrelated settings.
+  const storedHotkeys = shouldRefreshHotkeys ? getValidatedHotkeySettings() : null;
+  const hotkeysChanged = shouldRefreshHotkeys && (
+    normalizedHotkeys.scanHotkey !== storedHotkeys.scanHotkey
+    || normalizedHotkeys.stashScanHotkey !== storedHotkeys.stashScanHotkey
+  );
 
-  if (shouldRefreshHotkeys) {
+  if (hotkeysChanged) {
     // Registering checks that no other app holds the keys; outside the game they are released again.
     try {
       registerGlobalShortcuts(normalizedHotkeys);

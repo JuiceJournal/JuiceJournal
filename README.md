@@ -53,7 +53,7 @@ There is no telemetry and there are no ads.
 
 ## Fair play
 
-Juice Journal reads the game's log file and uses the official Path of Exile API. To find the game and place the overlay, it also checks the Windows process list and the game window's position.
+Juice Journal reads the game's log file and uses the official Path of Exile API. To find the game and place the overlay, it also checks the Windows process list and the game window's position. During a session it checks which window is in front, so it can hold the OCR hotkeys only while the game is.
 
 - It does **not** inject into the game, hook it or read its memory.
 - It does **not** send keys or mouse input to the game.
@@ -78,7 +78,7 @@ Good to know:
 
 - You must sign in with Path of Exile (**Continue with Path of Exile**) before you can use the app. It uses local port `34127`, which must be free.
 - If the log file was not found, set the `Client.txt` path in Settings. Turn on the overlay there too.
-- The OCR scan hotkeys, F9 and Ctrl+Shift+L, are only held while a session runs and the game window is in front; the game does not receive those two keys then. Change them in Settings → Hotkeys.
+- The OCR scan hotkeys, F9 and Ctrl+Shift+L, are only held while a session runs and the game window is in front (for the whole session if Windows does not report the window in front); the game does not receive those two keys then. Change them in Settings → Hotkeys.
 - Closing the window keeps the app running in the tray.
 - Deleting `%APPDATA%\Juice Journal\` removes all of your local data.
 

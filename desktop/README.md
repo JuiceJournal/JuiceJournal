@@ -39,7 +39,7 @@ npm run build:win
 ### OCR Kisayollari
 - `F9` - Hizli loot ekle
 - `Ctrl+Shift+L` - Stash tarama
-- Yalnizca aktif session varken ve oyun penceresi ondeyken kayitlidir; diger zamanlarda tuslar oyuna ve diger uygulamalara gider
+- Yalnizca aktif session varken ve oyun penceresi ondeyken kayitlidir (Windows ondeki pencereyi bildiremezse tum session boyunca); diger zamanlarda tuslar oyuna ve diger uygulamalara gider
 
 ### System Tray
 - Windows bildirim alaninda calisir
