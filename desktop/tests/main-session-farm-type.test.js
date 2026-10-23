@@ -1177,3 +1177,80 @@ test('the first local profile takes over the legacy user data once', () => {
   ]]);
   assert.equal(store.data.legacyUserMigratedTo, 'profile-1');
 });
+
+test('the character cache is saved for the signed-in profile only', () => {
+  const store = createMemoryStore({
+    localProfiles: { 'profile-1': { id: 'profile-1' }, 'profile-2': { id: 'profile-2' } },
+    activeProfileId: 'profile-1'
+  });
+  const context = loadFunctions(['getActiveProfile', 'getAccountStateStoreKey', 'applyDesktopSettings'], {
+    store,
+    SETTINGS_ALLOWLIST: new Set(['language', 'lastKnownAccountState'])
+  });
+
+  context.applyDesktopSettings({ lastKnownAccountState: { accountName: 'Exile#1234' }, language: 'tr' });
+  store.set('activeProfileId', 'profile-2');
+  context.applyDesktopSettings({ lastKnownAccountState: { accountName: 'Alt#0001' } });
+  store.set('activeProfileId', null);
+  context.applyDesktopSettings({ lastKnownAccountState: { accountName: 'Nobody#0000' } });
+
+  assert.deepEqual(store.data['lastKnownAccountState:profile-1'], { accountName: 'Exile#1234' });
+  assert.deepEqual(store.data['lastKnownAccountState:profile-2'], { accountName: 'Alt#0001' });
+  assert.equal('lastKnownAccountState' in store.data, false);
+  assert.equal(store.data.language, 'tr');
+});
+
+test('the renderer settings carry only the signed-in profile character cache', () => {
+  const store = createMemoryStore({
+    localProfiles: { 'profile-1': { id: 'profile-1' }, 'profile-2': { id: 'profile-2' } },
+    activeProfileId: 'profile-2',
+    language: 'en',
+    'lastKnownAccountState:profile-1': { accountName: 'Exile#1234' },
+    'lastKnownAccountState:profile-2': { accountName: 'Alt#0001' }
+  });
+  store.store = store.data;
+  const context = loadFunctions(['getActiveProfile', 'getAccountStateStoreKey', 'getRendererSettings'], {
+    store,
+    DEFAULT_SCAN_HOTKEY: 'F9',
+    DEFAULT_STASH_SCAN_HOTKEY: 'CommandOrControl+Shift+L'
+  });
+
+  const signedIn = context.getRendererSettings();
+  store.set('activeProfileId', null);
+  const signedOut = context.getRendererSettings();
+
+  assert.deepEqual(signedIn.lastKnownAccountState, { accountName: 'Alt#0001' });
+  assert.equal(signedOut.lastKnownAccountState, null);
+  for (const settings of [signedIn, signedOut]) {
+    assert.deepEqual(Object.keys(settings).filter((key) => key.startsWith('lastKnownAccountState:')), []);
+    assert.equal('localProfiles' in settings, false);
+    assert.equal(settings.language, 'en');
+  }
+});
+
+test('the shared character cache moves once to the profile of its account', () => {
+  const profiles = {
+    'profile-1': { id: 'profile-1', accountName: 'Exile#1234' },
+    'profile-2': { id: 'profile-2', accountName: 'Alt#0001' }
+  };
+  const load = (store) => loadFunctions(['getActiveProfile', 'getAccountStateStoreKey', 'migrateSharedAccountStateCache'], { store });
+
+  const owned = createMemoryStore({ localProfiles: profiles, activeProfileId: 'profile-2', lastKnownAccountState: { accountName: 'Exile#1234' } });
+  load(owned).migrateSharedAccountStateCache();
+  assert.deepEqual(owned.data['lastKnownAccountState:profile-1'], { accountName: 'Exile#1234' });
+  assert.equal('lastKnownAccountState:profile-2' in owned.data, false);
+  assert.equal('lastKnownAccountState' in owned.data, false);
+
+  const kept = createMemoryStore({
+    localProfiles: profiles,
+    lastKnownAccountState: { accountName: 'Exile#1234', cachedAt: 'old' },
+    'lastKnownAccountState:profile-1': { accountName: 'Exile#1234', cachedAt: 'new' }
+  });
+  load(kept).migrateSharedAccountStateCache();
+  assert.equal(kept.data['lastKnownAccountState:profile-1'].cachedAt, 'new');
+  assert.equal('lastKnownAccountState' in kept.data, false);
+
+  const orphan = createMemoryStore({ localProfiles: profiles, activeProfileId: 'profile-1', lastKnownAccountState: { accountName: 'Gone#9999' } });
+  load(orphan).migrateSharedAccountStateCache();
+  assert.deepEqual(Object.keys(orphan.data).filter((key) => key.startsWith('lastKnownAccountState')), []);
+});

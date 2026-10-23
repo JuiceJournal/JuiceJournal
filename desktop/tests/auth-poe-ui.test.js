@@ -206,6 +206,11 @@ test('device sign-in opens the local profile and loads its history', async () =>
       },
       t: (key) => key
     },
+    // Recorded only once the load has finished, so the order also proves the sign-in waits for it.
+    loadProfileAccountStateCache: async () => {
+      await Promise.resolve();
+      calls.push(['loadProfileAccountStateCache']);
+    },
     setCurrentUser: (user) => calls.push(['setCurrentUser', user.username, user.accountName]),
     loadMapResultHistory: async () => calls.push(['loadMapResultHistory']),
     syncPoeDeviceConnection: async () => calls.push(['syncPoeDeviceConnection']),
@@ -218,10 +223,12 @@ test('device sign-in opens the local profile and loads its history', async () =>
 
   assert.deepEqual(
     calls.filter(([name]) => [
-      'signInWithPoe', 'setCurrentUser', 'hideLoginModal', 'loadMapResultHistory', 'syncPoeDeviceConnection', 'refreshTrackerData'
+      'signInWithPoe', 'loadProfileAccountStateCache', 'setCurrentUser', 'hideLoginModal', 'loadMapResultHistory',
+      'syncPoeDeviceConnection', 'refreshTrackerData'
     ].includes(name)),
     [
       ['signInWithPoe'],
+      ['loadProfileAccountStateCache'],
       ['setCurrentUser', 'Exile#1234', 'Exile#1234'],
       ['hideLoginModal', 'hidden'],
       ['loadMapResultHistory'],
@@ -229,6 +236,37 @@ test('device sign-in opens the local profile and loads its history', async () =>
       ['refreshTrackerData']
     ]
   );
+});
+
+test('signing in swaps the previous profile character cache for the new profile one', async () => {
+  const state = { settings: { language: 'tr', lastKnownAccountState: { accountName: 'Exile#1234' } } };
+  let answer = { language: 'tr', lastKnownAccountState: { accountName: 'Alt#0001' } };
+  const context = loadFunctions(['loadProfileAccountStateCache'], {
+    state,
+    window: {
+      electronAPI: {
+        getSettings: async () => {
+          if (answer instanceof Error) {
+            throw answer;
+          }
+          return answer;
+        }
+      }
+    }
+  });
+
+  await context.loadProfileAccountStateCache();
+  assert.deepEqual(state.settings.lastKnownAccountState, { accountName: 'Alt#0001' });
+
+  answer = { language: 'tr', lastKnownAccountState: null };
+  await context.loadProfileAccountStateCache();
+  assert.equal(state.settings.lastKnownAccountState, null);
+
+  state.settings.lastKnownAccountState = { accountName: 'Exile#1234' };
+  answer = new Error('IPC closed');
+  await context.loadProfileAccountStateCache();
+  assert.equal(state.settings.lastKnownAccountState, null);
+  assert.equal(state.settings.language, 'tr');
 });
 
 test('bootstrapCurrentUserSession requires login when no local profile exists', async () => {

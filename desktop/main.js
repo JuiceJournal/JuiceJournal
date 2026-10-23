@@ -257,6 +257,27 @@ function migrateLanguageSetting() {
 
 migrateLanguageSetting();
 
+// The character cache used to be one entry for the whole machine. It moves to the profile of the account it was
+// saved for; without one it is dropped and fills again at the next character fetch.
+function migrateSharedAccountStateCache() {
+  const sharedCache = store.get('lastKnownAccountState');
+  if (sharedCache === undefined) {
+    return;
+  }
+
+  const accountName = sharedCache?.accountName;
+  const owner = accountName
+    ? Object.values(store.get('localProfiles') || {}).find((profile) => profile.accountName === accountName)
+    : null;
+  const ownerKey = owner ? getAccountStateStoreKey(owner.id) : null;
+  if (ownerKey && store.get(ownerKey) === undefined) {
+    store.set(ownerKey, sharedCache);
+  }
+  store.delete('lastKnownAccountState');
+}
+
+migrateSharedAccountStateCache();
+
 function normalizePoeVersion(version) {
   return version === 'poe1' || version === 'poe2' ? version : null;
 }
@@ -813,6 +834,11 @@ function setActiveFarmTypeId(farmTypeId) {
 
 function getMapResultsStoreKey(profileId = getActiveProfile()?.id) {
   return profileId ? `mapResults:${profileId}` : null;
+}
+
+// Each profile keeps its own characters, so a second account never starts from the first one's.
+function getAccountStateStoreKey(profileId = getActiveProfile()?.id) {
+  return profileId ? `lastKnownAccountState:${profileId}` : null;
 }
 
 // Sessions and loot stay on this machine: one journal file per local profile under userData/profiles.
@@ -3586,6 +3612,14 @@ function applyDesktopSettings(settings = {}) {
       continue;
     }
 
+    if (key === 'lastKnownAccountState') {
+      const accountStateKey = getAccountStateStoreKey();
+      if (accountStateKey) {
+        store.set(accountStateKey, value);
+      }
+      continue;
+    }
+
     store.set(key, value);
   }
 
@@ -3630,6 +3664,26 @@ function handleLogout() {
   return true;
 }
 
+function getRendererSettings() {
+  const allSettings = { ...store.store };
+  delete allSettings.authToken;
+  delete allSettings.authTokenEncrypted;
+  delete allSettings.poeOAuthTokens;
+  delete allSettings.poeOAuthTokensEncrypted;
+  delete allSettings.currentUserId;
+  delete allSettings.localProfiles;
+  delete allSettings.activeProfileId;
+  // The renderer sees only the signed-in profile's character cache.
+  Object.keys(allSettings)
+    .filter((key) => key.startsWith('lastKnownAccountState:'))
+    .forEach((key) => delete allSettings[key]);
+  const accountStateKey = getAccountStateStoreKey();
+  allSettings.lastKnownAccountState = (accountStateKey && store.get(accountStateKey)) || null;
+  allSettings.scanHotkey = allSettings.scanHotkey || DEFAULT_SCAN_HOTKEY;
+  allSettings.stashScanHotkey = allSettings.stashScanHotkey || DEFAULT_STASH_SCAN_HOTKEY;
+  return allSettings;
+}
+
 function persistDesktopAuthSession(authCookie) {
   if (!authCookie) {
     return false;
@@ -3668,19 +3722,7 @@ function setupIPC() {
   });
 
   // Ayarlari getir (secret alanlari cikar)
-  ipcMain.handle('get-settings', () => {
-    const allSettings = { ...store.store };
-    delete allSettings.authToken;
-    delete allSettings.authTokenEncrypted;
-    delete allSettings.poeOAuthTokens;
-    delete allSettings.poeOAuthTokensEncrypted;
-    delete allSettings.currentUserId;
-    delete allSettings.localProfiles;
-    delete allSettings.activeProfileId;
-    allSettings.scanHotkey = allSettings.scanHotkey || DEFAULT_SCAN_HOTKEY;
-    allSettings.stashScanHotkey = allSettings.stashScanHotkey || DEFAULT_STASH_SCAN_HOTKEY;
-    return allSettings;
-  });
+  ipcMain.handle('get-settings', () => getRendererSettings());
 
   ipcMain.handle('set-settings', (event, settings) => {
     return applyDesktopSettings(settings);
