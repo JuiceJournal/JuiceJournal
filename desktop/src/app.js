@@ -32,8 +32,6 @@ const state = {
   appUpdate: null,
   capabilities: null,
   selectedSession: null,
-  pendingLootCount: 0,
-  pendingSyncEntries: [],
   auditTrail: [],
   mapSessionPromptActive: false,
   farmType: window.farmTypeModel
@@ -216,11 +214,7 @@ const elements = {
   onlineAccountStatus: document.getElementById('online-account-status'),
   onlineSignIn: document.getElementById('online-sign-in'),
   onlineSignOut: document.getElementById('online-sign-out'),
-  pendingSyncCount: document.getElementById('pending-sync-count'),
-  pendingSyncMeta: document.getElementById('pending-sync-meta'),
-  pendingSyncList: document.getElementById('pending-sync-list'),
   auditTrailList: document.getElementById('audit-trail-list'),
-  retryPendingSyncBtn: document.getElementById('retry-pending-sync'),
   diagnosticsMode: document.getElementById('diagnostics-mode'),
   exportDiagnosticsBtn: document.getElementById('export-diagnostics'),
   saveSettingsBtn: document.getElementById('save-settings'),
@@ -1484,9 +1478,7 @@ async function init() {
 
   // Aktif session ve dashboard verilerini senkronize et
   await refreshTrackerData();
-  await loadPendingLootState();
   await loadAuditTrailState();
-  renderPendingSyncState();
   renderAuditTrail();
   loadPriceStatus();
   checkInitialGameStatus();
@@ -1596,17 +1588,6 @@ function populateStrategyPresets() {
     .join('');
 }
 
-async function loadPendingLootState() {
-  try {
-    const response = await window.electronAPI.getSyncStatus();
-    state.pendingLootCount = response?.total || 0;
-    state.pendingSyncEntries = response?.entries || [];
-  } catch {
-    state.pendingLootCount = 0;
-    state.pendingSyncEntries = [];
-  }
-}
-
 async function loadAuditTrailState() {
   try {
     const response = await window.electronAPI.getAuditTrail();
@@ -1614,47 +1595,6 @@ async function loadAuditTrailState() {
   } catch {
     state.auditTrail = [];
   }
-}
-
-function renderPendingSyncState() {
-  if (!elements.pendingSyncCount || !elements.pendingSyncMeta) {
-    return;
-  }
-
-  elements.pendingSyncCount.textContent = String(state.pendingLootCount || 0);
-  elements.pendingSyncMeta.textContent = state.pendingLootCount > 0
-    ? window.t('settings.syncQueuePending', { count: state.pendingLootCount })
-    : window.t('settings.syncQueueEmpty');
-
-  if (!elements.pendingSyncList) {
-    return;
-  }
-
-  if (!state.pendingSyncEntries?.length) {
-    elements.pendingSyncList.innerHTML = `<p class="text-muted">${window.t('settings.syncQueueEmpty')}</p>`;
-    return;
-  }
-
-  elements.pendingSyncList.innerHTML = state.pendingSyncEntries.slice(0, 10).map((entry) => {
-    const titleKey = entry.queueType === 'session'
-      ? (entry.type === 'sessionStart' ? 'settings.pendingSessionStart' : 'settings.pendingSessionEnd')
-      : 'settings.pendingLootSync';
-    const statusLabel = entry.blocked
-      ? window.t('settings.syncBlocked')
-      : (entry.lastError ? window.t('settings.syncRetrying') : window.t('settings.syncQueued'));
-    const attemptLabel = entry.attempts ? `${window.t('settings.syncAttempts')}: ${entry.attempts}` : '';
-    const reason = entry.lastError ? escapeHTML(entry.lastError) : window.t('settings.syncNoErrors');
-    return `
-      <article class="sync-action-item ${entry.blocked ? 'blocked' : (entry.lastError ? 'warning' : '')}">
-        <div class="sync-action-row">
-          <span class="sync-action-title">${window.t(titleKey)}</span>
-          <span class="sync-action-subtle">${statusLabel}</span>
-        </div>
-        <div class="sync-action-subtle">${attemptLabel}</div>
-        <div class="sync-action-subtle">${reason}</div>
-      </article>
-    `;
-  }).join('');
 }
 
 function renderAuditTrail() {
@@ -2183,9 +2123,6 @@ function setupEventListeners() {
   if (elements.onlineSignOut) {
     elements.onlineSignOut.addEventListener('click', handleOnlineSignOut);
   }
-  if (elements.retryPendingSyncBtn) {
-    elements.retryPendingSyncBtn.addEventListener('click', handleRetryPendingSync);
-  }
   if (elements.exportDiagnosticsBtn) {
     elements.exportDiagnosticsBtn.addEventListener('click', handleExportDiagnostics);
   }
@@ -2295,21 +2232,6 @@ function setupIPCListeners() {
     showToast(window.t('toast.lootAddedTitle'), window.t('toast.lootAddedBody', { count: itemCount }));
     refreshTrackerData({ includeSessions: isPageActive('sessions') });
   });
-
-  if (window.electronAPI.onPendingLootUpdated) {
-    window.electronAPI.onPendingLootUpdated((data) => {
-      state.pendingLootCount = data?.count || 0;
-      renderPendingSyncState();
-    });
-  }
-
-  if (window.electronAPI.onPendingSyncUpdated) {
-    window.electronAPI.onPendingSyncUpdated((data) => {
-      state.pendingLootCount = data?.total || 0;
-      state.pendingSyncEntries = data?.entries || [];
-      renderPendingSyncState();
-    });
-  }
 
   if (window.electronAPI.onAuditTrailUpdated) {
     window.electronAPI.onAuditTrailUpdated((data) => {
@@ -4125,9 +4047,7 @@ async function handleStartSession(options = {}) {
       await refreshTrackerData({ includeSessions: true });
       showToast(
         window.t('dashboard.activeSession'),
-        session.queued
-          ? `${window.t('toast.sessionQueued')} (${trackerContext.label})`
-          : `${session.mapName || mapName || window.t('misc.unknownMap')} ${window.t('toast.sessionStarted')} (${trackerContext.label})`
+        `${session.mapName || mapName || window.t('misc.unknownMap')} ${window.t('toast.sessionStarted')} (${trackerContext.label})`
       );
     }
   } catch (error) {
@@ -4164,9 +4084,6 @@ async function handleEndSession() {
     state.currentSession = null;
     updateActiveSessionUI();
     await refreshTrackerData({ includeSessions: true });
-    if (result?.queued) {
-      showToast(window.t('dashboard.activeSession'), window.t('toast.sessionEndQueued'), 'warning');
-    }
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.sessionEnd'), 'error');
   }
@@ -4282,13 +4199,8 @@ async function handleScanScreen() {
   elements.scanScreenBtn.textContent = window.t('dashboard.scanning');
 
   try {
-    const result = await window.electronAPI.scanScreen();
-    if (result?.queued) {
-      state.pendingLootCount += result.count || 0;
-      showToast(window.t('toast.currencyTitle'), window.t('toast.lootQueued', { count: result.count || 0 }), 'warning');
-    } else {
-      showToast(window.t('dashboard.scanScreen'), window.t('toast.scanComplete'));
-    }
+    await window.electronAPI.scanScreen();
+    showToast(window.t('dashboard.scanScreen'), window.t('toast.scanComplete'));
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.scanError'), 'error');
   } finally {
@@ -5179,7 +5091,7 @@ async function completePoe1SessionWithoutStashProfit(session = state.currentSess
   }
 
   try {
-    const result = await window.electronAPI.endSession({
+    await window.electronAPI.endSession({
       sessionId: session.id,
       mapName: session.mapName || null,
       startedAt: session.startedAt || session.started_at || null,
@@ -5195,9 +5107,6 @@ async function completePoe1SessionWithoutStashProfit(session = state.currentSess
         'Stash refresh failed, so the map was completed with the loot recorded during it.',
         'warning'
       );
-    }
-    if (result?.queued) {
-      showToast(window.t('dashboard.activeSession'), window.t('toast.sessionEndQueued'), 'warning');
     }
 
     return true;
@@ -5280,16 +5189,13 @@ async function completePoe1SessionWithStashProfit() {
     }
 
     await persistMapResultHistory(stashState.lastMapResult);
-    const result = await window.electronAPI.endSession(
+    await window.electronAPI.endSession(
       buildSessionCompletionPayloadFromMapResult(stashState.lastMapResult)
     );
 
     state.currentSession = null;
     updateActiveSessionUI();
     await refreshTrackerData({ includeSessions: true });
-    if (result?.queued) {
-      showToast(window.t('dashboard.activeSession'), window.t('toast.sessionEndQueued'), 'warning');
-    }
 
     return true;
   } catch (error) {
@@ -5392,27 +5298,6 @@ async function openSessionDrawer(sessionId) {
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'sessions.loadError'), 'error');
     closeSessionDrawer();
-  }
-}
-
-async function handleRetryPendingSync() {
-  if (!elements.retryPendingSyncBtn) return;
-
-  const originalLabel = elements.retryPendingSyncBtn.textContent;
-  elements.retryPendingSyncBtn.disabled = true;
-  elements.retryPendingSyncBtn.textContent = window.t('settings.retryingSync');
-
-  try {
-    const result = await window.electronAPI.retryPendingLootActions();
-    state.pendingLootCount = (result?.sessions?.remaining || 0) + (result?.loot?.remaining || 0);
-    renderPendingSyncState();
-    showToast(window.t('settings.api'), window.t('toast.syncRetryComplete', { count: state.pendingLootCount }), 'success');
-    await refreshTrackerData({ includeSessions: true });
-  } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.unexpectedError'), 'error');
-  } finally {
-    elements.retryPendingSyncBtn.disabled = false;
-    elements.retryPendingSyncBtn.textContent = originalLabel;
   }
 }
 

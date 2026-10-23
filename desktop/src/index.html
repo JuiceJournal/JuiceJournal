@@ -820,31 +820,22 @@
                 </div>
               </div>
               <div class="settings-group">
-                <h3 data-i18n="settings.syncQueue">Senkron Kuyrugu</h3>
-                <p class="settings-desc" data-i18n="settings.syncQueueDesc">Bekleyen session ve loot islemlerini yonetin.</p>
-                <div class="sync-queue-card">
-                  <div class="sync-queue-count" id="pending-sync-count">0</div>
-                  <div class="sync-queue-meta" id="pending-sync-meta" data-i18n="settings.syncQueueEmpty">Bekleyen islem yok</div>
-                </div>
-                <div class="sync-action-list" id="pending-sync-list">
-                  <p class="text-muted" data-i18n="settings.syncQueueEmpty">Bekleyen islem yok</p>
-                </div>
+                <h3 data-i18n="settings.diagnostics">Diagnostics</h3>
                 <div class="form-group">
                   <label for="diagnostics-mode" data-i18n="settings.diagnosticsMode">Diagnostik Seviyesi</label>
                   <select id="diagnostics-mode">
                     <option value="safe" data-i18n="settings.diagnosticsSafe">Guvenli</option>
                     <option value="sensitive" data-i18n="settings.diagnosticsSensitive">Hassas</option>
                   </select>
-                  <p class="settings-desc" data-i18n="settings.diagnosticsHint">Guvenli export yalnizca genel durum ozeti icerir. Hassas export kuyruk, oturum ve denetim ayrintilarini ekler.</p>
+                  <p class="settings-desc" data-i18n="settings.diagnosticsHint">Guvenli export yalnizca genel durum ozeti icerir. Hassas export oturum ve denetim ayrintilarini ekler.</p>
                 </div>
                 <div class="settings-actions-row">
-                  <button id="retry-pending-sync" class="btn btn-secondary btn-small" data-i18n="settings.retrySync">Bekleyenleri Dene</button>
                   <button id="export-diagnostics" class="btn btn-secondary btn-small" data-i18n="settings.exportDiagnostics">Diagnostik Disa Aktar</button>
                 </div>
               </div>
               <div class="settings-group">
                 <h3 data-i18n="settings.auditTrail">Yerel Islem Gecmisi</h3>
-                <p class="settings-desc" data-i18n="settings.auditTrailDesc">Son calisma, kuyruk ve diagnostik olaylari.</p>
+                <p class="settings-desc" data-i18n="settings.auditTrailDesc">Son calisma ve diagnostik olaylari.</p>
                 <div class="audit-trail-list" id="audit-trail-list">
                   <p class="text-muted" data-i18n="settings.auditTrailEmpty">Henuz kayit yok</p>
                 </div>

@@ -896,70 +896,32 @@ test('map-enter handler publishes runtime state and leaves session start to the 
   assert.deepEqual(runtimeCalls, [['area_entered', { mapName: 'Crimson Temple', mapTier: 16 }]]);
 });
 
-test('legacy queue drain leaves the journal-backed current session alone', async () => {
-  const backend = createJournalBackend();
-  const active = backend.start({}, 'journal-session-1');
-  let queuedCurrentSession = { id: 'local-legacy-1' };
-  const context = loadFunctions(['isLocalSessionId', 'flushPendingSessionActions'], {
-    currentSession: active,
-    pendingSessionFlushInProgress: false,
-    apiClient: {
-      token: 'legacy-token',
-      async startSession() {
-        return { id: 'server-session-1' };
-      },
-      async endSession() {
-        return { id: 'server-session-1', status: 'completed' };
-      }
-    },
-    hasOnlineAccount: () => true,
-    getCurrentUserId: () => 'user-1',
-    getPendingSessionActions: () => [
-      { type: 'sessionStart', localSessionId: 'local-legacy-1', payload: { mapName: 'Old Map' } },
-      { type: 'sessionEnd', sessionId: 'local-legacy-1', endedAt: '2026-05-06T12:04:00.000Z' }
-    ],
-    setPendingSessionActions() {},
-    getQueuedCurrentSession: () => queuedCurrentSession,
-    setQueuedCurrentSession(session) {
-      queuedCurrentSession = session;
-    }
+test('the sync queue an older version left on disk is removed at startup', () => {
+  const store = createMemoryStore({
+    pendingSessionActions: [{ type: 'sessionStart', localSessionId: 'local-legacy-1', payload: { mapName: 'Old Map' } }],
+    pendingLootActions: [{ type: 'bulkLoot', sessionId: 'local-legacy-1', items: [{ itemName: 'Divine Orb' }] }],
+    // The old default, which a truthiness check would leave behind.
+    queuedCurrentSession: null,
+    language: 'en'
   });
+  const deletes = [];
+  const deleteKey = store.delete;
+  store.delete = (key) => {
+    deletes.push(key);
+    deleteKey(key);
+  };
+  const context = loadFunctions(['removeLegacySyncQueue'], { store });
 
-  const result = await context.flushPendingSessionActions();
+  context.removeLegacySyncQueue();
+  context.removeLegacySyncQueue();
 
-  assert.equal(result.processed, 2);
-  assert.equal(queuedCurrentSession, null);
-  assert.equal(context.currentSession, active);
-});
-
-test('legacy queue stays on this machine while online features are off', async () => {
-  let serverCalls = 0;
-  let queueWrites = 0;
-  const context = loadFunctions(['isLocalSessionId', 'flushPendingSessionActions'], {
-    pendingSessionFlushInProgress: false,
-    apiClient: {
-      token: 'legacy-token',
-      async startSession() {
-        serverCalls += 1;
-        return { id: 'server-session-1' };
-      }
-    },
-    hasOnlineAccount: () => false,
-    getCurrentUserId: () => 'user-1',
-    getPendingSessionActions: () => [
-      { type: 'sessionStart', localSessionId: 'local-legacy-1', payload: { mapName: 'Old Map' } }
-    ],
-    setPendingSessionActions() {
-      queueWrites += 1;
-    }
-  });
-
-  const result = await context.flushPendingSessionActions();
-
-  assert.equal(result.processed, 0);
-  assert.equal(result.remaining, 1);
-  assert.equal(serverCalls, 0);
-  assert.equal(queueWrites, 0);
+  assert.deepEqual(store.data, { language: 'en' });
+  // Once the queue is gone, later launches do not write the config again.
+  assert.deepEqual(deletes, ['pendingSessionActions', 'pendingLootActions', 'queuedCurrentSession']);
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+  assert.match(source, /^removeLegacySyncQueue\(\);$/m);
+  assert.doesNotMatch(source, /pendingSessionActions: \[\]|pendingLootActions: \[\]|queuedCurrentSession: null/);
+  assert.doesNotMatch(source, /flushPendingActions|retry-pending-loot-actions|get-sync-status|pending-sync-updated/);
 });
 
 test('journal store is per local profile and rejects unsafe ids', () => {

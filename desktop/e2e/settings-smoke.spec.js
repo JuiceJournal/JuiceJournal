@@ -304,7 +304,8 @@ test('settings smoke: launches desktop app and shows core settings controls', as
     await expect(page.locator('#settings-api')).toHaveClass(/active/);
     await expect(page.locator('#api-url')).toHaveValue(backend.baseUrl);
     await expect(page.locator('#test-connection')).toBeVisible();
-    await expect(page.locator('#pending-sync-count')).toBeVisible();
+    await expect(page.locator('#export-diagnostics')).toBeVisible();
+    await expect(page.locator('#pending-sync-count')).toHaveCount(0);
 
     // Online features start off: the server hears nothing, even from the Farming Hub and the diagnostics export.
     await expect(page.locator('#online-enabled')).not.toBeChecked();
