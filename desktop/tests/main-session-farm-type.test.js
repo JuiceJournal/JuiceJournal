@@ -1228,6 +1228,29 @@ test('the renderer settings carry only the signed-in profile character cache', (
   }
 });
 
+test('the renderer settings carry no local profile map results', () => {
+  const store = createMemoryStore({
+    localProfiles: { 'profile-1': { id: 'profile-1' }, 'profile-2': { id: 'profile-2' } },
+    activeProfileId: 'profile-2',
+    language: 'en',
+    'mapResults:profile-1': [{ id: 'map-1' }],
+    'mapResults:profile-2': [{ id: 'map-2' }],
+    'mapResults:backend-user-1': [{ id: 'map-legacy' }]
+  });
+  store.store = store.data;
+  const context = loadFunctions(['getActiveProfile', 'getAccountStateStoreKey', 'getRendererSettings'], {
+    store,
+    DEFAULT_SCAN_HOTKEY: 'F9',
+    DEFAULT_STASH_SCAN_HOTKEY: 'CommandOrControl+Shift+L'
+  });
+
+  const settings = context.getRendererSettings();
+
+  assert.deepEqual(Object.keys(settings).filter((key) => key.startsWith('mapResults:')), []);
+  assert.equal(settings.language, 'en');
+  assert.deepEqual(store.data['mapResults:profile-1'], [{ id: 'map-1' }]);
+});
+
 test('the shared character cache moves once to the profile of its account', () => {
   const profiles = {
     'profile-1': { id: 'profile-1', accountName: 'Exile#1234' },
