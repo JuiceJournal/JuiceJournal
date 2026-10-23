@@ -3062,14 +3062,15 @@ function shouldAutoEndSessionOnMapExit(session = {}) {
   const poeVersion = normalizePoeVersion(session.poeVersion ?? session.poe_version)
     || 'poe1';
 
-  if (poeVersion !== 'poe1') {
+  // Without account:stashes (the built-in sign-in) there is no stash diff to wait for.
+  if (poeVersion !== 'poe1' || !poeApiClient?.hasScope('account:stashes')) {
     return true;
   }
 
   const totalLootChaos = getSessionValueNumber(session, 'totalLootChaos', 'total_loot_chaos');
   const profitChaos = getSessionValueNumber(session, 'profitChaos', 'profit_chaos');
 
-  // PoE1 profit is normally finalized by the stash before/after diff. If no
+  // With stash access, PoE1 profit is finalized by the stash before/after diff. If no
   // loot has been recorded yet, keep the session open after leaving the map so
   // the player can dump loot and calculate the stash diff first.
   return totalLootChaos !== 0 || profitChaos !== 0;

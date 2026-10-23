@@ -827,8 +827,25 @@ test('main shutdown finalizer stores calculated persisted profit before closing'
   ]);
 });
 
+test('main ends zero-loot PoE1 sessions on map exit when the sign-in cannot read stashes', () => {
+  const context = loadFunctions(['normalizePoeVersion', 'getSessionValueNumber', 'shouldAutoEndSessionOnMapExit'], {
+    poeApiClient: { hasScope: () => false }
+  });
+
+  assert.equal(
+    context.shouldAutoEndSessionOnMapExit({
+      poeVersion: 'poe1',
+      totalLootChaos: 0,
+      profitChaos: 0
+    }),
+    true
+  );
+});
+
 test('main keeps zero-loot PoE1 sessions open on map exit for stash diff completion', () => {
-  const context = loadFunctions(['normalizePoeVersion', 'getSessionValueNumber', 'shouldAutoEndSessionOnMapExit']);
+  const context = loadFunctions(['normalizePoeVersion', 'getSessionValueNumber', 'shouldAutoEndSessionOnMapExit'], {
+    poeApiClient: { hasScope: (scope) => scope === 'account:stashes' }
+  });
 
   assert.equal(
     context.shouldAutoEndSessionOnMapExit({

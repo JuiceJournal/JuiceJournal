@@ -38,7 +38,7 @@ Item values come from [poe.ninja](https://poe.ninja). The app asks for prices by
 
 ## Profit
 
-- **Path of Exile 1:** the intended source is a stash comparison: snapshots of your stash before and after a session. Snapshots need the `account:stashes` API scope, and the built-in sign-in only asks for `account:characters`, so the stash tracker is turned off and the app sends no stash requests. Profit is the value of the loot the experimental OCR scan adds to the session. A session with no loot stays open when you leave the map; end it with the End button.
+- **Path of Exile 1:** the intended source is a stash comparison: snapshots of your stash before and after a session. Snapshots need the `account:stashes` API scope, and the built-in sign-in only asks for `account:characters`, so the stash tracker is turned off and the app sends no stash requests. Profit is the value of the loot the experimental OCR scan adds to the session.
 - **Path of Exile 2:** GGG offers no stash API for PoE2. Profit is the value of the loot the OCR scan adds to the session, priced from poe.ninja's currency exchange (see [Prices](#prices-poeninja)).
 
 The session keeps this profit however it ends: as you leave the map, with the End button, or when you quit the app. Each completed session is added to your map results and, if the overlay is on, shown as a result card in the overlay (not while the app is quitting).
