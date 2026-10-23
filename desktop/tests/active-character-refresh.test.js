@@ -366,7 +366,6 @@ test('game-version change triggers active character refresh scheduling for poe2'
     ensureSessionClock() {},
     stopSessionClock() {},
     isPageActive() { return false; },
-    renderPendingSyncState() {},
     renderAuditTrail() {},
     renderProfitReport() {},
     setRuntimeSessionState() {},

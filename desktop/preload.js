@@ -50,9 +50,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addLoot: (data) => ipcRenderer.invoke('add-loot', data),
   scanScreen: () => ipcRenderer.invoke('scan-screen'),
   getRecentLoot: (params) => ipcRenderer.invoke('get-recent-loot', params),
-  getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
   getAuditTrail: () => ipcRenderer.invoke('get-audit-trail'),
-  retryPendingLootActions: () => ipcRenderer.invoke('retry-pending-loot-actions'),
   exportDiagnostics: (mode) => ipcRenderer.invoke('export-diagnostics', mode),
 
   // Stash & Prices
@@ -109,12 +107,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onLootAdded: (callback) => {
     ipcRenderer.on('loot-added', (event, data) => callback(data));
   },
-  onPendingLootUpdated: (callback) => {
-    ipcRenderer.on('pending-loot-updated', (event, data) => callback(data));
-  },
-  onPendingSyncUpdated: (callback) => {
-    ipcRenderer.on('pending-sync-updated', (event, data) => callback(data));
-  },
   onAuditTrailUpdated: (callback) => {
     ipcRenderer.on('audit-trail-updated', (event, data) => callback(data));
   },
@@ -158,7 +150,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeAllListeners: (channel) => {
     const ALLOWED_CHANNELS = [
       'map-entered', 'map-exited', 'session-started', 'session-ended',
-      'loot-added', 'pending-loot-updated', 'pending-sync-updated',
+      'loot-added',
       'audit-trail-updated', 'navigate', 'stash-snapshot-taken',
       'profit-calculated', 'game-version-changed', 'game-closed',
       'game-session-entered', 'game-session-left', 'character-log-line',

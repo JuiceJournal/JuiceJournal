@@ -60,7 +60,7 @@ Uygulama ici ayarlar:
 - **Bildirimler**: Masaustu bildirimleri
 - **Sesli Bildirimler**: Sesli event bildirimleri
 - **PoE Baglantisi**: Path of Exile OAuth bagla / ayir
-- **Diagnostik ve Audit Trail**: Pending sync, export ve audit goruntuleme
+- **Diagnostik ve Audit Trail**: Diagnostik export ve audit goruntuleme
 
 ### PoE Log Yolu
 

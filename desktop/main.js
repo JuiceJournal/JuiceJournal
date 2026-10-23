@@ -65,8 +65,6 @@ const SESSION_PRICES_WAIT_MS = 5_000;
 const SESSION_PRICES_RETRY_MS = 5 * 60_000;
 const CHARACTER_PROMPT_OVERLAY_DURATION_MS = 8_000;
 const OVERLAY_CLICKABLE_MODES = new Set(['start-map-prompt', 'map-result', 'character-prompt']);
-const MAX_PENDING_LOOT_ACTIONS = 100;
-const MAX_PENDING_SESSION_ACTIONS = 20;
 const MAX_AUDIT_TRAIL_ENTRIES = 200;
 const WINDOWS_APP_ICON_PATH = path.join(__dirname, 'src', 'assets', 'icon.ico');
 const APP_ICON_PATH = process.platform === 'win32'
@@ -231,10 +229,7 @@ const store = new Store({
     currentUserId: null,
     localProfiles: {},
     activeProfileId: null,
-    pendingSessionActions: [],
-    pendingLootActions: [],
     activeFarmTypeId: null,
-    queuedCurrentSession: null,
     auditTrail: [],
     strategyPresets: DEFAULT_STRATEGY_PRESETS,
     poeOAuthTokens: null
@@ -277,6 +272,16 @@ function migrateSharedAccountStateCache() {
 }
 
 migrateSharedAccountStateCache();
+
+// Older versions queued sessions and loot for the server while it was unreachable. Sessions and loot live in the
+// local journal now, so whatever such a version left in the queue is removed.
+function removeLegacySyncQueue() {
+  ['pendingSessionActions', 'pendingLootActions', 'queuedCurrentSession']
+    .filter((key) => store.get(key) !== undefined)
+    .forEach((key) => store.delete(key));
+}
+
+removeLegacySyncQueue();
 
 function normalizePoeVersion(version) {
   return version === 'poe1' || version === 'poe2' ? version : null;
@@ -345,12 +350,9 @@ let overlayCharacterPromptTimer = null;
 let overlayMapResultDismissTimer = null;
 let poeAuthServer = null;
 let trayHintShown = false;
-let pendingLootFlushInProgress = false;
-let pendingLootFlushInterval = null;
 const SCAN_HOTKEY_GATE_INTERVAL_MS = 500;
 let scanHotkeyGateInterval = null;
 let scanHotkeysActive = false;
-let pendingSessionFlushInProgress = false;
 let appUpdateState = null;
 let appUpdateInitialized = false;
 
@@ -639,46 +641,6 @@ function loadPersistedPoeTokens() {
   return deserializeSecurePayload(store.get('poeOAuthTokensEncrypted'));
 }
 
-function getPendingLootActions() {
-  return store.get('pendingLootActions') || [];
-}
-
-function setPendingLootActions(actions) {
-  const normalizedActions = actions.slice(-MAX_PENDING_LOOT_ACTIONS);
-  store.set('pendingLootActions', normalizedActions);
-  emitPendingSyncState();
-}
-
-function getPendingSessionActions() {
-  return store.get('pendingSessionActions') || [];
-}
-
-function setPendingSessionActions(actions) {
-  store.set('pendingSessionActions', actions.slice(-MAX_PENDING_SESSION_ACTIONS));
-  emitPendingSyncState();
-}
-
-function getQueuedCurrentSession() {
-  const session = store.get('queuedCurrentSession') || null;
-  if (!session) return null;
-
-  const currentUserId = getCurrentUserId();
-  if (!currentUserId) {
-    return null;
-  }
-
-  if (session.ownerUserId && session.ownerUserId !== currentUserId) {
-    return null;
-  }
-
-  return session;
-}
-
-function setQueuedCurrentSession(session) {
-  store.set('queuedCurrentSession', session || null);
-  emitPendingSyncState();
-}
-
 function getAuditTrail() {
   return store.get('auditTrail') || [];
 }
@@ -768,44 +730,6 @@ function assertDesktopUserAuthenticated() {
   if (!getActiveProfile()) {
     throw new Error('Local desktop sign-in is required');
   }
-}
-
-function isRetryableApiError(error) {
-  const code = error?.code || error?.data?.code || null;
-  const status = error?.status || null;
-  return code === 'SERVER_UNAVAILABLE'
-    || code === 'REQUEST_TIMEOUT'
-    || (code === 'AUTH_TOKEN_REQUIRED' && Boolean(getCurrentUserId()))
-    || status === null
-    || status >= 500;
-}
-
-function isLocalSessionId(sessionId) {
-  return typeof sessionId === 'string' && sessionId.startsWith('local-');
-}
-
-function getPendingSyncSnapshot() {
-  return {
-    pendingSessions: getPendingSessionActions().length,
-    pendingLoot: getPendingLootActions().length,
-    total: getPendingSessionActions().length + getPendingLootActions().length,
-    hasQueuedCurrentSession: Boolean(getQueuedCurrentSession())
-  };
-}
-
-function getPendingSyncEntriesForView() {
-  return [
-    ...getPendingSessionActions().map((action) => ({
-      ...action,
-      queueType: 'session'
-    })),
-    ...getPendingLootActions().map((action) => ({
-      ...action,
-      queueType: 'loot'
-    }))
-  ]
-    .sort((a, b) => new Date(b.lastAttemptAt || b.queuedAt).getTime() - new Date(a.lastAttemptAt || a.queuedAt).getTime())
-    .slice(0, 20);
 }
 
 function normalizeStoredFarmTypeId(farmTypeId) {
@@ -1261,209 +1185,12 @@ async function calculateSessionProfitFromPersistedSnapshots(options = {}) {
   };
 }
 
-function emitPendingSyncState() {
-  if (!mainWindow) return;
-  mainWindow.webContents.send('pending-sync-updated', {
-    ...getPendingSyncSnapshot(),
-    entries: getPendingSyncEntriesForView()
-  });
-}
-
-function annotateSyncFailure(action, error, { blocked = false } = {}) {
-  return {
-    ...action,
-    attempts: (action.attempts || 0) + 1,
-    lastAttemptAt: new Date().toISOString(),
-    lastError: normalizeErrorMessage(error, 'Unexpected sync error'),
-    blocked
-  };
-}
-
-async function flushPendingSessionActions(forceBlocked = false) {
-  if (pendingSessionFlushInProgress || !hasOnlineAccount()) {
-    return { processed: 0, remaining: getPendingSessionActions().length, sessionIdMap: new Map() };
-  }
-
-  const currentUserId = getCurrentUserId();
-  const queuedActions = getPendingSessionActions();
-  if (!queuedActions.length || !currentUserId) {
-    return { processed: 0, remaining: queuedActions.length, sessionIdMap: new Map() };
-  }
-
-  pendingSessionFlushInProgress = true;
-  const remainingActions = [];
-  const sessionIdMap = new Map();
-  let processed = 0;
-
-  try {
-    for (const action of queuedActions) {
-      if (action.ownerUserId && action.ownerUserId !== currentUserId) {
-        remainingActions.push(action);
-        continue;
-      }
-
-      if (action.blocked && !forceBlocked) {
-        remainingActions.push(action);
-        continue;
-      }
-
-      try {
-        if (action.type === 'sessionStart') {
-          const session = await apiClient.startSession({
-            ...action.payload,
-            startedAt: action.startedAt
-          });
-          sessionIdMap.set(action.localSessionId, session.id);
-
-          // The active session now comes from the local journal; only the legacy queue entry is dropped.
-          const queuedCurrentSession = getQueuedCurrentSession();
-          if (queuedCurrentSession?.id === action.localSessionId) {
-            setQueuedCurrentSession(null);
-          }
-        } else if (action.type === 'sessionEnd') {
-          const resolvedSessionId = sessionIdMap.get(action.sessionId) || action.sessionId;
-          if (isLocalSessionId(resolvedSessionId)) {
-            remainingActions.push(action);
-            continue;
-          }
-
-          await apiClient.endSession(resolvedSessionId, {
-            endedAt: action.endedAt
-          });
-
-          const queuedCurrentSession = getQueuedCurrentSession();
-          if (queuedCurrentSession?.id === action.sessionId) {
-            setQueuedCurrentSession(null);
-          }
-        }
-
-        processed += 1;
-      } catch (error) {
-        if (isRetryableApiError(error)) {
-          remainingActions.push(annotateSyncFailure(action, error));
-          break;
-        }
-
-        remainingActions.push(annotateSyncFailure(action, error, { blocked: true }));
-      }
-    }
-  } finally {
-    setPendingSessionActions(remainingActions);
-    pendingSessionFlushInProgress = false;
-  }
-
-  return {
-    processed,
-    remaining: remainingActions.length,
-    sessionIdMap
-  };
-}
-
-async function flushPendingLootActions(sessionIdMap = new Map(), forceBlocked = false) {
-  if (pendingLootFlushInProgress || !hasOnlineAccount()) {
-    return { processed: 0, remaining: getPendingLootActions().length };
-  }
-
-  const currentUserId = getCurrentUserId();
-  const queuedActions = getPendingLootActions();
-  if (!queuedActions.length || !currentUserId) {
-    return { processed: 0, remaining: queuedActions.length };
-  }
-
-  pendingLootFlushInProgress = true;
-  const remainingActions = [];
-  let processed = 0;
-
-  try {
-    for (const action of queuedActions) {
-      if (action.ownerUserId && action.ownerUserId !== currentUserId) {
-        remainingActions.push(action);
-        continue;
-      }
-
-      if (action.blocked && !forceBlocked) {
-        remainingActions.push(action);
-        continue;
-      }
-
-      const resolvedSessionId = sessionIdMap.get(action.sessionId) || action.sessionId;
-      if (isLocalSessionId(resolvedSessionId)) {
-        if (!sessionIdMap.has(action.sessionId)) {
-          console.log('[flushPendingLootActions] Skipping loot item — unresolved local session ID:', action.sessionId);
-        }
-        remainingActions.push(action);
-        continue;
-      }
-
-      try {
-        if (action.type === 'bulkLoot') {
-          await apiClient.addLootBulk(resolvedSessionId, action.items);
-        } else if (action.type === 'singleLoot') {
-          await apiClient.addLoot(resolvedSessionId, action.data);
-        } else {
-          continue;
-        }
-
-        processed += 1;
-      } catch (error) {
-        if (isRetryableApiError(error)) {
-          remainingActions.push(annotateSyncFailure(action, error));
-          break;
-        }
-
-        remainingActions.push(annotateSyncFailure(action, error, { blocked: true }));
-      }
-    }
-  } finally {
-    setPendingLootActions(remainingActions);
-    pendingLootFlushInProgress = false;
-  }
-
-  return {
-    processed,
-    remaining: remainingActions.length
-  };
-}
-
-async function flushPendingActions(forceBlocked = false) {
-  let sessionResult = { processed: 0, remaining: 0, sessionIdMap: new Map() };
-  try {
-    sessionResult = await flushPendingSessionActions(forceBlocked);
-  } catch (error) {
-    console.warn('[flushPendingActions] Session flush error (continuing with loot flush):', error?.message || error);
-  }
-
-  // Always run loot flush even if session flush partially failed.
-  // Loot flush will skip items with unresolved local session IDs gracefully.
-  let lootResult = { processed: 0, remaining: 0 };
-  try {
-    lootResult = await flushPendingLootActions(sessionResult.sessionIdMap, forceBlocked);
-  } catch (error) {
-    console.warn('[flushPendingActions] Loot flush error:', error?.message || error);
-  }
-
-  if ((sessionResult.processed || 0) > 0 || (lootResult.processed || 0) > 0) {
-    appendAuditTrail('auditPendingSyncFlushed', {
-      sessions: sessionResult.processed || 0,
-      loot: lootResult.processed || 0
-    });
-  }
-
-  return {
-    sessions: sessionResult,
-    loot: lootResult
-  };
-}
-
 function buildSafeSettingsSnapshot() {
   const settings = { ...store.store };
   delete settings.authToken;
   delete settings.auditTrail;
   delete settings.poeOAuthTokens;
   delete settings.poeOAuthTokensEncrypted;
-  delete settings.pendingLootActions;
-  delete settings.pendingSessionActions;
-  delete settings.queuedCurrentSession;
 
   return {
     language: settings.language || 'en',
@@ -1488,9 +1215,6 @@ function buildSensitiveSettingsSnapshot() {
   delete settings.auditTrail;
   delete settings.poeOAuthTokens;
   delete settings.poeOAuthTokensEncrypted;
-  delete settings.pendingLootActions;
-  delete settings.pendingSessionActions;
-  delete settings.queuedCurrentSession;
   return settings;
 }
 
@@ -1525,14 +1249,8 @@ async function buildDiagnosticsPayload(mode = 'safe') {
     appVersion: app.getVersion(),
     platform: process.platform,
     release: os.release(),
-    pendingSync: {
-      snapshot: getPendingSyncSnapshot(),
-      hasQueuedCurrentSession: Boolean(getQueuedCurrentSession())
-    },
     currentSession: currentSession ? {
-      status: currentSession.status,
-      localOnly: Boolean(currentSession.localOnly),
-      queued: Boolean(currentSession.queued)
+      status: currentSession.status
     } : null,
     api: {
       authenticated: apiSnapshot.authenticated,
@@ -1549,28 +1267,10 @@ async function buildDiagnosticsPayload(mode = 'safe') {
   return {
     ...basePayload,
     currentUserId: getCurrentUserId(),
-    pendingSync: {
-      ...basePayload.pendingSync,
-      sessionActions: getPendingSessionActions().map((action) => ({
-        id: action.id,
-        type: action.type,
-        sessionId: action.sessionId || action.localSessionId || null,
-        queuedAt: action.queuedAt
-      })),
-      lootActions: getPendingLootActions().map((action) => ({
-        id: action.id,
-        type: action.type,
-        sessionId: action.sessionId || null,
-        queuedAt: action.queuedAt,
-        itemCount: Array.isArray(action.items) ? action.items.length : 1
-      }))
-    },
     currentSession: currentSession ? {
       id: currentSession.id,
       mapName: currentSession.mapName,
       status: currentSession.status,
-      localOnly: Boolean(currentSession.localOnly),
-      queued: Boolean(currentSession.queued),
       startedAt: currentSession.startedAt,
       endedAt: currentSession.endedAt || null
     } : null,
@@ -3905,22 +3605,6 @@ function setupIPC() {
     });
   });
 
-  ipcMain.handle('get-sync-status', () => {
-    if (!getActiveProfile()) {
-      return {
-        pendingSession: 0,
-        pendingLoot: 0,
-        total: 0,
-        hasQueuedSession: false,
-        entries: []
-      };
-    }
-    return {
-      ...getPendingSyncSnapshot(),
-      entries: getPendingSyncEntriesForView()
-    };
-  });
-
   ipcMain.handle('get-audit-trail', () => {
     if (!getActiveProfile()) {
       return { entries: [] };
@@ -3928,11 +3612,6 @@ function setupIPC() {
     return {
       entries: getAuditTrail().slice().reverse().slice(0, 20)
     };
-  });
-
-  ipcMain.handle('retry-pending-loot-actions', async () => {
-    assertDesktopUserAuthenticated();
-    return await flushPendingActions(true);
   });
 
   ipcMain.handle('export-diagnostics', async (event, mode = 'safe') => {
@@ -3992,7 +3671,6 @@ function setupIPC() {
       const authCookie = apiClient.getToken();
       if (result?.success && persistDesktopAuthSession(authCookie)) {
         store.set('currentUserId', result?.data?.user?.id || null);
-        await flushPendingActions();
         appendAuditTrail('auditLogin');
       }
       return result;
@@ -4011,7 +3689,6 @@ function setupIPC() {
       const authCookie = apiClient.getToken();
       if (persistDesktopAuthSession(authCookie)) {
         store.set('currentUserId', result?.user?.id || null);
-        await flushPendingActions();
         appendAuditTrail('auditLogin');
       }
       return {
@@ -4032,7 +3709,6 @@ function setupIPC() {
     try {
       const me = await apiClient.getMe();
       store.set('currentUserId', me?.user?.id || null);
-      await flushPendingActions();
       return me;
     } catch (error) {
       throw toRendererError(error, 'Failed to load current user details');
@@ -4065,7 +3741,6 @@ function setupIPC() {
         const authCookie = apiClient.getToken();
         if (result?.success && persistDesktopAuthSession(authCookie)) {
           store.set('currentUserId', result.data.user?.id || null);
-          await flushPendingActions();
           appendAuditTrail('auditLogin');
         }
         return result;
@@ -4085,7 +3760,6 @@ function setupIPC() {
       const authCookie = apiClient.getToken();
       if (result?.success && persistDesktopAuthSession(authCookie)) {
         store.set('currentUserId', result.data.user?.id || null);
-        await flushPendingActions();
         appendAuditTrail('auditLogin');
       }
 
@@ -4582,7 +4256,6 @@ app.whenReady().then(() => {
   initializeAppUpdater();
   mainWindow.show(); // Show the window.
   mainWindow.focus();
-  emitPendingSyncState();
   ensureOverlayWindowForSettings();
 
   if (appUpdateState?.enabled) {
@@ -4598,14 +4271,6 @@ app.whenReady().then(() => {
   } catch {
     // Nobody is signed in yet.
   }
-  flushPendingActions().catch(() => { });
-  pendingLootFlushInterval = setInterval(async () => {
-    const result = await flushPendingActions().catch(() => null);
-    if (result && (result.sessions?.remaining || 0) === 0 && (result.loot?.remaining || 0) === 0) {
-      clearInterval(pendingLootFlushInterval);
-      pendingLootFlushInterval = null;
-    }
-  }, 30000);
 
 });
 
@@ -4653,11 +4318,6 @@ function handleAppWillQuit() {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     overlayWindow.destroy();
     overlayWindow = null;
-  }
-
-  if (pendingLootFlushInterval) {
-    clearInterval(pendingLootFlushInterval);
-    pendingLootFlushInterval = null;
   }
 
   if (scanHotkeyGateInterval) {
