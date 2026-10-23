@@ -3673,9 +3673,10 @@ function getRendererSettings() {
   delete allSettings.currentUserId;
   delete allSettings.localProfiles;
   delete allSettings.activeProfileId;
-  // The renderer sees only the signed-in profile's character cache.
+  // The renderer sees only the signed-in profile's character cache. Map results
+  // reach it per profile through their own IPC.
   Object.keys(allSettings)
-    .filter((key) => key.startsWith('lastKnownAccountState:'))
+    .filter((key) => key.startsWith('lastKnownAccountState:') || key.startsWith('mapResults:'))
     .forEach((key) => delete allSettings[key]);
   const accountStateKey = getAccountStateStoreKey();
   allSettings.lastKnownAccountState = (accountStateKey && store.get(accountStateKey)) || null;
