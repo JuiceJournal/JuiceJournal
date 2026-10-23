@@ -216,6 +216,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
 const store = new Store({
   defaults: {
     apiUrl: 'http://localhost:3001',
+    onlineEnabled: false,
     authToken: null,
     authTokenEncrypted: null,
     poePath: DEFAULT_POE_LOG_PATH,
@@ -688,6 +689,15 @@ function getCurrentUserId() {
   return store.get('currentUserId') || null;
 }
 
+// Juice Journal's own server (apiUrl) is used only after the player turns online features on.
+function isOnlineEnabled() {
+  return store.get('onlineEnabled') === true;
+}
+
+function hasOnlineAccount() {
+  return isOnlineEnabled() && Boolean(apiClient?.token);
+}
+
 function getActiveProfile() {
   return (store.get('localProfiles') || {})[store.get('activeProfileId')] || null;
 }
@@ -954,6 +964,12 @@ function markPublishedMapResults(sourceResults = [], publishedRun = {}) {
 }
 
 async function publishMapResultsToFarmingHub(input = {}) {
+  if (!isOnlineEnabled()) {
+    const error = new Error('Turn on online features to share farm runs');
+    error.code = 'ONLINE_DISABLED';
+    throw error;
+  }
+
   if (!apiClient?.token || typeof apiClient.publishFarmRun !== 'function') {
     const error = new Error('Sign in before publishing farm runs');
     error.code = 'AUTH_REQUIRED';
@@ -1144,7 +1160,7 @@ function withTimeout(promise, timeoutMs, message = 'Operation timed out') {
 }
 
 async function getLatestPersistedStashSnapshot(sessionId, kind) {
-  if (!apiClient?.token || typeof apiClient.listPoeStashSnapshots !== 'function') {
+  if (!hasOnlineAccount() || typeof apiClient.listPoeStashSnapshots !== 'function') {
     return null;
   }
 
@@ -1158,7 +1174,7 @@ async function getLatestPersistedStashSnapshot(sessionId, kind) {
 }
 
 async function loadPersistedStashSnapshot(snapshotId, context = {}) {
-  if (!snapshotId || !apiClient?.token || typeof apiClient.getPoeStashSnapshot !== 'function') {
+  if (!snapshotId || !hasOnlineAccount() || typeof apiClient.getPoeStashSnapshot !== 'function') {
     return null;
   }
 
@@ -1238,7 +1254,7 @@ function annotateSyncFailure(action, error, { blocked = false } = {}) {
 }
 
 async function flushPendingSessionActions(forceBlocked = false) {
-  if (pendingSessionFlushInProgress || !apiClient?.token) {
+  if (pendingSessionFlushInProgress || !hasOnlineAccount()) {
     return { processed: 0, remaining: getPendingSessionActions().length, sessionIdMap: new Map() };
   }
 
@@ -1318,7 +1334,7 @@ async function flushPendingSessionActions(forceBlocked = false) {
 }
 
 async function flushPendingLootActions(sessionIdMap = new Map(), forceBlocked = false) {
-  if (pendingLootFlushInProgress || !apiClient?.token) {
+  if (pendingLootFlushInProgress || !hasOnlineAccount()) {
     return { processed: 0, remaining: getPendingLootActions().length };
   }
 
@@ -1432,6 +1448,7 @@ function buildSafeSettingsSnapshot() {
     lastDetectedPoeVersion: normalizePoeVersion(settings.lastDetectedPoeVersion),
     defaultLeaguePoe1: typeof settings.defaultLeaguePoe1 === 'string' ? settings.defaultLeaguePoe1 : null,
     defaultLeaguePoe2: typeof settings.defaultLeaguePoe2 === 'string' ? settings.defaultLeaguePoe2 : null,
+    onlineEnabled: settings.onlineEnabled === true,
     hasCustomApiUrl: Boolean(settings.apiUrl),
     hasPoePath: Boolean(settings.poePath),
     scanHotkey: settings.scanHotkey || 'F9'
@@ -1456,13 +1473,13 @@ async function buildDiagnosticsPayload(mode = 'safe') {
 
   const apiSnapshot = {
     authenticated: Boolean(apiClient?.token),
-    status: 'unknown',
+    status: isOnlineEnabled() ? 'unknown' : 'disabled',
     latencyMs: null,
     details: null,
     error: null
   };
 
-  if (apiClient) {
+  if (apiClient && isOnlineEnabled()) {
     const startedAt = Date.now();
     try {
       const health = await apiClient.healthCheck();
@@ -3491,7 +3508,7 @@ function applyGameVersion(version, options = {}) {
 }
 
 const SETTINGS_ALLOWLIST = new Set([
-  'apiUrl', 'poePath', 'autoStartSession', 'notifications',
+  'apiUrl', 'onlineEnabled', 'poePath', 'autoStartSession', 'notifications',
   'soundNotifications', 'language', 'poeVersion', 'defaultLeaguePoe1', 'defaultLeaguePoe2',
   'scanHotkey', 'stashScanHotkey', 'overlayEnabled', 'lastKnownAccountState', 'theme'
 ]);
@@ -3564,11 +3581,20 @@ function applyDesktopSettings(settings = {}) {
       continue;
     }
 
+    if (key === 'onlineEnabled') {
+      store.set(key, value === true);
+      continue;
+    }
+
     store.set(key, value);
   }
 
   if (hasApiUrl && apiClient) {
     apiClient.setBaseURL(normalizedApiUrl);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(settings, 'onlineEnabled') && apiClient) {
+    apiClient.setOnline(settings.onlineEnabled === true);
   }
 
   if (shouldRefreshHotkeys) {
@@ -3661,6 +3687,34 @@ function setupIPC() {
   });
 
   ipcMain.handle('get-local-profile', () => getActiveProfile());
+
+  ipcMain.handle('get-online-account', () => ({
+    enabled: isOnlineEnabled(),
+    signedIn: Boolean(apiClient?.token)
+  }));
+
+  // Checks the server address typed in Settings. Nothing is sent while online features are off.
+  ipcMain.handle('test-online-connection', async (event, apiUrl) => {
+    const url = typeof apiUrl === 'string' ? apiUrl.trim() : '';
+    if (!isValidApiUrl(url)) {
+      throw new Error('Invalid API URL');
+    }
+
+    try {
+      await new APIClient(url, null, { online: isOnlineEnabled() }).healthCheck();
+      return true;
+    } catch (error) {
+      throw toRendererError(error, 'Unable to reach the server');
+    }
+  });
+
+  // Leaves the local profile and the device's Path of Exile connection as they are.
+  ipcMain.handle('sign-out-online', () => {
+    store.set('authToken', null);
+    store.set('authTokenEncrypted', null);
+    apiClient.setToken(null);
+    return true;
+  });
 
   ipcMain.handle('get-runtime-mode', () => ({
     isPackaged: app.isPackaged,
@@ -4162,7 +4216,7 @@ function setupIPC() {
   }
 
   async function takeBackendStashSnapshot(options = {}, context = {}) {
-    if (!apiClient?.token || typeof apiClient.takePoeStashSnapshot !== 'function') {
+    if (!hasOnlineAccount() || typeof apiClient.takePoeStashSnapshot !== 'function') {
       return null;
     }
 
@@ -4250,7 +4304,7 @@ function setupIPC() {
       try {
         report = stashAnalyzer.diffSnapshots(beforeId, afterId, priceService);
       } catch (error) {
-        if (!isUuid(beforeId) || !isUuid(afterId) || typeof apiClient?.diffPoeStashSnapshots !== 'function') {
+        if (!isUuid(beforeId) || !isUuid(afterId) || !hasOnlineAccount()) {
           throw error;
         }
 
@@ -4459,7 +4513,7 @@ function setupIPC() {
 app.whenReady().then(() => {
   // Initialize the API client.
   const resolvedToken = getDecryptedAuthToken();
-  apiClient = new APIClient(store.get('apiUrl'), resolvedToken);
+  apiClient = new APIClient(store.get('apiUrl'), resolvedToken, { online: isOnlineEnabled() });
   ocrScanner = new OCRScanner({ cachePath: path.join(app.getPath('userData'), 'ocr-cache') });
   poeApiClient = new PoeApiClient();
   priceService = new PriceService();

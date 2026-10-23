@@ -120,6 +120,7 @@ window.Translations = {
     // Farming Hub
     'farmingHub.title': 'Farming Hub',
     'farmingHub.subtitle': 'Oyuncularin lokal ledger uzerinden paylastigi public runlar.',
+    'farmingHub.onlineOff': 'Farming Hub icin online ozellikler gerekli. Ayarlar > Online bolumunden acin.',
 
     // Session info
     'session.map': 'Map',
@@ -133,7 +134,7 @@ window.Translations = {
     'settings.poe': 'Path of Exile',
     'settings.hotkeys': 'Kisayollar',
     'settings.notifications': 'Bildirimler',
-    'settings.api': 'API Baglantisi',
+    'settings.api': 'Online',
     'settings.about': 'Hakkinda',
 
     // Settings - General
@@ -181,13 +182,21 @@ window.Translations = {
     'settings.soundNotifications': 'Ses bildirimlerini etkinlestir',
 
     // Settings - API
-    'settings.apiUrl': 'API URL',
+    'settings.onlineEnabled': 'Online ozellikleri kullan',
+    'settings.onlineDescription': 'Kapaliyken Juice Journal kendi sunucusuna hic baglanmaz. Farming Hub ve run paylasmak icin acin. Path of Exile girisi ve poe.ninja fiyatlari iki durumda da calisir.',
+    'settings.apiUrl': 'Sunucu Adresi',
     'settings.apiUrlPlaceholder': 'http://localhost:3001',
     'settings.connectionStatus': 'Baglanti Durumu',
     'settings.connected': 'Bagli',
     'settings.disconnected': 'Baglanti Yok',
     'settings.testConnection': 'Baglantiyi Test Et',
     'settings.testing': 'Test ediliyor...',
+    'settings.onlineAccount': 'Online Hesap',
+    'settings.onlineAccountOff': 'Sunucuya giris yapmak icin online ozellikleri acin.',
+    'settings.onlineAccountSignedOut': 'Sunucuya giris yapilmadi. Farming Hub\'da run paylasmak icin giris yapin.',
+    'settings.onlineAccountSignedIn': 'Sunucuya giris yapildi.',
+    'settings.onlineSignIn': 'Path of Exile ile giris yap',
+    'settings.onlineSignOut': 'Sunucudan cikis yap',
     'settings.syncQueue': 'Senkron Kuyrugu',
     'settings.syncQueueDesc': 'Bekleyen session ve loot islemlerini yonetin.',
     'settings.syncQueueEmpty': 'Bekleyen islem yok',
@@ -267,6 +276,7 @@ window.Translations = {
     'toast.error': 'Hata',
     'toast.connectionSuccess': 'API baglantisi basarili',
     'toast.connectionFailed': 'API baglantisi basarisiz',
+    'toast.onlineSignedIn': 'Sunucuya giris yapildi.',
     'toast.syncRetryComplete': 'Bekleyen islemler yeniden denendi. Kalan: {count}',
     'toast.diagnosticsExported': 'Diagnostik dosyasi disa aktarildi',
     'toast.diagnosticsExportedSafe': 'Guvenli diagnostik dosyasi disa aktarildi',
@@ -312,6 +322,7 @@ window.Translations = {
     'errors.poeStatus': 'Path of Exile baglanti durumu alinamadi',
     'errors.poeDisconnect': 'Path of Exile baglantisi kaldirilamadi',
     'errors.serverUnavailable': 'Sunucuya ulasilamadi',
+    'errors.onlineDisabled': 'Online ozellikler kapali. Ayarlar > Online bolumunden acin.',
     'errors.requestTimeout': 'Sunucu yanit vermekte gecikti',
     'errors.forbidden': 'Bu islem icin yetkiniz yok',
     'errors.priceSyncInProgress': 'Fiyat senkronizasyonu devam ediyor, lutfen bekleyin',
@@ -472,7 +483,7 @@ window.Translations = {
     'settings.poe': 'Path of Exile',
     'settings.hotkeys': 'Hotkeys',
     'settings.notifications': 'Benachrichtigungen',
-    'settings.api': 'API-Verbindung',
+    'settings.api': 'Online',
     'settings.about': 'Info',
     'settings.language': 'Sprache',
     'settings.league': 'Aktive Liga',
@@ -867,6 +878,7 @@ window.Translations = {
     // Farming Hub
     'farmingHub.title': 'Farming Hub',
     'farmingHub.subtitle': 'Public runs shared by players from their local ledger.',
+    'farmingHub.onlineOff': 'The Farming Hub needs online features. Turn them on in Settings > Online.',
 
     // Session info
     'session.map': 'Map',
@@ -880,7 +892,7 @@ window.Translations = {
     'settings.poe': 'Path of Exile',
     'settings.hotkeys': 'Hotkeys',
     'settings.notifications': 'Notifications',
-    'settings.api': 'API Connection',
+    'settings.api': 'Online',
     'settings.about': 'About',
 
     // Settings - General
@@ -928,13 +940,21 @@ window.Translations = {
     'settings.soundNotifications': 'Enable sound notifications',
 
     // Settings - API
-    'settings.apiUrl': 'API URL',
+    'settings.onlineEnabled': 'Use online features',
+    'settings.onlineDescription': 'While this is off, Juice Journal does not contact its server. Turn it on for the Farming Hub and for sharing runs. Path of Exile sign-in and poe.ninja prices work either way.',
+    'settings.apiUrl': 'Server Address',
     'settings.apiUrlPlaceholder': 'http://localhost:3001',
     'settings.connectionStatus': 'Connection Status',
     'settings.connected': 'Connected',
     'settings.disconnected': 'Disconnected',
     'settings.testConnection': 'Test Connection',
     'settings.testing': 'Testing...',
+    'settings.onlineAccount': 'Online Account',
+    'settings.onlineAccountOff': 'Turn on online features to sign in to the server.',
+    'settings.onlineAccountSignedOut': 'Not signed in to the server. Sign in to share runs on the Farming Hub.',
+    'settings.onlineAccountSignedIn': 'Signed in to the server.',
+    'settings.onlineSignIn': 'Sign in with Path of Exile',
+    'settings.onlineSignOut': 'Sign out of the server',
     'settings.syncQueue': 'Sync Queue',
     'settings.syncQueueDesc': 'Review and retry queued session and loot actions.',
     'settings.syncQueueEmpty': 'No pending actions',
@@ -1014,6 +1034,7 @@ window.Translations = {
     'toast.error': 'Error',
     'toast.connectionSuccess': 'API connection successful',
     'toast.connectionFailed': 'API connection failed',
+    'toast.onlineSignedIn': 'Signed in to the server.',
     'toast.syncRetryComplete': 'Pending actions retried. Remaining: {count}',
     'toast.diagnosticsExported': 'Diagnostics file exported',
     'toast.diagnosticsExportedSafe': 'Safe diagnostics file exported',
@@ -1060,6 +1081,7 @@ window.Translations = {
     'errors.poeStatus': 'Failed to get Path of Exile link status',
     'errors.poeDisconnect': 'Failed to disconnect Path of Exile account',
     'errors.serverUnavailable': 'Unable to reach the server',
+    'errors.onlineDisabled': 'Online features are turned off. Turn them on in Settings > Online.',
     'errors.requestTimeout': 'The server took too long to respond',
     'errors.forbidden': 'You do not have permission to perform this action',
     'errors.priceSyncInProgress': 'Price sync is already running. Please wait.',

@@ -232,6 +232,7 @@ function loadMainWithMocks({
 function getSettingsAllowlist() {
   return new Set([
     'apiUrl',
+    'onlineEnabled',
     'poePath',
     'autoStartSession',
     'notifications',
@@ -650,6 +651,59 @@ test('main settings reject blank apiUrl updates before persisting or mutating th
   assert.equal(refreshTrayMenuCalls, 0);
   assert.equal(setBaseURLCalls, 0);
   assert.deepEqual(writes, []);
+});
+
+test('main online features start off and the setting switches the live API client', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+  assert.match(source, /defaults: \{\s*apiUrl: 'http:\/\/localhost:3001',\s*onlineEnabled: false,/);
+  assert.match(source, /new APIClient\(store\.get\('apiUrl'\), resolvedToken, \{ online: isOnlineEnabled\(\) \}\)/);
+
+  const writes = [];
+  const onlineCalls = [];
+  const context = loadFunctions(['applyDesktopSettings'], {
+    SETTINGS_ALLOWLIST: getSettingsAllowlist(),
+    store: {
+      set(key, value) {
+        writes.push([key, value]);
+      }
+    },
+    apiClient: {
+      setOnline(online) {
+        onlineCalls.push(online);
+      }
+    }
+  });
+
+  context.applyDesktopSettings({ onlineEnabled: true });
+  context.applyDesktopSettings({ onlineEnabled: 'true' });
+  context.applyDesktopSettings({ language: 'en' });
+
+  assert.deepEqual(writes, [['onlineEnabled', true], ['onlineEnabled', false], ['language', 'en']]);
+  assert.deepEqual(onlineCalls, [true, false]);
+});
+
+test('main farm sharing stops before the server while online features are off', async () => {
+  let publishCalls = 0;
+  const context = loadFunctions(['publishMapResultsToFarmingHub'], {
+    isOnlineEnabled: () => false,
+    apiClient: {
+      token: 'online-token',
+      async publishFarmRun() {
+        publishCalls += 1;
+        return { id: 'run-1' };
+      }
+    }
+  });
+
+  await assert.rejects(context.publishMapResultsToFarmingHub({ resultIds: ['run-1'] }), { code: 'ONLINE_DISABLED' });
+  assert.equal(publishCalls, 0);
+});
+
+test('main online connection test sends nothing while online features are off', async () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+
+  assert.match(source, /ipcMain\.handle\('test-online-connection'[\s\S]*?new APIClient\(url, null, \{ online: isOnlineEnabled\(\) \}\)\.healthCheck\(\)/);
+  assert.match(source, /if \(apiClient && isOnlineEnabled\(\)\) \{\s*const startedAt = Date\.now\(\);\s*try \{\s*const health = await apiClient\.healthCheck\(\);/);
 });
 
 test('main apiUrl validation allows expected localhost ports and rejects credentialed or private-network targets', () => {

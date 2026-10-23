@@ -94,7 +94,7 @@ function createAxiosMock() {
 test('desktop API client captures the auth cookie from login responses', async () => {
   const { axiosMock } = createAxiosMock();
   const APIClient = loadApiClientWithAxiosMock(axiosMock);
-  const client = new APIClient('http://localhost:3001');
+  const client = new APIClient('http://localhost:3001', null, { online: true });
 
   const response = await client.login({ username: 'demo', password: 'secret' });
 
@@ -106,7 +106,7 @@ test('desktop API client captures the auth cookie from login responses', async (
 test('desktop API client sends the persisted auth cookie on authenticated requests', async () => {
   const { axiosMock, requestHandlers } = createAxiosMock();
   const APIClient = loadApiClientWithAxiosMock(axiosMock);
-  const client = new APIClient('http://localhost:3001');
+  const client = new APIClient('http://localhost:3001', null, { online: true });
 
   client.setToken('juice_journal_auth=abc123');
 

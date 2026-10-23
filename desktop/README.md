@@ -50,7 +50,7 @@ npm run build:win
 
 Uygulama ici ayarlar:
 
-- **API URL**: Backend sunucu adresi
+- **Online**: Varsayilan olarak kapali; kapaliyken sunucuya istek gitmez. Farming Hub ve run paylasma icin acilir, sunucu adresi ve sunucu girisi burada
 - **Client.txt Yolu**: PoE log dosya yolu
 - **Dil**: Arayuz dili
 - **PoE Surumu**: PoE1 / PoE2 runtime secimi
@@ -144,6 +144,7 @@ Build ciktisi `dist/` klasorunde olusur.
 - Yonetici yetkisi gerekebilir
 
 ### API baglantisi yok
+- Ayarlar → Online'da online ozelliklerin acik oldugunu kontrol edin
 - Backend sunucu calisiyor mu kontrol edin
 - Firewall ayarlarini kontrol edin
 - API URL ayarini dogrulayin

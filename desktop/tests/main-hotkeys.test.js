@@ -689,6 +689,7 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
     activeLeagueInputState: { dirty: false },
     updateActiveLeagueFieldContext() {},
     syncDesktopCurrencyIcons() {},
+    refreshOnlineAccount: async () => {},
     refreshTrackerData: async () => {}
   });
 
@@ -731,6 +732,7 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
   assert.equal(savedSettings.length, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(savedSettings[0])), {
     apiUrl: 'http://localhost:3001',
+    onlineEnabled: false,
     poePath: '',
     autoStartSession: true,
     overlayEnabled: false,

@@ -8,6 +8,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createSettingsModel() {
   const DEFAULT_RESET_SETTINGS = Object.freeze({
     apiUrl: 'http://localhost:3001',
+    onlineEnabled: false,
     poePath: '',
     autoStartSession: true,
     overlayEnabled: false,

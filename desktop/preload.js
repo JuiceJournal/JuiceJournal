@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Ayarlar
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSettings: (settings) => ipcRenderer.invoke('set-settings', settings),
+  getOnlineAccount: () => ipcRenderer.invoke('get-online-account'),
+  testOnlineConnection: (apiUrl) => ipcRenderer.invoke('test-online-connection', apiUrl),
+  signOutOnline: () => ipcRenderer.invoke('sign-out-online'),
 
   // Auth
   getLocalProfile: () => ipcRenderer.invoke('get-local-profile'),

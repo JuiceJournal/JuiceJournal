@@ -602,6 +602,7 @@ test('reset settings persists only resettable settings and preserves signed-in h
     }),
     applySettingsVersionSelection: (version) => version,
     applySettingsDraftToDom: () => {},
+    refreshOnlineAccount: async () => {},
     updateActiveLeagueFieldContext: () => {},
     syncDesktopCurrencyIcons: () => {},
     applyDashboardCapabilities: () => {

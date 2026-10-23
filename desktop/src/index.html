@@ -786,10 +786,19 @@
               </div>
             </div>
 
-            <!-- API Tab -->
+            <!-- Online Tab -->
             <div class="settings-tab" id="settings-api" role="tabpanel">
               <div class="settings-group">
-                <h3 data-i18n="settings.apiUrl">API URL</h3>
+                <div class="form-group checkbox">
+                  <label>
+                    <input type="checkbox" id="online-enabled">
+                    <span data-i18n="settings.onlineEnabled">Use online features</span>
+                  </label>
+                </div>
+                <p class="settings-desc" data-i18n="settings.onlineDescription">While this is off, Juice Journal does not contact its server.</p>
+              </div>
+              <div class="settings-group">
+                <h3 data-i18n="settings.apiUrl">Server address</h3>
                 <div class="form-group">
                   <input type="url" id="api-url" data-i18n-placeholder="settings.apiUrlPlaceholder" placeholder="http://localhost:3001">
                 </div>
@@ -801,6 +810,14 @@
                   <span id="connection-text" data-i18n="settings.disconnected">Baglanti Yok</span>
                 </div>
                 <button id="test-connection" class="btn btn-secondary btn-small" data-i18n="settings.testConnection">Baglantiyi Test Et</button>
+              </div>
+              <div class="settings-group">
+                <h3 data-i18n="settings.onlineAccount">Online account</h3>
+                <p class="settings-desc" id="online-account-status" data-i18n="settings.onlineAccountOff">Turn on online features to sign in to the server.</p>
+                <div class="settings-actions-row">
+                  <button id="online-sign-in" class="btn btn-secondary btn-small" type="button" data-i18n="settings.onlineSignIn">Sign in with Path of Exile</button>
+                  <button id="online-sign-out" class="btn btn-secondary btn-small" type="button" data-i18n="settings.onlineSignOut">Sign out of the server</button>
+                </div>
               </div>
               <div class="settings-group">
                 <h3 data-i18n="settings.syncQueue">Senkron Kuyrugu</h3>
