@@ -2701,6 +2701,7 @@ async function handlePoeOAuthLogin() {
     const result = await window.electronAPI.signInWithPoe();
 
     if (result?.success) {
+      await loadProfileAccountStateCache();
       setCurrentUser(toProfileUser(result.profile));
       if (elements.loginModal) {
         elements.loginModal.classList.add('hidden');
@@ -3068,6 +3069,12 @@ function confirmActiveCharacter(poeVersion, characterId) {
   refreshAccountStateFromCurrentUser();
   renderCharacterSummaryCard();
   refreshRendererOverlayState();
+}
+
+// Main keeps one character cache per profile and hands out the signed-in profile's one.
+async function loadProfileAccountStateCache() {
+  const settings = await window.electronAPI.getSettings().catch(() => null);
+  state.settings.lastKnownAccountState = settings?.lastKnownAccountState || null;
 }
 
 function persistLastKnownAccountState() {
