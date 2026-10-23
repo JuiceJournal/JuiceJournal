@@ -129,6 +129,8 @@ function createIsolatedProfile(testInfo, apiUrl) {
         username: VISUAL_USER.username,
         characters: { poe1: [{ ...VISUAL_USER.selectedCharacter, current: true }] }
       }),
+      // The stash result card only renders when the sign-in can read stashes.
+      JUICE_JOURNAL_E2E_POE_SCOPE: 'account:characters account:stashes',
       JUICE_JOURNAL_E2E_PRICES: JSON.stringify({
         'Divine Orb': PROFIT_RATES.divineChaos,
         'Mirror of Kalandra': PROFIT_RATES.mirrorChaos
