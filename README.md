@@ -47,7 +47,7 @@ The app talks to these hosts only:
 | `web.poecdn.com` | Item icons |
 | `cdn.jsdelivr.net` | OCR language data, first scan only |
 | GitHub | Checking for and downloading updates, installed builds only |
-| The backend URL in Settings → API Connection (default `http://localhost:3001`, your own PC) | League list, Currency page, Farming Hub list and profit-tier rates. Without a self-hosted backend these requests fail: the league list and profit tiers fall back to built-in leagues and local poe.ninja prices, and the Currency page and Farming Hub show an error |
+| The server address in Settings → Online (default `http://localhost:3001`, your own PC) | Only after you turn on online features there: the Farming Hub list and the server sign-in. Once signed in to the server, also sharing runs, uploading sessions and loot that an older version queued for the server, and the server's stash snapshots when the device has no Path of Exile connection. Online features are off by default, and while they are off nothing is sent to this address |
 
 There is no telemetry and there are no ads.
 
@@ -92,7 +92,7 @@ Builds are not code-signed yet, so Windows SmartScreen will warn when someone ru
 
 ## Optional backend and web app
 
-`backend/` (Express + PostgreSQL) and `web/` (Next.js) are not needed to use the desktop app. If you self-host the backend and set its URL in Settings → API Connection, it powers the Currency browser page and the Farming Hub list. Publishing to the Farming Hub still needs a backend login that the current desktop UI does not offer. See [backend/README.md](backend/README.md) and [web/README.md](web/README.md).
+`backend/` (Express + PostgreSQL) and `web/` (Next.js) are not needed to use the desktop app. If you self-host the backend, turn on online features in Settings → Online and enter its address there. It powers the Farming Hub list. To share runs, sign in to the server on the same tab; that sign-in goes through the backend's own Path of Exile OAuth setup. See [backend/README.md](backend/README.md) and [web/README.md](web/README.md).
 
 ## Development
 

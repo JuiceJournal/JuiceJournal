@@ -63,6 +63,7 @@ test('reset defaults does not mutate authenticated header state', () => {
 
   assert.deepEqual(result.settings, {
     apiUrl: 'http://localhost:3001',
+    onlineEnabled: false,
     poePath: '',
     autoStartSession: true,
     overlayEnabled: false,

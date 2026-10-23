@@ -5,7 +5,20 @@
 
 const axios = require('axios');
 
+function createOnlineDisabledError() {
+  return {
+    status: null,
+    code: 'ONLINE_DISABLED',
+    message: 'Online features are turned off',
+    data: null
+  };
+}
+
 function normalizeApiError(error) {
+  if (error?.code === 'ONLINE_DISABLED') {
+    return error;
+  }
+
   const status = error.response?.status || null;
   const apiMessage = error.response?.data?.error;
   const apiErrorCode = error.response?.data?.errorCode || null;
@@ -58,9 +71,11 @@ function normalizeApiError(error) {
 }
 
 class APIClient {
-  constructor(baseURL, token = null) {
+  // Nothing goes to the server until online features are turned on.
+  constructor(baseURL, token = null, { online = false } = {}) {
     this.baseURL = baseURL;
     this.token = token;
+    this.online = online === true;
     
     this.client = axios.create({
       baseURL: this.baseURL,
@@ -70,9 +85,12 @@ class APIClient {
       }
     });
 
-    // Request interceptor - attach the token.
+    // Request interceptor - stop while offline, attach the token.
     this.client.interceptors.request.use(
       (config) => {
+        if (!this.online) {
+          throw createOnlineDisabledError();
+        }
         if (this.token) {
           config.headers.Cookie = this.token;
         }
@@ -110,6 +128,10 @@ class APIClient {
 
   getToken() {
     return this.token;
+  }
+
+  setOnline(online) {
+    this.online = online === true;
   }
 
   /**
@@ -264,6 +286,11 @@ class APIClient {
   }
 
   async requestWithSessionCookie(config) {
+    // This path uses axios directly, so the instance interceptor above does not see it.
+    if (!this.online) {
+      throw createOnlineDisabledError();
+    }
+
     const response = await axios.request({
       baseURL: this.baseURL,
       timeout: 10000,

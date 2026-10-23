@@ -16,6 +16,8 @@ const state = {
   leagueOptionsLoaded: false,
   sessions: [],
   farmingHubRuns: [],
+  // Saved online setting and whether the app holds a server session; the Farming Hub and sharing need both.
+  onlineAccount: { enabled: false, signedIn: false },
   mapResults: [],
   recentLoot: [],
   account: null,
@@ -90,6 +92,8 @@ const ERROR_MESSAGE_KEY_MAP = {
   'Failed to get Path of Exile link status': 'errors.poeStatus',
   'Failed to disconnect Path of Exile account': 'errors.poeDisconnect',
   'Unable to reach the server': 'errors.serverUnavailable',
+  'Online features are turned off': 'errors.onlineDisabled',
+  'Turn on online features to share farm runs': 'errors.onlineDisabled',
   'The request timed out': 'errors.requestTimeout',
   'An unexpected error occurred': 'errors.unexpected',
   'Unauthorized request': 'errors.loginFailed'
@@ -208,6 +212,10 @@ const elements = {
   testConnection: document.getElementById('test-connection'),
   connectionDot: document.getElementById('connection-dot'),
   connectionText: document.getElementById('connection-text'),
+  onlineEnabled: document.getElementById('online-enabled'),
+  onlineAccountStatus: document.getElementById('online-account-status'),
+  onlineSignIn: document.getElementById('online-sign-in'),
+  onlineSignOut: document.getElementById('online-sign-out'),
   pendingSyncCount: document.getElementById('pending-sync-count'),
   pendingSyncMeta: document.getElementById('pending-sync-meta'),
   pendingSyncList: document.getElementById('pending-sync-list'),
@@ -1447,6 +1455,7 @@ async function init() {
 
   // Ayarlari yukle
   await loadSettings();
+  await refreshOnlineAccount();
   await loadActiveFarmTypeSelection();
   populateStrategyPresets();
 
@@ -1522,6 +1531,7 @@ function applySettingsDraftToDom(settingsDraft = {}) {
   const completeSettingsDraft = getCompleteHotkeySettings(settingsDraft);
 
   if (elements.apiUrl) elements.apiUrl.value = completeSettingsDraft.apiUrl || '';
+  if (elements.onlineEnabled) elements.onlineEnabled.checked = completeSettingsDraft.onlineEnabled === true;
   if (elements.poePath) elements.poePath.value = completeSettingsDraft.poePath || '';
   if (elements.autoStartSession) elements.autoStartSession.checked = Boolean(completeSettingsDraft.autoStartSession);
   if (elements.overlayEnabled) elements.overlayEnabled.checked = completeSettingsDraft.overlayEnabled === true;
@@ -2167,6 +2177,12 @@ function setupEventListeners() {
   if (elements.testConnection) {
     elements.testConnection.addEventListener('click', handleTestConnection);
   }
+  if (elements.onlineSignIn) {
+    elements.onlineSignIn.addEventListener('click', handleOnlineSignIn);
+  }
+  if (elements.onlineSignOut) {
+    elements.onlineSignOut.addEventListener('click', handleOnlineSignOut);
+  }
   if (elements.retryPendingSyncBtn) {
     elements.retryPendingSyncBtn.addEventListener('click', handleRetryPendingSync);
   }
@@ -2757,6 +2773,8 @@ async function handleLogout() {
   state.account = null;
   state.runtimeSession = null;
   state.overlay = null;
+  // Signing out locally also ends the server session.
+  state.onlineAccount = { ...state.onlineAccount, signedIn: false };
   stashState.beforeSnapshotId = null;
   stashState.afterSnapshotId = null;
   stashState.beforeSnapshot = null;
@@ -2766,6 +2784,7 @@ async function handleLogout() {
   stashState.pricesSynced = false;
   closeSessionDrawer();
   renderUserIdentity();
+  renderOnlineSettings();
   if (typeof renderCharacterSummaryCard === 'function') {
     renderCharacterSummaryCard();
   }
@@ -3519,7 +3538,10 @@ function getMapResultPublishLabel(result = {}) {
 }
 
 function canPublishMapResult(result = {}) {
-  return isDisplayableMapResult(result) && result.publishState !== 'published';
+  return state.onlineAccount?.enabled === true
+    && state.onlineAccount?.signedIn === true
+    && isDisplayableMapResult(result)
+    && result.publishState !== 'published';
 }
 
 function renderMapResultHistory() {
@@ -4428,6 +4450,12 @@ function getFarmingHubFilters() {
 async function loadFarmingHubRuns() {
   if (!elements.farmingHubList) return;
 
+  if (!state.onlineAccount?.enabled) {
+    state.farmingHubRuns = [];
+    elements.farmingHubList.innerHTML = `<p class="empty-state">${escapeHTML(window.t('farmingHub.onlineOff'))}</p>`;
+    return;
+  }
+
   populateFarmingHubFarmOptions();
   elements.farmingHubList.innerHTML = '<p class="empty-state">Loading shared farm runs...</p>';
 
@@ -4668,6 +4696,7 @@ async function handleSaveSettings() {
 
   const settings = {
     apiUrl: elements.apiUrl.value,
+    onlineEnabled: elements.onlineEnabled ? elements.onlineEnabled.checked : false,
     poePath: elements.poePath.value,
     autoStartSession: elements.autoStartSession.checked,
     overlayEnabled: elements.overlayEnabled ? elements.overlayEnabled.checked : false,
@@ -4684,6 +4713,7 @@ async function handleSaveSettings() {
     await window.electronAPI.setSettings(settings);
     state.settings = { ...state.settings, ...settings };
     applySettingsDraftToDom(state.settings);
+    await refreshOnlineAccount();
     activeLeagueInputState.dirty = false;
     updateActiveLeagueFieldContext({ syncValue: true, forceValueSync: true });
     syncDesktopCurrencyIcons();
@@ -4724,6 +4754,7 @@ async function handleResetSettings() {
     state.settings = { ...state.settings, ...resetDraft.settings };
     const resetVersion = applySettingsVersionSelection(resetDraft.settings.poeVersion);
     applySettingsDraftToDom(resetDraft.settings);
+    await refreshOnlineAccount();
     window._appState.language = resetDraft.settings.language || 'en';
     applyLocalizedChrome();
     activeLeagueInputState.dirty = false;
@@ -4759,21 +4790,69 @@ async function handleTestConnection() {
   btn.disabled = true;
 
   try {
-    const response = await fetch(elements.apiUrl.value + '/api/health');
-    if (response.ok) {
-      elements.connectionDot.classList.add('connected');
-      elements.connectionText.textContent = window.t('settings.connected');
-      showToast(window.t('settings.api'), window.t('toast.connectionSuccess'), 'success');
-    } else {
-      throw new Error('Not OK');
-    }
+    // The main process sends the check, and only while online features are on.
+    await window.electronAPI.testOnlineConnection(elements.apiUrl.value);
+    elements.connectionDot.classList.add('connected');
+    elements.connectionText.textContent = window.t('settings.connected');
+    showToast(window.t('settings.api'), window.t('toast.connectionSuccess'), 'success');
   } catch {
     elements.connectionDot.classList.remove('connected');
     elements.connectionText.textContent = window.t('settings.disconnected');
     showToast(window.t('settings.api'), window.t('toast.connectionFailed'), 'error');
   } finally {
     btn.textContent = origText;
-    btn.disabled = false;
+    renderOnlineSettings();
+  }
+}
+
+async function refreshOnlineAccount() {
+  try {
+    state.onlineAccount = await window.electronAPI.getOnlineAccount();
+  } catch {
+    state.onlineAccount = { enabled: false, signedIn: false };
+  }
+  renderOnlineSettings();
+  renderMapResultHistory();
+}
+
+function renderOnlineSettings() {
+  const { enabled, signedIn } = state.onlineAccount;
+  let statusKey = 'settings.onlineAccountOff';
+  if (enabled) {
+    statusKey = signedIn ? 'settings.onlineAccountSignedIn' : 'settings.onlineAccountSignedOut';
+  }
+
+  if (elements.onlineAccountStatus) {
+    elements.onlineAccountStatus.dataset.i18n = statusKey;
+    elements.onlineAccountStatus.textContent = window.t(statusKey);
+  }
+  if (elements.testConnection) elements.testConnection.disabled = !enabled;
+  if (elements.onlineSignIn) elements.onlineSignIn.disabled = !enabled || signedIn;
+  if (elements.onlineSignOut) elements.onlineSignOut.disabled = !signedIn;
+}
+
+// Signs in to Juice Journal's server for the Farming Hub; the local profile is not touched.
+async function handleOnlineSignIn() {
+  elements.onlineSignIn.disabled = true;
+  try {
+    const result = await window.electronAPI.startPoeLogin();
+    if (result?.success) {
+      showToast(window.t('settings.onlineAccount'), window.t('toast.onlineSignedIn'), 'success');
+    } else {
+      showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage({ error: result?.error }, 'errors.loginFailed'), 'error');
+    }
+  } catch (error) {
+    showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
+  } finally {
+    await refreshOnlineAccount();
+  }
+}
+
+async function handleOnlineSignOut() {
+  try {
+    await window.electronAPI.signOutOnline();
+  } finally {
+    await refreshOnlineAccount();
   }
 }
 

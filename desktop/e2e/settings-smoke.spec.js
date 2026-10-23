@@ -36,8 +36,10 @@ function writeJson(response, statusCode, payload) {
 }
 
 async function startSmokeBackend() {
+  const requests = [];
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url || '/', 'http://127.0.0.1');
+    requests.push(`${request.method} ${url.pathname}`);
 
     writeJson(response, 404, {
       success: false,
@@ -56,6 +58,7 @@ async function startSmokeBackend() {
 
   return {
     server,
+    requests,
     baseUrl: `http://127.0.0.1:${address.port}`,
   };
 }
@@ -302,6 +305,30 @@ test('settings smoke: launches desktop app and shows core settings controls', as
     await expect(page.locator('#api-url')).toHaveValue(backend.baseUrl);
     await expect(page.locator('#test-connection')).toBeVisible();
     await expect(page.locator('#pending-sync-count')).toBeVisible();
+
+    // Online features start off: the server hears nothing, even from the Farming Hub and the diagnostics export.
+    await expect(page.locator('#online-enabled')).not.toBeChecked();
+    await expect(page.locator('#test-connection')).toBeDisabled();
+    await expect(page.locator('#online-sign-in')).toBeDisabled();
+    const diagnosticsPath = path.join(isolatedProfile.rootDir, 'diagnostics.json');
+    await electronApp.evaluate(({ dialog }, filePath) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath });
+    }, diagnosticsPath);
+    await page.evaluate(() => window.electronAPI.exportDiagnostics('safe'));
+    expect(JSON.parse(fs.readFileSync(diagnosticsPath, 'utf8')).api.status).toBe('disabled');
+    await page.locator('.nav-btn[data-page="farming-hub"]').click();
+    await expect(page.locator('#farming-hub-list')).toContainText('needs online features');
+    expect(backend.requests).toEqual([]);
+
+    // The Save button would also send the smoke server's random port, which settings reject, so only the switch is set.
+    await page.evaluate(() => window.electronAPI.setSettings({ onlineEnabled: true }));
+    await page.reload();
+    await expect(page.locator('#username')).toHaveText(SMOKE_USER.username);
+    await expect(page.locator('#online-enabled')).toBeChecked();
+    await expect(page.locator('#test-connection')).toBeEnabled();
+    await expect(page.locator('#online-sign-in')).toBeEnabled();
+    await page.locator('.nav-btn[data-page="farming-hub"]').click();
+    await expect.poll(() => backend.requests).toContain('GET /api/farming-hub/runs');
   } catch (error) {
     testError = error;
   } finally {

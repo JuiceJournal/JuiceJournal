@@ -718,6 +718,7 @@ test('renderer logout clears normalized account state', async () => {
     mapResults: [{ id: 'map-result-1' }],
     recentLoot: [{ id: 'loot-1' }],
     poeDeviceConnected: true,
+    onlineAccount: { enabled: true, signedIn: true },
     account: {
       accountName: 'KocaGyVeMasha',
       selectedCharacter: { id: 'char-1', name: 'MainOne' }
@@ -745,6 +746,7 @@ test('renderer logout clears normalized account state', async () => {
     },
     closeSessionDrawer: () => calls.push(['closeSessionDrawer']),
     renderUserIdentity: () => calls.push(['renderUserIdentity']),
+    renderOnlineSettings: () => calls.push(['renderOnlineSettings']),
     resetDashboardSummary: () => calls.push(['resetDashboardSummary']),
     updateActiveSessionUI: () => calls.push(['updateActiveSessionUI']),
     renderSessionsList: () => calls.push(['renderSessionsList']),
@@ -767,11 +769,14 @@ test('renderer logout clears normalized account state', async () => {
   assert.equal(stashState.mapResultContext, null);
   assert.equal(stashState.lastMapResult, null);
   assert.equal(stashState.pricesSynced, false);
+  assert.equal(state.onlineAccount.enabled, true);
+  assert.equal(state.onlineAccount.signedIn, false);
   assert.deepEqual(calls.map(([name]) => name), [
     'clearActiveCharacterRefreshTimers',
     'logout',
     'closeSessionDrawer',
     'renderUserIdentity',
+    'renderOnlineSettings',
     'resetDashboardSummary',
     'updateActiveSessionUI',
     'renderSessionsList',

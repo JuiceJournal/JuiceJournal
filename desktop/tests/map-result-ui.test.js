@@ -2247,6 +2247,46 @@ test('renderer map result history marks published results as shared', () => {
   assert.match(elements.mapResultHistory.innerHTML, /disabled/);
 });
 
+test('renderer offers sharing only with online features on and a server sign-in', () => {
+  const state = { onlineAccount: { enabled: false, signedIn: true } };
+  const context = loadFunctions(['canPublishMapResult'], {
+    state,
+    isDisplayableMapResult: () => true
+  });
+  const result = { id: 'local-result', durationSeconds: 240 };
+
+  assert.equal(context.canPublishMapResult(result), false);
+  state.onlineAccount = { enabled: true, signedIn: false };
+  assert.equal(context.canPublishMapResult(result), false);
+  state.onlineAccount = { enabled: true, signedIn: true };
+  assert.equal(context.canPublishMapResult(result), true);
+});
+
+test('renderer Farming Hub asks for nothing while online features are off', async () => {
+  let hubRequests = 0;
+  const farmingHubList = { innerHTML: '' };
+  const context = loadFunctions(['loadFarmingHubRuns'], {
+    state: { onlineAccount: { enabled: false, signedIn: false }, farmingHubRuns: [{ id: 'old-run' }] },
+    elements: { farmingHubList },
+    escapeHTML: (value) => String(value),
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        async getFarmingHubRuns() {
+          hubRequests += 1;
+          return { runs: [] };
+        }
+      }
+    }
+  });
+
+  await context.loadFarmingHubRuns();
+
+  assert.equal(hubRequests, 0);
+  assert.equal(context.state.farmingHubRuns.length, 0);
+  assert.match(farmingHubList.innerHTML, /farmingHub\.onlineOff/);
+});
+
 test('renderer publish handler calls desktop bridge and refreshes local history', async () => {
   let publishPayload = null;
   const toasts = [];
@@ -2259,6 +2299,7 @@ test('renderer publish handler calls desktop bridge and refreshes local history'
       currentUser: {
         username: 'Esquetta'
       },
+      onlineAccount: { enabled: true, signedIn: true },
       mapResults: [
         {
           id: 'result-1',

@@ -912,6 +912,7 @@ test('legacy queue drain leaves the journal-backed current session alone', async
         return { id: 'server-session-1', status: 'completed' };
       }
     },
+    hasOnlineAccount: () => true,
     getCurrentUserId: () => 'user-1',
     getPendingSessionActions: () => [
       { type: 'sessionStart', localSessionId: 'local-legacy-1', payload: { mapName: 'Old Map' } },
@@ -929,6 +930,36 @@ test('legacy queue drain leaves the journal-backed current session alone', async
   assert.equal(result.processed, 2);
   assert.equal(queuedCurrentSession, null);
   assert.equal(context.currentSession, active);
+});
+
+test('legacy queue stays on this machine while online features are off', async () => {
+  let serverCalls = 0;
+  let queueWrites = 0;
+  const context = loadFunctions(['isLocalSessionId', 'flushPendingSessionActions'], {
+    pendingSessionFlushInProgress: false,
+    apiClient: {
+      token: 'legacy-token',
+      async startSession() {
+        serverCalls += 1;
+        return { id: 'server-session-1' };
+      }
+    },
+    hasOnlineAccount: () => false,
+    getCurrentUserId: () => 'user-1',
+    getPendingSessionActions: () => [
+      { type: 'sessionStart', localSessionId: 'local-legacy-1', payload: { mapName: 'Old Map' } }
+    ],
+    setPendingSessionActions() {
+      queueWrites += 1;
+    }
+  });
+
+  const result = await context.flushPendingSessionActions();
+
+  assert.equal(result.processed, 0);
+  assert.equal(result.remaining, 1);
+  assert.equal(serverCalls, 0);
+  assert.equal(queueWrites, 0);
 });
 
 test('journal store is per local profile and rejects unsafe ids', () => {

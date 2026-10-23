@@ -1,6 +1,6 @@
 # Path of Exile sign-in
 
-Juice Journal signs in with your Path of Exile account on your own PC. There is no Juice Journal account and no Juice Journal server involved.
+Juice Journal signs in with your Path of Exile account on your own PC. There is no Juice Journal account and no Juice Journal server involved. The one exception is the optional server sign-in under Settings → Online, which goes through a self-hosted Juice Journal server and is needed only to share runs on the Farming Hub.
 
 ## How it works
 
