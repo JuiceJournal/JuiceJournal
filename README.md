@@ -47,7 +47,7 @@ The app talks to these hosts only:
 | `web.poecdn.com` | Item icons |
 | `cdn.jsdelivr.net` | OCR language data, first scan only |
 | GitHub | Checking for and downloading updates, installed builds only |
-| The server address in Settings → Online (default `http://localhost:3001`, your own PC) | Only after you turn on online features there: the Farming Hub list, sharing runs and the server sign-in. Online features are off by default, and while they are off nothing is sent to this address |
+| The server address in Settings → Online (default `http://localhost:3001`, your own PC) | Only after you turn on online features there: the Farming Hub list and the server sign-in. Once signed in to the server, also sharing runs, uploading sessions and loot that an older version queued for the server, and the server's stash snapshots when the device has no Path of Exile connection. Online features are off by default, and while they are off nothing is sent to this address |
 
 There is no telemetry and there are no ads.
 

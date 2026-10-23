@@ -645,7 +645,8 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
     stashScanHotkey,
     stashScanHotkeyDisplay: { textContent: '' },
     defaultLeague: { value: 'Standard' },
-    defaultLeagueSelect: { value: 'Standard' }
+    defaultLeagueSelect: { value: 'Standard' },
+    onlineEnabled: { checked: true }
   };
   const context = loadFunctions(appJsPath, [
     'getHotkeyModel',
@@ -726,13 +727,15 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
   assert.equal(keydownEvent.prevented, true);
   assert.equal(scanHotkey.value, 'Ctrl+Shift+K');
   assert.equal(elements.scanHotkeyDisplay.textContent, 'Ctrl+Shift+K');
+  assert.equal(elements.onlineEnabled.checked, false);
+  elements.onlineEnabled.checked = true;
 
   await context.handleSaveSettings();
 
   assert.equal(savedSettings.length, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(savedSettings[0])), {
     apiUrl: 'http://localhost:3001',
-    onlineEnabled: false,
+    onlineEnabled: true,
     poePath: '',
     autoStartSession: true,
     overlayEnabled: false,
