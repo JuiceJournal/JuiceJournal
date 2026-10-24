@@ -2377,8 +2377,22 @@ test('renderer Farming Hub asks for nothing while online features are off', asyn
 
 test('renderer publish handler calls desktop bridge and refreshes local history', async () => {
   let publishPayload = null;
+  let busyWhilePublishing = null;
   const toasts = [];
+  const buttonAttributes = {};
+  const farmPublishConfirmBtn = {
+    disabled: false,
+    dataset: {},
+    querySelector: () => null,
+    setAttribute: (name, value) => {
+      buttonAttributes[name] = value;
+    },
+    removeAttribute: (name) => {
+      delete buttonAttributes[name];
+    }
+  };
   const context = loadFunctions([
+    'setButtonBusy',
     'canPublishMapResult',
     'findMapResultById',
     'handleMapResultPublish'
@@ -2401,9 +2415,7 @@ test('renderer publish handler calls desktop bridge and refreshes local history'
       ]
     },
     elements: {
-      farmPublishConfirmBtn: {
-        disabled: false
-      }
+      farmPublishConfirmBtn
     },
     isDisplayableMapResult: (result) => Number(result?.durationSeconds || 0) > 0,
     requestFarmPublishDetails: async () => ({
@@ -2417,6 +2429,7 @@ test('renderer publish handler calls desktop bridge and refreshes local history'
       electronAPI: {
         async publishMapResults(payload) {
           publishPayload = payload;
+          busyWhilePublishing = [farmPublishConfirmBtn.disabled, buttonAttributes['aria-busy']];
           return {
             run: { id: 'published-1' },
             history: [
@@ -2454,6 +2467,9 @@ test('renderer publish handler calls desktop bridge and refreshes local history'
   assert.deepEqual(toasts, [
     { title: 'Farming Hub', message: 'Farm result published.', type: 'success' }
   ]);
+  assert.deepEqual(busyWhilePublishing, [true, 'true']);
+  assert.equal(farmPublishConfirmBtn.disabled, false);
+  assert.equal(buttonAttributes['aria-busy'], undefined);
 });
 
 test('sessions list counts loot from list rows and shows live duration for the active session', () => {

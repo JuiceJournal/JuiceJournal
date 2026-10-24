@@ -79,10 +79,10 @@
     </g>
   </symbol>
 
-  <symbol id="poe-hex" viewBox="0 0 24 24">
+  <symbol id="external" viewBox="0 0 24 24">
     <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter">
-      <path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/>
-      <path d="M12 7.5l3.9 2.25v4.5L12 16.5l-3.9-2.25v-4.5z"/>
+      <path d="M13.5 4.5h6v6M19.5 4.5l-8 8"/>
+      <path d="M10 5.5H4.5v14h14V14"/>
     </g>
   </symbol>
 

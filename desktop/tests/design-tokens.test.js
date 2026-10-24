@@ -63,9 +63,10 @@ test('renderer markup and scripts use color tokens instead of literals', () => {
 
 test('disabled buttons share one dimmed state and lose their hover', () => {
   const stylesCss = stripComments(fs.readFileSync(path.join(srcDir, 'styles.css'), 'utf8'));
-  const disabledRule = stylesCss.match(/\.btn:disabled,\s*\.btn\[aria-disabled="true"\]\s*\{([^}]*)\}/);
+  // Busy buttons are disabled too, but stay at full strength next to their spinner.
+  const disabledRule = stylesCss.match(/\.btn:disabled:not\(\[aria-busy="true"\]\),\s*\.btn\[aria-disabled="true"\]\s*\{([^}]*)\}/);
 
-  assert.ok(disabledRule, 'expected one .btn:disabled, .btn[aria-disabled="true"] rule');
+  assert.ok(disabledRule, 'expected one .btn:disabled:not([aria-busy="true"]), .btn[aria-disabled="true"] rule');
   assert.match(disabledRule[1], /cursor:\s*not-allowed;/);
   assert.match(disabledRule[1], /opacity:\s*0?\.42;/);
   assert.match(disabledRule[1], /filter:\s*saturate\(0?\.25\);/);

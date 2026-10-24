@@ -115,15 +115,27 @@
           </div>
 
           <div class="modal-panel oauth-only">
-            <h2>Login with Path of Exile</h2>
-            <p class="modal-subtitle compact">Juice Journal requires a linked Path of Exile account.</p>
-            <p class="modal-subtitle compact" data-i18n="login.poeClientNote">GGG cannot verify desktop apps like Juice Journal. Sign in only if you installed it from the official GitHub page.</p>
+            <h2 data-i18n="login.heading">Sign in with Path of Exile</h2>
+            <p class="modal-subtitle compact" data-i18n="login.poeRequired">Juice Journal needs a linked Path of Exile account.</p>
             <div class="form-actions">
-              <button type="button" class="btn btn-poe-oauth" id="poe-oauth-login">
-                <svg class="icon poe-oauth-icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#poe-hex"/></svg>
-                <span>Continue with Path of Exile</span>
+              <button type="button" class="btn btn-primary btn-hero" id="poe-oauth-login">
+                <span class="btn-glyph btn-glyph-brand" aria-hidden="true">
+                  <img src="assets/brand/mark-small.svg" alt="" width="20" height="20" draggable="false">
+                </span>
+                <span class="btn-label" data-i18n="login.poeOAuth">Sign in with Path of Exile</span>
+                <svg class="icon btn-external" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#external"/></svg>
               </button>
+              <p class="oauth-helper" data-i18n="login.poeOAuthHelper">Opens pathofexile.com in your browser. Juice Journal asks only for character access and never sees your password.</p>
             </div>
+            <ol class="oauth-steps">
+              <li><span class="oauth-step-num">1</span><span data-i18n="login.step1">Your browser opens pathofexile.com</span></li>
+              <li><span class="oauth-step-num">2</span><span data-i18n="login.step2">Approve character access</span></li>
+              <li><span class="oauth-step-num">3</span><span data-i18n="login.step3">Come back here when the browser says Connected</span></li>
+            </ol>
+            <p class="oauth-note">
+              <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#info"/></svg>
+              <span data-i18n="login.poeClientNote">GGG cannot verify desktop apps like Juice Journal. Sign in only if you installed it from the official GitHub page.</span>
+            </p>
           </div>
         </div>
       </div>
