@@ -27,7 +27,7 @@ body {
   align-items: center;
   gap: 1rem;
   padding: 0 1.25rem;
-  height: 56px;
+  height: var(--header-height);
   background: linear-gradient(180deg, var(--plate), rgb(var(--obsidian-rgb) / 0.96));
   border-bottom: 1px solid var(--line-strong);
   box-shadow: 0 10px 28px rgb(var(--shadow-rgb) / 0.35);
@@ -143,6 +143,11 @@ body {
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--bg-base);
+}
+
+/* Modals start below the title bar, so while one is open the title bar offers only the window controls. */
+body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
+  visibility: hidden;
 }
 
 /* ==================== WINDOW CONTROLS ==================== */
@@ -318,7 +323,7 @@ body {
 /* ==================== MODALS ==================== */
 .modal {
   position: fixed;
-  inset: 0;
+  inset: var(--header-height) 0 0 0;
   background: rgb(var(--shadow-rgb) / 0.7);
   backdrop-filter: blur(8px);
   display: flex;
@@ -1863,7 +1868,7 @@ body {
 
 .session-drawer {
   position: fixed;
-  inset: 0;
+  inset: var(--header-height) 0 0 0;
   z-index: 80;
 }
 
