@@ -2229,7 +2229,8 @@ function setupIPCListeners() {
   // Loot olaylari
   window.electronAPI.onLootAdded((data) => {
     const itemCount = Array.isArray(data.items) ? data.items.length : 1;
-    showToast(window.t('toast.lootAddedTitle'), window.t('toast.lootAddedBody', { count: itemCount }));
+    const bodyKey = itemCount === 1 ? 'toast.lootAddedBodyOne' : 'toast.lootAddedBody';
+    showToast(window.t('toast.lootAddedTitle'), window.t(bodyKey, { count: itemCount }));
     refreshTrackerData({ includeSessions: isPageActive('sessions') });
   });
 
@@ -4045,10 +4046,6 @@ async function handleStartSession(options = {}) {
         scheduleAutomaticBeforeSnapshotForSession(session);
       }
       await refreshTrackerData({ includeSessions: true });
-      showToast(
-        window.t('dashboard.activeSession'),
-        `${session.mapName || mapName || window.t('misc.unknownMap')} ${window.t('toast.sessionStarted')} (${trackerContext.label})`
-      );
     }
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.sessionStart'), 'error');

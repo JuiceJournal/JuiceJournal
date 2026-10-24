@@ -700,12 +700,43 @@ test('starting a poe1 map session schedules baseline snapshot without blocking s
   await context.handleStartSession();
   baselineResolve(true);
 
+  // The session-started event from main already toasts the start, so a second toast here would double it.
   assert.deepEqual(calls, [
     ['startSession', 'Dunes Map'],
     'updateActiveSessionUI',
     ['scheduleBaseline', 'session-1'],
-    'refreshTrackerData',
-    'showToast'
+    'refreshTrackerData'
+  ]);
+});
+
+test('loot-added toasts use the singular copy for one item', () => {
+  const listeners = {};
+  const toasts = [];
+  const context = loadFunctions(['setupIPCListeners'], {
+    state: { currentSession: null },
+    window: {
+      t: (key, values = {}) => `${key}:${values.count ?? ''}`,
+      electronAPI: {
+        onMapEntered: (handler) => { listeners.mapEntered = handler; },
+        onMapExited: (handler) => { listeners.mapExited = handler; },
+        onSessionStarted: (handler) => { listeners.sessionStarted = handler; },
+        onSessionEnded: (handler) => { listeners.sessionEnded = handler; },
+        onLootAdded: (handler) => { listeners.lootAdded = handler; },
+        onNavigate: (handler) => { listeners.navigate = handler; }
+      }
+    },
+    showToast: (title, body) => toasts.push([title, body]),
+    refreshTrackerData: async () => {},
+    isPageActive: () => false
+  });
+
+  context.setupIPCListeners();
+  listeners.lootAdded({ items: [{ name: 'Chaos Orb' }] });
+  listeners.lootAdded({ items: [{ name: 'Chaos Orb' }, { name: 'Divine Orb' }, { name: 'Exalted Orb' }] });
+
+  assert.deepEqual(toasts, [
+    ['toast.lootAddedTitle:', 'toast.lootAddedBodyOne:1'],
+    ['toast.lootAddedTitle:', 'toast.lootAddedBody:3']
   ]);
 });
 
