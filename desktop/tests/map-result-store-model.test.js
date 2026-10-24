@@ -379,6 +379,46 @@ test('renderer creates a completed map result directly from an ended session', (
   assert.equal(result.characterName, 'JaylenBaliston');
 });
 
+test('renderer keeps the Divine and Mirror rates on a completed session result so the overlay can tier it', () => {
+  const context = loadFunctions([
+    'getSessionNumber',
+    'getSessionTimestampMs',
+    'getCompletedSessionDurationSeconds',
+    'getCompletedSessionFarmTypeLabel',
+    'normalizeProfitPoeVersion',
+    'getProfitCurrencyLeague',
+    'getProfitCurrencyRateKey',
+    'getProfitCurrencyRates',
+    'createCompletedSessionMapResult'
+  ], {
+    state: {
+      account: {},
+      settings: { poeVersion: 'poe2' },
+      farmType: {},
+      profitCurrencyRates: {
+        'poe2:Mirage': { divineChaos: 150, mirrorChaos: null, poeVersion: 'poe2', league: 'Mirage' }
+      }
+    },
+    getFarmTypeModel: () => ({ listFarmTypes: () => [{ id: 'ritual', label: 'Ritual' }] }),
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe2', league: 'Standard', farmTypeId: 'ritual' }),
+    normalizePoeVersion: (value) => value
+  });
+
+  const result = context.createCompletedSessionMapResult({
+    id: 'session-1',
+    farmTypeId: 'ritual',
+    startedAt: '2026-05-02T15:10:00.000Z',
+    endedAt: '2026-05-02T15:12:05.000Z',
+    totalLootChaos: '300',
+    profitChaos: '300',
+    poeVersion: 'poe2',
+    league: 'Mirage'
+  });
+
+  assert.equal(result.profitCurrencyRates?.divineChaos, 150);
+  assert.equal(require('../src/modules/profitTierModel').getProfitTier(result.netProfit, result.profitCurrencyRates), 'rare');
+});
+
 test('ending a PoE1 map session routes through stash diff completion instead of plain zero-complete', async () => {
   const persisted = [];
   const calls = [];
@@ -1027,4 +1067,57 @@ test('main profit currency rates come from the local poe.ninja cache for the tra
     mirrorChaos: null,
     sources: { divine: 'local-price-service', mirror: 'unavailable' }
   });
+});
+
+test('main cache-only profit currency rates never start a poe.ninja sync', async () => {
+  const syncs = [];
+  const prices = { 'Divine Orb': { chaosValue: 150 }, 'Mirror of Kalandra': { chaosValue: 90000 } };
+  const context = loadMainFunctions(['normalizePositiveRate', 'readLocalChaosPrice', 'getProfitCurrencyRates'], {
+    resolveLeagueContext: (options) => ({ activeVersion: options.poeVersion, league: options.league }),
+    priceService: {
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      async ensureSynced(league, poeVersion) {
+        syncs.push([league, poeVersion]);
+      },
+      getPriceInfo: (itemName) => prices[itemName] || null
+    }
+  });
+
+  const cached = await context.getProfitCurrencyRates({ poeVersion: 'poe1', league: 'Mirage', cacheOnly: true });
+  // The cache holds Mirage prices, which are not another league's rates.
+  const otherLeague = await context.getProfitCurrencyRates({ poeVersion: 'poe1', league: 'Standard', cacheOnly: true });
+
+  assert.deepEqual(syncs, []);
+  assert.deepEqual([cached.divineChaos, cached.mirrorChaos], [150, 90000]);
+  assert.deepEqual(JSON.parse(JSON.stringify(otherLeague)), {
+    poeVersion: 'poe1',
+    league: 'Standard',
+    divineChaos: null,
+    mirrorChaos: null,
+    sources: { divine: 'unavailable', mirror: 'unavailable' }
+  });
+});
+
+function getIpcHandlerSource(source, channel) {
+  const startIndex = source.indexOf(`ipcMain.handle('${channel}'`);
+  assert.notEqual(startIndex, -1, `Expected main.js to handle ${channel}`);
+  const endIndex = source.indexOf('ipcMain.handle(', startIndex + 1);
+  return source.slice(startIndex, endIndex === -1 ? undefined : endIndex);
+}
+
+test('desktop main announces synced prices to the main window', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+
+  assert.match(source, /mainWindow\.webContents\.send\('prices-updated'/);
+  assert.match(getIpcHandlerSource(source, 'sync-prices'), /notifyPricesUpdated\(poeVersion, league, status\)/);
+  assert.match(getIpcHandlerSource(source, 'sync-currency-prices'), /notifyPricesUpdated\(poeVersion, league, status\)/);
+});
+
+test('desktop preload exposes the prices-updated subscription', () => {
+  const source = fs.readFileSync(preloadJsPath, 'utf8');
+
+  assert.match(source, /onPricesUpdated:\s*\(callback\)\s*=>/);
+  assert.match(source, /ipcRenderer\.on\('prices-updated'/);
+  assert.match(source, /ALLOWED_CHANNELS = \[[^\]]*'prices-updated'[^\]]*\]/);
 });

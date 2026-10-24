@@ -563,6 +563,7 @@ function loadOcrScan(backend, session, priceService, overrides = {}) {
     'normalizePositiveRate',
     'readLocalChaosPrice',
     'withTimeout',
+    'notifyPricesUpdated',
     'loadSessionPrices',
     'addLootToCurrentSession',
     'captureAndScan'
@@ -684,6 +685,43 @@ test('main OCR scan does not add loot to a session that ended while it read the 
 
   assert.deepEqual(backend.journal.sessions[0].lootEntries, []);
   assert.deepEqual(notifications, [['notificationError', 'noActiveSession']]);
+});
+
+test('main tells the main window when the session prices have loaded', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({
+    poeVersion: 'poe2',
+    league: 'Fate of the Vaal',
+    startedAt: '2026-05-06T12:00:00.000Z'
+  }, 'session-prices-updated');
+  const sent = [];
+  const context = loadOcrScan(backend, session, createFakePriceService(), {
+    mainWindow: { webContents: { send: (channel, data) => sent.push([channel, data]) } }
+  });
+
+  await context.captureAndScan();
+  await context.captureAndScan();
+
+  // Once for the load, before the loot it priced; the second scan reuses the loaded prices.
+  assert.deepEqual(sent.map(([channel]) => channel), ['prices-updated', 'loot-added', 'loot-added']);
+  assert.deepEqual(JSON.parse(JSON.stringify(sent[0][1])), {
+    poeVersion: 'poe2',
+    league: 'Fate of the Vaal',
+    itemCount: 1
+  });
+});
+
+test('main does not announce a session price load that found no prices', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-no-prices');
+  const sent = [];
+  const context = loadOcrScan(backend, session, createFakePriceService({ prices: {} }), {
+    mainWindow: { webContents: { send: (channel) => sent.push(channel) } }
+  });
+
+  await context.captureAndScan();
+
+  assert.deepEqual(sent, ['loot-added']);
 });
 
 test('main shutdown finalizer closes a session without loot at zero when stash profit is unavailable', async () => {

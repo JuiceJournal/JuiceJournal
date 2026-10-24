@@ -815,9 +815,20 @@ function loadSessionPrices(session) {
       if (!result?.itemCount) {
         entry.retryAt = Date.now() + SESSION_PRICES_RETRY_MS;
       }
+      notifyPricesUpdated(session.poeVersion, session.league, result);
     });
   sessionPrices = entry;
   return entry.load;
+}
+
+// Tells the main window that the price list holds a league's prices, so its views can read the Divine and Mirror
+// rates from it without a sync of their own.
+function notifyPricesUpdated(poeVersion, league, status) {
+  if (!mainWindow?.webContents || !status?.itemCount) {
+    return;
+  }
+
+  mainWindow.webContents.send('prices-updated', { poeVersion, league, itemCount: status.itemCount });
 }
 
 // Loot without a value is priced from the local poe.ninja cache, as the server used to price it.
@@ -1503,12 +1514,16 @@ function readLocalChaosPrice(itemName, poeVersion) {
   return normalizePositiveRate(localPrice?.chaosValue);
 }
 
-// Divine and Mirror rates come from the local poe.ninja cache, synced for the league first if needed.
+// Divine and Mirror rates come from the local poe.ninja cache, synced for the league first if needed. `cacheOnly`
+// reads what the cache already holds for the league and never starts a sync.
 async function getProfitCurrencyRates(options = {}) {
   const { activeVersion: poeVersion, league } = resolveLeagueContext(options);
-  await priceService.ensureSynced(league, poeVersion).catch(() => {});
-  const divineChaos = readLocalChaosPrice('Divine Orb', poeVersion);
-  const mirrorChaos = readLocalChaosPrice('Mirror of Kalandra', poeVersion);
+  if (!options.cacheOnly) {
+    await priceService.ensureSynced(league, poeVersion).catch(() => {});
+  }
+  const cached = !options.cacheOnly || priceService.league === league;
+  const divineChaos = cached ? readLocalChaosPrice('Divine Orb', poeVersion) : null;
+  const mirrorChaos = cached ? readLocalChaosPrice('Mirror of Kalandra', poeVersion) : null;
 
   return {
     poeVersion,
@@ -3493,7 +3508,9 @@ function setupIPC() {
   ipcMain.handle('sync-currency-prices', async (event, options = {}) => {
     try {
       const { activeVersion: poeVersion, league } = resolveLeagueContext(options);
-      return await priceService.ensureSynced(league, poeVersion, { full: true, force: true });
+      const status = await priceService.ensureSynced(league, poeVersion, { full: true, force: true });
+      notifyPricesUpdated(poeVersion, league, status);
+      return status;
     } catch (error) {
       throw toRendererError(error, 'Price sync failed');
     }
@@ -3852,7 +3869,9 @@ function setupIPC() {
     try {
       assertDesktopUserAuthenticated();
       const { activeVersion: poeVersion, league } = resolveLeagueContext(options);
-      return await priceService.ensureSynced(league, poeVersion, { full: options.full !== false, force: true });
+      const status = await priceService.ensureSynced(league, poeVersion, { full: options.full !== false, force: true });
+      notifyPricesUpdated(poeVersion, league, status);
+      return status;
     } catch (error) {
       throw toRendererError(error, t('pricesSyncFailed'));
     }
