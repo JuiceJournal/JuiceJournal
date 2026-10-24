@@ -6198,7 +6198,8 @@ async function loadCurrencyLeagues() {
 async function loadCurrencyPrices() {
   const tbody = document.getElementById('currency-table-body');
   if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="7" class="currency-empty">${window.t('currency.loading')}</td></tr>`;
+  // Main answers at once when the league's prices are loaded, so this row stays only while a poe.ninja sync runs.
+  tbody.innerHTML = `<tr><td colspan="7" class="currency-empty">${window.t('currency.waitingForSync')}</td></tr>`;
 
   try {
     const params = { poeVersion: currencyState.poeVersion, limit: '500' };

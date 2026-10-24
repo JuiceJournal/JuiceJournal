@@ -666,6 +666,64 @@ test('main OCR scan reloads the session league after the Currency page synced an
   assert.deepEqual(priceService.syncCalls.map(([, league]) => league), ['Mirage', 'Mirage']);
 });
 
+// A price service holding Mirage prices while a sync it queued earlier (a session's full sync) is still running.
+function loadCurrencyPricesWithRunningSync() {
+  const pending = [];
+  const priceService = {
+    poeVersion: 'poe1',
+    league: 'Mirage',
+    syncCalls: [],
+    ensureSynced(league, poeVersion) {
+      this.syncCalls.push([poeVersion, league]);
+      return new Promise((resolve) => pending.push(() => {
+        this.league = league;
+        resolve(this.getStatus());
+      }));
+    },
+    getStatus() {
+      return { itemCount: 1, lastSync: Date.parse('2026-10-24T10:00:00.000Z') };
+    },
+    listPrices(params) {
+      return [{ itemName: 'Divine Orb', league: this.league, type: params.type }];
+    }
+  };
+  const context = loadFunctions(['getCurrencyPrices'], {
+    priceService,
+    resolveLeagueContext: (options) => ({ activeVersion: options.poeVersion, league: options.league })
+  });
+  return { context, priceService, finishSync: () => pending.forEach((finish) => finish()) };
+}
+
+test('main lists the loaded league prices for the Currency page without waiting for a running sync', async () => {
+  const { context, priceService } = loadCurrencyPricesWithRunningSync();
+
+  const result = await Promise.race([
+    context.getCurrencyPrices({ poeVersion: 'poe1', league: 'Mirage', type: 'currency' }),
+    new Promise((resolve) => setTimeout(() => resolve('waited for the sync'), 50))
+  ]);
+
+  assert.deepEqual(priceService.syncCalls, []);
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+    prices: [{ itemName: 'Divine Orb', league: 'Mirage', type: 'currency' }],
+    count: 1,
+    league: 'Mirage',
+    poeVersion: 'poe1',
+    updatedAt: '2026-10-24T10:00:00.000Z'
+  });
+});
+
+test('main Currency page waits for the price sync when another league is asked for', async () => {
+  const { context, priceService, finishSync } = loadCurrencyPricesWithRunningSync();
+
+  const request = context.getCurrencyPrices({ poeVersion: 'poe1', league: 'Standard' });
+  assert.deepEqual(priceService.syncCalls, [['poe1', 'Standard']]);
+  finishSync();
+  const result = await request;
+
+  assert.equal(result.league, 'Standard');
+  assert.equal(result.prices[0].league, 'Standard');
+});
+
 test('main OCR scan does not add loot to a session that ended while it read the screen', async () => {
   const backend = createJournalBackend();
   const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-ended-mid-scan');

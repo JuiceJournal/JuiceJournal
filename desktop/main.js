@@ -1522,6 +1522,24 @@ async function getProfitCurrencyRates(options = {}) {
   };
 }
 
+// The Currency page lists the loaded game and league at once. It waits behind the price service's sync queue (a
+// session's full sync takes a while) only when the price list does not hold them yet.
+async function getCurrencyPrices(params = {}) {
+  const { activeVersion: poeVersion, league } = resolveLeagueContext(params);
+  const loaded = priceService.poeVersion === poeVersion
+    && priceService.league === league
+    && priceService.getStatus().itemCount > 0;
+  const status = loaded ? priceService.getStatus() : await priceService.ensureSynced(league, poeVersion);
+  const prices = priceService.listPrices(params);
+  return {
+    prices,
+    count: prices.length,
+    league,
+    poeVersion,
+    updatedAt: status.lastSync ? new Date(status.lastSync).toISOString() : null
+  };
+}
+
 async function closePoeAuthServer() {
   if (!poeAuthServer || !poeAuthServer.listening) {
     poeAuthServer = null;
@@ -3501,16 +3519,7 @@ function setupIPC() {
 
   ipcMain.handle('get-currency-prices', async (event, params = {}) => {
     try {
-      const { activeVersion: poeVersion, league } = resolveLeagueContext(params);
-      const status = await priceService.ensureSynced(league, poeVersion);
-      const prices = priceService.listPrices(params);
-      return {
-        prices,
-        count: prices.length,
-        league,
-        poeVersion,
-        updatedAt: status.lastSync ? new Date(status.lastSync).toISOString() : null
-      };
+      return await getCurrencyPrices(params);
     } catch (error) {
       throw toRendererError(error, 'Failed to load prices');
     }

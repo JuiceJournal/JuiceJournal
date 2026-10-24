@@ -336,7 +336,7 @@ window.Translations = {
     'currency.type': 'Tip',
     'currency.trend': 'Trend',
     'currency.noData': 'Fiyat verisi yok. Senkronize butonuna basin.',
-    'currency.loading': 'Fiyatlar yukleniyor...',
+    'currency.waitingForSync': 'Fiyatlar poe.ninja uzerinden senkronize ediliyor...',
     'currency.loadError': 'Fiyatlar yuklenirken hata olustu',
 
     // Currency category filters
@@ -1078,7 +1078,7 @@ window.Translations = {
     'currency.type': 'Type',
     'currency.trend': 'Trend',
     'currency.noData': 'No price data. Click Sync to fetch.',
-    'currency.loading': 'Loading prices...',
+    'currency.waitingForSync': 'Syncing prices from poe.ninja...',
     'currency.loadError': 'Failed to load prices',
 
     // Currency category filters
