@@ -69,12 +69,17 @@ test('ipc handlers validate sender windows before running privileged channels', 
   assert.match(mainJs, /'toggle-map-result-overlay-pin': \['main', 'overlay'\]/);
 });
 
-test('auth browser fallback avoids shell command composition', () => {
+test('auth browser fallback keeps the URL out of the PowerShell command text', () => {
   const body = getFunctionBody(mainJs, 'openUrlWithWindowsFallback');
+  const argList = body.match(/'powershell',\s*\[([\s\S]*?)\],/);
 
   assert.match(body, /execFile\(\s*[\r\n\s]*'powershell'/);
-  assert.match(body, /Start-Process -FilePath \$args\[0\]/);
+  assert.ok(argList, 'PowerShell should get an argument array');
+  assert.doesNotMatch(argList[1], /authUrl/);
+  assert.match(argList[1], /'Start-Process -FilePath \$env:JJ_OPEN_URL'/);
+  assert.match(body, /JJ_OPEN_URL:\s*authUrl/);
   assert.match(body, /windowsHide:\s*true/);
+  assert.doesNotMatch(body, /shell:\s*true/);
   assert.doesNotMatch(body, /cmd['"][\s\S]*\/c[\s\S]*start/i);
 });
 

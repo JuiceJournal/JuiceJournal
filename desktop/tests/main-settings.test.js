@@ -498,6 +498,7 @@ test('openAuthUrlInBrowser uses shell.openExternal when it succeeds', async () =
 
 test('openAuthUrlInBrowser falls back to a hidden PowerShell Start-Process on Windows when shell.openExternal fails', async () => {
   const calls = [];
+  const authUrl = 'https://www.pathofexile.com/oauth/authorize?client_id=juicejournal&state=a;b';
   const context = loadFunctions(['isAllowedExternalAuthUrl', 'openUrlWithWindowsFallback', 'openAuthUrlInBrowser'], {
     shell: {
       openExternal: async (url) => {
@@ -506,20 +507,22 @@ test('openAuthUrlInBrowser falls back to a hidden PowerShell Start-Process on Wi
       }
     },
     process: {
-      platform: 'win32'
+      platform: 'win32',
+      env: { SystemRoot: 'C:\\Windows' }
     },
     URL,
     execFile(command, args, options, callback) {
-      calls.push(['execFile', command, args]);
-      assert.equal(options.windowsHide, true);
+      calls.push(['execFile', command, args, options]);
       callback(null);
     }
   });
 
-  await context.openAuthUrlInBrowser('https://www.pathofexile.com/oauth/authorize');
+  await context.openAuthUrlInBrowser(authUrl);
 
+  // PowerShell joins every argument after -Command into its script text, so
+  // the URL travels in the environment and never reaches the parser.
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
-    ['openExternal', 'https://www.pathofexile.com/oauth/authorize'],
+    ['openExternal', authUrl],
     [
       'execFile',
       'powershell',
@@ -529,11 +532,38 @@ test('openAuthUrlInBrowser falls back to a hidden PowerShell Start-Process on Wi
         '-ExecutionPolicy',
         'Bypass',
         '-Command',
-        'Start-Process -FilePath $args[0]',
-        'https://www.pathofexile.com/oauth/authorize'
-      ]
+        'Start-Process -FilePath $env:JJ_OPEN_URL'
+      ],
+      {
+        windowsHide: true,
+        env: { SystemRoot: 'C:\\Windows', JJ_OPEN_URL: authUrl }
+      }
     ]
   ]);
+});
+
+test('openAuthUrlInBrowser rejects with the openExternal error when the Windows fallback also fails', async () => {
+  const openExternalError = new Error('openExternal failed');
+  const context = loadFunctions(['isAllowedExternalAuthUrl', 'openUrlWithWindowsFallback', 'openAuthUrlInBrowser'], {
+    shell: {
+      openExternal: async () => {
+        throw openExternalError;
+      }
+    },
+    process: {
+      platform: 'win32',
+      env: {}
+    },
+    URL,
+    execFile(command, args, options, callback) {
+      callback(new Error('powershell failed'));
+    }
+  });
+
+  await assert.rejects(
+    context.openAuthUrlInBrowser('https://www.pathofexile.com/oauth/authorize'),
+    (error) => error === openExternalError
+  );
 });
 
 test('openAuthUrlInBrowser rejects unsafe external URLs before invoking the shell', async () => {

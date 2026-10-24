@@ -1711,6 +1711,8 @@ function isAllowedExternalAuthUrl(authUrl) {
 
 function openUrlWithWindowsFallback(authUrl, originalError) {
   return new Promise((resolve, reject) => {
+    // -Command joins every later argument into the script text, so the URL
+    // goes through the environment and PowerShell only ever reads it as a string.
     execFile(
       'powershell',
       [
@@ -1719,11 +1721,11 @@ function openUrlWithWindowsFallback(authUrl, originalError) {
         '-ExecutionPolicy',
         'Bypass',
         '-Command',
-        'Start-Process -FilePath $args[0]',
-        authUrl
+        'Start-Process -FilePath $env:JJ_OPEN_URL'
       ],
       {
-        windowsHide: true
+        windowsHide: true,
+        env: { ...process.env, JJ_OPEN_URL: authUrl }
       },
       (fallbackError) => {
         if (fallbackError) {
