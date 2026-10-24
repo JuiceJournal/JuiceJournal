@@ -970,8 +970,9 @@ function createMemoryStore(initial = {}) {
   };
 }
 
-function loadSignIn({ store, accounts, fsOverrides = {}, legacy = false }) {
+function loadSignIn({ store, accounts, fsOverrides = {}, legacy = false, readJournal = () => ({ sessions: [] }) }) {
   const calls = [];
+  const warnings = [];
   let nextId = 0;
   const context = loadFunctions([
     'getCurrentUserId',
@@ -980,9 +981,14 @@ function loadSignIn({ store, accounts, fsOverrides = {}, legacy = false }) {
     'migrateLegacyUserData',
     'assertDesktopUserAuthenticated',
     'dropPoeDeviceConnection',
+    'loadActiveSession',
     'signInWithPoe',
     'reconnectPoeDevice'
   ], {
+    console: {
+      log() {},
+      warn: (...args) => warnings.push(args)
+    },
     store,
     path,
     crypto: { randomUUID: () => `profile-${++nextId}` },
@@ -997,14 +1003,16 @@ function loadSignIn({ store, accounts, fsOverrides = {}, legacy = false }) {
       clearTokens: () => calls.push('clearTokens')
     },
     persistPoeClientTokens: (tokens) => calls.push(['persistPoeClientTokens', tokens]),
-    loadActiveSession: () => calls.push('loadActiveSession'),
+    localJournal,
+    readJournal,
+    currentSession: null,
     appendAuditTrail: (key) => calls.push(key),
     t: (key) => key
   });
   if (legacy) {
     store.set('currentUserId', 'backend-user-1');
   }
-  return { context, calls };
+  return { context, calls, warnings };
 }
 
 test('signing in again with the same GGG account opens the same local profile', async () => {
@@ -1045,6 +1053,27 @@ test('a sign-in without a GGG account id drops the device token and opens no pro
   assert.equal(context.getActiveProfile(), null);
   assert.deepEqual(store.data.localProfiles, {});
   assert.deepEqual(calls, ['clearTokens', ['persistPoeClientTokens', null]]);
+});
+
+test('a sign-in with an unreadable journal still opens the profile, without a session', async () => {
+  const store = createMemoryStore({ localProfiles: {}, activeProfileId: null });
+  const { context, calls, warnings } = loadSignIn({
+    store,
+    accounts: [{ sub: 'ggg-account-1', username: 'Exile#1234' }],
+    // conf throws on every read of a journal.json that holds invalid JSON.
+    readJournal() {
+      throw new SyntaxError('Unexpected end of JSON input');
+    }
+  });
+
+  const profile = await context.signInWithPoe();
+
+  assert.equal(profile.id, 'profile-1');
+  assert.equal(context.getActiveProfile().id, 'profile-1');
+  assert.equal(context.currentSession, null);
+  assert.deepEqual(calls, ['auditLogin']);
+  assert.equal(warnings.length, 1);
+  assert.ok(warnings[0].some((value) => value instanceof SyntaxError));
 });
 
 test('reconnecting with another GGG account drops the token and keeps the profile', async () => {
