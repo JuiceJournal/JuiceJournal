@@ -119,6 +119,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onProfitCalculated: (callback) => {
     ipcRenderer.on('profit-calculated', (event, data) => callback(data));
   },
+  onPricesUpdated: (callback) => {
+    ipcRenderer.on('prices-updated', (event, data) => callback(data));
+  },
   onGameVersionChanged: (callback) => {
     ipcRenderer.on('game-version-changed', (event, data) => callback(data));
   },
@@ -152,7 +155,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'map-entered', 'map-exited', 'session-started', 'session-ended',
       'loot-added',
       'audit-trail-updated', 'navigate', 'stash-snapshot-taken',
-      'profit-calculated', 'game-version-changed', 'game-closed',
+      'profit-calculated', 'prices-updated', 'game-version-changed', 'game-closed',
       'game-session-entered', 'game-session-left', 'character-log-line',
       'app-update-state-changed',
       'start-map-prompt-overlay-result', 'character-prompt-overlay-result'

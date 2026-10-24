@@ -1872,7 +1872,8 @@ function setProfitCurrencyRates(poeVersion, rates = {}, league = null) {
   return payload;
 }
 
-async function refreshProfitCurrencyRates(poeVersion = state.settings.poeVersion || 'poe1', league = null) {
+// `cacheOnly` reads the rates main already holds and never starts a poe.ninja sync.
+async function refreshProfitCurrencyRates(poeVersion = state.settings.poeVersion || 'poe1', league = null, { cacheOnly = false } = {}) {
   const normalizedVersion = normalizeProfitPoeVersion(poeVersion);
   const resolvedLeague = league || getProfitCurrencyLeague();
 
@@ -1883,7 +1884,8 @@ async function refreshProfitCurrencyRates(poeVersion = state.settings.poeVersion
   try {
     const rates = await window.electronAPI.getProfitCurrencyRates({
       poeVersion: normalizedVersion,
-      league: resolvedLeague
+      league: resolvedLeague,
+      cacheOnly
     });
     return setProfitCurrencyRates(normalizedVersion, rates || {}, resolvedLeague);
   } catch {
@@ -2251,6 +2253,10 @@ function setupIPCListeners() {
     window.electronAPI.onProfitCalculated((report) => {
       renderProfitReport(report);
     });
+  }
+
+  if (window.electronAPI.onPricesUpdated) {
+    window.electronAPI.onPricesUpdated(handlePricesUpdated);
   }
 
   if (window.electronAPI.onAppUpdateStateChanged) {
@@ -3199,6 +3205,7 @@ function createCompletedSessionMapResult(session = {}) {
     || session.ended_at
     || session.completedAt
     || new Date().toISOString();
+  const league = session.league || trackerContext.league || characterSummary.league || null;
 
   return {
     // The end time keeps ids unique per run, as stash-diff results are; main's shutdown result uses the same id.
@@ -3208,7 +3215,7 @@ function createCompletedSessionMapResult(session = {}) {
     characterName: characterSummary.name || null,
     accountName: state.account?.accountName || null,
     poeVersion,
-    league: session.league || trackerContext.league || characterSummary.league || null,
+    league,
     mapName: session.mapName || session.map_name || 'Unknown Map',
     farmType: getCompletedSessionFarmTypeLabel(session),
     durationSeconds,
@@ -3218,6 +3225,10 @@ function createCompletedSessionMapResult(session = {}) {
     profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral',
     topInputs: [],
     topOutputs: [],
+    // The run's Divine and Mirror rates, as stash-diff results keep them: the overlay tiers the run by them.
+    profitCurrencyRates: typeof getProfitCurrencyRates === 'function'
+      ? getProfitCurrencyRates(poeVersion, league)
+      : null,
     createdAt
   };
 }
@@ -5749,6 +5760,19 @@ async function loadPriceStatus() {
     }
   } catch {
     // Ignore
+  }
+}
+
+// Main loaded a league's poe.ninja prices (for a session, a stash run or the Currency page). Views drawn before
+// that had no Divine price, so they showed no profit tiers; they get the cached rates and are drawn again.
+async function handlePricesUpdated({ poeVersion, league } = {}) {
+  await refreshProfitCurrencyRates(poeVersion || state.settings.poeVersion || 'poe1', league, { cacheOnly: true });
+  renderLatestMapResult();
+  renderMapResultHistory();
+  renderSessionsList();
+  updateActiveSessionUI();
+  if (state.currentUser) {
+    await loadDashboardStats();
   }
 }
 

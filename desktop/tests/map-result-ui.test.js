@@ -1481,6 +1481,63 @@ test('session-ended events leave sessions completed by a stash diff to that resu
   assert.deepEqual(overlayResults, []);
 });
 
+test('prices-updated events give the dashboard views the Divine and Mirror rates main just loaded', async () => {
+  const listeners = {};
+  const rateRequests = [];
+  const renders = [];
+  const context = loadFunctions([
+    'normalizeProfitPoeVersion',
+    'getProfitCurrencyModel',
+    'getProfitCurrencyLeague',
+    'getProfitCurrencyRateKey',
+    'getProfitCurrencyRates',
+    'setProfitCurrencyRates',
+    'refreshProfitCurrencyRates',
+    'getProfitTierFor',
+    'handlePricesUpdated',
+    'setupIPCListeners'
+  ], {
+    state: {
+      settings: { poeVersion: 'poe1' },
+      profitCurrencyRates: {},
+      currentUser: { id: 'user-1' }
+    },
+    window: {
+      t: (key) => key,
+      profitTierModel: require('../src/modules/profitTierModel'),
+      electronAPI: {
+        onMapEntered: (handler) => { listeners.mapEntered = handler; },
+        onMapExited: (handler) => { listeners.mapExited = handler; },
+        onSessionStarted: (handler) => { listeners.sessionStarted = handler; },
+        onSessionEnded: (handler) => { listeners.sessionEnded = handler; },
+        onLootAdded: (handler) => { listeners.lootAdded = handler; },
+        onNavigate: (handler) => { listeners.navigate = handler; },
+        onPricesUpdated: (handler) => { listeners.pricesUpdated = handler; },
+        async getProfitCurrencyRates(options) {
+          rateRequests.push({ ...options });
+          return { divineChaos: 150, mirrorChaos: 90000, league: options.league };
+        }
+      }
+    },
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe1', league: 'Standard' }),
+    renderLatestMapResult: () => renders.push('latestMapResult'),
+    renderMapResultHistory: () => renders.push('mapResultHistory'),
+    renderSessionsList: () => renders.push('sessionsList'),
+    updateActiveSessionUI: () => renders.push('activeSession'),
+    loadDashboardStats: async () => renders.push('dashboardStats')
+  });
+
+  context.setupIPCListeners();
+  assert.equal(context.getProfitTierFor(200, 'poe1', { league: 'Mirage' }), 'normal');
+
+  await listeners.pricesUpdated({ poeVersion: 'poe1', league: 'Mirage', itemCount: 900 });
+
+  // The rates come from the cache main just filled, so this refresh never asks poe.ninja itself.
+  assert.deepEqual(rateRequests, [{ poeVersion: 'poe1', league: 'Mirage', cacheOnly: true }]);
+  assert.equal(context.getProfitTierFor(200, 'poe1', { league: 'Mirage' }), 'rare');
+  assert.deepEqual(renders, ['latestMapResult', 'mapResultHistory', 'sessionsList', 'activeSession', 'dashboardStats']);
+});
+
 test('poe2 result smoke persists zero-profit map result and projects it into Last Map Result', async () => {
   const listeners = {};
   const savedResults = [];
