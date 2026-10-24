@@ -2424,3 +2424,85 @@ test('renderer publish handler calls desktop bridge and refreshes local history'
     { title: 'Farming Hub', message: 'Farm result published.', type: 'success' }
   ]);
 });
+
+test('sessions list counts loot from list rows and shows live duration for the active session', () => {
+  const elements = { sessionsList: { innerHTML: '' } };
+  const sessions = [
+    {
+      id: 'active-1',
+      mapName: 'Crimson Temple',
+      status: 'active',
+      poeVersion: 'poe1',
+      league: 'Mirage',
+      startedAt: '2026-10-21T11:56:00.000Z',
+      durationSec: null,
+      profitChaos: 0,
+      lootCount: 152
+    },
+    { id: 'done-1', mapName: 'Mesa', status: 'completed', poeVersion: 'poe1', durationSec: 330, lootCount: 1 },
+    { id: 'detail-1', mapName: 'Dunes', status: 'completed', poeVersion: 'poe1', durationSec: 60, lootEntries: [{ quantity: 3 }, { quantity: 2 }] }
+  ];
+  const context = loadFunctions(['renderSessionsList'], {
+    elements,
+    state: { currentUser: { id: 'user-1' }, sessions },
+    window: { t: (key) => key },
+    closeSessionDrawer() {},
+    getFilteredSessions: () => sessions,
+    getSessionPoeVersion: (session) => session.poeVersion,
+    getSessionFarmTypeId: () => 'breach',
+    getSessionFarmTypeLabel: () => 'Breach',
+    escapeHTML: (value) => String(value),
+    timeAgo: () => 'just now',
+    currencyHTML: (value) => `${value}c`,
+    formatDuration: (seconds) => `duration:${seconds}`,
+    getLiveDuration: () => 240
+  });
+
+  context.renderSessionsList();
+
+  const rows = elements.sessionsList.innerHTML.split('class="session-item"').slice(1);
+  const values = rows.map((row) => [...row.matchAll(/session-secondary-value">([^<]*)</g)].map((match) => match[1]));
+  assert.deepEqual(values, [['duration:240', '152'], ['duration:330', '1'], ['duration:60', '5']]);
+});
+
+test('session drawer shows live duration while the session is active and the stored one after', () => {
+  const elements = {
+    sessionDrawerTitle: { textContent: '' },
+    sessionDrawerLootCount: { textContent: '' },
+    sessionDrawerSummary: { innerHTML: '' },
+    sessionDrawerAnalytics: { innerHTML: '' },
+    sessionDrawerLoot: { innerHTML: '' }
+  };
+  const state = {
+    settings: { poeVersion: 'poe1' },
+    selectedSession: {
+      id: 'active-1',
+      mapName: 'Crimson Temple',
+      status: 'active',
+      poeVersion: 'poe1',
+      startedAt: '2026-10-21T11:56:00.000Z',
+      endedAt: null,
+      durationSec: null,
+      lootEntries: []
+    }
+  };
+  const context = loadFunctions(['renderSessionDrawer'], {
+    elements,
+    state,
+    window: { t: (key) => key },
+    buildSessionAnalytics: () => [],
+    escapeHTML: (value) => String(value),
+    currencyHTML: (value) => `${value}c`,
+    formatDuration: (seconds) => `duration:${seconds}`,
+    getLiveDuration: () => 240
+  });
+  const durationValue = () => elements.sessionDrawerSummary.innerHTML
+    .match(/sessions\.duration<\/span>\s*<span class="session-drawer-value">([^<]*)</)[1];
+
+  context.renderSessionDrawer();
+  assert.equal(durationValue(), 'duration:240');
+
+  state.selectedSession = { ...state.selectedSession, status: 'completed', endedAt: '2026-10-21T12:01:30.000Z', durationSec: 330 };
+  context.renderSessionDrawer();
+  assert.equal(durationValue(), 'duration:330');
+});

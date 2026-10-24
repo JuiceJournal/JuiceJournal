@@ -39,9 +39,10 @@
     return { sessions: Array.isArray(journal?.sessions) ? journal.sessions : [] };
   }
 
+  // List rows drop the loot entries but keep the item count the Sessions list shows.
   function withoutLoot(session) {
     const { lootEntries, ...summary } = session;
-    return summary;
+    return { ...summary, lootCount: (lootEntries || []).reduce((sum, loot) => sum + toNumber(loot.quantity), 0) };
   }
 
   function sumLootChaos(lootEntries) {

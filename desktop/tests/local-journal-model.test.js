@@ -155,6 +155,10 @@ test('listSessions filters, sorts newest first, pages and leaves loot out', () =
   for (const [id, poeVersion, league, startedAt] of sessions) {
     journal = endSession(startedJournal({ poeVersion, league, startedAt }, journal, id).journal, id, {}, { now: NOW }).journal;
   }
+  journal = addLoot(journal, 's-3', [
+    { itemName: 'Divine Orb', quantity: 12, chaosValue: 150 },
+    { itemName: 'Chaos Orb', quantity: 140, chaosValue: 1 }
+  ], { createId: idFactory('loot'), now: NOW }).journal;
 
   const result = listSessions(journal, { poeVersion: 'poe1', league: 'Mirage', limit: 1, offset: 0 });
 
@@ -162,6 +166,8 @@ test('listSessions filters, sorts newest first, pages and leaves loot out', () =
   assert.equal(result.limit, 1);
   assert.deepEqual(result.sessions.map((session) => session.id), ['s-3']);
   assert.equal('lootEntries' in result.sessions[0], false);
+  assert.equal(result.sessions[0].lootCount, 152);
+  assert.deepEqual(listSessions(journal, { poeVersion: 'poe1' }).sessions.map((session) => session.lootCount), [152, 0]);
   assert.deepEqual(listSessions(journal, { status: 'active' }).sessions, []);
 });
 
