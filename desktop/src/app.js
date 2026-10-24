@@ -4527,12 +4527,16 @@ function renderSessionsList() {
   const memeFor = typeof profitMemeHTML === 'function' ? profitMemeHTML : () => '';
   elements.sessionsList.innerHTML = filteredSessions.map((session) => {
     const profit = parseFloat(session.profitChaos || 0);
-    const lootCount = Array.isArray(session.lootEntries)
-      ? session.lootEntries.reduce((sum, loot) => sum + parseInt(loot.quantity || 0, 10), 0)
-      : 0;
+    const lootCount = Number.isFinite(session.lootCount)
+      ? session.lootCount
+      : (Array.isArray(session.lootEntries)
+        ? session.lootEntries.reduce((sum, loot) => sum + parseInt(loot.quantity || 0, 10), 0)
+        : 0);
     const poeVersion = getSessionPoeVersion(session);
     const contextLabel = `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(session.league || 'Standard')} / <span${typeof farmTypeAttr === 'function' ? farmTypeAttr(getSessionFarmTypeId(session)) : ''}>${escapeHTML(getSessionFarmTypeLabel(session))}</span>`;
-    const duration = session.durationSec ? formatDuration(session.durationSec) : '-';
+    const duration = session.status === 'active'
+      ? formatDuration(getLiveDuration(session))
+      : (session.durationSec ? formatDuration(session.durationSec) : '-');
     const tier = session.mapTier ? `T${session.mapTier}` : '-';
     const startedAt = session.startedAt ? timeAgo(session.startedAt) : '-';
     const safeStatus = ['active', 'completed', 'abandoned'].includes(session.status) ? session.status : 'unknown';
@@ -5782,6 +5786,10 @@ function renderSessionDrawer() {
     ? getProfitTierFor(profit, poeVersion)
     : (profit < 0 ? 'loss' : 'normal');
 
+  const duration = session.status === 'active'
+    ? formatDuration(getLiveDuration(session))
+    : (session.durationSec ? formatDuration(session.durationSec) : '-');
+
   elements.sessionDrawerTitle.textContent = session.mapName || 'Session';
   elements.sessionDrawerLootCount.textContent = String(lootEntries.length);
   elements.sessionDrawerSummary.innerHTML = `
@@ -5799,7 +5807,7 @@ function renderSessionDrawer() {
     </div>
     <div class="session-drawer-metric">
       <span class="session-drawer-label">${window.t('sessions.duration')}</span>
-      <span class="session-drawer-value">${session.durationSec ? formatDuration(session.durationSec) : '-'}</span>
+      <span class="session-drawer-value">${duration}</span>
     </div>
     <div class="session-drawer-metric">
       <span class="session-drawer-label">${window.t('sessions.cost')}</span>
