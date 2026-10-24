@@ -44,6 +44,15 @@ window.Translations = {
     'login.or': 'veya',
     'login.createAccount': 'Yeni Hesap Olustur',
     'login.poeOAuth': 'Path of Exile ile Juice Journey Baslat',
+    'login.kicker': 'Yerel map gunlugu',
+    'login.headline': 'Her map zamanlanir ve fiyatlanir.',
+    'login.lede': "Juice Journal map'lerini oyunun logundan takip eder, taradigin loot'u fiyatlar ve gunlugu bilgisayarinda tutar.",
+    'login.featureMapsTitle': "Client.txt'den map session'lari",
+    'login.featureMapsBody': "Her map'i kendiliginden baslatir, sureyi tutar ve bitirir.",
+    'login.featureScanTitle': "Loot tarama, fiyatlar poe.ninja'dan",
+    'login.featureScanBody': 'Deneysel. F9 loot isimlerini ekran goruntusunden okur.',
+    'login.featureLocalTitle': 'Verilerin bu bilgisayarda kalir',
+    'login.featureLocalBody': 'Hesap yok, telemetri yok. Online ozellikler sen acana kadar kapali kalir.',
 
     // Register
     'register.title': 'Hesap Olustur',
@@ -785,6 +794,15 @@ window.Translations = {
     'login.or': 'or',
     'login.createAccount': 'Create New Account',
     'login.poeOAuth': 'Start Your Juice Journey with Path of Exile',
+    'login.kicker': 'Local-first map journal',
+    'login.headline': 'Every map, timed and priced.',
+    'login.lede': "Juice Journal follows your maps from the game's log, prices the loot you scan and keeps the journal on your PC.",
+    'login.featureMapsTitle': 'Map sessions from Client.txt',
+    'login.featureMapsBody': 'Starts, times and ends each map on its own.',
+    'login.featureScanTitle': 'Loot scan, priced by poe.ninja',
+    'login.featureScanBody': 'Experimental. F9 reads loot names from a screenshot.',
+    'login.featureLocalTitle': 'Your data stays on this PC',
+    'login.featureLocalBody': 'No account, no telemetry. Online features are off until you turn them on.',
 
     // Register
     'register.title': 'Create Account',
