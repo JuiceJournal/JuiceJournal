@@ -189,6 +189,16 @@ test('character portrait slot keeps PoE1 class art centered in a square circular
   assert.match(css, /\.character-portrait-shell img\s*\{[^}]*object-position:\s*center top;/s);
 });
 
+test('character banner and portrait art are never recoloured', () => {
+  const css = fs.readFileSync(stylesPath, 'utf8');
+
+  for (const selector of [/\.character-banner > img\s*\{[^}]*\}/, /\.character-portrait-shell img\s*\{[^}]*\}/]) {
+    const [rule] = css.match(selector) || [''];
+    assert.ok(rule, String(selector));
+    assert.doesNotMatch(rule, /filter:/, rule);
+  }
+});
+
 test('renderer fills hero banner artwork and meta fields from normalized account state', () => {
   const elements = {
     characterSummaryCard: { dataset: {} },
@@ -440,4 +450,22 @@ test('renderer keeps hero text current when character art is unavailable', () =>
   assert.equal(elements.characterLeague.textContent, 'Standard');
   assert.equal(elements.characterClassMeta.textContent, 'Monk');
   assert.equal(elements.characterAccount.textContent, 'Esquetta#4179');
+});
+
+test('renderer level meta falls back to an em dash without a level element', () => {
+  const elements = {
+    characterSummaryCard: { dataset: {} },
+    characterLevelMeta: { textContent: '' }
+  };
+  const context = loadFunctions(['renderCharacterSummaryCard'], {
+    elements,
+    state: { account: null },
+    getCharacterVisualModel: () => ({
+      deriveCharacterVisual: () => ({ badgeText: '?', classLabel: 'Unknown Class' })
+    })
+  });
+
+  context.renderCharacterSummaryCard();
+
+  assert.equal(elements.characterLevelMeta.textContent, '—');
 });

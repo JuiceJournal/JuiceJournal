@@ -846,7 +846,6 @@ body {
   height: 100%;
   object-fit: cover;
   object-position: center 20%;
-  filter: saturate(1.04) contrast(1.02);
 }
 
 .character-banner-scrim {
@@ -977,7 +976,6 @@ body {
   height: 100%;
   object-fit: cover;
   object-position: center top;
-  filter: saturate(1.08) contrast(1.02);
 }
 
 .character-hero-copy {

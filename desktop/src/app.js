@@ -1316,7 +1316,7 @@ function renderCharacterSummaryCard() {
   if (elements.characterLevelMeta) {
     elements.characterLevelMeta.textContent = elements.characterLevel
       ? elements.characterLevel.textContent
-      : (isReady && summary.level ? String(summary.level) : 'â€”');
+      : (isReady && summary.level ? String(summary.level) : '—');
   }
   if (elements.characterLeague) {
     elements.characterLeague.textContent = isReady ? (summary.league || 'Unknown League') : '—';
