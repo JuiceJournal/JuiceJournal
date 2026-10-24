@@ -453,9 +453,6 @@ body {
   border-radius: var(--bevel-sm);
   background: var(--gold-glow);
   color: var(--gold-light);
-  font-size: 0.7rem;
-  font-family: var(--font-display);
-  font-weight: 700;
 }
 
 .modal-feature strong {
