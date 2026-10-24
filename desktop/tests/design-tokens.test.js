@@ -60,3 +60,20 @@ test('renderer markup and scripts use color tokens instead of literals', () => {
     assert.deepEqual(source.match(COLOR_LITERAL) || [], [], fileName);
   }
 });
+
+test('disabled buttons share one dimmed state and lose their hover', () => {
+  const stylesCss = stripComments(fs.readFileSync(path.join(srcDir, 'styles.css'), 'utf8'));
+  const disabledRule = stylesCss.match(/\.btn:disabled,\s*\.btn\[aria-disabled="true"\]\s*\{([^}]*)\}/);
+
+  assert.ok(disabledRule, 'expected one .btn:disabled, .btn[aria-disabled="true"] rule');
+  assert.match(disabledRule[1], /cursor:\s*not-allowed;/);
+  assert.match(disabledRule[1], /opacity:\s*0?\.42;/);
+  assert.match(disabledRule[1], /filter:\s*saturate\(0?\.25\);/);
+  assert.match(disabledRule[1], /box-shadow:\s*inset 0 0 0 1px var\(--line\);/);
+  assert.match(disabledRule[1], /transform:\s*none;/);
+  assert.deepEqual(stylesCss.match(/\.btn-[a-z-]+:disabled/g) || [], []);
+
+  for (const [selector] of stylesCss.matchAll(/\.btn-[a-z-]+:hover[^{,]*/g)) {
+    assert.match(selector, /:not\(:disabled\)/, selector.trim());
+  }
+});

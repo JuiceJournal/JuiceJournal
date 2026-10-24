@@ -642,6 +642,7 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
     globalLanguage: { value: 'en' },
     scanHotkey,
     scanHotkeyDisplay: { textContent: '' },
+    scanHotkeyBadge: { textContent: '' },
     stashScanHotkey,
     stashScanHotkeyDisplay: { textContent: '' },
     defaultLeague: { value: 'Standard' },
@@ -708,6 +709,7 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
   assert.equal(scanHotkey.value, 'F9');
   assert.equal(stashScanHotkey.value, 'Ctrl+Shift+L');
   assert.equal(elements.stashScanHotkeyDisplay.textContent, 'Ctrl+Shift+L');
+  assert.equal(elements.scanHotkeyBadge.textContent, 'F9');
 
   context.setupHotkeyCaptureFields();
   const keydownEvent = {
@@ -727,10 +729,14 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
   assert.equal(keydownEvent.prevented, true);
   assert.equal(scanHotkey.value, 'Ctrl+Shift+K');
   assert.equal(elements.scanHotkeyDisplay.textContent, 'Ctrl+Shift+K');
+  // The dashboard badge shows the saved hotkey, not an unsaved capture.
+  assert.equal(elements.scanHotkeyBadge.textContent, 'F9');
   assert.equal(elements.onlineEnabled.checked, false);
   elements.onlineEnabled.checked = true;
 
   await context.handleSaveSettings();
+
+  assert.equal(elements.scanHotkeyBadge.textContent, 'Ctrl+Shift+K');
 
   assert.equal(savedSettings.length, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(savedSettings[0])), {
@@ -747,4 +753,58 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
     scanHotkey: 'CommandOrControl+Shift+K',
     stashScanHotkey: 'CommandOrControl+Shift+L'
   });
+});
+
+test('renderer scan button swaps only its label while scanning, so the icon survives', async () => {
+  const buttonTextWrites = [];
+  const duringScan = [];
+  const scanScreenBtn = {
+    disabled: false,
+    set textContent(value) {
+      buttonTextWrites.push(value);
+    }
+  };
+  const scanScreenLabel = { textContent: 'dashboard.scanScreen' };
+  const toasts = [];
+  const context = loadFunctions(appJsPath, ['handleScanScreen'], {
+    state: { currentSession: { id: 'session-1' } },
+    elements: { scanScreenBtn, scanScreenLabel },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        async scanScreen() {
+          duringScan.push([scanScreenBtn.disabled, scanScreenLabel.textContent]);
+        }
+      }
+    },
+    showToast: (...args) => toasts.push(args),
+    getUserFacingErrorMessage: (error) => error.message
+  });
+
+  await context.handleScanScreen();
+
+  assert.deepEqual(buttonTextWrites, []);
+  assert.deepEqual(duringScan, [[true, 'dashboard.scanning']]);
+  assert.equal(scanScreenBtn.disabled, false);
+  assert.equal(scanScreenLabel.textContent, 'dashboard.scanScreen');
+  assert.deepEqual(toasts, [['dashboard.scanScreen', 'toast.scanComplete']]);
+});
+
+test('dashboard scan card has a hotkey badge, a label slot and no fallback wording', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.html'), 'utf8');
+  assert.match(html, /<span class="hotkey-badge" id="scan-hotkey-badge">/);
+  assert.match(
+    html,
+    /id="scan-screen-btn"[^>]*>\s*<svg[^>]*><use href="assets\/icons\.svg#scan"\/><\/svg>\s*<span id="scan-screen-label" data-i18n="dashboard\.scanScreen">/
+  );
+
+  const context = vm.createContext({ window: {}, document: { querySelectorAll: () => [] } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'translations.js'), 'utf8'), context);
+  const { en, tr } = context.window.Translations;
+  assert.equal(en['dashboard.scanScreen'], 'Scan Loot');
+  for (const dictionary of [en, tr]) {
+    for (const key of ['dashboard.quickLoot', 'dashboard.scanHint', 'dashboard.scanScreen']) {
+      assert.doesNotMatch(dictionary[key], /fallback/i, key);
+    }
+  }
 });

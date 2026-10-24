@@ -213,11 +213,21 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   letter-spacing: 0.1em;
 }
 
+/* One disabled look for every variant; variant hovers skip disabled buttons. */
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.42;
+  filter: saturate(0.25);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transform: none;
+}
+
 .btn-primary {
   background: linear-gradient(180deg, var(--ember-hot), var(--ember-deep));
   color: var(--on-accent);
 }
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   filter: brightness(1.08);
 }
 
@@ -226,13 +236,9 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   color: var(--gold-light);
   box-shadow: inset 0 0 0 1px var(--line-strong);
 }
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   background: var(--bg-card-hover);
   box-shadow: inset 0 0 0 1px var(--gold-dim);
-}
-.btn-secondary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .btn-poe-oauth {
@@ -240,15 +246,9 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   color: var(--gold-light);
   box-shadow: inset 0 0 0 1px rgb(var(--brass-rgb) / 0.45);
 }
-.btn-poe-oauth:hover {
+.btn-poe-oauth:hover:not(:disabled) {
   box-shadow: inset 0 0 0 1px rgb(var(--brass-rgb) / 0.7);
   color: var(--brass-light);
-}
-.btn-poe-oauth:disabled,
-.btn-poe-oauth.is-loading {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
 }
 .btn-poe-oauth .poe-oauth-icon {
   flex-shrink: 0;
@@ -260,7 +260,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   color: var(--red);
   box-shadow: inset 0 0 0 1px rgb(var(--loss-rgb) / 0.4);
 }
-.btn-danger:hover {
+.btn-danger:hover:not(:disabled) {
   background: rgb(var(--loss-rgb) / 0.2);
 }
 
@@ -269,7 +269,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   color: var(--text-secondary);
   padding: 0.4rem 0.6rem;
 }
-.btn-ghost:hover {
+.btn-ghost:hover:not(:disabled) {
   color: var(--text);
   background: rgb(var(--ink-rgb) / 0.04);
 }
@@ -285,7 +285,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   font-weight: 500;
   text-decoration: none;
 }
-.btn-link:hover { text-decoration: underline; }
+.btn-link:hover:not(:disabled) { text-decoration: underline; }
 
 .btn-glyph {
   width: 1.1rem;
@@ -315,7 +315,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   color: var(--text-secondary);
   font-size: 1rem;
 }
-.btn-icon:hover {
+.btn-icon:hover:not(:disabled) {
   box-shadow: inset 0 0 0 1px var(--gold-dim);
   color: var(--gold-light);
 }
@@ -851,7 +851,6 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   height: 100%;
   object-fit: cover;
   object-position: center 20%;
-  filter: saturate(1.04) contrast(1.02);
 }
 
 .character-banner-scrim {
@@ -982,7 +981,6 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   height: 100%;
   object-fit: cover;
   object-position: center top;
-  filter: saturate(1.08) contrast(1.02);
 }
 
 .character-hero-copy {
@@ -3056,6 +3054,10 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   padding: 0.5rem 0;
 }
 
+.stash-tracker-card[data-stash-capability="unavailable"] .stash-tracker-content {
+  display: none;
+}
+
 .stash-price-status {
   display: flex;
   align-items: center;
@@ -3303,7 +3305,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   transition: all 0.15s;
 }
 
-.btn-ghost:hover {
+.btn-ghost:hover:not(:disabled) {
   border-color: var(--gold-dim);
   color: var(--gold-light);
 }

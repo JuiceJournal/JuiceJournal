@@ -154,6 +154,8 @@ const elements = {
   startSessionBtn: document.getElementById('start-session-btn'),
   endSessionBtn: document.getElementById('end-session-btn'),
   scanScreenBtn: document.getElementById('scan-screen-btn'),
+  scanScreenLabel: document.getElementById('scan-screen-label'),
+  scanHotkeyBadge: document.getElementById('scan-hotkey-badge'),
   todaySessions: document.getElementById('today-sessions'),
   todayProfit: document.getElementById('today-profit'),
   todayAvg: document.getElementById('today-avg'),
@@ -1191,8 +1193,9 @@ function applyDashboardCapabilities(version = null) {
     }
   }
 
+  // The card body already explains why; the header badge only says the tracker is off.
   if (elements.stashTrackerStatus && stashUnavailable) {
-    elements.stashTrackerStatus.textContent = unavailableText;
+    elements.stashTrackerStatus.textContent = window.t('stash.off');
     elements.stashTrackerStatus.style.color = '';
   }
 
@@ -1313,7 +1316,7 @@ function renderCharacterSummaryCard() {
   if (elements.characterLevelMeta) {
     elements.characterLevelMeta.textContent = elements.characterLevel
       ? elements.characterLevel.textContent
-      : (isReady && summary.level ? String(summary.level) : 'â€”');
+      : (isReady && summary.level ? String(summary.level) : '—');
   }
   if (elements.characterLeague) {
     elements.characterLeague.textContent = isReady ? (summary.league || 'Unknown League') : '—';
@@ -1532,6 +1535,8 @@ function applySettingsDraftToDom(settingsDraft = {}) {
   if (elements.scanHotkey) elements.scanHotkey.value = completeSettingsDraft.scanHotkey;
   if (elements.stashScanHotkey) elements.stashScanHotkey.value = completeSettingsDraft.stashScanHotkey;
   syncHotkeyDisplays();
+  // The dashboard badge follows the applied scan hotkey, not captures that are not saved yet.
+  syncHotkeyFieldDisplay(elements.scanHotkey, elements.scanHotkeyBadge);
   if (elements.globalLanguage) elements.globalLanguage.value = completeSettingsDraft.language || 'en';
   if (elements.defaultLeague || elements.defaultLeagueSelect) {
     const leagueKey = getLeagueSettingKey(getSettingsLeagueVersion());
@@ -2231,7 +2236,8 @@ function setupIPCListeners() {
   // Loot olaylari
   window.electronAPI.onLootAdded((data) => {
     const itemCount = Array.isArray(data.items) ? data.items.length : 1;
-    showToast(window.t('toast.lootAddedTitle'), window.t('toast.lootAddedBody', { count: itemCount }));
+    const bodyKey = itemCount === 1 ? 'toast.lootAddedBodyOne' : 'toast.lootAddedBody';
+    showToast(window.t('toast.lootAddedTitle'), window.t(bodyKey, { count: itemCount }));
     refreshTrackerData({ includeSessions: isPageActive('sessions') });
   });
 
@@ -4056,10 +4062,6 @@ async function handleStartSession(options = {}) {
         scheduleAutomaticBeforeSnapshotForSession(session);
       }
       await refreshTrackerData({ includeSessions: true });
-      showToast(
-        window.t('dashboard.activeSession'),
-        `${session.mapName || mapName || window.t('misc.unknownMap')} ${window.t('toast.sessionStarted')} (${trackerContext.label})`
-      );
     }
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.sessionStart'), 'error');
@@ -4206,8 +4208,9 @@ async function handleScanScreen() {
     return;
   }
 
+  // Only the label changes; setting the button's textContent would drop its icon.
   elements.scanScreenBtn.disabled = true;
-  elements.scanScreenBtn.textContent = window.t('dashboard.scanning');
+  elements.scanScreenLabel.textContent = window.t('dashboard.scanning');
 
   try {
     await window.electronAPI.scanScreen();
@@ -4216,7 +4219,7 @@ async function handleScanScreen() {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.scanError'), 'error');
   } finally {
     elements.scanScreenBtn.disabled = false;
-    elements.scanScreenBtn.textContent = window.t('dashboard.scanScreen');
+    elements.scanScreenLabel.textContent = window.t('dashboard.scanScreen');
   }
 }
 
@@ -5705,7 +5708,7 @@ function handleResetSnapshots() {
 function updateStashTrackerStatus() {
   if (!elements.stashTrackerStatus) return;
   if (state.capabilities?.stashTracking?.enabled === false) {
-    elements.stashTrackerStatus.textContent = getCurrentStashUnavailableText();
+    elements.stashTrackerStatus.textContent = window.t('stash.off');
     elements.stashTrackerStatus.style.color = '';
     return;
   }

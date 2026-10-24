@@ -992,6 +992,9 @@ test('renderer disables stash dashboard controls when poe2 stash capability is u
         textContent: '',
         style: {}
       }
+    },
+    window: {
+      t: (key) => key
     }
   });
 
@@ -1001,8 +1004,47 @@ test('renderer disables stash dashboard controls when poe2 stash capability is u
   assert.equal(stashTrackerCard.dataset.stashCapability, 'unavailable');
   assert.equal(stashCapabilityUnavailable.hidden, false);
   assert.equal(stashCapabilityUnavailable.textContent, 'stash.capabilityUnavailable.poe2');
+  // The sentence is shown once in the card body; the header badge only says the tracker is off.
+  assert.equal(context.elements.stashTrackerStatus.textContent, 'stash.off');
   assert.deepEqual(buttons.map((button) => button.disabled), [true, true, true, true]);
   assert.equal(context.elements.resetSnapshotsBtn.disabled, true);
+});
+
+test('stash status badge stays short while stash tracking is unavailable', () => {
+  const context = loadFunctions(['updateStashTrackerStatus'], {
+    state: {
+      capabilities: {
+        stashTracking: { enabled: false, reason: 'stash_scope_missing' }
+      }
+    },
+    stashState: {
+      beforeSnapshotId: null,
+      afterSnapshotId: null
+    },
+    elements: {
+      stashTrackerStatus: {
+        textContent: '',
+        style: { color: 'red' }
+      }
+    },
+    window: {
+      t: (key) => key
+    }
+  });
+
+  context.updateStashTrackerStatus();
+
+  assert.equal(context.elements.stashTrackerStatus.textContent, 'stash.off');
+  assert.equal(context.elements.stashTrackerStatus.style.color, '');
+});
+
+test('unavailable stash card hides its snapshot controls', () => {
+  const stylesCss = fs.readFileSync(path.join(desktopDir, 'src', 'styles.css'), 'utf8');
+
+  assert.match(
+    stylesCss,
+    /\.stash-tracker-card\[data-stash-capability="unavailable"\] \.stash-tracker-content\s*\{[^}]*display:\s*none;/
+  );
 });
 
 test('renderer keeps poe2 detected runtime capability when settings selection is poe1', () => {
