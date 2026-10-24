@@ -289,6 +289,18 @@
       box-shadow: inset 0 0 0 1px var(--ember-hot);
     }
 
+    /* A check mark drawn with borders, so selection is not shown by colour alone. */
+    .jj-chip[aria-pressed="true"]::before {
+      content: "";
+      flex-shrink: 0;
+      width: 4px;
+      height: 8px;
+      margin: -2px 7px 0 1px;
+      border: solid currentColor;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+
     /* ── Farm types: each league's content colour on its name ── */
     [data-farm-type="abyss"] { --farm-color: var(--farm-abyss); }
     [data-farm-type="breach"] { --farm-color: var(--farm-breach); }
@@ -306,7 +318,11 @@
     .jj-primary-name[data-farm-type],
     .jj-chip[data-farm-type] { color: var(--farm-color); }
 
-    .jj-chip[data-farm-type][aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--farm-color); }
+    /* The farm colour keeps 5.1:1 or more on the raised plate; on the ember tint it drops below 4.5:1. */
+    .jj-chip[data-farm-type][aria-pressed="true"] {
+      background: var(--plate-raised);
+      box-shadow: inset 0 0 0 2px var(--farm-color);
+    }
 
     .jj-form-actions {
       display: flex;
@@ -352,7 +368,7 @@
       <div class="jj-primary" data-overlay-primary>Waiting for game</div>
       <div class="jj-secondary-row">
         <span class="jj-secondary" data-overlay-secondary>Waiting for runtime session</span>
-        <span class="jj-meta" data-overlay-meta></span>
+        <span class="jj-meta" data-overlay-meta aria-live="off"></span>
       </div>
       <form class="jj-form" data-overlay-start-form hidden>
         <div class="jj-field">

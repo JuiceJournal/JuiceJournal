@@ -25,6 +25,10 @@
   var selectedFarmTypeId = '';
   var renderedCharactersKey = null;
   var promptedCharacterId = '';
+  // Main pushes state only on events, so a running map or session counts up here: one 1 Hz timer that only
+  // swaps the meta text (no transition), and only while the state has a clock and the card is shown.
+  var clockTimer = null;
+  var clockState = null;
 
   function setText(element, value) {
     if (element) { element.textContent = value || ''; }
@@ -244,6 +248,23 @@
     if (el.card) el.card.setAttribute('data-overlay-exiting', 'false');
   }
 
+  function tickClock() {
+    var model = root.overlayStateModel;
+    if (clockState && model && typeof model.formatOverlayClock === 'function') {
+      setText(el.meta, model.formatOverlayClock(clockState, Date.now()));
+    }
+  }
+
+  function syncClock(state, visibility) {
+    clockState = visibility !== 'hidden' && state.clock && typeof state.clock === 'object' ? state.clock : null;
+    if (clockState && !clockTimer) {
+      clockTimer = setInterval(tickClock, 1000);
+    } else if (!clockState && clockTimer) {
+      clearInterval(clockTimer);
+      clockTimer = null;
+    }
+  }
+
   /* ── Main render ── */
   function renderState(input) {
     var state = deriveState(input);
@@ -290,11 +311,15 @@
 
     renderStartMapForm(state);
     renderCharacterForm(state);
+    syncClock(state, visibility);
 
     if (el.pin) {
       var showPin = mode === 'map-result' && visibility !== 'hidden';
+      var pinned = showPin && Boolean(state.mapResult && state.mapResult.pinned);
       el.pin.hidden = !showPin;
-      el.pin.setAttribute('aria-pressed', showPin && (state.mapResult && state.mapResult.pinned) ? 'true' : 'false');
+      el.pin.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+      // The label says it too, so the pinned state is not shown by colour alone.
+      setText(el.pin, pinned ? 'Pinned' : 'Pin');
       if (el.dismiss) el.dismiss.hidden = !showPin;
     }
 
