@@ -154,6 +154,8 @@ const elements = {
   startSessionBtn: document.getElementById('start-session-btn'),
   endSessionBtn: document.getElementById('end-session-btn'),
   scanScreenBtn: document.getElementById('scan-screen-btn'),
+  scanScreenLabel: document.getElementById('scan-screen-label'),
+  scanHotkeyBadge: document.getElementById('scan-hotkey-badge'),
   todaySessions: document.getElementById('today-sessions'),
   todayProfit: document.getElementById('today-profit'),
   todayAvg: document.getElementById('today-avg'),
@@ -1532,6 +1534,8 @@ function applySettingsDraftToDom(settingsDraft = {}) {
   if (elements.scanHotkey) elements.scanHotkey.value = completeSettingsDraft.scanHotkey;
   if (elements.stashScanHotkey) elements.stashScanHotkey.value = completeSettingsDraft.stashScanHotkey;
   syncHotkeyDisplays();
+  // The dashboard badge follows the applied scan hotkey, not captures that are not saved yet.
+  syncHotkeyFieldDisplay(elements.scanHotkey, elements.scanHotkeyBadge);
   if (elements.globalLanguage) elements.globalLanguage.value = completeSettingsDraft.language || 'en';
   if (elements.defaultLeague || elements.defaultLeagueSelect) {
     const leagueKey = getLeagueSettingKey(getSettingsLeagueVersion());
@@ -4192,8 +4196,9 @@ async function handleScanScreen() {
     return;
   }
 
+  // Only the label changes; setting the button's textContent would drop its icon.
   elements.scanScreenBtn.disabled = true;
-  elements.scanScreenBtn.textContent = window.t('dashboard.scanning');
+  elements.scanScreenLabel.textContent = window.t('dashboard.scanning');
 
   try {
     await window.electronAPI.scanScreen();
@@ -4202,7 +4207,7 @@ async function handleScanScreen() {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.scanError'), 'error');
   } finally {
     elements.scanScreenBtn.disabled = false;
-    elements.scanScreenBtn.textContent = window.t('dashboard.scanScreen');
+    elements.scanScreenLabel.textContent = window.t('dashboard.scanScreen');
   }
 }
 
