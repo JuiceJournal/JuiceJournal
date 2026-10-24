@@ -6054,6 +6054,7 @@ const currencyState = {
   sortField: 'chaosValue',
   sortDir: 'desc',
   prices: [],
+  pricesRequest: 0,
   searchTimer: null
 };
 
@@ -6222,7 +6223,11 @@ async function loadCurrencyLeagues() {
 async function loadCurrencyPrices() {
   const tbody = document.getElementById('currency-table-body');
   if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="7" class="currency-empty">${window.t('currency.loading')}</td></tr>`;
+  // A request queued behind a running sync can answer after a later one that main answered at once, so only the
+  // latest request renders.
+  const request = ++currencyState.pricesRequest;
+  // Main answers at once when the league's prices are loaded, so this row stays only while a poe.ninja sync runs.
+  tbody.innerHTML = `<tr><td colspan="7" class="currency-empty">${window.t('currency.waitingForSync')}</td></tr>`;
 
   try {
     const params = { poeVersion: currencyState.poeVersion, limit: '500' };
@@ -6232,6 +6237,7 @@ async function loadCurrencyPrices() {
 
     // json = { prices: [...], count, league, updatedAt } from the local poe.ninja cache
     const json = await window.electronAPI.getCurrencyPrices(params);
+    if (request !== currencyState.pricesRequest) return;
     currencyState.prices = json?.prices || json?.data?.prices || [];
     renderCurrencyTable();
 
@@ -6242,6 +6248,7 @@ async function loadCurrencyPrices() {
       footer.textContent = `${count} items` + (updated ? ` · Last synced: ${timeAgo(updated)}` : '');
     }
   } catch (error) {
+    if (request !== currencyState.pricesRequest) return;
     renderCurrencyEmptyRow(tbody, getUserFacingErrorMessage(error, 'currency.loadError'));
   }
 }

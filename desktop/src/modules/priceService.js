@@ -156,6 +156,8 @@ class PriceService {
     this.league = null;
     this.fullySynced = false;
     this.syncQueue = Promise.resolve();
+    // Bumped by clearCache, so a sync that was running then drops what it fetched.
+    this.cacheGeneration = 0;
     // poe.ninja's league list per game: poeVersion → { data, fetchedAt }
     this.indexStates = new Map();
 
@@ -256,7 +258,9 @@ class PriceService {
    * @param {boolean} [options.full] - Sync ALL types (slow, many API calls)
    */
   async syncPrices(league, options = {}) {
-    this.priceMap.clear();
+    // Filled apart and swapped in at the end, so readers such as OCR pricing never see a half-filled list.
+    const prices = new Map();
+    const generation = this.cacheGeneration;
 
     // Get types from registry (version-aware, dynamic)
     const currencyTypes = registry.getCurrencyTypes();
@@ -268,7 +272,7 @@ class PriceService {
     for (const type of currencyTypes) {
       try {
         const data = await this._fetchCurrencyOverview(league, type);
-        this._indexCurrencyData(data, type);
+        this._indexCurrencyData(data, type, prices);
       } catch (err) {
         console.error(`Price sync failed for currency/${type}:`, err.message);
       }
@@ -279,7 +283,7 @@ class PriceService {
       for (const type of itemTypes) {
         try {
           const data = await this._fetchItemOverview(league, type);
-          this._indexItemData(data, type);
+          this._indexItemData(data, type, prices);
         } catch (err) {
           console.error(`Price sync failed for item/${type}:`, err.message);
         }
@@ -288,6 +292,15 @@ class PriceService {
       }
     }
 
+    if (generation !== this.cacheGeneration) {
+      // clearCache ran mid-sync because the detected game changed, so these prices belong to the old game.
+      return {
+        itemCount: this.priceMap.size,
+        syncedAt: this.lastFullSync
+      };
+    }
+
+    this.priceMap = prices;
     this.lastFullSync = Date.now();
     this.league = league;
     this.fullySynced = options.full !== false;
@@ -309,6 +322,13 @@ class PriceService {
         && this.league === league
         && (this.fullySynced || !full);
       if (force || !loaded) {
+        if (this.poeVersion !== version || this.league !== league) {
+          // Another game's or league's prices must not read as these while this sync runs. Only a re-sync of the
+          // same league keeps the last complete list readable.
+          this.priceMap = new Map();
+          this.league = null;
+          this.fullySynced = false;
+        }
         this.setPoeVersion(version);
         await this.syncPrices(league, { full });
       }
@@ -355,9 +375,9 @@ class PriceService {
   }
 
   /**
-   * Index currency data into priceMap
+   * Index currency data into priceMap (or the map a sync is filling)
    */
-  _indexCurrencyData(data, type) {
+  _indexCurrencyData(data, type, prices = this.priceMap) {
     const registryBatch = [];
 
     if (Array.isArray(data?.items)) {
@@ -400,7 +420,7 @@ class PriceService {
             tradeId: itemInfo.id || null,
             sparkline: Array.isArray(line.sparkline?.data) ? line.sparkline.data : []
           };
-          this._addPrice(itemInfo.name, entry);
+          this._addPrice(itemInfo.name, entry, prices);
           registryBatch.push({ name: itemInfo.name, ...entry });
         }
       }
@@ -429,7 +449,7 @@ class PriceService {
             tradeId: details?.tradeId || null,
             sparkline: getSparklineData(line)
           };
-          this._addPrice(name, entry);
+          this._addPrice(name, entry, prices);
           registryBatch.push({ name, ...entry });
         }
       }
@@ -440,9 +460,9 @@ class PriceService {
   }
 
   /**
-   * Index item data into priceMap
+   * Index item data into priceMap (or the map a sync is filling)
    */
-  _indexItemData(data, type) {
+  _indexItemData(data, type, prices = this.priceMap) {
     if (!data.lines) return;
     const registryBatch = [];
     for (const line of data.lines) {
@@ -454,20 +474,20 @@ class PriceService {
         sparkline: line.sparkline?.data || [],
         listingCount: line.listingCount || 0
       };
-      this._addPrice(line.name, entry);
+      this._addPrice(line.name, entry, prices);
       registryBatch.push({ name: line.name, ...entry });
     }
     // Feed discovered items into the currency registry
     registry.registerFromNinja(type, registryBatch);
   }
 
-  _addPrice(name, data) {
+  _addPrice(name, data, prices = this.priceMap) {
     const key = normalizeLookupKey(name);
     if (!key) {
       return;
     }
-    this._enforcePriceMapLimit();
-    this.priceMap.set(key, { name, ...data });
+    this._enforcePriceMapLimit(prices);
+    prices.set(key, { name, ...data });
   }
 
   _evictOldest(map, count) {
@@ -477,9 +497,9 @@ class PriceService {
     }
   }
 
-  _enforcePriceMapLimit() {
-    if (this.priceMap.size >= MAX_PRICE_MAP_SIZE) {
-      this._evictOldest(this.priceMap, Math.ceil(MAX_PRICE_MAP_SIZE * 0.1));
+  _enforcePriceMapLimit(prices) {
+    if (prices.size >= MAX_PRICE_MAP_SIZE) {
+      this._evictOldest(prices, Math.ceil(MAX_PRICE_MAP_SIZE * 0.1));
     }
   }
 
@@ -570,6 +590,7 @@ class PriceService {
    * Clear all caches
    */
   clearCache() {
+    this.cacheGeneration += 1;
     this.cache.clear();
     this.priceMap.clear();
     this.lastFullSync = null;

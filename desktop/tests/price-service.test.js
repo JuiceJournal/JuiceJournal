@@ -179,6 +179,109 @@ test('ensureSynced syncs a league once, again only when forced, and one sync at 
   assert.equal(status.poeVersion, 'poe2');
 });
 
+// A PoE2 price service whose second overview fetch waits until the test releases it.
+function createPausedSync() {
+  const service = new PriceService();
+  service.setPoeVersion('poe2');
+  let reachPause;
+  let release;
+  const reached = new Promise((resolve) => { reachPause = resolve; });
+  const paused = new Promise((resolve) => { release = resolve; });
+  let fetches = 0;
+  service._fetchCurrencyOverview = async (league, type) => {
+    fetches += 1;
+    if (fetches === 2) {
+      reachPause();
+      await paused;
+    }
+    if (type === 'Currency') {
+      return { lines: [{ currencyTypeName: 'Divine Orb', chaosEquivalent: 120 }] };
+    }
+    if (type === 'Fragments') {
+      return { lines: [{ currencyTypeName: 'Breach Splinter', chaosEquivalent: 0.5 }] };
+    }
+    return { lines: [] };
+  };
+  return { service, reached, release };
+}
+
+test('a forced re-sync keeps the last complete price list readable until the new one is complete', async () => {
+  const { service, reached, release } = createPausedSync();
+  service._addPrice('Divine Orb', { chaosValue: 100, category: 'currency' });
+  service._addPrice('Breach Splinter', { chaosValue: 0.4, category: 'fragments' });
+  service.league = 'Rise of the Abyssal';
+
+  const sync = service.ensureSynced('Rise of the Abyssal', 'poe2', { full: true, force: true });
+  await reached;
+
+  // The Currency overview is already fetched, but readers still see the previous complete list.
+  assert.equal(service.getChaosValue('Divine Orb'), 100);
+  assert.equal(service.getChaosValue('Breach Splinter'), 0.4);
+  assert.equal(service.getStatus().itemCount, 2);
+
+  release();
+  const status = await sync;
+
+  assert.equal(service.getChaosValue('Divine Orb'), 120);
+  assert.equal(service.getChaosValue('Breach Splinter'), 0.5);
+  assert.equal(status.itemCount, 2);
+  assert.equal(status.league, 'Rise of the Abyssal');
+});
+
+test('a sync for the other game does not leave the old game prices readable as the new game prices', async () => {
+  const { service, reached, release } = createPausedSync();
+  service.setPoeVersion('poe1');
+  service._addPrice('Divine Orb', { chaosValue: 300, category: 'currency' });
+  service.league = 'Standard';
+
+  const sync = service.ensureSynced('Standard', 'poe2');
+  await reached;
+
+  assert.equal(service.poeVersion, 'poe2');
+  assert.equal(service.getChaosValue('Divine Orb'), 0);
+  assert.equal(service.getStatus().itemCount, 0);
+
+  release();
+  await sync;
+
+  assert.equal(service.getChaosValue('Divine Orb'), 120);
+});
+
+test('a sync for another league of the same game does not leave the old league prices readable', async () => {
+  const { service, reached, release } = createPausedSync();
+  service._addPrice('Divine Orb', { chaosValue: 300, category: 'currency' });
+  service.league = 'Standard';
+
+  const sync = service.ensureSynced('Rise of the Abyssal', 'poe2');
+  await reached;
+
+  assert.equal(service.getChaosValue('Divine Orb'), 0);
+  assert.equal(service.getStatus().itemCount, 0);
+
+  release();
+  const status = await sync;
+
+  assert.equal(service.getChaosValue('Divine Orb'), 120);
+  assert.equal(status.league, 'Rise of the Abyssal');
+});
+
+test('a sync running when the detected game changes does not swap in the old game prices', async () => {
+  const { service, reached, release } = createPausedSync();
+
+  const sync = service.ensureSynced('Rise of the Abyssal', 'poe2');
+  await reached;
+  // What main's applyGameVersion does when GameDetector reports the other game.
+  service.setPoeVersion('poe1');
+  service.clearCache();
+  release();
+  const status = await sync;
+
+  assert.equal(status.itemCount, 0);
+  assert.equal(status.league, null);
+  assert.equal(service.getStatus().itemCount, 0);
+  assert.equal(service.getChaosValue('Divine Orb'), 0);
+});
+
 test('listPrices returns the Currency page shape filtered by item type and name', () => {
   const service = new PriceService();
   service._addPrice('Divine Orb', { chaosValue: 150, divineValue: 1, category: 'currency', icon: 'divine.png', sparkline: [1, 2] });
