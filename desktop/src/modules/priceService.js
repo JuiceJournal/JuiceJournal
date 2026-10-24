@@ -156,6 +156,8 @@ class PriceService {
     this.league = null;
     this.fullySynced = false;
     this.syncQueue = Promise.resolve();
+    // Bumped by clearCache, so a sync that was running then drops what it fetched.
+    this.cacheGeneration = 0;
     // poe.ninja's league list per game: poeVersion → { data, fetchedAt }
     this.indexStates = new Map();
 
@@ -258,6 +260,7 @@ class PriceService {
   async syncPrices(league, options = {}) {
     // Filled apart and swapped in at the end, so readers such as OCR pricing never see a half-filled list.
     const prices = new Map();
+    const generation = this.cacheGeneration;
 
     // Get types from registry (version-aware, dynamic)
     const currencyTypes = registry.getCurrencyTypes();
@@ -289,6 +292,14 @@ class PriceService {
       }
     }
 
+    if (generation !== this.cacheGeneration) {
+      // clearCache ran mid-sync because the detected game changed, so these prices belong to the old game.
+      return {
+        itemCount: this.priceMap.size,
+        syncedAt: this.lastFullSync
+      };
+    }
+
     this.priceMap = prices;
     this.lastFullSync = Date.now();
     this.league = league;
@@ -311,8 +322,9 @@ class PriceService {
         && this.league === league
         && (this.fullySynced || !full);
       if (force || !loaded) {
-        if (this.poeVersion !== version) {
-          // The other game's prices must not read as this game's while its sync runs.
+        if (this.poeVersion !== version || this.league !== league) {
+          // Another game's or league's prices must not read as these while this sync runs. Only a re-sync of the
+          // same league keeps the last complete list readable.
           this.priceMap = new Map();
           this.league = null;
           this.fullySynced = false;
@@ -578,6 +590,7 @@ class PriceService {
    * Clear all caches
    */
   clearCache() {
+    this.cacheGeneration += 1;
     this.cache.clear();
     this.priceMap.clear();
     this.lastFullSync = null;

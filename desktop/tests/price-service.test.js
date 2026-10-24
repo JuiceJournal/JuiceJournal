@@ -247,6 +247,41 @@ test('a sync for the other game does not leave the old game prices readable as t
   assert.equal(service.getChaosValue('Divine Orb'), 120);
 });
 
+test('a sync for another league of the same game does not leave the old league prices readable', async () => {
+  const { service, reached, release } = createPausedSync();
+  service._addPrice('Divine Orb', { chaosValue: 300, category: 'currency' });
+  service.league = 'Standard';
+
+  const sync = service.ensureSynced('Rise of the Abyssal', 'poe2');
+  await reached;
+
+  assert.equal(service.getChaosValue('Divine Orb'), 0);
+  assert.equal(service.getStatus().itemCount, 0);
+
+  release();
+  const status = await sync;
+
+  assert.equal(service.getChaosValue('Divine Orb'), 120);
+  assert.equal(status.league, 'Rise of the Abyssal');
+});
+
+test('a sync running when the detected game changes does not swap in the old game prices', async () => {
+  const { service, reached, release } = createPausedSync();
+
+  const sync = service.ensureSynced('Rise of the Abyssal', 'poe2');
+  await reached;
+  // What main's applyGameVersion does when GameDetector reports the other game.
+  service.setPoeVersion('poe1');
+  service.clearCache();
+  release();
+  const status = await sync;
+
+  assert.equal(status.itemCount, 0);
+  assert.equal(status.league, null);
+  assert.equal(service.getStatus().itemCount, 0);
+  assert.equal(service.getChaosValue('Divine Orb'), 0);
+});
+
 test('listPrices returns the Currency page shape filtered by item type and name', () => {
   const service = new PriceService();
   service._addPrice('Divine Orb', { chaosValue: 150, divineValue: 1, category: 'currency', icon: 'divine.png', sparkline: [1, 2] });
