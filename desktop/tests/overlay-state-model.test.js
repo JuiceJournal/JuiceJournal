@@ -51,7 +51,7 @@ test('overlay state model composes compact character and runtime summary', () =>
   assert.equal(state.visibility, 'visible');
   assert.equal(state.primaryLine, 'KocaGyVeMasha \u00b7 Fate of the Vaal');
   assert.equal(state.secondaryLine, 'Overgrown');
-  assert.equal(state.metaLine, '332s \u00b7 session 1840s');
+  assert.equal(state.metaLine, 'Map 5:32 \u00b7 Total 30:40');
 });
 
 test('overlay state model consumes normalized runtime session summary shape', () => {
@@ -79,7 +79,70 @@ test('overlay state model consumes normalized runtime session summary shape', ()
   assert.equal(state.visibility, 'visible');
   assert.equal(state.primaryLine, 'MainOne \u00b7 Fate of the Vaal');
   assert.equal(state.secondaryLine, 'Crimson Shores');
-  assert.equal(state.metaLine, '125s \u00b7 session 725s');
+  assert.equal(state.metaLine, 'Map 2:05 \u00b7 Total 12:05');
+});
+
+test('overlay state model counts a running map from its entry time and includes it in the session total', () => {
+  const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
+  const formatOverlayClock = getOverlayStateModelExport('formatOverlayClock');
+  const { createRuntimeSessionState, applyRuntimeEvent, cloneRuntimeSessionState } = require('../src/modules/runtimeSessionModel');
+  const runtimeState = createRuntimeSessionState();
+  applyRuntimeEvent(runtimeState, { type: 'area_entered', areaName: 'Tower', at: '2026-05-04T12:00:00.000Z' });
+  applyRuntimeEvent(runtimeState, { type: 'area_exited', areaName: 'Hideout', at: '2026-05-04T12:10:00.000Z' });
+  applyRuntimeEvent(runtimeState, { type: 'area_entered', areaName: 'Overgrown', at: '2026-05-04T12:11:00.000Z' });
+  // main.js snapshots the runtime at the area event, so the current map is 0s old in the pushed state.
+  const runtime = cloneRuntimeSessionState(runtimeState, { now: '2026-05-04T12:11:00.000Z' });
+  const now = Date.parse('2026-05-04T12:15:12.000Z');
+
+  const state = deriveOverlayState({ enabled: true, character: { name: 'MainOne' }, runtime, now });
+
+  assert.equal(state.secondaryLine, 'Overgrown');
+  assert.equal(state.metaLine, 'Map 4:12 \u00b7 Total 14:12');
+  assert.deepEqual(state.clock, { kind: 'runtime', mapBase: 252, totalBase: 852, at: now });
+  assert.equal(formatOverlayClock(state.clock, now + 3000), 'Map 4:15 \u00b7 Total 14:15');
+  assert.equal(formatOverlayClock(state.clock, now + 3000 * 1000), 'Map 54:12 \u00b7 Total 1:04:12');
+});
+
+test('overlay state model only sends a clock while a map or session is running', () => {
+  const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
+  const formatOverlayClock = getOverlayStateModelExport('formatOverlayClock');
+  const now = Date.parse('2026-05-04T12:03:10.000Z');
+
+  // Without a running map the total stays put, so there is nothing to count up.
+  const stopped = deriveOverlayState({
+    enabled: true,
+    character: { name: 'MainOne' },
+    runtime: { currentArea: 'Overgrown', currentInstanceSeconds: 332, currentSessionSeconds: 1840 },
+    now
+  });
+  assert.equal(stopped.visibility, 'visible');
+  assert.equal(stopped.metaLine, 'Map 5:32 \u00b7 Total 30:40');
+  assert.equal(stopped.clock, undefined);
+
+  const idle = deriveOverlayState({
+    enabled: true,
+    character: { name: 'MainOne' },
+    runtime: {
+      currentInstance: null,
+      totalActiveSeconds: 600,
+      summary: { status: 'idle', currentAreaName: null, currentInstanceSeconds: 0, totalActiveSeconds: 600, lastAreaName: 'Tower' }
+    },
+    now
+  });
+  assert.equal(idle.visibility, 'hidden');
+  assert.equal(idle.clock, undefined);
+
+  const session = deriveOverlayState({
+    now,
+    session: { status: 'active', mapName: 'Tower', startedAt: '2026-05-04T12:02:00.000Z' }
+  });
+  assert.equal(session.metaLine, 'elapsed 1m 10s');
+  assert.deepEqual(session.clock, { kind: 'session', base: 70, at: now });
+  assert.equal(formatOverlayClock(session.clock, now + 5000), 'elapsed 1m 15s');
+
+  assert.equal(deriveOverlayState({ enabled: true, now, startMapPrompt: { mapName: 'Channel' } }).clock, undefined);
+  assert.equal(deriveOverlayState({ enabled: false, now, runtime: { currentArea: 'Dunes' } }).clock, undefined);
+  assert.equal(formatOverlayClock(null, now), '');
 });
 
 test('overlay state model stays hidden when runtime data is missing', () => {

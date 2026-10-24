@@ -51,6 +51,33 @@
     return `${minutes}m ${String(remainingSeconds).padStart(2, '0')}s`;
   }
 
+  // m:ss under an hour, h:mm:ss after.
+  function formatClock(seconds) {
+    const normalized = normalizeSeconds(seconds);
+    const hours = Math.floor(normalized / 3600);
+    const minutes = Math.floor((normalized % 3600) / 60);
+    const remainingSeconds = String(normalized % 60).padStart(2, '0');
+
+    return hours
+      ? `${hours}:${String(minutes).padStart(2, '0')}:${remainingSeconds}`
+      : `${minutes}:${remainingSeconds}`;
+  }
+
+  // Main only pushes overlay state on events, so the overlay counts a clock up from its base seconds at `at`
+  // (epoch ms) and redraws the meta line with this.
+  function formatOverlayClock(clock, now = Date.now()) {
+    if (!clock || typeof clock !== 'object') {
+      return '';
+    }
+
+    const passedSeconds = Math.max(0, Math.floor((now - clock.at) / 1000));
+    if (clock.kind === 'session') {
+      return `elapsed ${formatDuration(clock.base + passedSeconds)}`;
+    }
+
+    return `Map ${formatClock(clock.mapBase + passedSeconds)}${SEPARATOR}Total ${formatClock(clock.totalBase + passedSeconds)}`;
+  }
+
   function getCharacterSummary(character) {
     if (!character || typeof character !== 'object') {
       return null;
@@ -107,7 +134,7 @@
     };
   }
 
-  function getRuntimeSummary(runtime) {
+  function getRuntimeSummary(runtime, now = Date.now()) {
     if (!runtime || typeof runtime !== 'object') {
       return null;
     }
@@ -126,16 +153,24 @@
         ?? currentInstance?.areaName
         ?? runtime.mapName
     );
-    const currentInstanceSeconds = normalizeSeconds(
-      runtime.currentInstanceSeconds
-        ?? summary?.currentInstanceSeconds
-        ?? currentInstance?.durationSeconds
-    );
-    const currentSessionSeconds = normalizeSeconds(
-      runtime.currentSessionSeconds
-        ?? runtime.totalActiveSeconds
-        ?? summary?.totalActiveSeconds
-    );
+    // The snapshot is taken at the area event, so a running map counts from its entry time instead.
+    // The top-level total holds completed maps only.
+    const enteredMs = currentInstance ? Date.parse(currentInstance.enteredAt) : NaN;
+    const running = Number.isFinite(enteredMs);
+    const currentInstanceSeconds = running
+      ? normalizeSeconds((now - enteredMs) / 1000)
+      : normalizeSeconds(
+        runtime.currentInstanceSeconds
+          ?? summary?.currentInstanceSeconds
+          ?? currentInstance?.durationSeconds
+      );
+    const currentSessionSeconds = running
+      ? normalizeSeconds(runtime.totalActiveSeconds) + currentInstanceSeconds
+      : normalizeSeconds(
+        runtime.currentSessionSeconds
+          ?? summary?.totalActiveSeconds
+          ?? runtime.totalActiveSeconds
+      );
 
     if (!currentArea && summary?.status !== 'active') {
       return null;
@@ -144,7 +179,8 @@
     return {
       currentArea,
       currentInstanceSeconds,
-      currentSessionSeconds
+      currentSessionSeconds,
+      running
     };
   }
 
@@ -219,11 +255,14 @@
         sessionSummary.league
       ].filter(Boolean).join(SEPARATOR);
 
+      const clock = { kind: 'session', base: sessionSummary.elapsedSeconds, at: now };
+
       return {
         visibility: 'visible',
         primaryLine: sessionSummary.mapName,
         secondaryLine: contextLine || 'Active map session',
-        metaLine: `elapsed ${formatDuration(sessionSummary.elapsedSeconds)}`
+        metaLine: formatOverlayClock(clock, now),
+        clock
       };
     }
 
@@ -269,7 +308,7 @@
       };
     }
 
-    const runtimeSummary = getRuntimeSummary(runtime);
+    const runtimeSummary = getRuntimeSummary(runtime, now);
     if (!runtimeSummary) {
       return {
         visibility: 'hidden',
@@ -279,15 +318,29 @@
       };
     }
 
-    return {
+    // Between maps the total stays put, so only a running map gets a clock.
+    const clock = {
+      kind: 'runtime',
+      mapBase: runtimeSummary.currentInstanceSeconds,
+      totalBase: runtimeSummary.currentSessionSeconds,
+      at: now
+    };
+    const state = {
       visibility: 'visible',
       primaryLine: createPrimaryLine(getCharacterSummary(character)),
       secondaryLine: runtimeSummary.currentArea || 'Waiting for area data',
-      metaLine: `${runtimeSummary.currentInstanceSeconds}s${SEPARATOR}session ${runtimeSummary.currentSessionSeconds}s`
+      metaLine: formatOverlayClock(clock, now)
     };
+
+    if (runtimeSummary.running) {
+      state.clock = clock;
+    }
+
+    return state;
   }
 
   return {
-    deriveOverlayState
+    deriveOverlayState,
+    formatOverlayClock
   };
 });
