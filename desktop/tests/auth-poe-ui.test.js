@@ -171,6 +171,34 @@ test('desktop login surface exposes only Path of Exile OAuth entry', () => {
   assert.match(html, /id="poe-oauth-login"/);
 });
 
+test('login art column describes shipped features and translates every line', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const art = html.match(/<div class="modal-art">([\s\S]*?)<div class="modal-panel/)[1];
+  // The brand name stays as is in every locale.
+  const copy = art.replace(/<div class="modal-logo">[\s\S]*?<span>Juice Journal<\/span>\s*<\/div>/, '');
+  const context = vm.createContext({ window: {}, document: { querySelectorAll: () => [] } });
+  vm.runInContext(fs.readFileSync(path.join(desktopDir, 'src', 'modules', 'translations.js'), 'utf8'), context);
+  const { en, tr } = context.window.Translations;
+
+  // The built-in sign-in requests only account:characters, so stash tracking is off for everyone.
+  assert.doesNotMatch(art, /stash/i);
+
+  const icons = [...copy.matchAll(/<span class="modal-feature-icon">([\s\S]*?)<\/span>/g)];
+  assert.equal(icons.length, 3);
+  for (const [, icon] of icons) {
+    assert.match(icon, /<use href="assets\/icons\.svg#[\w-]+"\/>/);
+  }
+
+  const lines = [...copy.matchAll(/<(\w+)([^>]*)>([^<]*[^<\s][^<]*)<\/\1>/g)];
+  assert.ok(lines.length >= 9, 'Expected kicker, headline, lede and three feature rows');
+  for (const [, tag, attributes, text] of lines) {
+    const key = attributes.match(/data-i18n="([^"]+)"/)?.[1];
+    assert.ok(key, `<${tag}>${text.trim()}</${tag}> has no data-i18n`);
+    assert.equal(en[key], text.trim(), `${key} must match the English markup`);
+    assert.ok(tr[key] && tr[key] !== en[key], `${key} needs a Turkish string`);
+  }
+});
+
 test('device sign-in opens the local profile and loads its history', async () => {
   const calls = [];
   const button = {
