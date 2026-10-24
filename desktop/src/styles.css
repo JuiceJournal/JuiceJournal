@@ -145,8 +145,8 @@ body {
   color: var(--bg-base);
 }
 
-/* The login modal has no close button, so the title bar offers only the window controls. */
-body:has(#login-modal:not(.hidden)) :is(.nav, #logout-btn) {
+/* Modals start below the title bar, so while one is open the title bar offers only the window controls. */
+body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   visibility: hidden;
 }
 

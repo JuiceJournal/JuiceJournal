@@ -24,16 +24,20 @@ test('the session drawer and modals start below the title bar', () => {
     assert.match(getTopLevelRule(selector), /inset:\s*var\(--header-height\) 0 0 0;/, selector);
   }
 
+  // Any fixed layer that sets a top edge must start at the title bar's height; bottom-anchored ones set none.
   for (const [rule] of stylesCss.matchAll(/[^{}]*\{[^}]*position:\s*fixed[^}]*\}/g)) {
     const selector = rule.slice(0, rule.indexOf('{')).replace(/\/\*[\s\S]*?\*\//g, '').trim();
-    assert.doesNotMatch(rule, /inset:\s*0;|top:\s*0;/, `${selector} covers the title bar`);
+    for (const [, value] of rule.matchAll(/(?<![-\w])(?:inset|top)\s*:\s*([^;}]+)/g)) {
+      assert.match(value, /var\(--header-height\)/, `${selector} covers the title bar`);
+    }
   }
 });
 
-test('the title bar offers only the window controls while the login modal is open', () => {
+test('the title bar offers only the window controls while any modal is open', () => {
+  // Modals no longer cover the title bar, so the nav and Logout must not stay clickable behind them.
   // The login modal has no close button, so the window controls are the only way out.
   assert.match(
     stylesCss,
-    /body:has\(#login-modal:not\(\.hidden\)\) :is\(\.nav, #logout-btn\) \{\s*visibility: hidden;\s*\}/
+    /body:has\(\.modal:not\(\.hidden\)\)\s*:is\(\.nav,\s*#logout-btn\)\s*\{\s*visibility:\s*hidden;\s*\}/
   );
 });
