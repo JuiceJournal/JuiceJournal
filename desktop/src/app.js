@@ -1193,8 +1193,9 @@ function applyDashboardCapabilities(version = null) {
     }
   }
 
+  // The card body already explains why; the header badge only says the tracker is off.
   if (elements.stashTrackerStatus && stashUnavailable) {
-    elements.stashTrackerStatus.textContent = unavailableText;
+    elements.stashTrackerStatus.textContent = window.t('stash.off');
     elements.stashTrackerStatus.style.color = '';
   }
 
@@ -5692,7 +5693,7 @@ function handleResetSnapshots() {
 function updateStashTrackerStatus() {
   if (!elements.stashTrackerStatus) return;
   if (state.capabilities?.stashTracking?.enabled === false) {
-    elements.stashTrackerStatus.textContent = getCurrentStashUnavailableText();
+    elements.stashTrackerStatus.textContent = window.t('stash.off');
     elements.stashTrackerStatus.style.color = '';
     return;
   }

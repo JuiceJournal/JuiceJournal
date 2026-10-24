@@ -3051,6 +3051,10 @@ body {
   padding: 0.5rem 0;
 }
 
+.stash-tracker-card[data-stash-capability="unavailable"] .stash-tracker-content {
+  display: none;
+}
+
 .stash-price-status {
   display: flex;
   align-items: center;
