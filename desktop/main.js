@@ -1954,7 +1954,12 @@ async function signInWithPoe() {
   // The profile becomes active only after the old data has moved, so a failed move is retried next time.
   migrateLegacyUserData(profile);
   store.set('activeProfileId', profile.id);
-  loadActiveSession();
+  try {
+    loadActiveSession();
+  } catch (error) {
+    // An unreadable journal must not undo the sign-in: the profile opens without an active session.
+    console.warn('Unable to load active session after sign-in', error);
+  }
   appendAuditTrail('auditLogin');
   return profile;
 }
