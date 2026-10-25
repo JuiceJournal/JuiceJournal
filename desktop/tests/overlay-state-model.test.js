@@ -209,7 +209,8 @@ test('overlay state model shows a start-map prompt for detected map entries', ()
     farmTypeOptions: [
       { id: 'breach', label: 'Breach' },
       { id: 'expedition', label: 'Expedition' }
-    ]
+    ],
+    expiresAt: null
   });
 });
 
@@ -295,4 +296,29 @@ test('overlay state model skips the character prompt when there is no choice, th
     characterPrompt,
     startMapPrompt: { mapName: 'Headland' }
   }).mode, 'start-map-prompt');
+});
+
+test('prompts that close on their own count down to it', () => {
+  const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
+  const formatOverlayClock = getOverlayStateModelExport('formatOverlayClock');
+  const now = Date.parse('2026-05-04T12:15:12.000Z');
+
+  const start = deriveOverlayState({ enabled: true, now, startMapPrompt: { mapName: 'Channel', expiresAt: now + 7000 } });
+  assert.deepEqual(start.clock, { kind: 'countdown', expiresAt: now + 7000 });
+  assert.equal(start.metaLine, 'closes in 7s');
+  assert.equal(formatOverlayClock(start.clock, now + 1500), 'closes in 6s');
+  assert.equal(formatOverlayClock(start.clock, now + 9000), 'closes in 0s');
+
+  const character = deriveOverlayState({
+    enabled: true,
+    now,
+    characterPrompt: {
+      poeVersion: 'poe2',
+      selectedId: 'a',
+      expiresAt: now + 8000,
+      characters: [{ id: 'a', name: 'MainOne', level: 95 }, { id: 'b', name: 'AltTwo', level: 80 }]
+    }
+  });
+  assert.equal(character.metaLine, 'PoE 2 · 8s');
+  assert.equal(formatOverlayClock(character.clock, now + 3000), 'PoE 2 · 5s');
 });

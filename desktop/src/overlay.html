@@ -79,13 +79,14 @@
     [data-overlay-mode="start-map-prompt"],
     [data-overlay-mode="character-prompt"] { --tone: var(--brass); }
 
-    /* ── Short enter/exit for the result card: transform and opacity only ── */
-    [data-overlay-mode="map-result"][data-overlay-state="visible"] {
-      animation: jj-slide-in var(--duration-enter) var(--ease-out) both;
-    }
+    /* A finished map's corner brackets are heavier, so the result reads at a glance. */
+    [data-overlay-mode="map-result"]::before { border-width: 2px; }
 
-    [data-overlay-exiting="true"] {
-      animation: jj-slide-out var(--duration-fast) ease-in both;
+    /* ── One short enter for the result and the prompts: transform and opacity only, none when motion is reduced ── */
+    [data-overlay-mode="map-result"][data-overlay-state="visible"],
+    [data-overlay-mode="start-map-prompt"][data-overlay-state="visible"],
+    [data-overlay-mode="character-prompt"][data-overlay-state="visible"] {
+      animation: jj-slide-in var(--duration-enter) var(--ease-out) both;
     }
 
     @keyframes jj-slide-in {
@@ -93,14 +94,10 @@
       to   { opacity: 1; transform: translateX(0); }
     }
 
-    @keyframes jj-slide-out {
-      from { opacity: 1; transform: translateX(0); }
-      to   { opacity: 0; transform: translateX(24px); }
-    }
-
     @media (prefers-reduced-motion: reduce) {
       [data-overlay-mode="map-result"][data-overlay-state="visible"],
-      [data-overlay-exiting="true"] { animation: none; }
+      [data-overlay-mode="start-map-prompt"][data-overlay-state="visible"],
+      [data-overlay-mode="character-prompt"][data-overlay-state="visible"] { animation: none; }
     }
 
     /* ── Header row ── */
@@ -171,6 +168,13 @@
       box-shadow: inset 0 0 0 1px var(--gold-dim);
     }
 
+    /* A press moves the button 1px at once; transform is not transitioned. */
+    .jj-btn:active:not(:disabled),
+    .jj-form-btn:active:not(:disabled),
+    .jj-chip:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
     .jj-btn[aria-pressed="true"] {
       color: var(--text-bright);
       background: rgb(var(--brass-rgb) / 0.22);
@@ -205,12 +209,22 @@
     }
 
     .jj-value {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
       flex-shrink: 0;
       color: var(--tone);
       font-family: var(--font);
       font-size: 20px;
       font-weight: 800;
       font-variant-numeric: tabular-nums;
+    }
+
+    /* The run's currency after the amount: bundled game art, unfiltered, 20px to fit the 112px window. */
+    .jj-value-icon {
+      width: 20px;
+      height: 20px;
+      object-fit: contain;
     }
 
     /* ── Secondary row ── */
@@ -233,17 +247,36 @@
       white-space: nowrap;
     }
 
-    .jj-secondary img {
+    /* The top drop's art in a 20px slot well: dark ground and a thin brass ring, as in the main window. */
+    .jj-slot {
+      display: inline-grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+      border-radius: var(--bevel-xs);
+      background: var(--plate-deep);
+      box-shadow: inset 0 0 0 1px rgb(var(--brass-rgb) / 0.35);
+    }
+
+    .jj-slot img {
       width: 18px;
       height: 18px;
       object-fit: contain;
-      flex-shrink: 0;
     }
 
     .jj-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       flex-shrink: 0;
       color: var(--text-secondary);
       font-variant-numeric: tabular-nums;
+    }
+
+    .jj-meme-icon {
+      width: 16px;
+      height: 16px;
     }
 
     /* ── Prompt forms (mouse only: the overlay never takes focus) ── */

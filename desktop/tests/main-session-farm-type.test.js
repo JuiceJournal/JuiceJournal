@@ -261,7 +261,8 @@ test('main start-map overlay prompt state can be shown and cleared independently
       { id: 'expedition', label: 'Expedition' }
     ]
   }, {
-    now: Date.parse('2026-05-06T12:00:00.000Z')
+    now: Date.parse('2026-05-06T12:00:00.000Z'),
+    expiresInMs: 7000
   });
 
   assert.deepEqual(JSON.parse(JSON.stringify(context.overlayStartMapPromptState)), {
@@ -275,7 +276,9 @@ test('main start-map overlay prompt state can be shown and cleared independently
       { id: 'expedition', label: 'Expedition' }
     ],
     source: 'map-detected',
-    createdAt: Date.parse('2026-05-06T12:00:00.000Z')
+    createdAt: Date.parse('2026-05-06T12:00:00.000Z'),
+    // The overlay counts down to the moment the renderer closes the prompt.
+    expiresAt: Date.parse('2026-05-06T12:00:07.000Z')
   });
 
   context.hideStartMapPromptOverlay();
@@ -292,7 +295,8 @@ test('main start-map overlay prompt state can be shown and cleared independently
         { id: 'expedition', label: 'Expedition' }
       ],
       source: 'map-detected',
-      createdAt: Date.parse('2026-05-06T12:00:00.000Z')
+      createdAt: Date.parse('2026-05-06T12:00:00.000Z'),
+      expiresAt: Date.parse('2026-05-06T12:00:07.000Z')
     },
     null
   ]);

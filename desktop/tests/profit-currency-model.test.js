@@ -72,3 +72,27 @@ test('profit currency model ignores invalid rates and falls back to chaos', () =
     { type: 'chaos', value: 5000, chaosValue: 5000, rateChaos: 1 }
   );
 });
+
+test('currency amounts group thousands and drop decimals the size of the number does not need', () => {
+  const { formatCurrencyAmount } = loadModel();
+
+  assert.equal(formatCurrencyAmount(97800, 'chaos'), '97,800');
+  assert.equal(formatCurrencyAmount(540, 'chaos', { signed: true }), '+540');
+  assert.equal(formatCurrencyAmount(-540, 'chaos', { signed: true }), '-540');
+  assert.equal(formatCurrencyAmount(12.34, 'chaos'), '12.3');
+  assert.equal(formatCurrencyAmount(0.456, 'chaos'), '0.46');
+  assert.equal(formatCurrencyAmount(2, 'divine'), '2.00');
+  assert.equal(formatCurrencyAmount(45.67, 'divine'), '45.7');
+  assert.equal(formatCurrencyAmount(489.4, 'divine'), '489');
+  assert.equal(formatCurrencyAmount(1.5, 'mirror'), '1.50');
+  assert.equal(formatCurrencyAmount(0, 'chaos', { signed: true }), '0');
+  assert.equal(formatCurrencyAmount('not a number', 'chaos'), '0');
+
+  // Values that round into the next band take that band's precision, and nothing rounds to a signed zero.
+  assert.equal(formatCurrencyAmount(99.96, 'chaos'), '100');
+  assert.equal(formatCurrencyAmount(0.996, 'chaos'), '1.0');
+  assert.equal(formatCurrencyAmount(9.996, 'divine'), '10.0');
+  assert.equal(formatCurrencyAmount(99.96, 'divine'), '100');
+  assert.equal(formatCurrencyAmount(-0.001, 'chaos'), '0');
+  assert.equal(formatCurrencyAmount(0.001, 'chaos', { signed: true }), '0');
+});

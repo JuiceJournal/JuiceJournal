@@ -2322,6 +2322,8 @@ function normalizeStartMapPromptFarmTypeOptions(value) {
 }
 
 function showStartMapPromptOverlay(prompt = {}, options = {}) {
+  const createdAt = options.now ?? Date.now();
+  const expiresInMs = Number(options.expiresInMs);
   overlayStartMapPromptState = {
     mapName: normalizeStartMapPromptText(prompt.mapName, 'Unknown Map'),
     farmTypeId: normalizeStartMapPromptText(prompt.farmTypeId || prompt.farm_type_id),
@@ -2330,7 +2332,9 @@ function showStartMapPromptOverlay(prompt = {}, options = {}) {
     league: normalizeStartMapPromptText(prompt.league),
     farmTypeOptions: normalizeStartMapPromptFarmTypeOptions(prompt.farmTypeOptions),
     source: normalizeStartMapPromptText(prompt.source, 'map-detected'),
-    createdAt: options.now ?? Date.now()
+    createdAt,
+    // The renderer closes an unanswered prompt after expiresInMs; the overlay counts down to this.
+    expiresAt: Number.isFinite(expiresInMs) && expiresInMs > 0 ? createdAt + expiresInMs : null
   };
 
   return updateOverlayWindow();
@@ -2401,7 +2405,8 @@ function showCharacterPromptOverlay(prompt = {}) {
   overlayCharacterPromptState = {
     poeVersion: normalizePoeVersion(prompt.poeVersion),
     selectedId: typeof prompt.selectedId === 'string' ? prompt.selectedId.trim() || null : null,
-    characters
+    characters,
+    expiresAt: Date.now() + CHARACTER_PROMPT_OVERLAY_DURATION_MS
   };
   overlayCharacterPromptTimer = setTimeout(() => {
     overlayCharacterPromptTimer = null;

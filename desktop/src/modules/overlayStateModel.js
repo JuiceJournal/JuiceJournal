@@ -70,6 +70,12 @@
       return '';
     }
 
+    // A prompt counts down to the moment it closes on its own.
+    if (clock.kind === 'countdown') {
+      const secondsLeft = Math.max(0, Math.ceil((clock.expiresAt - now) / 1000));
+      return clock.label ? `${clock.label}${SEPARATOR}${secondsLeft}s` : `closes in ${secondsLeft}s`;
+    }
+
     const passedSeconds = Math.max(0, Math.floor((now - clock.at) / 1000));
     if (clock.kind === 'session') {
       return `elapsed ${formatDuration(clock.base + passedSeconds)}`;
@@ -202,8 +208,14 @@
       farmType,
       league,
       poeVersion,
-      farmTypeOptions
+      farmTypeOptions,
+      expiresAt: normalizeTimestamp(startMapPrompt.expiresAt)
     };
+  }
+
+  function normalizeTimestamp(value) {
+    const timestamp = Number(value);
+    return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
   }
 
   function getCharacterPromptSummary(characterPrompt) {
@@ -231,7 +243,8 @@
     return {
       poeVersion: normalizeString(characterPrompt.poeVersion),
       selectedId: selected.id,
-      characters
+      characters,
+      expiresAt: normalizeTimestamp(characterPrompt.expiresAt)
     };
   }
 
@@ -274,7 +287,7 @@
         startMapPromptSummary.league
       ].filter(Boolean).join(SEPARATOR);
 
-      return {
+      const promptState = {
         visibility: 'visible',
         mode: 'start-map-prompt',
         primaryLine: startMapPromptSummary.mapName,
@@ -282,6 +295,11 @@
         metaLine: 'confirm map start',
         startMapPrompt: startMapPromptSummary
       };
+      if (startMapPromptSummary.expiresAt) {
+        promptState.clock = { kind: 'countdown', expiresAt: startMapPromptSummary.expiresAt };
+        promptState.metaLine = formatOverlayClock(promptState.clock, now);
+      }
+      return promptState;
     }
 
     if (enabled !== true) {
@@ -296,16 +314,22 @@
     const characterPromptSummary = getCharacterPromptSummary(characterPrompt);
     if (characterPromptSummary) {
       const selected = characterPromptSummary.characters.find((entry) => entry.id === characterPromptSummary.selectedId);
+      const gameLabel = characterPromptSummary.poeVersion ? characterPromptSummary.poeVersion.replace(/^poe/i, 'PoE ') : '';
 
-      return {
+      const promptState = {
         visibility: 'visible',
         mode: 'character-prompt',
         primaryLine: selected.name,
         secondaryLine: [selected.level ? `Level ${selected.level}` : null, selected.className].filter(Boolean).join(' ')
           || 'Last played character',
-        metaLine: characterPromptSummary.poeVersion ? characterPromptSummary.poeVersion.replace(/^poe/i, 'PoE ') : '',
+        metaLine: gameLabel,
         characterPrompt: characterPromptSummary
       };
+      if (characterPromptSummary.expiresAt) {
+        promptState.clock = { kind: 'countdown', expiresAt: characterPromptSummary.expiresAt, label: gameLabel || null };
+        promptState.metaLine = formatOverlayClock(promptState.clock, now);
+      }
+      return promptState;
     }
 
     const runtimeSummary = getRuntimeSummary(runtime, now);

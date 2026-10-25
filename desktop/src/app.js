@@ -1778,30 +1778,10 @@ function itemSlotHTML(itemName, poeVersion, { small = false, quantity = 1, fallb
   return `<span class="item-slot${small ? ' item-slot--sm' : ''}">${art}${stack}</span>`;
 }
 
-// Readable amounts: chaos drops decimals once it is large, divine and mirror keep two below 10, thousands are grouped.
-function formatChipNumber(value, type = 'chaos', { signed = false } = {}) {
-  const num = parseFloat(value);
-  if (!Number.isFinite(num) || num === 0) {
-    return '0';
-  }
-
-  const digitsFor = (abs) => (type === 'divine' || type === 'mirror'
-    ? (abs < 10 ? 2 : abs < 100 ? 1 : 0)
-    : (abs >= 100 ? 0 : abs >= 1 ? 1 : 2));
-  // A value that rounds up into the next band (99.96c, 9.996 div) takes that band's precision.
-  const digits = digitsFor(Math.abs(Number(num.toFixed(digitsFor(Math.abs(num))))));
-  const rounded = Number(num.toFixed(digits));
-  if (rounded === 0) {
-    return '0';
-  }
-
-  const formatted = rounded.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  return signed && rounded > 0 ? `+${formatted}` : formatted;
-}
-
+// The amount format is shared with the overlay through profitCurrencyModel.
 function currencyHTML(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1', options = {}) {
   const imgPath = getCurrencyAssetPath(type, poeVersion);
-  const formatted = formatChipNumber(value, type, options);
+  const formatted = getProfitCurrencyModel().formatCurrencyAmount(value, type, options);
   const name = CURRENCY_NAMES[type] || type;
   return `<span class="value-chip">${formatted} <img src="${imgPath}" class="value-chip-icon" width="${iconSize}" height="${iconSize}" alt="${name}" title="${name}" draggable="false"></span>`;
 }
@@ -1845,7 +1825,7 @@ async function applyCachedItemIcons(container) {
 }
 
 function createCurrencyValueElement(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1') {
-  const formatted = formatChipNumber(value, type);
+  const formatted = getProfitCurrencyModel().formatCurrencyAmount(value, type);
   const span = document.createElement('span');
   span.className = 'value-chip';
   span.append(`${formatted} `);
@@ -2440,6 +2420,9 @@ function showLoginModal() {
   }
 }
 
+// The overlay start prompt is mouse-only, so the player gets the spec'd 7 s once it is on screen.
+const START_MAP_PROMPT_OVERLAY_MS = 7000;
+
 async function handleMapEnteredEvent(data = {}) {
   if (data?.runtimeSession) {
     setRuntimeSessionState(data.runtimeSession);
@@ -2522,10 +2505,9 @@ async function handleMapEnteredEvent(data = {}) {
               settle(result);
             }) || (() => {});
 
-            // The overlay prompt is mouse-only, so give the player the spec'd 7 s once it is on screen.
             startOverlayResultTimeout = () => {
               if (!settled && typeof setTimeout === 'function') {
-                timeoutId = setTimeout(() => settle(null), 7000);
+                timeoutId = setTimeout(() => settle(null), START_MAP_PROMPT_OVERLAY_MS);
               }
             };
           })
@@ -2539,7 +2521,7 @@ async function handleMapEnteredEvent(data = {}) {
           farmType,
           farmTypeOptions,
           source: 'map-detected'
-        });
+        }, { expiresInMs: START_MAP_PROMPT_OVERLAY_MS });
         startPromptOverlayShown = true;
         const canUseInteractiveOverlay = overlayState?.visibility === 'visible'
           && overlayState?.mode === 'start-map-prompt'
@@ -3253,6 +3235,7 @@ function createCompletedSessionMapResult(session = {}) {
     || session.completedAt
     || new Date().toISOString();
   const league = session.league || trackerContext.league || characterSummary.league || null;
+  const lootEntries = Array.isArray(session.lootEntries) ? session.lootEntries : [];
 
   return {
     // The end time keeps ids unique per run, as stash-diff results are; main's shutdown result uses the same id.
@@ -3271,13 +3254,33 @@ function createCompletedSessionMapResult(session = {}) {
     netProfit,
     profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral',
     topInputs: [],
-    topOutputs: [],
+    topOutputs: getScannedTopOutputs(lootEntries),
+    lootItemCount: lootEntries.reduce((sum, loot) => sum + (parseInt(loot.quantity || 0, 10) || 0), 0),
     // The run's Divine and Mirror rates, as stash-diff results keep them: the overlay tiers the run by them.
     profitCurrencyRates: typeof getProfitCurrencyRates === 'function'
       ? getProfitCurrencyRates(poeVersion, league)
       : null,
     createdAt
   };
+}
+
+// An OCR run's most valuable drops, grouped by item, in the shape stash-diff results use.
+function getScannedTopOutputs(lootEntries = []) {
+  const byItem = new Map();
+  for (const loot of lootEntries) {
+    const label = String(loot?.itemName || '').trim();
+    if (!label) continue;
+    const quantity = parseInt(loot.quantity || 1, 10) || 1;
+    const entry = byItem.get(label) || { label, quantityDelta: 0, valueDelta: 0, currencyCode: 'chaos' };
+    entry.quantityDelta += quantity;
+    entry.valueDelta += (parseFloat(loot.chaosValue || 0) || 0) * quantity;
+    byItem.set(label, entry);
+  }
+
+  return [...byItem.values()]
+    .filter((entry) => entry.valueDelta > 0)
+    .sort((a, b) => b.valueDelta - a.valueDelta)
+    .slice(0, 3);
 }
 
 function normalizeCompletedSessionPoeVersion(value) {

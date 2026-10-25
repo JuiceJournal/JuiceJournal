@@ -45,3 +45,26 @@ test('game art ships with a notice and the About page credits Grinding Gear Game
   assert.match(indexHtml, /data-i18n="settings\.gameArtNotice"/);
   assert.equal((translations.match(/'settings\.gameArtNotice':/g) || []).length, 2);
 });
+
+test('the overlay knows the same bundled item art as the main window, and every file exists', () => {
+  const vm = require('node:vm');
+  const overlayJs = fs.readFileSync(path.join(srcDir, 'overlay.js'), 'utf8');
+  const readObject = (source, name) => vm.runInNewContext(`(${source.match(new RegExp(`var ${name} = (\\{[\\s\\S]*?\\});`))[1]})`);
+  const overlayKeys = readObject(overlayJs, 'LOCAL_ICON_KEYS');
+  const poe2Files = readObject(overlayJs, 'POE2_ICON_FILES');
+  const appKeys = vm.runInNewContext(`${getBlock(appJs, 'const LOCAL_ITEM_ICON_KEYS')}\nLOCAL_ITEM_ICON_KEYS`);
+
+  // Both objects come from other vm realms, so they are compared as plain data.
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(appKeys).map(([name, key]) => [name.toLowerCase(), key])))),
+    JSON.parse(JSON.stringify(overlayKeys))
+  );
+  for (const key of new Set(Object.values(overlayKeys))) {
+    if (key !== 'transmute') {
+      assert.ok(fs.existsSync(path.join(srcDir, 'assets', 'currency', 'poe1', `${key}.png`)), `poe1 ${key}`);
+    }
+  }
+  for (const file of Object.values(poe2Files)) {
+    assert.ok(fs.existsSync(path.join(srcDir, 'assets', 'currency', 'poe2', file)), `poe2 ${file}`);
+  }
+});
