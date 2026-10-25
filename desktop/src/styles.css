@@ -1466,6 +1466,8 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   position: absolute;
   right: 1px;
   bottom: 0;
+  max-width: calc(100% - 2px);
+  overflow: hidden;
   color: var(--text-bright);
   font-family: var(--font);
   font-size: 11px;

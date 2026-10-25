@@ -1749,7 +1749,10 @@ const LOCAL_ITEM_ICON_KEYS = {
 };
 
 function getLocalItemIconPath(itemName, poeVersion = 'poe1') {
-  const key = LOCAL_ITEM_ICON_KEYS[String(itemName || '').trim()];
+  // OCR keeps the casing it read ("Divine orb"), and prices match names case-insensitively, so icons do too.
+  const wanted = String(itemName || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  const name = Object.keys(LOCAL_ITEM_ICON_KEYS).find((candidate) => candidate.toLowerCase() === wanted);
+  const key = name ? LOCAL_ITEM_ICON_KEYS[name] : null;
   if (!key) {
     return '';
   }
@@ -1769,7 +1772,9 @@ function itemSlotHTML(itemName, poeVersion, { small = false, quantity = 1, fallb
   } else if (fallback === 'chest') {
     art = '<svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#chest"/></svg>';
   }
-  const stack = quantity > 1 ? `<span class="stack">${quantity}</span>` : '';
+  // Five digits no longer fit a slot corner, so big merged stacks read as thousands.
+  const count = quantity >= 10000 ? `${Math.floor(quantity / 1000)}k` : String(quantity);
+  const stack = quantity > 1 ? `<span class="stack">${count}</span>` : '';
   return `<span class="item-slot${small ? ' item-slot--sm' : ''}">${art}${stack}</span>`;
 }
 
@@ -4668,7 +4673,9 @@ function renderRecentLoot() {
   const formatLootValue = typeof profitCurrencyHTML === 'function'
     ? profitCurrencyHTML
     : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
-  const lootTierFor = typeof getProfitTierFor === 'function' ? getProfitTierFor : () => '';
+  const lootTierFor = typeof getProfitTierFor === 'function'
+    ? getProfitTierFor
+    : (value) => (Number(value) < 0 ? 'loss' : 'normal');
   elements.recentLootList.innerHTML = state.recentLoot.map((loot) => {
     const session = loot.session || {};
     const quantity = parseInt(loot.quantity || 1, 10) || 1;
@@ -5897,6 +5904,9 @@ async function handlePricesUpdated({ poeVersion, league } = {}) {
   renderSessionsList();
   updateActiveSessionUI();
   renderRecentLoot();
+  if (state.selectedSession) {
+    renderSessionDrawer({ keepForm: true });
+  }
   if (state.currentUser) {
     await loadDashboardStats();
   }
@@ -5913,7 +5923,8 @@ function closeSessionDrawer() {
   if (elements.sessionDrawerAnalytics) elements.sessionDrawerAnalytics.innerHTML = '';
 }
 
-function renderSessionDrawer() {
+// `keepForm` redraws the numbers only, so notes being typed survive a price update.
+function renderSessionDrawer({ keepForm = false } = {}) {
   const session = state.selectedSession;
   if (!session || !elements.sessionDrawerSummary || !elements.sessionDrawerLoot || !elements.sessionDrawerAnalytics) return;
 
@@ -5962,21 +5973,23 @@ function renderSessionDrawer() {
     </div>
     <dl class="session-drawer-facts">
       ${fact('sessions.game', contextLabel)}
-      ${fact('sessions.cost', currencyHTML(cost, 'chaos', 14, poeVersion))}
+      ${fact('sessions.cost', formatProfit(cost, 14, poeVersion, rateOptions))}
       ${fact('sessions.totalLoot', formatProfit(totalLoot, 14, poeVersion, rateOptions))}
       ${fact('sessions.startedAt', session.startedAt ? new Date(session.startedAt).toLocaleString() : '-')}
       ${fact('sessions.endedAt', session.endedAt ? new Date(session.endedAt).toLocaleString() : '-')}
     </dl>
   `;
 
-  if (elements.sessionDrawerStrategy) {
-    elements.sessionDrawerStrategy.value = session.strategyTag || '';
-  }
-  if (elements.sessionDrawerNotes) {
-    elements.sessionDrawerNotes.value = session.notes || '';
-  }
-  if (elements.sessionDrawerSave) {
-    elements.sessionDrawerSave.disabled = false;
+  if (!keepForm) {
+    if (elements.sessionDrawerStrategy) {
+      elements.sessionDrawerStrategy.value = session.strategyTag || '';
+    }
+    if (elements.sessionDrawerNotes) {
+      elements.sessionDrawerNotes.value = session.notes || '';
+    }
+    if (elements.sessionDrawerSave) {
+      elements.sessionDrawerSave.disabled = false;
+    }
   }
 
   if (!analytics.length) {
@@ -5991,7 +6004,7 @@ function renderSessionDrawer() {
             <div class="session-analytics-main">
               <div class="session-analytics-row">
                 <span class="session-analytics-name">${escapeHTML(entry.label)}</span>
-                <span class="session-analytics-value">${currencyHTML(entry.totalValue, 'chaos', 14, poeVersion)}</span>
+                <span class="session-analytics-value">${formatProfit(entry.totalValue, 14, poeVersion, rateOptions)}</span>
               </div>
               <div class="session-analytics-meta">${entry.quantity} ${window.t('sessions.analyticsItems')} / ${entry.entries} ${window.t('sessions.analyticsEntries')}</div>
               <div class="session-analytics-bar">
@@ -6016,7 +6029,7 @@ function renderSessionDrawer() {
       const quantity = parseInt(loot.quantity || 1, 10) || 1;
       const totalValue = (parseFloat(loot.chaosValue || 0) * quantity) || 0;
       const typeLabel = loot.itemType ? escapeHTML(loot.itemType.replace(/_/g, ' ')) : '-';
-      const lootTier = typeof getProfitTierFor === 'function' ? getProfitTierFor(totalValue, poeVersion, rateOptions) : '';
+      const lootTier = typeof getProfitTierFor === 'function' ? getProfitTierFor(totalValue, poeVersion, rateOptions) : 'normal';
       return `
         <article class="session-drawer-loot-item">
           ${itemSlotHTML(loot.itemName, poeVersion, { small: true, quantity, fallback: 'empty' })}
