@@ -244,6 +244,7 @@ const elements = {
   userAvatar: document.getElementById('user-avatar'),
   logoutBtn: document.getElementById('logout-btn'),
   sessionBadge: document.getElementById('session-badge'),
+  sessionCard: document.getElementById('session-card'),
 
   // Toast
   toastContainer: document.getElementById('toast-container'),
@@ -1631,7 +1632,7 @@ function startSessionClock() {
   if (sessionClockInterval) return; // Already running
   sessionClockInterval = setInterval(() => {
     if (state.currentSession && !document.hidden) {
-      updateActiveSessionUI();
+      updateActiveSessionClock();
     }
   }, 1000);
 }
@@ -2805,6 +2806,10 @@ function applyLocalizedChrome() {
 
   renderUserIdentity();
   renderPoeLinkStatus();
+  // The active map card is written by JS (its badge too), so it follows the new language here.
+  if (typeof updateActiveSessionUI === 'function') {
+    updateActiveSessionUI();
+  }
 }
 
 // The renderer reads the local profile through the fields the server account used to fill.
@@ -4196,79 +4201,117 @@ async function loadCurrentSession() {
   }
 }
 
+// m:ss under an hour, h:mm:ss after, so a running map reads like a clock.
+function formatElapsedClock(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = String(total % 60).padStart(2, '0');
+  return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${secs}` : `${minutes}:${secs}`;
+}
+
+let renderedActiveSessionHTML = null;
+let renderedActiveSessionItems = null;
+
+// The active map card. Its markup is rebuilt only when the run, its loot or its prices change, so the
+// 1 s clock (updateActiveSessionClock) rewrites only the elapsed time.
 function updateActiveSessionUI() {
-  const lootEntries = Array.isArray(state.currentSession?.lootEntries) ? state.currentSession.lootEntries : [];
-  const totalLootChaos = parseFloat(state.currentSession?.totalLootChaos || 0);
-  const profitChaos = parseFloat(state.currentSession?.profitChaos || 0);
-  const itemCount = lootEntries.reduce((sum, loot) => sum + parseInt(loot.quantity || 0, 10), 0);
-  const liveDuration = getLiveDuration(state.currentSession);
+  const session = state.currentSession;
+  if (elements.sessionCard?.dataset) {
+    elements.sessionCard.dataset.sessionState = session ? 'active' : 'idle';
+  }
+  elements.startSessionBtn.classList.toggle('hidden', Boolean(session));
+  elements.endSessionBtn.classList.toggle('hidden', !session);
+  elements.scanScreenBtn?.classList.toggle('hidden', !session);
+  if (elements.sessionBadge) {
+    elements.sessionBadge.textContent = window.t(session ? 'dashboard.active' : 'dashboard.waiting');
+    elements.sessionBadge.classList.toggle('is-active', Boolean(session));
+  }
+
+  if (!session) {
+    stopSessionClock();
+    renderedActiveSessionHTML = null;
+    renderedActiveSessionItems = null;
+    elements.activeSession.innerHTML = `<p class="empty-state"><span class="empty-state-icon"><svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#ledger"/></svg></span>${window.t('dashboard.noActiveMap')}</p>`;
+    renderFarmTypeSelector();
+    return;
+  }
+
+  const lootEntries = Array.isArray(session.lootEntries) ? session.lootEntries : [];
+  const totalLootChaos = parseFloat(session.totalLootChaos || 0);
+  const costChaos = parseFloat(session.costChaos || 0);
+  const profitChaos = parseFloat(session.profitChaos || 0);
+  const itemCount = lootEntries.reduce((sum, loot) => sum + (parseInt(loot.quantity || 1, 10) || 1), 0);
+  const poeVersion = session.poeVersion || state.settings.poeVersion || 'poe1';
+  const rateOptions = { league: session.league };
   const profitTier = typeof getProfitTierFor === 'function'
-    ? getProfitTierFor(profitChaos, state.currentSession?.poeVersion || state.settings.poeVersion || 'poe1')
+    ? getProfitTierFor(profitChaos, poeVersion, rateOptions)
     : (profitChaos < 0 ? 'loss' : 'normal');
   const formatProfit = typeof profitCurrencyHTML === 'function'
     ? profitCurrencyHTML
-    : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
-  if (state.currentSession) {
-    const contextLabel = `${state.currentSession.poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} • ${escapeHTML(state.currentSession.league || 'Standard')}`;
-    elements.activeSession.innerHTML = `
-      <div class="session-info">
-        <div class="session-info-item">
-          <span class="session-info-label">${window.t('session.map')}</span>
-          <span class="session-info-value">${escapeHTML(state.currentSession.mapName)}</span>
-        </div>
-        <div class="session-info-item">
-          <span class="session-info-label">${window.t('session.tier')}</span>
-          <span class="session-info-value">${state.currentSession.mapTier || '-'}</span>
-        </div>
-        <div class="session-info-item">
-          <span class="session-info-label">${window.t('session.start')}</span>
-          <span class="session-info-value">${new Date(state.currentSession.startedAt).toLocaleTimeString()}</span>
-        </div>
-        <div class="session-info-item">
-          <span class="session-info-label">${window.t('session.status')}</span>
-          <span class="session-info-value" style="color: var(--blue);">${window.t('dashboard.active')}</span>
-        </div>
-        <div class="session-info-item">
-          <span class="session-info-label">Game</span>
-          <span class="session-info-value">${contextLabel}</span>
-        </div>
-        <div class="session-info-item">
-          <span class="session-info-label">${window.t('dashboard.elapsed')}</span>
-          <span class="session-info-value">${formatDuration(liveDuration)}</span>
-        </div>
-        <div class="session-info-item session-info-item--metric">
-          <span class="session-info-label">${window.t('dashboard.liveLoot')}</span>
-          <span class="session-info-value">${currencyHTML(totalLootChaos, 'chaos', 16, state.currentSession.poeVersion || state.settings.poeVersion || 'poe1')}</span>
-        </div>
-        <div class="session-info-item session-info-item--metric">
-          <span class="session-info-label">${window.t('dashboard.liveProfit')}</span>
-          <span class="session-info-value" data-profit-tier="${profitTier}">${formatProfit(profitChaos, 16, state.currentSession.poeVersion || state.settings.poeVersion || 'poe1', { signed: true })}</span>
-        </div>
-        <div class="session-info-item">
-          <span class="session-info-label">${window.t('dashboard.itemsCollected')}</span>
-          <span class="session-info-value">${itemCount}</span>
-        </div>
-      </div>
-    `;
-    elements.startSessionBtn.classList.add('hidden');
-    elements.endSessionBtn.classList.remove('hidden');
-    if (elements.sessionBadge) {
-      elements.sessionBadge.textContent = window.t('dashboard.active');
-      elements.sessionBadge.style.background = 'var(--green-dim)';
-      elements.sessionBadge.style.color = 'var(--green)';
-    }
-  } else {
-    elements.activeSession.innerHTML = `<p class="empty-state"><span class="empty-state-icon"><svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#ledger"/></svg></span>${window.t('dashboard.noActiveMap')}</p>`;
-    elements.startSessionBtn.classList.remove('hidden');
-    elements.endSessionBtn.classList.add('hidden');
-    if (elements.sessionBadge) {
-      elements.sessionBadge.textContent = window.t('dashboard.waiting');
-      elements.sessionBadge.style.background = '';
-      elements.sessionBadge.style.color = '';
-    }
+    : (value, iconSize, version) => currencyHTML(value, 'chaos', iconSize, version);
+  const memeFor = typeof profitMemeHTML === 'function' ? profitMemeHTML : () => '';
+  const farmTypeId = getSessionFarmTypeId(session);
+  const metaParts = [
+    poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1',
+    escapeHTML(session.league || 'Standard'),
+    window.t('dashboard.startedAt', {
+      time: escapeHTML(new Date(session.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+    }),
+    window.t(itemCount === 1 ? 'dashboard.itemCountOne' : 'dashboard.itemCount', { count: itemCount })
+  ];
+  // Loot and cost differ only when the run had a cost.
+  if (costChaos > 0) {
+    metaParts.push(`${window.t('dashboard.liveLoot')} ${formatProfit(totalLootChaos, 14, poeVersion, rateOptions)}`);
+    metaParts.push(`${window.t('sessions.cost')} ${formatProfit(costChaos, 14, poeVersion, rateOptions)}`);
   }
 
+  const html = `
+    <div class="session-live">
+      <div class="session-live-title">
+        <span class="session-live-dot" aria-hidden="true"></span>
+        <strong class="session-live-map">${escapeHTML(session.mapName || 'Unknown Map')}</strong>
+        ${session.mapTier ? `<span class="session-live-chip">T${escapeHTML(session.mapTier)}</span>` : ''}
+        ${farmTypeId ? `<span class="session-live-farm"${farmTypeAttr(farmTypeId)}>${escapeHTML(getSessionFarmTypeLabel(session))}</span>` : ''}
+      </div>
+      <div class="session-live-tiles">
+        <div class="session-live-tile">
+          <span class="session-live-label">${window.t('dashboard.elapsed')}</span>
+          <strong class="session-live-value" data-live="elapsed"></strong>
+        </div>
+        <div class="session-live-tile" data-live="profit">
+          <span class="session-live-label">${window.t('dashboard.liveProfit')}</span>
+          <div class="session-live-profit">
+            <strong class="session-live-value" data-profit-tier="${profitTier}">${formatProfit(profitChaos, 20, poeVersion, { ...rateOptions, signed: true })}</strong>
+            ${memeFor(profitTier)}
+          </div>
+        </div>
+      </div>
+      <p class="session-live-meta">${metaParts.join(' · ')}</p>
+    </div>
+  `;
+
+  if (html !== renderedActiveSessionHTML) {
+    renderedActiveSessionHTML = html;
+    elements.activeSession.innerHTML = html;
+    // New loot gets one short bump on the profit tile, so a scan is seen landing.
+    if (renderedActiveSessionItems !== null && itemCount > renderedActiveSessionItems) {
+      elements.activeSession.querySelector('[data-live="profit"]')?.classList.add('is-bumped');
+    }
+  }
+  renderedActiveSessionItems = itemCount;
+  updateActiveSessionClock();
+  if (!document.hidden) {
+    startSessionClock();
+  }
   renderFarmTypeSelector();
+}
+
+function updateActiveSessionClock() {
+  const elapsed = elements.activeSession?.querySelector?.('[data-live="elapsed"]');
+  if (elapsed && state.currentSession) {
+    elapsed.textContent = formatElapsedClock(getLiveDuration(state.currentSession));
+  }
 }
 
 /**
@@ -4996,7 +5039,7 @@ async function syncPricesForCurrentStashRun(session = state.currentSession) {
   const result = await window.electronAPI.syncPrices({ league });
   stashState.pricesSynced = true;
   if (elements.priceItemCount && Number(result?.itemCount || 0) > 0) {
-    elements.priceItemCount.textContent = `${result.itemCount} items`;
+    renderPriceItemCount(result.itemCount);
   }
   if (typeof refreshProfitCurrencyRates === 'function') {
     await refreshProfitCurrencyRates(session?.poeVersion || getSelectedTrackerContext().poeVersion, league);
@@ -5551,9 +5594,7 @@ async function handleSyncPrices() {
     }
 
     stashState.pricesSynced = true;
-    if (elements.priceItemCount) {
-      elements.priceItemCount.textContent = `${result.itemCount} items`;
-    }
+    renderPriceItemCount(result.itemCount);
     await refreshProfitCurrencyRates(result.poeVersion || state.settings.poeVersion || 'poe1', league);
     showToast(window.t('stash.priceData'), window.t('stash.pricesSynced', { count: result.itemCount }), 'success');
   } catch (error) {
@@ -5889,7 +5930,7 @@ async function loadPriceStatus() {
   try {
     const status = await window.electronAPI.getPriceStatus();
     if (elements.priceItemCount && status.itemCount > 0) {
-      elements.priceItemCount.textContent = `${status.itemCount} items`;
+      renderPriceItemCount(status.itemCount);
       stashState.pricesSynced = true;
       await refreshProfitCurrencyRates(status.poeVersion || state.settings.poeVersion || 'poe1');
       renderLatestMapResult();
@@ -5907,7 +5948,16 @@ async function loadPriceStatus() {
 
 // Main loaded a league's poe.ninja prices (for a session, a stash run or the Currency page). Views drawn before
 // that had no Divine price, so they showed no profit tiers; they get the cached rates and are drawn again.
-async function handlePricesUpdated({ poeVersion, league } = {}) {
+// Today's Summary shows how many prices are loaded; "—" until the first load.
+function renderPriceItemCount(count) {
+  const itemCount = Number(count);
+  if (elements.priceItemCount && itemCount > 0) {
+    elements.priceItemCount.textContent = window.t('dashboard.itemCount', { count: itemCount.toLocaleString('en-US') });
+  }
+}
+
+async function handlePricesUpdated({ poeVersion, league, itemCount } = {}) {
+  renderPriceItemCount(itemCount);
   await refreshProfitCurrencyRates(poeVersion || state.settings.poeVersion || 'poe1', league, { cacheOnly: true });
   renderLatestMapResult();
   renderMapResultHistory();

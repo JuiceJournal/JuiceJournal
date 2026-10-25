@@ -789,13 +789,15 @@ test('renderer scan button swaps only its label while scanning, so the icon surv
   assert.deepEqual(toasts, [['dashboard.scanScreen', 'toast.scanComplete']]);
 });
 
-test('dashboard scan card has a hotkey badge, a label slot and no fallback wording', () => {
+test('dashboard scan button sits next to End Map with the real hotkey, a label slot and no fallback wording', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.html'), 'utf8');
-  assert.match(html, /<span class="hotkey-badge" id="scan-hotkey-badge">/);
+  const actions = html.match(/<div class="session-actions">([\s\S]*?)\n\s*<\/div>/)[1];
+  assert.match(actions, /id="end-session-btn"[\s\S]*id="scan-screen-btn"/);
   assert.match(
-    html,
-    /id="scan-screen-btn"[^>]*>\s*<svg[^>]*><use href="assets\/icons\.svg#scan"\/><\/svg>\s*<span id="scan-screen-label" data-i18n="dashboard\.scanScreen">/
+    actions,
+    /<button id="scan-screen-btn" class="btn btn-primary hidden">\s*<svg[^>]*><use href="assets\/icons\.svg#scan"\/><\/svg>\s*<span class="btn-label" id="scan-screen-label" data-i18n="dashboard\.scanScreen">[^<]*<\/span>\s*<kbd class="btn-kbd" id="scan-hotkey-badge">/
   );
+  assert.doesNotMatch(html, /quick-loot-card/);
 
   const context = vm.createContext({ window: {}, document: { querySelectorAll: () => [] } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'translations.js'), 'utf8'), context);

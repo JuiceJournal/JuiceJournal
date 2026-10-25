@@ -1534,16 +1534,18 @@ test('prices-updated events give the dashboard views the Divine and Mirror rates
     'setProfitCurrencyRates',
     'refreshProfitCurrencyRates',
     'getProfitTierFor',
+    'renderPriceItemCount',
     'handlePricesUpdated',
     'setupIPCListeners'
   ], {
+    elements: { priceItemCount: { textContent: '—' } },
     state: {
       settings: { poeVersion: 'poe1' },
       profitCurrencyRates: {},
       currentUser: { id: 'user-1' }
     },
     window: {
-      t: (key) => key,
+      t: (key, values) => (values?.count !== undefined ? `${key}:${values.count}` : key),
       profitTierModel: require('../src/modules/profitTierModel'),
       electronAPI: {
         onMapEntered: (handler) => { listeners.mapEntered = handler; },
@@ -1573,7 +1575,8 @@ test('prices-updated events give the dashboard views the Divine and Mirror rates
   context.setupIPCListeners();
   assert.equal(context.getProfitTierFor(200, 'poe1', { league: 'Mirage' }), 'normal');
 
-  await listeners.pricesUpdated({ poeVersion: 'poe1', league: 'Mirage', itemCount: 900 });
+  await listeners.pricesUpdated({ poeVersion: 'poe1', league: 'Mirage', itemCount: 1900 });
+  assert.equal(context.elements.priceItemCount.textContent, 'dashboard.itemCount:1,900');
 
   // The rates come from the cache main just filled, so this refresh never asks poe.ninja itself.
   assert.deepEqual(rateRequests, [{ poeVersion: 'poe1', league: 'Mirage', cacheOnly: true }]);
@@ -2889,4 +2892,148 @@ test('game art in item slots is never recoloured', () => {
   const slotStart = appJs.indexOf('function itemSlotHTML');
   const slotSource = appJs.slice(slotStart, slotStart + appJs.slice(slotStart).search(/\r?\n\}\r?\n/));
   assert.doesNotMatch(slotSource, /style=|filter/);
+});
+
+function createActiveSessionHarness(session, extraState = {}) {
+  const hidden = {};
+  const toggleFor = (name) => ({ toggle: (className, on) => { if (className === 'hidden') hidden[name] = on; } });
+  let html = '';
+  let writes = 0;
+  const live = {};
+  const activeSession = {
+    get innerHTML() { return html; },
+    set innerHTML(value) {
+      html = value;
+      writes += 1;
+      live.elapsed = { textContent: '' };
+      live.profit = { classes: [], classList: { add: (className) => live.profit.classes.push(className) } };
+    },
+    querySelector: (selector) => (selector.includes('elapsed') ? live.elapsed : selector.includes('profit') ? live.profit : null)
+  };
+  const badgeClasses = new Set();
+  const elements = {
+    activeSession,
+    sessionCard: { dataset: {} },
+    startSessionBtn: { classList: toggleFor('start') },
+    endSessionBtn: { classList: toggleFor('end') },
+    scanScreenBtn: { classList: toggleFor('scan') },
+    sessionBadge: { textContent: '', classList: { toggle: (className, on) => (on ? badgeClasses.add(className) : badgeClasses.delete(className)) } }
+  };
+  let liveSeconds = 252;
+  const clockCalls = [];
+  const context = createProfitDisplayContext(
+    ['formatElapsedClock', 'getSessionFarmTypeId', 'getMapResultProfitTier', 'profitMemeHTML', 'updateActiveSessionUI', 'updateActiveSessionClock'],
+    {
+      elements,
+      renderedActiveSessionHTML: null,
+      renderedActiveSessionItems: null,
+      PROFIT_MEME_LABELS: { bricked: 'Bricked', pog: 'Pog', juiced: 'Juiced', mirror: 'Mirror tier' },
+      escapeHTML: (value) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+      farmTypeAttr: (id) => ` data-farm-type="${id}"`,
+      getSessionFarmTypeLabel: () => 'Ritual',
+      getLiveDuration: () => liveSeconds,
+      renderFarmTypeSelector: () => {},
+      document: { hidden: false },
+      startSessionClock: () => clockCalls.push('start'),
+      stopSessionClock: () => clockCalls.push('stop'),
+      state: { currentSession: session, ...extraState }
+    }
+  );
+  return {
+    context,
+    elements,
+    hidden,
+    badgeClasses,
+    live,
+    clockCalls,
+    html: () => html,
+    writes: () => writes,
+    setLiveSeconds: (seconds) => { liveSeconds = seconds; }
+  };
+}
+
+const RUNNING_SESSION = {
+  id: 'session-1',
+  mapName: 'Crimson Temple Map',
+  mapTier: 16,
+  farmTypeId: 'ritual',
+  poeVersion: 'poe1',
+  league: 'Standard',
+  startedAt: '2026-10-25T13:32:00.000Z',
+  profitChaos: 300,
+  totalLootChaos: 300,
+  costChaos: 0,
+  lootEntries: [{ itemName: 'Divine Orb', quantity: 3, chaosValue: 100 }]
+};
+
+test('a running map shows a live hero, and the 1 s clock only rewrites the elapsed time', () => {
+  const harness = createActiveSessionHarness(RUNNING_SESSION);
+
+  harness.context.updateActiveSessionUI();
+  assert.equal(harness.elements.sessionCard.dataset.sessionState, 'active');
+  assert.deepEqual(harness.hidden, { start: true, end: false, scan: false });
+  assert.equal(harness.elements.sessionBadge.textContent, 'dashboard.active');
+  assert.ok(harness.badgeClasses.has('is-active'));
+  assert.match(harness.html(), /<strong class="session-live-map">Crimson Temple Map<\/strong>/);
+  assert.match(harness.html(), /<span class="session-live-chip">T16<\/span>/);
+  assert.match(harness.html(), /<span class="session-live-farm" data-farm-type="ritual">Ritual<\/span>/);
+  assert.match(harness.html(), /data-profit-tier="rare"><span class="value-chip">\+3\.00 /);
+  assert.match(harness.html(), /data-meme="pog"/);
+  assert.doesNotMatch(harness.html(), /dashboard\.liveLoot|sessions\.cost/, 'no loot/cost line without a cost');
+  assert.equal(harness.live.elapsed.textContent, '4:12');
+  assert.deepEqual(harness.clockCalls, ['start'], 'a restored or loaded session starts the clock too');
+
+  // The clock tick and an unchanged redraw leave the markup alone.
+  harness.setLiveSeconds(3725);
+  harness.context.updateActiveSessionClock();
+  harness.context.updateActiveSessionUI();
+  assert.equal(harness.writes(), 1);
+  assert.equal(harness.live.elapsed.textContent, '1:02:05');
+
+  // New loot redraws once and bumps the profit tile.
+  harness.context.state.currentSession = {
+    ...RUNNING_SESSION,
+    profitChaos: 400,
+    lootEntries: [...RUNNING_SESSION.lootEntries, { itemName: 'Divine Orb', quantity: 1, chaosValue: 100 }]
+  };
+  harness.context.updateActiveSessionUI();
+  assert.equal(harness.writes(), 2);
+  assert.deepEqual(harness.live.profit.classes, ['is-bumped']);
+
+  // A redraw for new prices (no new loot) does not bump.
+  harness.context.state.currentSession = { ...harness.context.state.currentSession, profitChaos: 401 };
+  harness.context.updateActiveSessionUI();
+  assert.equal(harness.writes(), 3);
+  assert.deepEqual(harness.live.profit.classes, []);
+});
+
+test('the active map card escapes the map name and league', () => {
+  const harness = createActiveSessionHarness({ ...RUNNING_SESSION, mapName: '<img src=x>Map', league: '<b>League</b>' });
+  harness.context.updateActiveSessionUI();
+  assert.match(harness.html(), /<strong class="session-live-map">&lt;img src=x&gt;Map<\/strong>/);
+  assert.match(harness.html(), /&lt;b&gt;League&lt;\/b&gt;/);
+});
+
+test('a run with a cost lists loot and cost, and the idle card goes back to waiting', () => {
+  const harness = createActiveSessionHarness({ ...RUNNING_SESSION, costChaos: 50, profitChaos: 250 });
+
+  harness.context.updateActiveSessionUI();
+  assert.match(harness.html(), /dashboard\.liveLoot <span class="value-chip">3\.00 [\s\S]*sessions\.cost <span class="value-chip">50\.0 /);
+
+  harness.context.state.currentSession = null;
+  harness.context.updateActiveSessionUI();
+  assert.equal(harness.clockCalls.at(-1), 'stop');
+  assert.equal(harness.elements.sessionCard.dataset.sessionState, 'idle');
+  assert.deepEqual(harness.hidden, { start: false, end: true, scan: true });
+  assert.equal(harness.elements.sessionBadge.textContent, 'dashboard.waiting');
+  assert.equal(harness.badgeClasses.has('is-active'), false);
+  assert.match(harness.html(), /dashboard\.noActiveMap/);
+});
+
+test('the session clock interval updates only the elapsed time', () => {
+  const appJs = fs.readFileSync(appJsPath, 'utf8');
+  const clockStart = appJs.indexOf('function startSessionClock');
+  const clockSource = appJs.slice(clockStart, clockStart + appJs.slice(clockStart).search(/\r?\n\}\r?\n/));
+  assert.match(clockSource, /updateActiveSessionClock\(\)/);
+  assert.doesNotMatch(clockSource, /updateActiveSessionUI\(\)/);
 });

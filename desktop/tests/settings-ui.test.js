@@ -441,12 +441,14 @@ test('generic translation passes reapply authenticated chrome after static copy 
     poeConnectBtn: connectBtn,
     poeDisconnectBtn: disconnectBtn
   };
+  let activeSessionRedraws = 0;
   const context = loadFunctions([
     'renderUserIdentity',
     'renderPoeLinkStatus',
     'applyLocalizedChrome'
   ], {
     elements,
+    updateActiveSessionUI: () => { activeSessionRedraws += 1; },
     state: {
       currentUser: { username: 'Esquetta4179', accountName: 'RangerMain' },
       poeDeviceConnected: true
@@ -465,6 +467,7 @@ test('generic translation passes reapply authenticated chrome after static copy 
 
   context.applyLocalizedChrome();
 
+  assert.equal(activeSessionRedraws, 1, 'the active map card follows the new language');
   assert.equal(elements.username.textContent, 'Esquetta4179');
   assert.equal(elements.userAvatar.textContent, 'E');
   assert.equal(elements.poeLinkStatus.textContent, 'settings.poeLinked');

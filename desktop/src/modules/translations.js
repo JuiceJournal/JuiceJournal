@@ -102,6 +102,9 @@ window.Translations = {
     'dashboard.liveProfit': 'Anlik Kar',
     'dashboard.itemsCollected': 'Item',
     'dashboard.elapsed': 'Gecen Sure',
+    'dashboard.startedAt': 'baslangic {time}',
+    'dashboard.itemCount': '{count} item',
+    'dashboard.itemCountOne': '1 item',
 
     // Sessions
     'sessions.title': "Map Session'lari",
@@ -868,6 +871,9 @@ window.Translations = {
     'dashboard.liveProfit': 'Live Profit',
     'dashboard.itemsCollected': 'Items',
     'dashboard.elapsed': 'Elapsed',
+    'dashboard.startedAt': 'started {time}',
+    'dashboard.itemCount': '{count} items',
+    'dashboard.itemCountOne': '1 item',
 
     // Sessions
     'sessions.title': 'Map Sessions',
