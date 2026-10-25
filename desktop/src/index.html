@@ -271,140 +271,156 @@
             </div>
           </div>
 
-          <!-- Active Session -->
-          <div class="card session-card">
-            <div class="card-header">
-              <h3 data-i18n="dashboard.activeSession">Aktif Map Session</h3>
-              <span class="card-badge" id="session-badge" data-i18n="dashboard.waiting">Bekleniyor</span>
-            </div>
-            <div class="form-group">
-              <label for="session-farm-type-select">Farm Type</label>
-              <div class="input-with-btn">
-                <select id="session-farm-type-select">
-                  <option value="">No farm type</option>
-                </select>
-                <button id="clear-farm-type-btn" class="btn btn-secondary btn-small" type="button">Clear</button>
+          <div class="dashboard-main">
+            <!-- Active Session -->
+            <div class="card session-card" id="session-card" data-session-state="idle">
+              <div class="card-header">
+                <h3 data-i18n="dashboard.activeSession">Aktif Map Session</h3>
+                <div class="card-header-right">
+                  <span class="game-status" id="game-status-indicator">
+                    <span class="game-status-dot"></span> <span data-i18n="game.notRunning">Not Running</span>
+                  </span>
+                  <span class="card-badge" id="session-badge" data-i18n="dashboard.waiting">Bekleniyor</span>
+                </div>
+              </div>
+              <div class="form-group session-farm-field">
+                <label for="session-farm-type-select">Farm Type</label>
+                <div class="input-with-btn">
+                  <select id="session-farm-type-select">
+                    <option value="">No farm type</option>
+                  </select>
+                  <button id="clear-farm-type-btn" class="btn btn-secondary btn-small" type="button">Clear</button>
+                </div>
+              </div>
+              <div id="active-session">
+                <p class="empty-state">
+                  <span class="empty-state-icon">
+                    <svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#ledger"/></svg>
+                  </span>
+                  Aktif map yok
+                </p>
+              </div>
+              <div class="session-actions">
+                <button id="start-session-btn" class="btn btn-primary">
+                  <span class="btn-glyph btn-glyph-play" aria-hidden="true">
+                    <svg class="icon icon-sm" width="13" height="13" aria-hidden="true"><use href="assets/icons.svg#play"/></svg>
+                  </span>
+                  <span data-i18n="dashboard.newMap">Yeni Map Baslat</span>
+                </button>
+                <button id="end-session-btn" class="btn btn-danger hidden">
+                  <span class="btn-glyph btn-glyph-stop" aria-hidden="true">
+                    <svg class="icon icon-sm" width="13" height="13" aria-hidden="true"><use href="assets/icons.svg#stop"/></svg>
+                  </span>
+                  <span data-i18n="dashboard.endMap">Map'i Bitir</span>
+                </button>
+                <button id="scan-screen-btn" class="btn btn-primary hidden">
+                  <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#scan"/></svg>
+                  <span class="btn-label" id="scan-screen-label" data-i18n="dashboard.scanScreen">Loot Tara</span>
+                  <kbd class="btn-kbd" id="scan-hotkey-badge">F9</kbd>
+                </button>
               </div>
             </div>
-            <div id="active-session">
-              <p class="empty-state">
-                <span class="empty-state-icon">
-                  <svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#ledger"/></svg>
-                </span>
-                Aktif map yok
+
+            <!-- Last Map Result -->
+            <div class="card last-map-result-card" id="last-map-result-card" data-result-state="empty">
+              <div class="card-header">
+                <h3>Last Map Result</h3>
+              </div>
+              <div class="map-result-summary">
+                <strong id="last-map-result-farm-type">No completed map yet</strong>
+                <div class="map-result-headline">
+                  <span id="last-map-result-profit">—</span>
+                  <span id="last-map-result-meme"></span>
+                </div>
+                <span id="last-map-result-duration">—</span>
+              </div>
+            </div>
+
+            <div class="card map-result-history-card">
+              <div class="card-header">
+                <h3>Map Result History</h3>
+                <select id="map-result-filter" aria-label="Filter map result history by farm type">
+                  <option value="">All farms</option>
+                </select>
+              </div>
+              <div id="map-result-history" class="map-result-history-list">
+                <p class="empty-state">No map results recorded yet.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="dashboard-side">
+            <!-- Today Stats -->
+            <div class="card stats-card">
+              <div class="card-header">
+                <h3 data-i18n="dashboard.todaySummary">Bugunku Ozet</h3>
+              </div>
+              <div class="stats-grid">
+                <div class="stat">
+                  <div class="stat-left">
+                    <div class="stat-icon">
+                      <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#map"/></svg>
+                    </div>
+                    <span class="stat-label" data-i18n="dashboard.map">Map</span>
+                  </div>
+                  <span class="stat-value" id="today-sessions">0</span>
+                </div>
+                <div class="stat">
+                  <div class="stat-left">
+                    <div class="stat-icon">
+                      <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#sum"/></svg>
+                    </div>
+                    <span class="stat-label" data-i18n="dashboard.profit">Kar</span>
+                  </div>
+                  <span class="stat-value" id="today-profit">0</span>
+                </div>
+                <div class="stat">
+                  <div class="stat-left">
+                    <div class="stat-icon">
+                      <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#orb"/></svg>
+                    </div>
+                    <span class="stat-label" data-i18n="dashboard.avgPerMap">Ort/Map</span>
+                  </div>
+                  <span class="stat-value" id="today-avg">0</span>
+                </div>
+                <div class="stat">
+                  <div class="stat-left">
+                    <div class="stat-icon">
+                      <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#arrow-up"/></svg>
+                    </div>
+                    <span class="stat-label" data-i18n="dashboard.perHour">Saatlik</span>
+                  </div>
+                  <span class="stat-value" id="today-per-hour">0</span>
+                </div>
+                <div class="stat">
+                  <div class="stat-left">
+                    <div class="stat-icon">
+                      <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#hourglass"/></svg>
+                    </div>
+                    <span class="stat-label" data-i18n="dashboard.timeMapped">Map suresi</span>
+                  </div>
+                  <span class="stat-value" id="today-time">0</span>
+                </div>
+              </div>
+              <p class="stats-footer">
+                <span data-i18n="stash.priceData">Price Data</span>
+                <span id="price-item-count">—</span>
               </p>
             </div>
-            <div class="session-actions">
-              <button id="start-session-btn" class="btn btn-primary">
-                <span class="btn-glyph btn-glyph-play" aria-hidden="true">
-                  <svg class="icon icon-sm" width="13" height="13" aria-hidden="true"><use href="assets/icons.svg#play"/></svg>
-                </span>
-                <span data-i18n="dashboard.newMap">Yeni Map Baslat</span>
-              </button>
-              <button id="end-session-btn" class="btn btn-danger hidden">
-                <span class="btn-glyph btn-glyph-stop" aria-hidden="true">
-                  <svg class="icon icon-sm" width="13" height="13" aria-hidden="true"><use href="assets/icons.svg#stop"/></svg>
-                </span>
-                <span data-i18n="dashboard.endMap">Map'i Bitir</span>
-              </button>
-            </div>
-          </div>
 
-          <!-- Today Stats -->
-          <div class="card stats-card">
-            <div class="card-header">
-              <h3 data-i18n="dashboard.todaySummary">Bugunku Ozet</h3>
-            </div>
-            <div class="stats-grid">
-              <div class="stat">
-                <div class="stat-left">
-                  <div class="stat-icon">
-                    <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#map"/></svg>
-                  </div>
-                  <span class="stat-label" data-i18n="dashboard.map">Map</span>
-                </div>
-                <span class="stat-value" id="today-sessions">0</span>
+            <!-- Recent Loot -->
+            <div class="card recent-loot-card">
+              <div class="card-header">
+                <h3 data-i18n="dashboard.recentLoot">Son Loot'lar</h3>
               </div>
-              <div class="stat">
-                <div class="stat-left">
-                  <div class="stat-icon">
-                    <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#sum"/></svg>
-                  </div>
-                  <span class="stat-label" data-i18n="dashboard.profit">Kar</span>
-                </div>
-                <span class="stat-value" id="today-profit">0</span>
+              <div id="recent-loot-list">
+                <p class="empty-state">
+                  <span class="empty-state-icon">
+                    <svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#chest"/></svg>
+                  </span>
+                  Henuz loot eklenmedi
+                </p>
               </div>
-              <div class="stat">
-                <div class="stat-left">
-                  <div class="stat-icon">
-                    <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#orb"/></svg>
-                  </div>
-                  <span class="stat-label" data-i18n="dashboard.avgPerMap">Ort/Map</span>
-                </div>
-                <span class="stat-value" id="today-avg">0</span>
-              </div>
-              <div class="stat">
-                <div class="stat-left">
-                  <div class="stat-icon">
-                    <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#arrow-up"/></svg>
-                  </div>
-                  <span class="stat-label" data-i18n="dashboard.perHour">Saatlik</span>
-                </div>
-                <span class="stat-value" id="today-per-hour">0</span>
-              </div>
-              <div class="stat">
-                <div class="stat-left">
-                  <div class="stat-icon">
-                    <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#hourglass"/></svg>
-                  </div>
-                  <span class="stat-label" data-i18n="dashboard.timeMapped">Map suresi</span>
-                </div>
-                <span class="stat-value" id="today-time">0</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- OCR Loot Scan -->
-          <div class="card quick-loot-card">
-            <div class="card-header">
-              <h3 data-i18n="dashboard.quickLoot">OCR Loot Tarama</h3>
-            </div>
-            <div class="quick-loot-content">
-              <span class="hotkey-badge" id="scan-hotkey-badge">F9</span>
-              <div class="quick-loot-text">
-                <p data-i18n="dashboard.scanHint">Deneysel: ekrandaki loot OCR ile okunur ve aktif map'e eklenir.</p>
-              </div>
-              <button id="scan-screen-btn" class="btn btn-secondary">
-                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#scan"/></svg>
-                <span id="scan-screen-label" data-i18n="dashboard.scanScreen">Loot Tara</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Last Map Result -->
-          <div class="card last-map-result-card" id="last-map-result-card" data-result-state="empty">
-            <div class="card-header">
-              <h3>Last Map Result</h3>
-            </div>
-            <div class="map-result-summary">
-              <strong id="last-map-result-farm-type">No completed map yet</strong>
-              <div class="map-result-headline">
-                <span id="last-map-result-profit">—</span>
-                <span id="last-map-result-meme"></span>
-              </div>
-              <span id="last-map-result-duration">—</span>
-            </div>
-          </div>
-
-          <div class="card map-result-history-card">
-            <div class="card-header">
-              <h3>Map Result History</h3>
-              <select id="map-result-filter" aria-label="Filter map result history by farm type">
-                <option value="">All farms</option>
-              </select>
-            </div>
-            <div id="map-result-history" class="map-result-history-list">
-              <p class="empty-state">No map results recorded yet.</p>
             </div>
           </div>
 
@@ -412,21 +428,12 @@
           <div class="card stash-tracker-card" id="stash-tracker-card" data-stash-capability="enabled">
             <div class="card-header">
               <h3 data-i18n="stash.profitTracker">Stash Profit Tracker</h3>
-              <div class="card-header-right">
-                <span class="game-status" id="game-status-indicator">
-                  <span class="game-status-dot"></span> <span data-i18n="game.notRunning">Not Running</span>
-                </span>
-                <span class="card-badge" id="stash-tracker-status" data-i18n="stash.ready">Ready</span>
-              </div>
+              <span class="card-badge" id="stash-tracker-status" data-i18n="stash.ready">Ready</span>
             </div>
             <div class="stash-capability-unavailable hidden" id="stash-capability-unavailable" data-i18n="stash.capabilityUnavailable.poe2" hidden></div>
             <div class="stash-tracker-content">
               <!-- Price sync status -->
               <div class="stash-price-status" id="stash-price-status">
-                <div class="price-status-row">
-                  <span class="price-status-label" data-i18n="stash.priceData">Price Data</span>
-                  <span class="price-status-value" id="price-item-count">—</span>
-                </div>
                 <button id="sync-prices-btn" class="btn btn-sm btn-secondary">
                   <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sync"/></svg>
                   <span data-i18n="stash.syncPrices">Sync Prices</span>
@@ -497,21 +504,6 @@
                   <span data-i18n="stash.resetSnapshots">Reset & Start New</span>
                 </button>
               </div>
-            </div>
-          </div>
-
-          <!-- Recent Loot -->
-          <div class="card recent-loot-card">
-            <div class="card-header">
-              <h3 data-i18n="dashboard.recentLoot">Son Loot'lar</h3>
-            </div>
-            <div id="recent-loot-list">
-              <p class="empty-state">
-                <span class="empty-state-icon">
-                  <svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#chest"/></svg>
-                </span>
-                Henuz loot eklenmedi
-              </p>
             </div>
           </div>
         </div>

@@ -919,9 +919,17 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 /* ==================== DASHBOARD ==================== */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1fr 340px;
-  grid-template-rows: auto auto auto;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  align-items: start;
   gap: 1rem;
+}
+
+.dashboard-main,
+.dashboard-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
 }
 
 /* Character Summary Card */
@@ -1325,10 +1333,22 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   color: var(--gold-light);
 }
 
-/* Active Session Card */
-.session-card {
-  grid-column: 1;
-  grid-row: 2;
+.card-badge.is-active {
+  background: rgb(var(--ember-rgb) / 0.14);
+  color: var(--ember-hot);
+}
+
+/* Active Session Card: a running map gets ember edges and hides the farm picker it no longer needs. */
+.session-card[data-session-state="active"] {
+  border-color: rgb(var(--ember-rgb) / 0.45);
+}
+
+.session-card[data-session-state="active"]::before {
+  border-color: var(--ember-hot);
+}
+
+.session-card[data-session-state="active"] .session-farm-field {
+  display: none;
 }
 
 #active-session {
@@ -1343,40 +1363,108 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   justify-content: center;
 }
 
-.session-info {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
+/* The live map: name and chips, two big tiles (a ticking clock and the tiered live profit), one meta line. */
+.session-live {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
   width: 100%;
 }
 
-.session-info-item {
+.session-live-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.session-live-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--ember-hot);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.session-live-map {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-bright);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-live-chip {
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--bevel-xs);
+  box-shadow: inset 0 0 0 1px rgb(var(--brass-rgb) / 0.5);
+  color: var(--gold-light);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.session-live-farm {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.session-live-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.session-live-tile {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-}
-
-.session-info-label {
-  font-size: 0.7rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.session-info-value {
-  font-size: 1rem;
-  font-weight: 700;
-  font-family: var(--font);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-bright);
-}
-
-.session-info-item--metric {
-  padding: 0.75rem 0.85rem;
-  background: rgb(var(--ink-rgb) / 0.025);
-  border: 1px solid var(--border);
+  gap: 0.35rem;
+  padding: 0.75rem 0.9rem;
   border-radius: var(--bevel-sm);
+  background: rgb(var(--plate-deep-rgb) / 0.92);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.session-live-tile.is-bumped {
+  animation: tile-bump var(--duration-enter) var(--ease-out);
+}
+
+@keyframes tile-bump {
+  50% { transform: translateY(-2px); }
+}
+
+.session-live-label {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.session-live-profit {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.session-live-value {
+  color: var(--text-bright);
+  font-family: var(--font);
+  font-size: 2rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.session-live-meta {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
 }
 
 .session-actions {
@@ -1384,10 +1472,25 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   gap: 0.5rem;
 }
 
-/* Stats Card */
-.stats-card {
-  grid-column: 2;
-  grid-row: 2;
+/* The real scan hotkey on the Scan loot button, as a small keycap. */
+.btn-kbd {
+  padding: 1px 5px;
+  border-radius: var(--bevel-xs);
+  background: rgb(var(--shadow-rgb) / 0.2);
+  font-family: var(--font);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+/* Price data moved here from the stash card, so OCR players see it too. */
+.stats-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 .stats-grid {
@@ -1514,22 +1617,6 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   gap: 0.75rem;
 }
 
-/* Quick Loot Card */
-.quick-loot-card {
-  grid-column: 1;
-  grid-row: 3;
-}
-
-.quick-loot-content {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  background: var(--bg-base);
-  border: 1px solid var(--border);
-  border-radius: var(--bevel);
-}
-
 .hotkey-badge {
   display: inline-flex;
   align-items: center;
@@ -1547,21 +1634,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   box-shadow: 0 2px 0 var(--border);
 }
 
-.quick-loot-text {
-  flex: 1;
-}
-
-.quick-loot-text p {
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-
 /* Last Map Result Card */
-.last-map-result-card {
-  grid-column: 2;
-  grid-row: 3;
-}
 
 .map-result-summary {
   display: grid;
@@ -1638,10 +1711,6 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 /* Map Result History */
-.map-result-history-card {
-  grid-column: 1;
-  grid-row: 4;
-}
 
 .map-result-history-card .card-header {
   align-items: center;
@@ -1760,10 +1829,6 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 /* Recent Loot Card */
-.recent-loot-card {
-  grid-column: 2;
-  grid-row: 4;
-}
 
 #recent-loot-list {
   display: flex;
@@ -1957,7 +2022,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.session-status.active { background: var(--blue-dim); color: var(--blue); }
+.session-status.active { background: rgb(var(--ember-rgb) / 0.14); color: var(--ember-hot); }
 .session-status.completed { background: var(--green-dim); color: var(--green); }
 .session-status.abandoned { background: rgb(var(--ink-rgb) / 0.05); color: var(--text-muted); }
 
@@ -3162,15 +3227,6 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
-  .session-card,
-  .stats-card,
-  .last-map-result-card,
-  .map-result-history-card,
-  .quick-loot-card,
-  .recent-loot-card {
-    grid-column: 1;
-    grid-row: auto;
-  }
   .session-item {
     grid-template-columns: 1fr;
     text-align: center;
@@ -3300,7 +3356,26 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 
 .stash-tracker-card {
   grid-column: 1 / -1;
-  grid-row: 6;
+}
+
+.stash-tracker-card[data-stash-capability="unavailable"] {
+  padding-block: 0.75rem;
+  box-shadow: none;
+}
+
+.stash-tracker-card[data-stash-capability="unavailable"]::before {
+  display: none;
+}
+
+.stash-tracker-card[data-stash-capability="unavailable"] .card-header {
+  margin-bottom: 0;
+}
+
+.stash-capability-unavailable {
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
 .stash-tracker-content {
@@ -3317,28 +3392,11 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 .stash-price-status {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 0.5rem 0.75rem;
   background: var(--bg-input);
   border-radius: var(--bevel-sm);
   border: 1px solid var(--border);
-}
-
-.price-status-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.price-status-label {
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-}
-
-.price-status-value {
-  color: var(--gold);
-  font-weight: 600;
-  font-size: 0.85rem;
 }
 
 .stash-snapshot-controls {
