@@ -15,8 +15,7 @@ const VISUAL_USER = {
     id: 'char-visual-qa',
     name: 'VisualDeadeye',
     level: 99,
-    class: 'Ranger',
-    ascendancy: 'Deadeye',
+    class: 'Deadeye',
     league: 'Standard'
   }
 };
@@ -399,6 +398,12 @@ test('adaptive profit visual QA: captures dashboard, sessions, stash result, and
     await prepareAdaptiveProfitState(page);
 
     await expect(page.locator('#dashboard-page')).toHaveClass(/active/);
+    await expect(page.locator('#character-class')).toHaveText('Deadeye · Ranger');
+    await expect(page.locator('#character-league')).toHaveText('Standard');
+    await expect(page.locator('#character-level-meta')).toHaveCount(0);
+    await page.locator('#character-summary-card').screenshot({
+      path: testInfo.outputPath('character-hero.png')
+    });
     await expect(page.locator('#today-profit')).toContainText('2.00');
     await expect(page.locator('#last-map-result-card')).toHaveAttribute('data-result-state', 'ready');
     await expect(page.locator('#last-map-result-profit')).toContainText('2.00');

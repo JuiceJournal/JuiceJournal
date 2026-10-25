@@ -199,7 +199,54 @@ test('character banner and portrait art are never recoloured', () => {
   }
 });
 
-test('renderer fills hero banner artwork and meta fields from normalized account state', () => {
+test('dashboard hero shows class, league and game chips instead of a meta grid', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+
+  assert.doesNotMatch(html, /character-meta-grid|id="character-(level-meta|class-meta|account)"|data-i18n="dashboard\.characterSummary"/);
+  assert.match(html, /id="character-summary-card" role="region" data-i18n-aria="dashboard\.characterSummary"/);
+
+  const [chips] = html.match(/<div class="character-chips">[\s\S]*?<\/div>/) || [''];
+  assert.match(chips, /id="character-class"/);
+  assert.match(chips, /id="character-league"/);
+  assert.match(chips, /id="character-game-version"/);
+});
+
+test('hero chips keep English casing for GGG names under any UI language', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+
+  // Uppercased under lang="tr", 'Witch' would read 'WİTCH'.
+  for (const id of ['character-class', 'character-league', 'character-game-version']) {
+    assert.match(html, new RegExp(`<span class="character-chip" id="${id}" lang="en">`), id);
+  }
+});
+
+test('hero banner art is right-anchored, masked and slim', () => {
+  const css = fs.readFileSync(stylesPath, 'utf8');
+
+  const [img] = css.match(/\.character-banner > img\s*\{[^}]*\}/) || [''];
+  assert.match(img, /inset:\s*0 0 0 auto;/);
+  assert.match(img, /width:\s*58%;/);
+  assert.match(img, /mask-image:\s*linear-gradient\(90deg,\s*transparent/);
+  assert.match(css, /\.character-banner\s*\{[^}]*min-height:\s*176px;/);
+  assert.match(css, /\.character-hero\s*\{[^}]*min-height:\s*176px;/);
+  assert.match(css, /\.character-portrait-shell\s*\{[^}]*width:\s*112px;/);
+});
+
+test('hero chips never blur the art behind them', () => {
+  const css = fs.readFileSync(stylesPath, 'utf8');
+
+  const [chip] = css.match(/\.character-chip\s*\{[^}]*\}/) || [''];
+  assert.ok(chip);
+  assert.doesNotMatch(chip, /backdrop-filter|filter:/);
+});
+
+test('empty character card hides the class and league chips', () => {
+  const css = fs.readFileSync(stylesPath, 'utf8');
+
+  assert.match(css, /\.character-card\[data-character-state="empty"\] :is\(#character-class, #character-league\)\s*\{\s*display:\s*none;/);
+});
+
+test('renderer fills hero banner artwork and chips from normalized account state', () => {
   const elements = {
     characterSummaryCard: { dataset: {} },
     characterBanner: { dataset: {} },
@@ -218,10 +265,7 @@ test('renderer fills hero banner artwork and meta fields from normalized account
     characterName: { textContent: '' },
     characterClass: { textContent: '' },
     characterLevel: { textContent: '' },
-    characterLevelMeta: { textContent: '' },
     characterLeague: { textContent: '' },
-    characterClassMeta: { textContent: '' },
-    characterAccount: { textContent: '' },
     characterStatus: { textContent: '' },
     characterGameVersion: { textContent: '' }
   };
@@ -284,12 +328,9 @@ test('renderer fills hero banner artwork and meta fields from normalized account
   assert.equal(elements.characterPortraitBadge.textContent, 'S');
   assert.equal(elements.characterPortraitBadge.style.display, 'none');
   assert.equal(elements.characterName.textContent, 'KocaGyVeMasha');
-  assert.equal(elements.characterClass.textContent, 'Shaman');
+  assert.equal(elements.characterClass.textContent, 'Shaman · Druid');
   assert.equal(elements.characterLevel.textContent, '96');
-  assert.equal(elements.characterLevelMeta.textContent, '96');
   assert.equal(elements.characterLeague.textContent, 'Fate of the Vaal');
-  assert.equal(elements.characterClassMeta.textContent, 'Druid');
-  assert.equal(elements.characterAccount.textContent, 'KocaGyVeMasha');
   assert.equal(elements.characterGameVersion.textContent, 'PoE 2');
 });
 
@@ -312,10 +353,7 @@ test('renderer keeps the last detected game character badge when no game is acti
     characterName: { textContent: '' },
     characterClass: { textContent: '' },
     characterLevel: { textContent: '' },
-    characterLevelMeta: { textContent: '' },
     characterLeague: { textContent: '' },
-    characterClassMeta: { textContent: '' },
-    characterAccount: { textContent: '' },
     characterStatus: { textContent: '' },
     characterGameVersion: { textContent: '' }
   };
@@ -389,10 +427,7 @@ test('renderer keeps hero text current when character art is unavailable', () =>
     characterName: { textContent: '' },
     characterClass: { textContent: '' },
     characterLevel: { textContent: '' },
-    characterLevelMeta: { textContent: '' },
     characterLeague: { textContent: '' },
-    characterClassMeta: { textContent: '' },
-    characterAccount: { textContent: '' },
     characterStatus: { textContent: '' },
     characterGameVersion: { textContent: '' }
   };
@@ -444,18 +479,17 @@ test('renderer keeps hero text current when character art is unavailable', () =>
   assert.equal(elements.characterPortraitBadge.textContent, 'I');
   assert.notEqual(elements.characterPortraitBadge.style.display, 'none');
   assert.equal(elements.characterName.textContent, 'KELLEE');
-  assert.equal(elements.characterClass.textContent, 'Invoker');
+  assert.equal(elements.characterClass.textContent, 'Invoker · Monk');
   assert.equal(elements.characterLevel.textContent, '92');
-  assert.equal(elements.characterLevelMeta.textContent, '92');
   assert.equal(elements.characterLeague.textContent, 'Standard');
-  assert.equal(elements.characterClassMeta.textContent, 'Monk');
-  assert.equal(elements.characterAccount.textContent, 'Esquetta#4179');
 });
 
-test('renderer level meta falls back to an em dash without a level element', () => {
+test('renderer empty state shows em dashes and Unknown Class', () => {
   const elements = {
     characterSummaryCard: { dataset: {} },
-    characterLevelMeta: { textContent: '' }
+    characterLevel: { textContent: '' },
+    characterLeague: { textContent: '' },
+    characterClass: { textContent: '' }
   };
   const context = loadFunctions(['renderCharacterSummaryCard'], {
     elements,
@@ -467,5 +501,30 @@ test('renderer level meta falls back to an em dash without a level element', () 
 
   context.renderCharacterSummaryCard();
 
-  assert.equal(elements.characterLevelMeta.textContent, '—');
+  assert.equal(elements.characterLevel.textContent, '—');
+  assert.equal(elements.characterLeague.textContent, '—');
+  assert.equal(elements.characterClass.textContent, 'Unknown Class');
+  assert.equal(elements.characterSummaryCard.dataset.characterState, 'empty');
+});
+
+test('renderer shows only the class for an unascended character', () => {
+  const elements = {
+    characterSummaryCard: { dataset: {} },
+    characterClass: { textContent: '' }
+  };
+  const context = loadFunctions(['renderCharacterSummaryCard'], {
+    elements,
+    state: {
+      account: {
+        summary: { status: 'ready', name: 'Base', level: 12, className: 'Ranger', league: 'Standard' }
+      }
+    },
+    getCharacterVisualModel: () => ({
+      deriveCharacterVisual: () => ({ classLabel: 'Ranger', baseClassLabel: 'Ranger', badgeText: 'R' })
+    })
+  });
+
+  context.renderCharacterSummaryCard();
+
+  assert.equal(elements.characterClass.textContent, 'Ranger');
 });

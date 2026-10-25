@@ -222,7 +222,7 @@
       <section id="dashboard-page" class="page active">
         <div class="dashboard-grid">
           <!-- Character Summary -->
-          <div class="card character-card" id="character-summary-card" data-character-state="empty">
+          <div class="card character-card" id="character-summary-card" role="region" data-i18n-aria="dashboard.characterSummary" data-character-state="empty">
             <div class="character-banner" id="character-banner" data-character-tone="neutral">
               <img id="character-banner-image" alt="" hidden>
               <div class="character-banner-scrim"></div>
@@ -233,12 +233,12 @@
                   <strong id="character-level">—</strong>
                 </div>
                 <div class="character-hero-copy">
-                  <h3 data-i18n="dashboard.characterSummary">Character Summary</h3>
                   <p class="character-status" id="character-status">Character sync needed</p>
-                  <div class="character-heading-row">
-                    <strong id="character-name">No character selected</strong>
-                    <span id="character-league">—</span>
-                    <span id="character-class">Unknown Class</span>
+                  <strong id="character-name">No character selected</strong>
+                  <div class="character-chips">
+                    <span class="character-chip" id="character-class" lang="en">Unknown Class</span>
+                    <span class="character-chip" id="character-league" lang="en">—</span>
+                    <span class="character-chip" id="character-game-version" lang="en">PoE</span>
                   </div>
                   <label class="character-picker" id="character-picker-field" hidden>
                     <span data-i18n="dashboard.playingAs">Playing as</span>
@@ -251,22 +251,7 @@
                     <span class="btn-label" data-i18n="dashboard.connectDevice">Reconnect Path of Exile</span>
                     <svg class="icon btn-external" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#external"/></svg>
                   </button>
-                  <div class="character-meta-grid">
-                    <div class="character-meta">
-                      <span>Level</span>
-                      <strong id="character-level-meta">—</strong>
-                    </div>
-                    <div class="character-meta">
-                      <span>Class</span>
-                      <strong id="character-class-meta">Unknown Class</strong>
-                    </div>
-                    <div class="character-meta">
-                      <span>Account</span>
-                      <strong id="character-account">—</strong>
-                    </div>
-                  </div>
                 </div>
-                <span class="card-badge" id="character-game-version">PoE</span>
               </div>
             </div>
           </div>
@@ -293,12 +278,11 @@
                 </div>
               </div>
               <div id="active-session">
-                <p class="empty-state">
-                  <span class="empty-state-icon">
-                    <svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#ledger"/></svg>
-                  </span>
-                  Aktif map yok
-                </p>
+                <div class="empty-state empty-state--rich">
+                  <img class="empty-state-art" src="assets/brand/mark.svg" width="48" height="48" alt="" draggable="false">
+                  <strong class="empty-state-title" data-i18n="dashboard.noActiveMap">No map running</strong>
+                  <span class="empty-state-hint" data-i18n="dashboard.idleHint">Pick a farm type and press Start.</span>
+                </div>
               </div>
               <div class="session-actions">
                 <button id="start-session-btn" class="btn btn-primary">
@@ -336,7 +320,7 @@
               </div>
             </div>
 
-            <div class="card map-result-history-card">
+            <div class="card map-result-history-card" id="map-result-history-card" hidden>
               <div class="card-header">
                 <h3>Map Result History</h3>
                 <select id="map-result-filter" aria-label="Filter map result history by farm type">
@@ -414,12 +398,11 @@
                 <h3 data-i18n="dashboard.recentLoot">Son Loot'lar</h3>
               </div>
               <div id="recent-loot-list">
-                <p class="empty-state">
-                  <span class="empty-state-icon">
-                    <svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#chest"/></svg>
-                  </span>
-                  Henuz loot eklenmedi
-                </p>
+                <div class="empty-state empty-state--rich">
+                  <span class="item-slot empty-state-art"><svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#chest"/></svg></span>
+                  <strong class="empty-state-title" data-i18n="dashboard.noLoot">No loot added yet</strong>
+                  <span class="empty-state-hint" data-i18n="dashboard.noLootHint">Loot you scan during a map shows up here.</span>
+                </div>
               </div>
             </div>
           </div>
@@ -966,7 +949,7 @@
     </main>
 
     <!-- Toast Notifications -->
-    <div id="toast-container" role="status" aria-live="polite"></div>
+    <div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
   </div>
 
   <script src="modules/translations.js"></script>

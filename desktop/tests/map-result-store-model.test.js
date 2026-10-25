@@ -326,6 +326,33 @@ test('renderer saves the latest map result and stores returned history in state'
 
   assert.deepEqual(calls, [{ id: 'new-1' }]);
   assert.deepEqual(state.mapResults, [{ id: 'new-1' }, { id: 'old-1' }]);
+  // The saved result leads the list, so the next latest-result render lands it.
+  assert.equal(state.landingMapResultKey, 'new-1');
+  assert.equal(state.landedMapResultKey, 'new-1');
+});
+
+test('renderer lands a saved result by its local run id and hands each result over once', async () => {
+  const state = {
+    mapResults: []
+  };
+  const context = loadFunctions(['persistMapResultHistory'], {
+    state,
+    window: {
+      electronAPI: {
+        async saveMapResult() {
+          return [{ localRunId: 'local-run-1' }];
+        }
+      }
+    }
+  });
+
+  await context.persistMapResultHistory({ localRunId: 'local-run-1' });
+  assert.equal(state.landingMapResultKey, 'local-run-1');
+
+  // A second save of the same result (session-ended and the end call) does not hand it over again.
+  state.landingMapResultKey = null;
+  await context.persistMapResultHistory({ localRunId: 'local-run-1' });
+  assert.equal(state.landingMapResultKey, null);
 });
 
 test('renderer creates a completed map result directly from an ended session', () => {
