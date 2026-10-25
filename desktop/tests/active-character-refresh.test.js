@@ -304,15 +304,17 @@ test('syncRendererGameContext schedules an active-character refresh for detected
   const versionButtons = [
     {
       dataset: { version: 'poe1' },
-      classList: { toggle() {} }
+      classList: { toggle() {} },
+      setAttribute() {}
     },
     {
       dataset: { version: 'poe2' },
-      classList: { toggle() {} }
+      classList: { toggle() {} },
+      setAttribute() {}
     }
   ];
 
-  const context = loadFunctions(['syncRendererGameContext'], {
+  const context = loadFunctions(['setToggleButtonPressed', 'syncRendererGameContext'], {
     normalizePoeVersion: (value) => value,
     state: {
       currentUser: { id: 'user-1' },

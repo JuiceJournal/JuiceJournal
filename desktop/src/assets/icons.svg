@@ -86,6 +86,39 @@
     </g>
   </symbol>
 
+  <symbol id="sign-in" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter">
+      <path d="M13 4.5h6.5v15H13"/>
+      <path d="M3.5 12h11M11 8l4 4-4 4"/>
+    </g>
+  </symbol>
+
+  <symbol id="sign-out" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter">
+      <path d="M11 4.5H4.5v15H11"/>
+      <path d="M9.5 12h11M17 8l4 4-4 4"/>
+    </g>
+  </symbol>
+
+  <symbol id="check" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter">
+      <path d="M4.5 12.5l5 5 10-11"/>
+    </g>
+  </symbol>
+
+  <symbol id="folder" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter">
+      <path d="M3.5 6h6l2 2.5h9v11h-17z"/>
+    </g>
+  </symbol>
+
+  <symbol id="export" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter">
+      <path d="M12 3.5v11M8 10.5l4 4 4-4"/>
+      <path d="M4.5 15v5h15v-5"/>
+    </g>
+  </symbol>
+
   <symbol id="poe1" viewBox="0 0 24 24">
     <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter">
       <path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/>

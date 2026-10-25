@@ -756,6 +756,9 @@ test('runtime game-version sync updates settings league context from the selecte
           assert.equal(className, 'active');
           versionButtons[0].active = isActive;
         }
+      },
+      setAttribute: (name, value) => {
+        versionButtons[0][name] = value;
       }
     },
     {
@@ -765,10 +768,13 @@ test('runtime game-version sync updates settings league context from the selecte
           assert.equal(className, 'active');
           versionButtons[1].active = isActive;
         }
+      },
+      setAttribute: (name, value) => {
+        versionButtons[1][name] = value;
       }
     }
   ];
-  const context = loadFunctions(['syncRendererGameContext'], {
+  const context = loadFunctions(['setToggleButtonPressed', 'syncRendererGameContext'], {
     normalizePoeVersion: (value) => value,
     state: {
       detectedGameVersion: null,
@@ -813,6 +819,8 @@ test('runtime game-version sync updates settings league context from the selecte
   assert.deepEqual(currencySyncCalls, ['sync']);
   assert.equal(versionButtons[0].active, true);
   assert.equal(versionButtons[1].active, false);
+  assert.equal(versionButtons[0]['aria-pressed'], 'true');
+  assert.equal(versionButtons[1]['aria-pressed'], 'false');
   assert.equal(JSON.stringify(uiCalls), JSON.stringify([{
     options: { syncValue: true },
     settingsVersion: 'poe1'
@@ -831,6 +839,9 @@ test('runtime game-version sync preserves the current settings version when the 
           assert.equal(className, 'active');
           versionButtons[0].active = isActive;
         }
+      },
+      setAttribute: (name, value) => {
+        versionButtons[0][name] = value;
       }
     },
     {
@@ -840,10 +851,13 @@ test('runtime game-version sync preserves the current settings version when the 
           assert.equal(className, 'active');
           versionButtons[1].active = isActive;
         }
+      },
+      setAttribute: (name, value) => {
+        versionButtons[1][name] = value;
       }
     }
   ];
-  const context = loadFunctions(['syncRendererGameContext'], {
+  const context = loadFunctions(['setToggleButtonPressed', 'syncRendererGameContext'], {
     normalizePoeVersion: (value) => value,
     state: {
       detectedGameVersion: null,
@@ -899,6 +913,9 @@ test('runtime game-version sync reports no active game without falling back to p
           assert.equal(className, 'active');
           versionButtons[0].active = isActive;
         }
+      },
+      setAttribute: (name, value) => {
+        versionButtons[0][name] = value;
       }
     },
     {
@@ -908,10 +925,13 @@ test('runtime game-version sync reports no active game without falling back to p
           assert.equal(className, 'active');
           versionButtons[1].active = isActive;
         }
+      },
+      setAttribute: (name, value) => {
+        versionButtons[1][name] = value;
       }
     }
   ];
-  const context = loadFunctions(['syncRendererGameContext'], {
+  const context = loadFunctions(['setToggleButtonPressed', 'syncRendererGameContext'], {
     normalizePoeVersion: (value) => value === 'poe1' || value === 'poe2' ? value : null,
     state: {
       detectedGameVersion: 'poe2',
@@ -1382,4 +1402,31 @@ test('renderer keeps prior settings state and shows an error when settings save 
   assert.equal(context.state.settings.defaultLeaguePoe2, 'Dawn of the Hunt');
   assert.equal(savedToasts.length, 1);
   assert.deepEqual(savedToasts[0], ['toast.error', 'Invalid API URL', 'error']);
+});
+
+test('choosing a settings version marks only that button as pressed', () => {
+  const createToggle = (version) => {
+    const attributes = {};
+    const classes = new Set();
+    return {
+      dataset: { version },
+      attributes,
+      classes,
+      classList: { toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)) },
+      setAttribute: (name, value) => {
+        attributes[name] = value;
+      }
+    };
+  };
+  const versionBtns = [createToggle('poe1'), createToggle('poe2')];
+  const context = loadFunctions(['normalizePoeVersion', 'setToggleButtonPressed', 'applySettingsVersionSelection'], {
+    state: { settings: { poeVersion: 'poe1' } },
+    elements: { versionBtns }
+  });
+
+  assert.equal(context.applySettingsVersionSelection('poe2'), 'poe2');
+  assert.deepEqual(versionBtns.map((btn) => [btn.classes.has('active'), btn.attributes['aria-pressed']]), [
+    [false, 'false'],
+    [true, 'true']
+  ]);
 });

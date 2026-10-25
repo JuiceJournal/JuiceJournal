@@ -303,12 +303,12 @@ function renderAppUpdateState() {
     }
     if (elements.checkUpdatesBtn) {
       elements.checkUpdatesBtn.disabled = true;
-      elements.checkUpdatesBtn.textContent = window.t('settings.checkForUpdates');
+      setButtonLabel(elements.checkUpdatesBtn, window.t('settings.checkForUpdates'));
     }
     if (elements.installUpdateBtn) {
       elements.installUpdateBtn.hidden = true;
       elements.installUpdateBtn.disabled = true;
-      elements.installUpdateBtn.textContent = window.t('settings.installUpdate');
+      setButtonLabel(elements.installUpdateBtn, window.t('settings.installUpdate'));
       elements.installUpdateBtn.classList?.add('hidden');
     }
     return;
@@ -364,15 +364,15 @@ function renderAppUpdateState() {
 
   if (elements.checkUpdatesBtn) {
     elements.checkUpdatesBtn.disabled = Boolean(update.checking || update.downloading);
-    elements.checkUpdatesBtn.textContent = update.checking
+    setButtonLabel(elements.checkUpdatesBtn, update.checking
       ? window.t('settings.checkingForUpdates')
-      : window.t('settings.checkForUpdates');
+      : window.t('settings.checkForUpdates'));
   }
 
   if (elements.installUpdateBtn) {
     elements.installUpdateBtn.hidden = !update.downloaded;
     elements.installUpdateBtn.disabled = !update.downloaded;
-    elements.installUpdateBtn.textContent = window.t('settings.installUpdate');
+    setButtonLabel(elements.installUpdateBtn, window.t('settings.installUpdate'));
     elements.installUpdateBtn.classList?.toggle('hidden', !update.downloaded);
   }
 }
@@ -834,7 +834,7 @@ function applySettingsVersionSelection(version) {
   const normalizedVersion = normalizePoeVersion(version) || 'poe1';
   state.settings.poeVersion = normalizedVersion;
   elements.versionBtns.forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.version === normalizedVersion);
+    setToggleButtonPressed(btn, btn.dataset.version === normalizedVersion);
   });
   return normalizedVersion;
 }
@@ -1055,7 +1055,7 @@ function syncRendererGameContext(version, options = {}) {
   if (normalizedSettingsVersion) {
     state.settings.poeVersion = normalizedSettingsVersion;
     elements.versionBtns.forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.version === normalizedSettingsVersion);
+      setToggleButtonPressed(btn, btn.dataset.version === normalizedSettingsVersion);
     });
     syncDesktopCurrencyIcons();
     void loadSettingsLeagueOptions(normalizedSettingsVersion);
@@ -2099,8 +2099,7 @@ function setupEventListeners() {
   // PoE version switching
   elements.versionBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-      elements.versionBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
+      elements.versionBtns.forEach(b => setToggleButtonPressed(b, b === btn));
       state.settings.poeVersion = btn.dataset.version;
       syncDesktopCurrencyIcons();
       updateActiveLeagueFieldContext({ syncValue: true });
@@ -2301,7 +2300,7 @@ function setupIPCListeners() {
         currencyState.type = '';
         // Update poe-toggle buttons on currency page
         document.querySelectorAll('.poe-toggle-btn').forEach(b => {
-          b.classList.toggle('active', b.dataset.poe === version);
+          setToggleButtonPressed(b, b.dataset.poe === version);
         });
         updateTypeFilterDropdown();
         loadCurrencyLeagues();
@@ -4742,13 +4741,16 @@ function renderOnlineSettings() {
     elements.onlineAccountStatus.textContent = window.t(statusKey);
   }
   if (elements.testConnection) elements.testConnection.disabled = !enabled;
-  if (elements.onlineSignIn) elements.onlineSignIn.disabled = !enabled || signedIn;
+  // A sign-in still waiting on the browser stays disabled, so a second click cannot start a second flow.
+  if (elements.onlineSignIn) {
+    elements.onlineSignIn.disabled = !enabled || signedIn || elements.onlineSignIn.getAttribute?.('aria-busy') === 'true';
+  }
   if (elements.onlineSignOut) elements.onlineSignOut.disabled = !signedIn;
 }
 
 // Signs in to Juice Journal's server for the Farming Hub; the local profile is not touched.
 async function handleOnlineSignIn() {
-  elements.onlineSignIn.disabled = true;
+  setButtonBusy(elements.onlineSignIn, true, window.t('login.waitingBrowser'));
   try {
     const result = await window.electronAPI.startPoeLogin();
     if (result?.success) {
@@ -4759,7 +4761,10 @@ async function handleOnlineSignIn() {
   } catch (error) {
     showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
   } finally {
+    // Read the new account state first, so the button goes straight from busy to its final state.
     await refreshOnlineAccount();
+    setButtonBusy(elements.onlineSignIn, false);
+    renderOnlineSettings();
   }
 }
 
@@ -4769,6 +4774,17 @@ async function handleOnlineSignOut() {
   } finally {
     await refreshOnlineAccount();
   }
+}
+
+// Writes a button's label without erasing its icon.
+function setButtonLabel(button, text) {
+  (button.querySelector('.btn-label') || button).textContent = text;
+}
+
+// Toggle buttons keep the .active class for styling and tell assistive tech with aria-pressed.
+function setToggleButtonPressed(button, pressed) {
+  button.classList.toggle('active', pressed);
+  button.setAttribute('aria-pressed', String(pressed));
 }
 
 // A busy button shows a spinner and, when given one, a busy label; only the label text changes, so icons survive.
@@ -5932,8 +5948,7 @@ async function handleSessionMetadataSave() {
     notes: elements.sessionDrawerNotes ? elements.sessionDrawerNotes.value : ''
   };
 
-  const originalLabel = elements.sessionDrawerSave.textContent;
-  elements.sessionDrawerSave.disabled = true;
+  setButtonBusy(elements.sessionDrawerSave, true);
 
   try {
     const updatedSession = await window.electronAPI.updateSessionDetails(state.selectedSession.id, payload);
@@ -5958,11 +5973,7 @@ async function handleSessionMetadataSave() {
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.sessionUpdateError'), 'error');
   } finally {
-    if (elements.sessionDrawerSave) {
-      elements.sessionDrawerSave.disabled = false;
-      elements.sessionDrawerSave.textContent = originalLabel;
-      applyLocalizedChrome();
-    }
+    setButtonBusy(elements.sessionDrawerSave, false);
   }
 }
 
@@ -6112,8 +6123,7 @@ function setupCurrencyListeners() {
   // PoE version toggle
   document.querySelectorAll('.poe-toggle-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.poe-toggle-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
+      document.querySelectorAll('.poe-toggle-btn').forEach(b => setToggleButtonPressed(b, b === btn));
       currencyState.poeVersion = btn.dataset.poe;
       currencyState.league = '';
       currencyState.type = '';
@@ -6171,7 +6181,7 @@ function setupCurrencyListeners() {
 async function loadCurrencyPage() {
   currencyState.poeVersion = state.settings.poeVersion || 'poe1';
   document.querySelectorAll('.poe-toggle-btn').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.poe === currencyState.poeVersion);
+    setToggleButtonPressed(btn, btn.dataset.poe === currencyState.poeVersion);
   });
   updateTypeFilterDropdown();
   await loadCurrencyLeagues();

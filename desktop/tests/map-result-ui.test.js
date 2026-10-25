@@ -421,11 +421,11 @@ test('runtime game-version sync reconciles farm type support for the active vers
   };
   const elements = {
     versionBtns: [
-      { dataset: { version: 'poe1' }, classList: { toggle: () => {} } },
-      { dataset: { version: 'poe2' }, classList: { toggle: () => {} } }
+      { dataset: { version: 'poe1' }, classList: { toggle: () => {} }, setAttribute: () => {} },
+      { dataset: { version: 'poe2' }, classList: { toggle: () => {} }, setAttribute: () => {} }
     ]
   };
-  const context = loadFunctions(['syncRendererGameContext'], {
+  const context = loadFunctions(['setToggleButtonPressed', 'syncRendererGameContext'], {
     state,
     elements,
     normalizePoeVersion: (version) => version === 'poe1' || version === 'poe2' ? version : null,
