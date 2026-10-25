@@ -16,6 +16,7 @@ test('adaptive profit visual QA has reproducible screenshot coverage for all tar
   const spec = fs.readFileSync(visualQaSpecPath, 'utf8');
 
   for (const screenshotName of [
+    'character-hero.png',
     'adaptive-profit-dashboard.png',
     'adaptive-profit-sessions.png',
     'adaptive-profit-stash-result.png',
@@ -25,6 +26,7 @@ test('adaptive profit visual QA has reproducible screenshot coverage for all tar
   }
 
   for (const selector of [
+    '#character-summary-card',
     '#last-map-result-card',
     '#sessions-page',
     '#stash-profit-result',

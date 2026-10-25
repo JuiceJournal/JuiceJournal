@@ -442,6 +442,7 @@ test('generic translation passes reapply authenticated chrome after static copy 
     poeDisconnectBtn: disconnectBtn
   };
   let activeSessionRedraws = 0;
+  let recentLootRedraws = 0;
   const context = loadFunctions([
     'renderUserIdentity',
     'renderPoeLinkStatus',
@@ -449,6 +450,7 @@ test('generic translation passes reapply authenticated chrome after static copy 
   ], {
     elements,
     updateActiveSessionUI: () => { activeSessionRedraws += 1; },
+    renderRecentLoot: () => { recentLootRedraws += 1; },
     state: {
       currentUser: { username: 'Esquetta4179', accountName: 'RangerMain' },
       poeDeviceConnected: true
@@ -468,6 +470,7 @@ test('generic translation passes reapply authenticated chrome after static copy 
   context.applyLocalizedChrome();
 
   assert.equal(activeSessionRedraws, 1, 'the active map card follows the new language');
+  assert.equal(recentLootRedraws, 1, "Recent Loot's empty state follows the new language");
   assert.equal(elements.username.textContent, 'Esquetta4179');
   assert.equal(elements.userAvatar.textContent, 'E');
   assert.equal(elements.poeLinkStatus.textContent, 'settings.poeLinked');
@@ -542,6 +545,76 @@ test('saving settings uses the visible league control for the active PoE version
   assert.equal(savedSettings.length, 1);
   assert.equal(savedSettings[0].poeVersion, 'poe2');
   assert.equal(savedSettings[0].defaultLeaguePoe2, 'Dawn of the Hunt');
+});
+
+test('saving settings redraws the idle map card so its auto-start hint follows the setting', async () => {
+  let redraws = 0;
+  const toasts = [];
+  const context = loadFunctions([
+    'getActiveLeagueControlType',
+    'getActiveLeagueFieldElement',
+    'getActiveLeagueFieldValue',
+    'handleSaveSettings'
+  ], {
+    elements: {
+      apiUrl: { value: 'http://localhost:3001' },
+      poePath: { value: '' },
+      autoStartSession: { checked: false },
+      enableNotifications: { checked: true },
+      soundNotifications: { checked: false },
+      globalLanguage: { value: 'en' },
+      scanHotkey: { value: 'F9' },
+      stashScanHotkey: { value: 'Ctrl+Shift+L' },
+      defaultLeague: { value: 'Standard', hidden: false, disabled: false },
+      defaultLeagueSelect: { value: '', hidden: true, disabled: true }
+    },
+    document: {
+      querySelector: (selector) => (
+        selector === '.version-btn.active'
+          ? { dataset: { version: 'poe1' } }
+          : null
+      )
+    },
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe1', league: 'Standard' }),
+    getHotkeyModel: () => ({
+      validateHotkeys: (hotkeys) => ({
+        scanHotkey: hotkeys.scanHotkey,
+        stashScanHotkey: hotkeys.stashScanHotkey
+      })
+    }),
+    normalizePoeVersion: (value) => value,
+    getSettingsLeagueVersion: () => 'poe1',
+    getLeagueSettingKey: (value) => (value === 'poe2' ? 'defaultLeaguePoe2' : 'defaultLeaguePoe1'),
+    window: {
+      electronAPI: {
+        setSettings: async () => {}
+      },
+      t: (key) => key
+    },
+    state: {
+      settings: { autoStartSession: true },
+      currentUser: null
+    },
+    activeLeagueInputState: {
+      dirty: false,
+      version: 'poe1'
+    },
+    applySettingsDraftToDom: () => {},
+    updateActiveSessionUI: () => {
+      redraws += 1;
+      assert.equal(context.state.settings.autoStartSession, false, 'the card redraws with the saved setting');
+    },
+    refreshOnlineAccount: async () => {},
+    updateActiveLeagueFieldContext: () => {},
+    refreshTrackerData: async () => {},
+    showToast: (title, message, type) => toasts.push(type),
+    getUserFacingErrorMessage: (error) => String(error)
+  });
+
+  await context.handleSaveSettings();
+
+  assert.equal(redraws, 1);
+  assert.deepEqual(toasts, [undefined], 'the save succeeds');
 });
 
 test('reset settings persists only resettable settings and preserves signed-in header identity', async () => {

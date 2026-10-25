@@ -19,6 +19,12 @@ const state = {
   // Saved online setting and whether the app holds a server session; the Farming Hub and sharing need both.
   onlineAccount: { enabled: false, signedIn: false },
   mapResults: [],
+  // Id of the map result persistMapResultHistory just saved; the next latest-result render lands it once.
+  landingMapResultKey: null,
+  // The last id persistMapResultHistory handed over, so a result saved twice (session-ended and the end call) lands once.
+  landedMapResultKey: null,
+  // The Last Map Result profit markup last written, so a repeat render leaves a running count-up alone.
+  latestMapResultProfitHTML: null,
   recentLoot: [],
   account: null,
   characterSession: null,
@@ -139,10 +145,7 @@ const elements = {
   characterName: document.getElementById('character-name'),
   characterClass: document.getElementById('character-class'),
   characterLevel: document.getElementById('character-level'),
-  characterLevelMeta: document.getElementById('character-level-meta'),
   characterLeague: document.getElementById('character-league'),
-  characterClassMeta: document.getElementById('character-class-meta'),
-  characterAccount: document.getElementById('character-account'),
   characterStatus: document.getElementById('character-status'),
   characterGameVersion: document.getElementById('character-game-version'),
   characterPickerField: document.getElementById('character-picker-field'),
@@ -168,6 +171,7 @@ const elements = {
   lastMapResultMeme: document.getElementById('last-map-result-meme'),
   mapResultFilter: document.getElementById('map-result-filter'),
   mapResultHistory: document.getElementById('map-result-history'),
+  mapResultHistoryCard: document.getElementById('map-result-history-card'),
   recentLootList: document.getElementById('recent-loot-list'),
 
   // Sessions
@@ -1311,26 +1315,17 @@ function renderCharacterSummaryCard() {
     elements.characterName.textContent = isReady ? summary.name : 'No character selected';
   }
   if (elements.characterClass) {
-    elements.characterClass.textContent = isReady ? visual.classLabel : 'Unknown Class';
+    // Ascended characters keep their base class in the chip: 'Deadeye · Ranger'.
+    const classChip = visual.classLabel && visual.baseClassLabel && visual.classLabel !== visual.baseClassLabel
+      ? `${visual.classLabel} · ${visual.baseClassLabel}`
+      : visual.classLabel;
+    elements.characterClass.textContent = isReady ? classChip : 'Unknown Class';
   }
   if (elements.characterLevel) {
     elements.characterLevel.textContent = isReady && summary.level ? String(summary.level) : '—';
   }
-  if (elements.characterLevelMeta) {
-    elements.characterLevelMeta.textContent = elements.characterLevel
-      ? elements.characterLevel.textContent
-      : (isReady && summary.level ? String(summary.level) : '—');
-  }
   if (elements.characterLeague) {
     elements.characterLeague.textContent = isReady ? (summary.league || 'Unknown League') : '—';
-  }
-  if (elements.characterClassMeta) {
-    elements.characterClassMeta.textContent = isReady
-      ? (visual.baseClassLabel || visual.classLabel)
-      : 'Unknown Class';
-  }
-  if (elements.characterAccount) {
-    elements.characterAccount.textContent = account?.accountName || state.currentUser?.username || '—';
   }
   if (elements.characterStatus) {
     const session = state.characterSession?.poeVersion === account?.activePoeVersion ? state.characterSession : null;
@@ -1779,6 +1774,15 @@ function itemSlotHTML(itemName, poeVersion, { small = false, quantity = 1, fallb
   return `<span class="item-slot${small ? ' item-slot--sm' : ''}">${art}${stack}</span>`;
 }
 
+// A dashboard empty state: our own art (the flask mark, or the chest sprite in an item slot), a title and the next step. Never game art.
+function emptyStateHTML({ art = 'mascot', title = '', hint = '' } = {}) {
+  const artHTML = art === 'chest'
+    ? '<span class="item-slot empty-state-art"><svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#chest"/></svg></span>'
+    : '<img class="empty-state-art" src="assets/brand/mark.svg" width="48" height="48" alt="" draggable="false">';
+  const hintHTML = hint ? `<span class="empty-state-hint">${hint}</span>` : '';
+  return `<div class="empty-state empty-state--rich">${artHTML}<strong class="empty-state-title">${title}</strong>${hintHTML}</div>`;
+}
+
 // The amount format is shared with the overlay through profitCurrencyModel.
 function formatCurrencyAmount(value, type = 'chaos', options = {}) {
   const model = getProfitCurrencyModel();
@@ -1790,6 +1794,69 @@ function currencyHTML(value, type = 'chaos', iconSize = 18, poeVersion = state.s
   const formatted = formatCurrencyAmount(value, type, options);
   const name = CURRENCY_NAMES[type] || type;
   return `<span class="value-chip">${formatted} <img src="${imgPath}" class="value-chip-icon" width="${iconSize}" height="${iconSize}" alt="${name}" title="${name}" draggable="false"></span>`;
+}
+
+// Writes the final chip at once, then rolls only the number in its .value-chip from the value shown before (or `from`),
+// so the currency icon is never re-created. It stays still under reduced motion, in a hidden window and when the currency
+// changed. Frames keep the final value's decimals, sign rule and en-US grouping, as formatCurrencyAmount does.
+function countUp(element, html, { from } = {}) {
+  if (!element) {
+    return;
+  }
+
+  const readChip = () => {
+    const chip = element.querySelector?.('.value-chip');
+    const node = chip?.firstChild;
+    const match = node?.nodeType === 3 ? node.nodeValue.match(/^([+-]?)([\d,]+)(?:\.(\d+))?(\s*)$/) : null;
+    if (!match) {
+      return null;
+    }
+    return {
+      node,
+      text: node.nodeValue,
+      value: Number(`${match[1] === '-' ? '-' : ''}${match[2].replace(/,/g, '')}.${match[3] || '0'}`),
+      decimals: (match[3] || '').length,
+      signed: match[1] === '+',
+      trailing: match[4],
+      icon: chip.querySelector('.value-chip-icon')?.getAttribute('src') || ''
+    };
+  };
+
+  const before = from === undefined ? readChip() : null;
+  element.innerHTML = html;
+  const after = readChip();
+  const start = from !== undefined ? Number(from) : (before && after && before.icon === after.icon ? before.value : NaN);
+  if (
+    !after || !Number.isFinite(start) || start === after.value
+    || typeof requestAnimationFrame !== 'function' || typeof matchMedia !== 'function'
+    || matchMedia('(prefers-reduced-motion: reduce)').matches || document.hidden
+  ) {
+    return;
+  }
+
+  const signed = after.signed || Boolean(before?.signed);
+  const format = (value) => {
+    const rounded = Number(value.toFixed(after.decimals));
+    const sign = rounded < 0 ? '-' : (signed && rounded > 0 ? '+' : '');
+    return `${sign}${Math.abs(rounded).toLocaleString('en-US', { minimumFractionDigits: after.decimals, maximumFractionDigits: after.decimals })}${after.trailing}`;
+  };
+  let startedAt = null;
+  const frame = (now) => {
+    // A newer render replaced the chip, so this roll stops; a newer countUp carries on from the number on screen.
+    if (!after.node.isConnected) {
+      return;
+    }
+    if (startedAt === null) {
+      startedAt = now;
+    }
+    const progress = Math.min(1, (now - startedAt) / 450);
+    after.node.nodeValue = progress < 1 ? format(start + (after.value - start) * (1 - (1 - progress) ** 3)) : after.text;
+    if (progress < 1) {
+      requestAnimationFrame(frame);
+    }
+  };
+  after.node.nodeValue = format(start);
+  requestAnimationFrame(frame);
 }
 
 function normalizeSafeImageSrc(src) {
@@ -2434,13 +2501,13 @@ async function handleMapEnteredEvent(data = {}) {
     setRuntimeSessionState(data.runtimeSession);
   }
 
-  showToast(window.t('toast.mapEnteredTitle'), window.t('toast.mapEnteredBody', { mapName: data.mapName }));
-
   const shouldPromptForSession = Boolean(state.settings?.autoStartSession)
     && !state.currentSession
     && !state.mapSessionPromptActive;
 
+  // A start prompt (overlay or desktop modal) names the map itself, so only toast when none follows.
   if (!shouldPromptForSession) {
+    showToast(window.t('toast.mapEnteredTitle'), window.t('toast.mapEnteredBody', { mapName: data.mapName }));
     return;
   }
 
@@ -2809,6 +2876,10 @@ function applyLocalizedChrome() {
   // The active map card is written by JS (its badge too), so it follows the new language here.
   if (typeof updateActiveSessionUI === 'function') {
     updateActiveSessionUI();
+  }
+  // So is Recent Loot's empty state; it redraws from state, with no IPC.
+  if (typeof renderRecentLoot === 'function') {
+    renderRecentLoot();
   }
 }
 
@@ -3409,6 +3480,13 @@ async function loadMapResultHistory() {
 async function persistMapResultHistory(result) {
   const results = await window.electronAPI.saveMapResult(result);
   state.mapResults = Array.isArray(results) ? results : [];
+  // The result just saved leads the list (appendMapResult prepends it); the next latest-result render lands it,
+  // unless it was handed over already.
+  const savedKey = state.mapResults[0]?.id || state.mapResults[0]?.localRunId || null;
+  if (savedKey && savedKey !== state.landedMapResultKey) {
+    state.landingMapResultKey = savedKey;
+    state.landedMapResultKey = savedKey;
+  }
   if (typeof renderLatestMapResult === 'function') {
     renderLatestMapResult();
   }
@@ -3483,6 +3561,10 @@ function renderLatestMapResult() {
     return;
   }
 
+  // Only the result persistMapResultHistory just saved lands; a render for prices, the language or a refresh draws it without a roll.
+  const landingKey = state.landingMapResultKey;
+  state.landingMapResultKey = null;
+
   const canDisplayMapResult = typeof isDisplayableMapResult === 'function'
     ? isDisplayableMapResult
     : (result) => Number(result?.durationSeconds || 0) > 0;
@@ -3499,6 +3581,7 @@ function renderLatestMapResult() {
     }
     elements.lastMapResultDuration.textContent = '—';
     elements.lastMapResultProfit.innerHTML = '—';
+    state.latestMapResultProfitHTML = null;
     if (typeof applyProfitTier === 'function') {
       applyProfitTier(elements.lastMapResultProfit, '');
     }
@@ -3515,7 +3598,17 @@ function renderLatestMapResult() {
   }
   elements.lastMapResultDuration.textContent = formatDuration(latest.durationSeconds || 0);
   // The latest result is the biggest number on the dashboard: signed, in its tier colour, with the tier's meme badge.
-  elements.lastMapResultProfit.innerHTML = formatMapResultProfitHTML(latest, 22, { signed: true });
+  const resultKey = latest.id || latest.localRunId || null;
+  const isLanding = Boolean(resultKey) && resultKey === landingKey;
+  const profitHTML = formatMapResultProfitHTML(latest, 22, { signed: true });
+  // A landing result counts up from 0. Any other render writes the number as it is, and only when it changed,
+  // so the second save of an End Map does not cut the count-up short.
+  if (isLanding && typeof countUp === 'function') {
+    countUp(elements.lastMapResultProfit, profitHTML, { from: 0 });
+  } else if (isLanding || profitHTML !== state.latestMapResultProfitHTML) {
+    elements.lastMapResultProfit.innerHTML = profitHTML;
+  }
+  state.latestMapResultProfitHTML = profitHTML;
   const tier = typeof getMapResultProfitTier === 'function' ? getMapResultProfitTier(latest) : '';
   if (typeof applyProfitTier === 'function') {
     applyProfitTier(elements.lastMapResultProfit, tier);
@@ -3523,6 +3616,23 @@ function renderLatestMapResult() {
   if (elements.lastMapResultMeme) {
     elements.lastMapResultMeme.innerHTML = typeof profitMemeHTML === 'function' ? profitMemeHTML(tier) : '';
   }
+  if (isLanding && typeof landLatestMapResult === 'function') {
+    landLatestMapResult();
+  }
+}
+
+let resultLandTimer = null;
+
+// The result just saved lands once: data-fresh plays resultLand on its profit (styles.css), then goes so the next one can.
+function landLatestMapResult() {
+  const card = elements.lastMapResultCard;
+  delete card.dataset.fresh;
+  void card.offsetWidth; // restarts the animation when two results land within its 700ms
+  card.dataset.fresh = '';
+  clearTimeout(resultLandTimer);
+  resultLandTimer = setTimeout(() => {
+    delete card.dataset.fresh;
+  }, 900);
 }
 
 function isPoe1ZeroLifecycleResult(result = {}) {
@@ -3582,6 +3692,10 @@ function renderMapResultHistory() {
   const results = Array.isArray(state.mapResults)
     ? state.mapResults.filter((result) => canDisplayMapResult(result))
     : [];
+  // The card appears with the first result; a filter never hides it, so the filter stays reachable.
+  if (elements.mapResultHistoryCard) {
+    elements.mapResultHistoryCard.hidden = results.length === 0;
+  }
   const availableFarmTypes = [];
   const seenFarmTypes = new Set();
 
@@ -4232,7 +4346,11 @@ function updateActiveSessionUI() {
     stopSessionClock();
     renderedActiveSessionHTML = null;
     renderedActiveSessionItems = null;
-    elements.activeSession.innerHTML = `<p class="empty-state"><span class="empty-state-icon"><svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#ledger"/></svg></span>${window.t('dashboard.noActiveMap')}</p>`;
+    // Auto-start opens the start prompt on map entry, so the hint mentions it only while that setting is on.
+    const idleHint = state.settings?.autoStartSession
+      ? `${window.t('dashboard.idleHint')} ${window.t('dashboard.idleHintAutoStart')}`
+      : window.t('dashboard.idleHint');
+    elements.activeSession.innerHTML = emptyStateHTML({ art: 'mascot', title: window.t('dashboard.noActiveMap'), hint: idleHint });
     renderFarmTypeSelector();
     return;
   }
@@ -4574,15 +4692,13 @@ async function loadDashboardStats() {
     return;
   }
 
-  elements.todaySessions.textContent = '...';
-  elements.todayProfit.textContent = '...';
-  elements.todayAvg.textContent = '...';
-  if (elements.todayPerHour) elements.todayPerHour.textContent = '...';
-  if (elements.todayTime) elements.todayTime.textContent = '...';
-  if (typeof applyProfitTier === 'function') {
-    applyProfitTier(elements.todayProfit, '');
-    applyProfitTier(elements.todayAvg, '');
-  }
+  // A refresh keeps the numbers and tiers on screen, dimmed (styles.css), until the new ones are written.
+  const statValues = [elements.todaySessions, elements.todayProfit, elements.todayAvg, elements.todayPerHour, elements.todayTime]
+    .filter(Boolean);
+  statValues.forEach((element) => element.setAttribute?.('aria-busy', 'true'));
+  const writeAmount = typeof countUp === 'function'
+    ? countUp
+    : (element, html) => { element.innerHTML = html; };
 
   try {
     const trackerContext = typeof getSelectedTrackerContext === 'function'
@@ -4605,10 +4721,11 @@ async function loadDashboardStats() {
       : (value, iconSize, version) => currencyHTML(value, 'chaos', iconSize, version);
 
     elements.todaySessions.textContent = String(totalSessions);
-    elements.todayProfit.innerHTML = formatProfit(totalProfit, 18, poeVersion, { ...rateOptions, signed: true });
-    elements.todayAvg.innerHTML = formatProfit(avgProfitPerMap, 18, poeVersion, rateOptions);
+    // The amounts count up from the numbers on screen when they stay in the same currency (countUp).
+    writeAmount(elements.todayProfit, formatProfit(totalProfit, 18, poeVersion, { ...rateOptions, signed: true }));
+    writeAmount(elements.todayAvg, formatProfit(avgProfitPerMap, 18, poeVersion, rateOptions));
     if (elements.todayPerHour) {
-      elements.todayPerHour.innerHTML = formatProfit(avgProfitPerHour, 18, poeVersion, rateOptions);
+      writeAmount(elements.todayPerHour, formatProfit(avgProfitPerHour, 18, poeVersion, rateOptions));
     }
     if (elements.todayTime) {
       elements.todayTime.textContent = formatHoursMinutes(summary.totalDuration);
@@ -4622,6 +4739,8 @@ async function loadDashboardStats() {
     }
   } catch (error) {
     resetDashboardSummary();
+  } finally {
+    statValues.forEach((element) => element.removeAttribute?.('aria-busy'));
   }
 }
 
@@ -4635,7 +4754,8 @@ async function loadRecentLoot() {
     return;
   }
 
-  elements.recentLootList.innerHTML = `<p class="empty-state">${window.t('sessions.loading')}</p>`;
+  // A refresh keeps the list on screen, dimmed (styles.css), instead of flashing a loading line over it.
+  elements.recentLootList.setAttribute('aria-busy', 'true');
 
   try {
     const response = await window.electronAPI.getRecentLoot({ limit: 6 });
@@ -4644,6 +4764,8 @@ async function loadRecentLoot() {
   } catch (error) {
     state.recentLoot = [];
     elements.recentLootList.innerHTML = `<p class="empty-state">${getUserFacingErrorMessage(error, 'dashboard.noLoot')}</p>`;
+  } finally {
+    elements.recentLootList.removeAttribute('aria-busy');
   }
 }
 
@@ -4718,7 +4840,7 @@ function renderRecentLoot() {
   if (!elements.recentLootList) return;
 
   if (!state.currentUser || !state.recentLoot.length) {
-    elements.recentLootList.innerHTML = `<p class="empty-state">${window.t('dashboard.noLoot')}</p>`;
+    elements.recentLootList.innerHTML = emptyStateHTML({ art: 'chest', title: window.t('dashboard.noLoot'), hint: window.t('dashboard.noLootHint') });
     return;
   }
 
@@ -4791,6 +4913,10 @@ async function handleSaveSettings() {
     await window.electronAPI.setSettings(settings);
     state.settings = { ...state.settings, ...settings };
     applySettingsDraftToDom(state.settings);
+    // The idle map card mentions auto-start only while it is on.
+    if (typeof updateActiveSessionUI === 'function') {
+      updateActiveSessionUI();
+    }
     await refreshOnlineAccount();
     activeLeagueInputState.dirty = false;
     updateActiveLeagueFieldContext({ syncValue: true, forceValueSync: true });
@@ -4974,12 +5100,18 @@ function setButtonBusy(button, busy, busyLabel) {
   }
 }
 
-/**
- * Toast bildirimi goster
- */
+// Errors and warnings stay long enough to read; info and success get out of the way.
+const TOAST_DURATION_MS = { info: 4000, success: 5000, warning: 8000, error: 8000 };
+const TOAST_STACK_LIMIT = 3;
+// Removes a leaving toast even when its exit animation never reports an end (hidden window, reduced motion).
+const TOAST_EXIT_FALLBACK_MS = 300;
+
 function showToast(title, message, type = 'info') {
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
+  if (type === 'error') {
+    toast.setAttribute('role', 'alert');
+  }
 
   const titleElement = document.createElement('div');
   titleElement.className = 'toast-title';
@@ -4991,13 +5123,35 @@ function showToast(title, message, type = 'info') {
 
   toast.append(titleElement, messageElement);
 
+  // The oldest steps aside so at most TOAST_STACK_LIMIT stay on screen.
+  const visibleToasts = Array.from(elements.toastContainer.querySelectorAll('.toast:not(.leaving)'));
+  visibleToasts.slice(0, Math.max(0, visibleToasts.length - TOAST_STACK_LIMIT + 1)).forEach((oldToast) => dismissToast(oldToast));
   elements.toastContainer.appendChild(toast);
 
-  // 5 saniye sonra kaldir
-  setTimeout(() => {
-    toast.style.animation = 'fadeOut 0.3s ease';
-    setTimeout(() => toast.remove(), 300);
-  }, 5000);
+  // Hovering holds the toast and leaving resumes the time it had left; a click dismisses it.
+  let remainingMs = TOAST_DURATION_MS[type] || TOAST_DURATION_MS.info;
+  let startedAt = Date.now();
+  let timerId = setTimeout(() => dismissToast(toast), remainingMs);
+  toast.addEventListener('mouseenter', () => {
+    clearTimeout(timerId);
+    remainingMs -= Date.now() - startedAt;
+  });
+  toast.addEventListener('mouseleave', () => {
+    startedAt = Date.now();
+    timerId = setTimeout(() => dismissToast(toast), remainingMs);
+  });
+  toast.addEventListener('click', () => dismissToast(toast));
+}
+
+function dismissToast(toast) {
+  if (!toast.isConnected || toast.classList.contains('leaving')) {
+    return;
+  }
+
+  toast.classList.add('leaving');
+  const remove = () => toast.remove();
+  toast.addEventListener('animationend', remove, { once: true });
+  setTimeout(remove, TOAST_EXIT_FALLBACK_MS);
 }
 
 async function handleCheckForAppUpdate() {

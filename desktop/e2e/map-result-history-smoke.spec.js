@@ -290,6 +290,7 @@ test('map result history smoke: shows persisted results newest-first and filters
     await waitForGuestReady(page);
     await signInWithPoeOAuth(page);
 
+    // An incomplete result is not shown, so after its refresh the history card is still hidden.
     await seedMapResults(page, [
       {
         id: 'history-incomplete',
@@ -298,7 +299,11 @@ test('map result history smoke: shows persisted results newest-first and filters
         netProfit: 999,
         poeVersion: 'poe2',
         createdAt: '2026-04-12T10:30:00.000Z'
-      },
+      }
+    ]);
+    await expect(page.locator('#map-result-history-card')).toBeHidden();
+
+    await seedMapResults(page, [
       {
         id: 'history-1',
         farmType: 'Ritual',

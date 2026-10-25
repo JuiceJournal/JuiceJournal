@@ -1038,6 +1038,7 @@ test('starting a map session aborts cleanly when the branded modal is cancelled'
 test('map-entered events prompt for a session with the detected map instead of silently auto-starting', async () => {
   const startCalls = [];
   const runtimeSnapshots = [];
+  const toasts = [];
   const context = loadFunctions(['handleMapEnteredEvent'], {
     START_MAP_PROMPT_OVERLAY_MS: 7000,
     state: {
@@ -1049,7 +1050,7 @@ test('map-entered events prompt for a session with the detected map instead of s
     setRuntimeSessionState(runtimeSession) {
       runtimeSnapshots.push(runtimeSession);
     },
-    showToast: () => {},
+    showToast: (...args) => toasts.push(args),
     window: {
       t: (key, values = {}) => values.mapName ? `${key}:${values.mapName}` : key
     },
@@ -1073,6 +1074,38 @@ test('map-entered events prompt for a session with the detected map instead of s
     }
   }]);
   assert.deepEqual(startCalls, [{ defaultMapName: 'Tower', source: 'map-detected' }]);
+  // The start prompt names the map, so no 'Map Entered' toast doubles it.
+  assert.deepEqual(toasts, []);
+});
+
+test('map-entered toasts only when no start prompt follows', async () => {
+  const cases = [
+    { currentSession: null, mapSessionPromptActive: false, settings: { autoStartSession: false } },
+    { currentSession: { id: 'running' }, mapSessionPromptActive: false, settings: { autoStartSession: true } },
+    { currentSession: null, mapSessionPromptActive: true, settings: { autoStartSession: true } }
+  ];
+
+  for (const state of cases) {
+    const toasts = [];
+    const startCalls = [];
+    const context = loadFunctions(['handleMapEnteredEvent'], {
+      START_MAP_PROMPT_OVERLAY_MS: 7000,
+      state,
+      setRuntimeSessionState: () => {},
+      showToast: (...args) => toasts.push(args),
+      window: {
+        t: (key, values = {}) => (values.mapName ? `${key}:${values.mapName}` : key)
+      },
+      handleStartSession: async (options) => {
+        startCalls.push({ ...options });
+      }
+    });
+
+    await context.handleMapEnteredEvent({ mapName: 'Tower' });
+
+    assert.deepEqual(toasts, [['toast.mapEnteredTitle', 'toast.mapEnteredBody:Tower']]);
+    assert.deepEqual(startCalls, []);
+  }
 });
 
 test('map-entered events show an in-game start-map overlay prompt before opening the desktop modal', async () => {
@@ -1738,6 +1771,21 @@ test('dashboard html includes a map result history card with a farm type filter'
   assert.match(html, /id="map-result-history"/);
 });
 
+test('dashboard empty states start as the rich state in index.html', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const activeSession = html.slice(html.indexOf('<div id="active-session">'), html.indexOf('<div class="session-actions">'));
+  const recentLoot = html.slice(html.indexOf('<div id="recent-loot-list">'), html.indexOf('<!-- Stash Profit Tracker -->'));
+
+  assert.match(activeSession, /<img class="empty-state-art" src="assets\/brand\/mark\.svg"/);
+  assert.match(activeSession, /data-i18n="dashboard\.noActiveMap"/);
+  assert.match(activeSession, /data-i18n="dashboard\.idleHint"/);
+  assert.match(recentLoot, /<span class="item-slot empty-state-art"><svg[^>]*><use href="assets\/icons\.svg#chest"\/>/);
+  assert.match(recentLoot, /data-i18n="dashboard\.noLoot"/);
+  assert.doesNotMatch(html, /Aktif map yok|Henuz loot eklenmedi/);
+  // The history card waits for its first result.
+  assert.match(html, /<div class="card map-result-history-card" id="map-result-history-card" hidden>/);
+});
+
 test('dashboard html includes a branded farm publish modal', () => {
   const html = fs.readFileSync(indexHtmlPath, 'utf8');
 
@@ -1835,6 +1883,22 @@ test('renderer keeps the last map result card empty when the latest result has n
   assert.equal(elements.lastMapResultFarmType.textContent, 'No completed map yet');
   assert.equal(elements.lastMapResultDuration.textContent, '—');
   assert.equal(elements.lastMapResultProfit.innerHTML, '—');
+});
+
+test('an empty last map result is a body-font line without dashes', () => {
+  const stylesCss = fs.readFileSync(path.join(desktopDir, 'src', 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = stylesCss.match(/[^{}]+\{[^}]*\}/g).map((rule) => {
+    const [selectorText, body] = rule.split('{');
+    return { selectors: selectorText.split(',').map((selector) => selector.trim()), body };
+  });
+  const empty = '.last-map-result-card[data-result-state="empty"]';
+  const ruleFor = (selector) => rules.find(({ selectors }) => selectors.includes(`${empty} ${selector}`));
+
+  assert.match(ruleFor('#last-map-result-farm-type').body, /font-family:\s*var\(--font\);/);
+  // The JS still writes the two dashes; CSS hides them while there is no result.
+  const dashes = ruleFor('.map-result-headline');
+  assert.ok(dashes.selectors.includes(`${empty} #last-map-result-duration`));
+  assert.match(dashes.body, /display:\s*none;/);
 });
 
 test('renderer skips stale zero-value PoE1 lifecycle results in the latest map card', () => {
@@ -2301,6 +2365,41 @@ test('renderer map result history ignores incomplete results before applying far
   assert.doesNotMatch(elements.mapResultHistory.innerHTML, /result-incomplete/);
 });
 
+test('map result history hides its card only when there are no results at all', () => {
+  const completeResults = [
+    { id: 'result-2', farmType: 'Breach', durationSeconds: 240, netProfit: 88, poeVersion: 'poe1', createdAt: '2026-04-12T08:30:00.000Z' },
+    { id: 'result-1', farmType: 'Ritual', durationSeconds: 360, netProfit: 42, poeVersion: 'poe1', createdAt: '2026-04-12T07:30:00.000Z' }
+  ];
+  let filterMapResults = (results, { farmType }) => (farmType ? results.filter((result) => result.farmType === farmType) : results);
+  const elements = {
+    mapResultFilter: { value: '', innerHTML: '' },
+    mapResultHistory: { innerHTML: '' },
+    mapResultHistoryCard: { hidden: false }
+  };
+  const context = loadFunctions(['formatMapResultProfitHTML', 'renderMapResultHistory'], {
+    elements,
+    state: { settings: { poeVersion: 'poe1' }, mapResults: [] },
+    escapeHTML: (value) => String(value),
+    formatDuration: (seconds) => `duration:${seconds}`,
+    currencyHTML: (value, type, iconSize, poeVersion) => `profit:${value}:${type}:${iconSize}:${poeVersion}`,
+    timeAgo: (value) => `ago:${value}`,
+    getMapResultStoreModel: () => ({ filterMapResults: (results, filters) => filterMapResults(results, filters) })
+  });
+  const cardHiddenWith = (mapResults) => {
+    context.state.mapResults = mapResults;
+    context.renderMapResultHistory();
+    return elements.mapResultHistoryCard.hidden;
+  };
+
+  assert.equal(cardHiddenWith([]), true, 'no results');
+  assert.equal(cardHiddenWith([{ id: 'result-incomplete', farmType: 'Ritual', durationSeconds: 0, netProfit: 999, poeVersion: 'poe2' }]), true, 'only an incomplete result');
+  assert.equal(cardHiddenWith(completeResults), false, 'complete results');
+
+  // A filter that matches nothing keeps the card, and with it the filter, on screen.
+  filterMapResults = () => [];
+  assert.equal(cardHiddenWith(completeResults), false, 'results the filter does not match');
+});
+
 test('renderer map result history marks published results as shared', () => {
   const elements = {
     mapResultFilter: {
@@ -2643,20 +2742,43 @@ test('the latest map result is a signed hero number in its tier colour with the 
   assert.equal(elements.lastMapResultMeme.innerHTML, '');
 });
 
-test("today's summary tiers the per-map average, flags only a losing day and shows per hour and time mapped", async () => {
-  const stat = () => ({ textContent: '', innerHTML: '', dataset: {} });
-  const elements = {
-    todaySessions: stat(),
-    todayProfit: stat(),
-    todayAvg: stat(),
-    todayPerHour: stat(),
-    todayTime: stat()
+// An element that keeps the aria-busy attribute loadDashboardStats and loadRecentLoot set while they read.
+function busyElement(fields = {}) {
+  const attributes = new Map();
+  return {
+    textContent: '',
+    innerHTML: '',
+    dataset: {},
+    ...fields,
+    setAttribute: (name, value) => attributes.set(name, String(value)),
+    removeAttribute: (name) => attributes.delete(name),
+    getAttribute: (name) => (attributes.has(name) ? attributes.get(name) : null)
   };
+}
+
+test("today's summary tiers the per-map average, flags only a losing day and shows per hour and time mapped", async () => {
+  const elements = {
+    todaySessions: busyElement(),
+    todayProfit: busyElement(),
+    todayAvg: busyElement(),
+    todayPerHour: busyElement(),
+    todayTime: busyElement()
+  };
+  const values = () => Object.values(elements);
+  const shownValues = () => values().map((element) => [element.textContent, element.innerHTML]);
+  const countUps = [];
   let summary = { totalSessions: 4, totalProfit: -60, avgProfitPerMap: 150, avgProfitPerHour: 97800, totalDuration: 3900 };
   let tiersWhileLoading = null;
+  let busyWhileLoading = null;
+  let valuesWhileLoading = null;
   const context = createProfitDisplayContext(['formatHoursMinutes', 'loadDashboardStats'], {
     elements,
     getSelectedTrackerContext: () => ({ poeVersion: 'poe1', league: 'Standard' }),
+    // Records which values roll; it writes the final markup like countUp does without animation.
+    countUp: (element, html) => {
+      countUps.push(Object.keys(elements).find((key) => elements[key] === element));
+      element.innerHTML = html;
+    },
     window: {
       profitCurrencyModel: require('../src/modules/profitCurrencyModel.js'),
       profitTierModel: require('../src/modules/profitTierModel.js'),
@@ -2664,6 +2786,8 @@ test("today's summary tiers the per-map average, flags only a losing day and sho
       electronAPI: {
         getDashboardStats: async () => {
           tiersWhileLoading = [elements.todayProfit.dataset.profitTier, elements.todayAvg.dataset.profitTier];
+          busyWhileLoading = values().map((element) => element.getAttribute('aria-busy'));
+          valuesWhileLoading = shownValues();
           return { summary };
         }
       }
@@ -2673,6 +2797,10 @@ test("today's summary tiers the per-map average, flags only a losing day and sho
 
   await context.loadDashboardStats();
 
+  // Only the three amounts count up; the map count and time mapped are plain text writes.
+  assert.deepEqual(countUps, ['todayProfit', 'todayAvg', 'todayPerHour']);
+  assert.deepEqual(busyWhileLoading, ['true', 'true', 'true', 'true', 'true']);
+  assert.deepEqual(values().map((element) => element.getAttribute('aria-busy')), [null, null, null, null, null]);
   assert.equal(elements.todaySessions.textContent, '4');
   assert.deepEqual(chipText(elements.todayProfit.innerHTML), ['-60.0', 'Chaos Orb']);
   assert.equal(elements.todayProfit.dataset.profitTier, 'loss');
@@ -2681,10 +2809,14 @@ test("today's summary tiers the per-map average, flags only a losing day and sho
   assert.deepEqual(chipText(elements.todayPerHour.innerHTML), ['978', 'Divine Orb']);
   assert.equal(elements.todayTime.textContent, '1:05');
 
-  // A winning day is signed and keeps the brass colour, however big it is; the '...' state drops the old tiers.
+  // A winning day is signed and keeps the brass colour, however big it is; the refresh keeps the old numbers and tiers, dimmed.
   summary = { totalSessions: 6, totalProfit: 54000, avgProfitPerMap: 9000, avgProfitPerHour: 0, totalDuration: 0 };
+  const shownBeforeRefresh = shownValues();
   await context.loadDashboardStats();
-  assert.deepEqual(tiersWhileLoading, [undefined, undefined]);
+  assert.deepEqual(tiersWhileLoading, ['loss', 'rare']);
+  assert.deepEqual(valuesWhileLoading, shownBeforeRefresh);
+  assert.deepEqual(busyWhileLoading, ['true', 'true', 'true', 'true', 'true']);
+  assert.deepEqual(values().map((element) => element.getAttribute('aria-busy')), [null, null, null, null, null]);
   assert.deepEqual(chipText(elements.todayProfit.innerHTML), ['+540', 'Divine Orb']);
   assert.equal(elements.todayProfit.dataset.profitTier, undefined);
   assert.equal(elements.todayAvg.dataset.profitTier, 'unique');
@@ -2694,6 +2826,321 @@ test("today's summary tiers the per-map average, flags only a losing day and sho
   summary = { totalSessions: 0, totalProfit: 0, avgProfitPerMap: 0, avgProfitPerHour: 0, totalDuration: 0 };
   await context.loadDashboardStats();
   assert.equal(elements.todayAvg.dataset.profitTier, undefined);
+});
+
+test('loadDashboardStats clears the busy state when the read fails', async () => {
+  const elements = {
+    todaySessions: busyElement({ textContent: '4' }),
+    todayProfit: busyElement({ innerHTML: 'profit' }),
+    todayAvg: busyElement({ innerHTML: 'avg' }),
+    todayPerHour: busyElement({ innerHTML: 'per hour' }),
+    todayTime: busyElement({ textContent: '1:05' })
+  };
+  const shownValues = () => Object.values(elements).map((element) => [element.textContent, element.innerHTML]);
+  const shownBeforeRead = shownValues();
+  let valuesWhileLoading = null;
+  const resets = [];
+  const context = loadFunctions(['loadDashboardStats'], {
+    elements,
+    state: { currentUser: { id: 'profile-1' }, settings: { poeVersion: 'poe1' } },
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe1', league: 'Standard' }),
+    window: {
+      electronAPI: {
+        getDashboardStats: async () => {
+          valuesWhileLoading = shownValues();
+          throw new Error('stats read failed');
+        }
+      }
+    },
+    resetDashboardSummary: () => resets.push('reset')
+  });
+
+  await context.loadDashboardStats();
+
+  assert.deepEqual(valuesWhileLoading, shownBeforeRead);
+  assert.deepEqual(resets, ['reset']);
+  assert.deepEqual(Object.values(elements).map((element) => element.getAttribute('aria-busy')), [null, null, null, null, null]);
+  assert.equal(elements.todaySessions.textContent, '4');
+});
+
+// A value chip as currencyHTML writes it: the number with its trailing space, then the currency icon.
+const countUpChip = (text, icon = 'chaos') => `<span class="value-chip">${text}<img src="assets/currency/poe1/${icon}.png" class="value-chip-icon"></span>`;
+
+// A host whose innerHTML setter builds a fake .value-chip, so a test can watch countUp frame by frame.
+function createCountUpHost(initialHTML) {
+  let html = '';
+  let chip = null;
+  const host = {
+    writes: 0,
+    get innerHTML() {
+      return html;
+    },
+    set innerHTML(value) {
+      host.writes += 1;
+      html = value;
+      if (chip) {
+        chip.firstChild.isConnected = false;
+      }
+      const match = value.match(/<span class="value-chip">([^<]*)<img src="([^"]*)"/);
+      chip = match
+        ? {
+          firstChild: { nodeType: 3, nodeValue: match[1], isConnected: true },
+          querySelector: (selector) => (selector === '.value-chip-icon' ? { getAttribute: () => match[2] } : null)
+        }
+        : null;
+    },
+    querySelector: (selector) => (selector === '.value-chip' ? chip : null),
+    textNode: () => chip?.firstChild || null
+  };
+  host.innerHTML = initialHTML;
+  host.writes = 0;
+  return host;
+}
+
+function createCountUpContext({ reducedMotion = false, hidden = false } = {}) {
+  const frames = [];
+  const context = loadFunctions(['countUp'], {
+    requestAnimationFrame: (callback) => frames.push(callback),
+    matchMedia: (query) => ({ matches: reducedMotion && query === '(prefers-reduced-motion: reduce)' }),
+    document: { hidden }
+  });
+  return { context, frames, runFrame: (now) => frames.shift()(now) };
+}
+
+test('countUp writes the final markup and never animates in a plain context', () => {
+  const context = loadFunctions(['countUp']);
+  const element = { innerHTML: '' };
+  const html = countUpChip('+7.50 ', 'divine');
+
+  context.countUp(element, html);
+  assert.equal(element.innerHTML, html);
+  context.countUp(element, html, { from: 0 });
+  assert.equal(element.innerHTML, html);
+  assert.doesNotThrow(() => context.countUp(null, html));
+});
+
+test('countUp rolls only the chip text node and ends on the exact text', () => {
+  const { context, frames, runFrame } = createCountUpContext();
+  const host = createCountUpHost(countUpChip('980 '));
+
+  context.countUp(host, countUpChip('+1,234 '));
+  const node = host.textNode();
+  // The day turned signed, so the roll starts from the old number with the new sign rule.
+  assert.equal(node.nodeValue, '+980 ');
+  assert.equal(frames.length, 1);
+
+  runFrame(0);
+  assert.equal(node.nodeValue, '+980 ');
+  runFrame(225);
+  assert.match(node.nodeValue, /^\+1,\d{3} $/);
+  runFrame(450);
+  assert.equal(node.nodeValue, '+1,234 ');
+  assert.equal(frames.length, 0);
+
+  assert.equal(host.writes, 1, 'innerHTML is written once, with the final markup');
+  assert.equal(host.innerHTML, countUpChip('+1,234 '));
+  assert.equal(host.textNode(), node, 'the text node is never replaced');
+});
+
+test('countUp stays still for reduced motion, a hidden window, a new currency, the same value or no previous chip', () => {
+  const cases = [
+    { name: 'reduced motion', options: { reducedMotion: true }, before: countUpChip('980 '), after: countUpChip('1,234 ') },
+    { name: 'hidden window', options: { hidden: true }, before: countUpChip('980 '), after: countUpChip('1,234 ') },
+    { name: 'new currency', options: {}, before: countUpChip('980 '), after: countUpChip('1.50 ', 'divine') },
+    { name: 'same value', options: {}, before: countUpChip('980 '), after: countUpChip('980 ') },
+    { name: 'no previous chip', options: {}, before: '—', after: countUpChip('1,234 ') }
+  ];
+
+  for (const { name, options, before, after } of cases) {
+    const { context, frames } = createCountUpContext(options);
+    const host = createCountUpHost(before);
+
+    context.countUp(host, after);
+
+    assert.equal(frames.length, 0, name);
+    assert.equal(host.innerHTML, after, name);
+    assert.equal(host.textNode().nodeValue, after.match(/value-chip">([^<]*)/)[1], name);
+  }
+});
+
+test('countUp from 0 keeps the final decimals and the sign rule', () => {
+  const { context, frames, runFrame } = createCountUpContext();
+  const host = createCountUpHost('—');
+
+  context.countUp(host, countUpChip('+7.50 ', 'divine'), { from: 0 });
+  const node = host.textNode();
+  assert.equal(node.nodeValue, '0.00 ');
+  runFrame(0);
+  assert.equal(node.nodeValue, '0.00 ');
+  for (const now of [100, 200, 300, 400]) {
+    runFrame(now);
+    assert.match(node.nodeValue, /^\+\d\.\d\d $/, `frame at ${now}ms`);
+  }
+  runFrame(450);
+  assert.equal(node.nodeValue, '+7.50 ');
+  assert.equal(frames.length, 0);
+
+  // Crossing zero: positive frames keep the '+' of the signed day, negative frames take a '-'.
+  const crossing = createCountUpContext();
+  const signedHost = createCountUpHost(countUpChip('+30.0 '));
+  crossing.context.countUp(signedHost, countUpChip('-60.0 '));
+  const seen = [signedHost.textNode().nodeValue];
+  for (let now = 0; crossing.frames.length; now += 30) {
+    crossing.runFrame(now);
+    seen.push(signedHost.textNode().nodeValue);
+  }
+  assert.equal(seen[0], '+30.0 ');
+  assert.equal(seen.at(-1), '-60.0 ');
+  for (const text of seen) {
+    const value = Number(text.replace(/[+,\s]/g, ''));
+    assert.match(text, value > 0 ? /^\+\d/ : (value < 0 ? /^-\d/ : /^\d/), text);
+  }
+  assert.ok(seen.some((text) => text.startsWith('+')) && seen.some((text) => text.startsWith('-')));
+});
+
+// A Last Map Result card whose profit counts its writes, with countUp and the land recorded.
+function createLandingHarness(functionNames, state, overrides = {}) {
+  let profitHTML = '';
+  const elements = {
+    lastMapResultCard: { dataset: {} },
+    lastMapResultFarmType: { textContent: '' },
+    lastMapResultDuration: { textContent: '' },
+    lastMapResultProfit: {
+      writes: 0,
+      get innerHTML() {
+        return profitHTML;
+      },
+      set innerHTML(value) {
+        elements.lastMapResultProfit.writes += 1;
+        profitHTML = value;
+      }
+    }
+  };
+  const harness = { elements, countUpCalls: [], lands: 0 };
+  harness.context = loadFunctions(functionNames, {
+    elements,
+    state,
+    formatDuration: (seconds) => `duration:${seconds}`,
+    profitCurrencyHTML: (value) => `profit:${value}`,
+    countUp: (element, html, options) => {
+      harness.countUpCalls.push({ html, options: { ...options } });
+      element.innerHTML = html;
+    },
+    landLatestMapResult: () => {
+      harness.lands += 1;
+    },
+    ...overrides
+  });
+  return harness;
+}
+
+test('renderLatestMapResult lands only the result that was just saved', () => {
+  const state = {
+    landingMapResultKey: 'run-2',
+    mapResults: [{ id: 'run-2', farmType: 'Breach', durationSeconds: 240, netProfit: 750, poeVersion: 'poe1' }]
+  };
+  const harness = createLandingHarness(['formatMapResultProfitHTML', 'renderLatestMapResult'], state);
+  const profit = harness.elements.lastMapResultProfit;
+
+  harness.context.renderLatestMapResult();
+  assert.deepEqual(harness.countUpCalls, [{ html: 'profit:750', options: { from: 0 } }]);
+  assert.equal(harness.lands, 1);
+  assert.equal(state.landingMapResultKey, null);
+  assert.equal(profit.innerHTML, 'profit:750');
+  assert.equal(profit.writes, 1);
+
+  // The same markup again (the second save of an End Map) leaves the running count-up alone.
+  harness.context.renderLatestMapResult();
+  assert.equal(profit.writes, 1);
+  assert.equal(harness.countUpCalls.length, 1);
+  assert.equal(harness.lands, 1);
+
+  // A new price redraws the number at once, with no roll and no land.
+  state.mapResults = [{ ...state.mapResults[0], netProfit: 760 }];
+  harness.context.renderLatestMapResult();
+  assert.equal(profit.innerHTML, 'profit:760');
+  assert.equal(profit.writes, 2);
+  assert.equal(harness.countUpCalls.length, 1);
+  assert.equal(harness.lands, 1);
+
+  // A key for a result that is not the one shown lands nothing, and is used up.
+  state.landingMapResultKey = 'run-3';
+  harness.context.renderLatestMapResult();
+  assert.equal(harness.countUpCalls.length, 1);
+  assert.equal(harness.lands, 1);
+  assert.equal(state.landingMapResultKey, null);
+
+  // After the empty state the same result is written again.
+  const shown = state.mapResults;
+  state.mapResults = [];
+  harness.context.renderLatestMapResult();
+  assert.equal(profit.innerHTML, '—');
+  state.mapResults = shown;
+  harness.context.renderLatestMapResult();
+  assert.equal(profit.innerHTML, 'profit:760');
+  assert.equal(harness.lands, 1);
+});
+
+test('an End Map that saves its result twice lands it once', async () => {
+  const state = { mapResults: [] };
+  const saved = { id: 'run-5', farmType: 'Breach', durationSeconds: 240, netProfit: 750, poeVersion: 'poe1' };
+  const harness = createLandingHarness(
+    ['persistMapResultHistory', 'formatMapResultProfitHTML', 'renderLatestMapResult'],
+    state,
+    { window: { electronAPI: { saveMapResult: async (result) => [result] } } }
+  );
+
+  // session-ended and the end call both save the same result.
+  await Promise.all([harness.context.persistMapResultHistory(saved), harness.context.persistMapResultHistory(saved)]);
+  assert.equal(harness.lands, 1);
+  assert.deepEqual(harness.countUpCalls, [{ html: 'profit:750', options: { from: 0 } }]);
+  assert.equal(harness.elements.lastMapResultProfit.innerHTML, 'profit:750');
+
+  // The next map's result lands in turn.
+  await harness.context.persistMapResultHistory({ ...saved, id: 'run-6', netProfit: 120 });
+  assert.equal(harness.lands, 2);
+  assert.deepEqual(harness.countUpCalls.at(-1), { html: 'profit:120', options: { from: 0 } });
+});
+
+test('landLatestMapResult flags the card once and clears it', () => {
+  const timers = [];
+  const cleared = [];
+  const card = { dataset: {}, offsetWidth: 0 };
+  const context = loadFunctions(['landLatestMapResult'], {
+    elements: { lastMapResultCard: card },
+    resultLandTimer: null,
+    setTimeout: (callback, delay) => {
+      timers.push({ callback, delay });
+      return timers.length;
+    },
+    clearTimeout: (id) => cleared.push(id)
+  });
+
+  context.landLatestMapResult();
+  assert.equal(card.dataset.fresh, '');
+  assert.equal(timers[0].delay, 900);
+  timers[0].callback();
+  assert.equal('fresh' in card.dataset, false);
+
+  // A second landing restarts the flag and drops the earlier timer.
+  context.landLatestMapResult();
+  context.landLatestMapResult();
+  assert.equal(card.dataset.fresh, '');
+  assert.deepEqual(cleared, [null, 1, 2]);
+});
+
+test('a refresh dims the dashboard numbers and a new map result lands once, inside the reduced-motion rule', () => {
+  const stylesCss = fs.readFileSync(path.join(desktopDir, 'src', 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const busyRule = stylesCss.match(/\.stat-value\[aria-busy="true"\],\s*#recent-loot-list\[aria-busy="true"\]\s*\{([^}]*)\}/);
+
+  assert.ok(busyRule, 'expected a .stat-value[aria-busy="true"], #recent-loot-list[aria-busy="true"] rule');
+  assert.match(busyRule[1], /opacity:\s*0\.6;/);
+  assert.match(stylesCss, /\.last-map-result-card\[data-fresh\] #last-map-result-profit\s*\{[^}]*animation:\s*resultLand 700ms/);
+  const landFrom = stylesCss.match(/@keyframes resultLand\s*\{\s*from\s*\{([^}]*)\}/);
+  assert.ok(landFrom, 'expected a from-only @keyframes resultLand');
+  assert.match(landFrom[1], /var\(--profit-tier-color/);
+  assert.match(landFrom[1], /translateY\(3px\)/);
+  assert.match(stylesCss, /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*animation-duration:\s*0\.01ms/);
 });
 
 test('recent loot shows each drop in the adaptive currency of its own league', () => {
@@ -2801,6 +3248,66 @@ test('recent loot rows show the item art with its stack count, a chest for unkno
   assert.doesNotMatch(mirrorRow, /PoE 1 \/ Standard/);
   assert.match(scarabRow, /<span class="item-slot"><svg[^>]*><use href="assets\/icons\.svg#chest"\/><\/svg><\/span>/);
   assert.doesNotMatch(scarabRow, /class="stack"/, 'a single item has no stack count');
+});
+
+test('recent loot empty state shows the chest in a slot, not the mascot or game art', () => {
+  const elements = { recentLootList: { innerHTML: '' } };
+  const context = createProfitDisplayContext(['emptyStateHTML', 'renderRecentLoot'], {
+    elements,
+    state: { currentUser: null, recentLoot: [] }
+  });
+
+  context.renderRecentLoot();
+  const signedOut = elements.recentLootList.innerHTML;
+  assert.match(signedOut, /class="item-slot empty-state-art"><svg[^>]*><use href="assets\/icons\.svg#chest"\/>/);
+  assert.match(signedOut, /dashboard\.noLoot</);
+  assert.match(signedOut, /dashboard\.noLootHint/);
+  assert.doesNotMatch(signedOut, /mark\.svg|assets\/currency/);
+
+  // A signed-in profile without loot gets the same state.
+  context.state.currentUser = { id: 'profile-1' };
+  elements.recentLootList.innerHTML = '';
+  context.renderRecentLoot();
+  assert.equal(elements.recentLootList.innerHTML, signedOut);
+});
+
+test('loadRecentLoot dims the list instead of writing a loading line', async () => {
+  const list = busyElement({ innerHTML: 'previous' });
+  let duringFetch = null;
+  let renders = 0;
+  let failRead = false;
+  const context = loadFunctions(['loadRecentLoot'], {
+    elements: { recentLootList: list },
+    state: { currentUser: { id: 'profile-1' }, recentLoot: [] },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        getRecentLoot: async () => {
+          duringFetch = { busy: list.getAttribute('aria-busy'), html: list.innerHTML };
+          if (failRead) {
+            throw new Error('loot read failed');
+          }
+          return { lootEntries: [{ itemName: 'Divine Orb' }] };
+        }
+      }
+    },
+    renderRecentLoot: () => {
+      renders += 1;
+    },
+    getUserFacingErrorMessage: (error, fallbackKey) => `error:${fallbackKey}`
+  });
+
+  await context.loadRecentLoot();
+  assert.deepEqual(duringFetch, { busy: 'true', html: 'previous' });
+  assert.equal(list.getAttribute('aria-busy'), null);
+  assert.equal(renders, 1);
+  assert.equal(context.state.recentLoot.length, 1);
+
+  failRead = true;
+  await context.loadRecentLoot();
+  assert.deepEqual(duringFetch, { busy: 'true', html: 'previous' });
+  assert.equal(list.getAttribute('aria-busy'), null);
+  assert.equal(list.innerHTML, '<p class="empty-state">error:dashboard.noLoot</p>');
 });
 
 test('the run drawer leads with profit, counts loot by quantity and lists loot before the notes', () => {
@@ -2922,7 +3429,7 @@ function createActiveSessionHarness(session, extraState = {}) {
   let liveSeconds = 252;
   const clockCalls = [];
   const context = createProfitDisplayContext(
-    ['formatElapsedClock', 'getSessionFarmTypeId', 'getMapResultProfitTier', 'profitMemeHTML', 'updateActiveSessionUI', 'updateActiveSessionClock'],
+    ['formatElapsedClock', 'getSessionFarmTypeId', 'getMapResultProfitTier', 'profitMemeHTML', 'emptyStateHTML', 'updateActiveSessionUI', 'updateActiveSessionClock'],
     {
       elements,
       renderedActiveSessionHTML: null,
@@ -3028,6 +3535,42 @@ test('a run with a cost lists loot and cost, and the idle card goes back to wait
   assert.equal(harness.elements.sessionBadge.textContent, 'dashboard.waiting');
   assert.equal(harness.badgeClasses.has('is-active'), false);
   assert.match(harness.html(), /dashboard\.noActiveMap/);
+});
+
+test('the idle map card shows the mascot and the next step, and mentions auto-start only while it is on', () => {
+  const harness = createActiveSessionHarness(null);
+
+  harness.context.updateActiveSessionUI();
+  assert.equal(harness.elements.sessionCard.dataset.sessionState, 'idle');
+  assert.match(harness.html(), /class="empty-state empty-state--rich"/);
+  assert.match(harness.html(), /<img class="empty-state-art" src="assets\/brand\/mark\.svg"/);
+  assert.match(harness.html(), /<strong class="empty-state-title">dashboard\.noActiveMap<\/strong>/);
+  assert.match(harness.html(), /<span class="empty-state-hint">dashboard\.idleHint<\/span>/);
+  assert.doesNotMatch(harness.html(), /dashboard\.idleHintAutoStart/);
+  // Our own art only, and the farm controls stay outside the well that every render replaces.
+  assert.doesNotMatch(harness.html(), /assets\/(currency|game)\//);
+  assert.doesNotMatch(harness.html(), /session-farm-type-select|start-session-btn/);
+  assert.doesNotMatch(harness.html(), /icons\.svg#ledger/);
+
+  const autoStart = createActiveSessionHarness(null, { settings: { poeVersion: 'poe1', autoStartSession: true } });
+  autoStart.context.updateActiveSessionUI();
+  assert.match(autoStart.html(), /<span class="empty-state-hint">dashboard\.idleHint dashboard\.idleHintAutoStart<\/span>/);
+});
+
+test('the idle session card draws the farm picker, the mascot well and Start as one panel', () => {
+  const stylesCss = fs.readFileSync(path.join(desktopDir, 'src', 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const idleRule = (selector) => {
+    const start = stylesCss.indexOf(`.session-card[data-session-state="idle"]${selector} {`);
+    assert.notEqual(start, -1, `expected an idle rule for ${selector}`);
+    return stylesCss.slice(start, stylesCss.indexOf('}', start));
+  };
+
+  assert.match(idleRule('::after'), /grid-area:\s*2 \/ 1 \/ 5 \/ 2;/);
+  assert.match(idleRule('::after'), /background:\s*var\(--bg-base\);/);
+  assert.match(idleRule(' #active-session'), /background:\s*none;/);
+  assert.match(idleRule(' .session-actions'), /justify-content:\s*center;/);
+  assert.match(idleRule(' #start-session-btn'), /min-height:\s*40px;/);
+  assert.doesNotMatch(stylesCss, /data-session-state="idle"\][^{]*:hover/, 'the idle panel adds no hover rule');
 });
 
 test('the session clock interval updates only the elapsed time', () => {
