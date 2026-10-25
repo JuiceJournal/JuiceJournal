@@ -175,6 +175,13 @@
     </g>
   </symbol>
 
+  <symbol id="hourglass" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter">
+      <path d="M5.5 3.5h13M5.5 20.5h13"/>
+      <path d="M7.5 3.5h9L12 12zM12 12l4.5 8.5h-9z"/>
+    </g>
+  </symbol>
+
   <symbol id="arrow-right" viewBox="0 0 24 24">
     <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter">
       <path d="M4.5 12h15M14 6.5l5.5 5.5-5.5 5.5"/>

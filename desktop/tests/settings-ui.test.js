@@ -529,7 +529,6 @@ test('saving settings uses the visible league control for the active PoE version
     },
     applySettingsDraftToDom: () => {},
     updateActiveLeagueFieldContext: () => {},
-    syncDesktopCurrencyIcons: () => {},
     refreshTrackerData: async () => {},
     showToast: () => {},
     getUserFacingErrorMessage: (error) => String(error)
@@ -604,7 +603,6 @@ test('reset settings persists only resettable settings and preserves signed-in h
     applySettingsDraftToDom: () => {},
     refreshOnlineAccount: async () => {},
     updateActiveLeagueFieldContext: () => {},
-    syncDesktopCurrencyIcons: () => {},
     applyDashboardCapabilities: () => {
       capabilityCalls.push({
         detectedGameVersion: context.state.detectedGameVersion,
@@ -747,7 +745,6 @@ test('runtime game-version sync updates settings league context from the selecte
   const loadCalls = [];
   const uiCalls = [];
   const statusCalls = [];
-  const currencySyncCalls = [];
   const versionButtons = [
     {
       dataset: { version: 'poe1' },
@@ -787,9 +784,6 @@ test('runtime game-version sync updates settings league context from the selecte
     elements: {
       versionBtns: versionButtons
     },
-    syncDesktopCurrencyIcons: () => {
-      currencySyncCalls.push('sync');
-    },
     loadSettingsLeagueOptions: async (version) => {
       loadCalls.push(version);
     },
@@ -816,7 +810,6 @@ test('runtime game-version sync updates settings league context from the selecte
   assert.equal(context.state.settings.poePath, 'C:/Games/Client.txt');
   assert.deepEqual(loadCalls, ['poe1']);
   assert.deepEqual(statusCalls, ['poe2']);
-  assert.deepEqual(currencySyncCalls, ['sync']);
   assert.equal(versionButtons[0].active, true);
   assert.equal(versionButtons[1].active, false);
   assert.equal(versionButtons[0]['aria-pressed'], 'true');
@@ -870,7 +863,6 @@ test('runtime game-version sync preserves the current settings version when the 
     elements: {
       versionBtns: versionButtons
     },
-    syncDesktopCurrencyIcons: () => {},
     loadSettingsLeagueOptions: async (version) => {
       loadCalls.push(version);
     },
@@ -944,7 +936,6 @@ test('runtime game-version sync reports no active game without falling back to p
     elements: {
       versionBtns: versionButtons
     },
-    syncDesktopCurrencyIcons: () => {},
     loadSettingsLeagueOptions: async () => {},
     updateGameStatusIndicator: (version) => {
       statusCalls.push(version);
@@ -1386,7 +1377,6 @@ test('renderer keeps prior settings state and shows an error when settings save 
       draftApplications.push({ ...settings });
     },
     updateActiveLeagueFieldContext: () => {},
-    syncDesktopCurrencyIcons: () => {},
     refreshTrackerData: async () => {},
     showToast: (...args) => {
       savedToasts.push(args);

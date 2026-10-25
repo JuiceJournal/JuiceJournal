@@ -318,8 +318,8 @@
             <div class="stats-grid">
               <div class="stat">
                 <div class="stat-left">
-                  <div class="stat-icon maps">
-                    <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#dashboard"/></svg>
+                  <div class="stat-icon">
+                    <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#map"/></svg>
                   </div>
                   <span class="stat-label" data-i18n="dashboard.map">Map</span>
                 </div>
@@ -327,8 +327,8 @@
               </div>
               <div class="stat">
                 <div class="stat-left">
-                  <div class="item-slot">
-                    <img id="stat-profit-icon" src="assets/currency/poe1/chaos.png" alt="Profit currency icon" draggable="false">
+                  <div class="stat-icon">
+                    <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#sum"/></svg>
                   </div>
                   <span class="stat-label" data-i18n="dashboard.profit">Kar</span>
                 </div>
@@ -336,12 +336,30 @@
               </div>
               <div class="stat">
                 <div class="stat-left">
-                  <div class="item-slot">
-                    <img id="stat-avg-icon" src="assets/currency/poe1/divine.png" alt="Average currency icon" draggable="false">
+                  <div class="stat-icon">
+                    <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#orb"/></svg>
                   </div>
                   <span class="stat-label" data-i18n="dashboard.avgPerMap">Ort/Map</span>
                 </div>
                 <span class="stat-value" id="today-avg">0</span>
+              </div>
+              <div class="stat">
+                <div class="stat-left">
+                  <div class="stat-icon">
+                    <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#arrow-up"/></svg>
+                  </div>
+                  <span class="stat-label" data-i18n="dashboard.perHour">Saatlik</span>
+                </div>
+                <span class="stat-value" id="today-per-hour">0</span>
+              </div>
+              <div class="stat">
+                <div class="stat-left">
+                  <div class="stat-icon">
+                    <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#hourglass"/></svg>
+                  </div>
+                  <span class="stat-label" data-i18n="dashboard.timeMapped">Map suresi</span>
+                </div>
+                <span class="stat-value" id="today-time">0</span>
               </div>
             </div>
           </div>
@@ -370,8 +388,11 @@
             </div>
             <div class="map-result-summary">
               <strong id="last-map-result-farm-type">No completed map yet</strong>
+              <div class="map-result-headline">
+                <span id="last-map-result-profit">—</span>
+                <span id="last-map-result-meme"></span>
+              </div>
               <span id="last-map-result-duration">—</span>
-              <span id="last-map-result-profit">—</span>
             </div>
           </div>
 

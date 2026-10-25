@@ -328,7 +328,6 @@ test('syncRendererGameContext schedules an active-character refresh for detected
     elements: {
       versionBtns: versionButtons
     },
-    syncDesktopCurrencyIcons() {},
     loadSettingsLeagueOptions: async () => {},
     updateGameStatusIndicator() {},
     updateActiveLeagueFieldContext() {},

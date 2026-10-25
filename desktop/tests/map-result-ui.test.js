@@ -429,7 +429,6 @@ test('runtime game-version sync reconciles farm type support for the active vers
     state,
     elements,
     normalizePoeVersion: (version) => version === 'poe1' || version === 'poe2' ? version : null,
-    syncDesktopCurrencyIcons: () => {},
     loadSettingsLeagueOptions: () => Promise.resolve(),
     updateGameStatusIndicator: () => {},
     updateActiveLeagueFieldContext: () => {},
@@ -1555,6 +1554,7 @@ test('prices-updated events give the dashboard views the Divine and Mirror rates
     renderMapResultHistory: () => renders.push('mapResultHistory'),
     renderSessionsList: () => renders.push('sessionsList'),
     updateActiveSessionUI: () => renders.push('activeSession'),
+    renderRecentLoot: () => renders.push('recentLoot'),
     loadDashboardStats: async () => renders.push('dashboardStats')
   });
 
@@ -1566,7 +1566,7 @@ test('prices-updated events give the dashboard views the Divine and Mirror rates
   // The rates come from the cache main just filled, so this refresh never asks poe.ninja itself.
   assert.deepEqual(rateRequests, [{ poeVersion: 'poe1', league: 'Mirage', cacheOnly: true }]);
   assert.equal(context.getProfitTierFor(200, 'poe1', { league: 'Mirage' }), 'rare');
-  assert.deepEqual(renders, ['latestMapResult', 'mapResultHistory', 'sessionsList', 'activeSession', 'dashboardStats']);
+  assert.deepEqual(renders, ['latestMapResult', 'mapResultHistory', 'sessionsList', 'activeSession', 'recentLoot', 'dashboardStats']);
 });
 
 test('poe2 result smoke persists zero-profit map result and projects it into Last Map Result', async () => {
@@ -1700,7 +1700,7 @@ test('poe2 result smoke persists zero-profit map result and projects it into Las
   assert.equal(elements.lastMapResultCard.dataset.resultState, 'ready');
   assert.equal(elements.lastMapResultFarmType.textContent, 'Abyss');
   assert.equal(elements.lastMapResultDuration.textContent, 'duration:330');
-  assert.equal(elements.lastMapResultProfit.innerHTML, 'profit:0:16:poe2');
+  assert.equal(elements.lastMapResultProfit.innerHTML, 'profit:0:22:poe2');
 });
 
 test('dashboard html includes a last map result card with summary fields', () => {
@@ -1883,7 +1883,7 @@ test('renderer skips stale zero-value PoE1 lifecycle results in the latest map c
   assert.equal(elements.lastMapResultCard.dataset.resultState, 'ready');
   assert.equal(elements.lastMapResultFarmType.textContent, 'Breach');
   assert.equal(elements.lastMapResultDuration.textContent, 'duration:90');
-  assert.equal(elements.lastMapResultProfit.innerHTML, 'profit:0:chaos:16:poe1');
+  assert.equal(elements.lastMapResultProfit.innerHTML, 'profit:0:chaos:22:poe1');
 });
 
 test('renderer projects only the latest map result into the dashboard card', () => {
@@ -1930,7 +1930,7 @@ test('renderer projects only the latest map result into the dashboard card', () 
   assert.equal(elements.lastMapResultCard.dataset.resultState, 'ready');
   assert.equal(elements.lastMapResultFarmType.textContent, 'Ritual');
   assert.equal(elements.lastMapResultDuration.textContent, 'duration:185');
-  assert.equal(elements.lastMapResultProfit.innerHTML, 'profit:127:chaos:16:poe2');
+  assert.equal(elements.lastMapResultProfit.innerHTML, 'profit:127:chaos:22:poe2');
 });
 
 test('renderer shows unavailable profit results as not calculated', () => {
@@ -2552,4 +2552,185 @@ test('session drawer shows live duration while the session is active and the sto
   state.selectedSession = { ...state.selectedSession, status: 'completed', endedAt: '2026-10-21T12:01:30.000Z', durationSec: 330 };
   context.renderSessionDrawer();
   assert.equal(durationValue(), 'duration:330');
+});
+
+const PROFIT_DISPLAY_FUNCTIONS = [
+  'formatChipNumber', 'currencyHTML', 'normalizeProfitPoeVersion', 'getProfitCurrencyModel', 'getProfitCurrencyRateKey',
+  'getProfitCurrencyRates', 'profitCurrencyHTML', 'getProfitTierFor', 'applyProfitTier'
+];
+
+function createProfitDisplayContext(functionNames, overrides = {}) {
+  return loadFunctions([...PROFIT_DISPLAY_FUNCTIONS, ...functionNames], {
+    window: {
+      profitCurrencyModel: require('../src/modules/profitCurrencyModel.js'),
+      profitTierModel: require('../src/modules/profitTierModel.js'),
+      t: (key) => key
+    },
+    CURRENCY_NAMES: { chaos: 'Chaos Orb', divine: 'Divine Orb', mirror: 'Mirror of Kalandra' },
+    getCurrencyAssetPath: (type) => `assets/currency/poe1/${type}.png`,
+    ...overrides,
+    state: {
+      settings: { poeVersion: 'poe1' },
+      // 1 divine = 100c and 1 mirror = 200,000c, so tiers are easy to read off.
+      profitCurrencyRates: {
+        'poe1:Standard': { divineChaos: 100, mirrorChaos: 200000 },
+        poe1: { divineChaos: 100, mirrorChaos: 200000 }
+      },
+      ...overrides.state
+    }
+  });
+}
+
+const chipText = (html) => html.match(/<span class="value-chip">([^<]*) <img[^>]*alt="([^"]+)"/).slice(1, 3);
+
+test('value chips group thousands and drop decimals the size of the number does not need', () => {
+  const { formatChipNumber } = createProfitDisplayContext([]);
+
+  assert.equal(formatChipNumber(97800, 'chaos'), '97,800');
+  assert.equal(formatChipNumber(540, 'chaos', { signed: true }), '+540');
+  assert.equal(formatChipNumber(-540, 'chaos', { signed: true }), '-540');
+  assert.equal(formatChipNumber(12.34, 'chaos'), '12.3');
+  assert.equal(formatChipNumber(0.456, 'chaos'), '0.46');
+  assert.equal(formatChipNumber(2, 'divine'), '2.00');
+  assert.equal(formatChipNumber(45.67, 'divine'), '45.7');
+  assert.equal(formatChipNumber(489.4, 'divine'), '489');
+  assert.equal(formatChipNumber(1.5, 'mirror'), '1.50');
+  assert.equal(formatChipNumber(0, 'chaos', { signed: true }), '0');
+  assert.equal(formatChipNumber('not a number', 'chaos'), '0');
+
+  // Values that round into the next band take that band's precision, and nothing rounds to a signed zero.
+  assert.equal(formatChipNumber(99.96, 'chaos'), '100');
+  assert.equal(formatChipNumber(0.996, 'chaos'), '1.0');
+  assert.equal(formatChipNumber(9.996, 'divine'), '10.0');
+  assert.equal(formatChipNumber(99.96, 'divine'), '100');
+  assert.equal(formatChipNumber(-0.001, 'chaos'), '0');
+  assert.equal(formatChipNumber(0.001, 'chaos', { signed: true }), '0');
+});
+
+test('the latest map result is a signed hero number in its tier colour with the tier badge', () => {
+  const elements = {
+    lastMapResultCard: { dataset: {} },
+    lastMapResultFarmType: { textContent: '' },
+    lastMapResultDuration: { textContent: '' },
+    lastMapResultProfit: { innerHTML: '', dataset: {} },
+    lastMapResultMeme: { innerHTML: '' }
+  };
+  const context = createProfitDisplayContext(
+    ['formatMapResultProfitHTML', 'getMapResultProfitTier', 'profitMemeHTML', 'renderLatestMapResult'],
+    {
+      elements,
+      PROFIT_MEME_LABELS: { bricked: 'Bricked', pog: 'Pog', juiced: 'Juiced', mirror: 'Mirror tier' },
+      formatDuration: (seconds) => `duration:${seconds}`,
+      state: { mapResults: [{ farmType: 'Breach', durationSeconds: 240, netProfit: 750, poeVersion: 'poe1' }] }
+    }
+  );
+
+  context.renderLatestMapResult();
+
+  assert.equal(elements.lastMapResultCard.dataset.resultState, 'ready');
+  assert.deepEqual(chipText(elements.lastMapResultProfit.innerHTML), ['+7.50', 'Divine Orb']);
+  assert.equal(elements.lastMapResultProfit.dataset.profitTier, 'unique');
+  assert.match(elements.lastMapResultMeme.innerHTML, /data-meme="juiced"/);
+
+  context.state.mapResults = [];
+  context.renderLatestMapResult();
+  assert.equal(elements.lastMapResultProfit.innerHTML, '—');
+  assert.equal(elements.lastMapResultMeme.innerHTML, '');
+});
+
+test("today's summary tiers the per-map average, flags only a losing day and shows per hour and time mapped", async () => {
+  const stat = () => ({ textContent: '', innerHTML: '', dataset: {} });
+  const elements = {
+    todaySessions: stat(),
+    todayProfit: stat(),
+    todayAvg: stat(),
+    todayPerHour: stat(),
+    todayTime: stat()
+  };
+  let summary = { totalSessions: 4, totalProfit: -60, avgProfitPerMap: 150, avgProfitPerHour: 97800, totalDuration: 3900 };
+  let tiersWhileLoading = null;
+  const context = createProfitDisplayContext(['formatHoursMinutes', 'loadDashboardStats'], {
+    elements,
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe1', league: 'Standard' }),
+    window: {
+      profitCurrencyModel: require('../src/modules/profitCurrencyModel.js'),
+      profitTierModel: require('../src/modules/profitTierModel.js'),
+      t: (key) => key,
+      electronAPI: {
+        getDashboardStats: async () => {
+          tiersWhileLoading = [elements.todayProfit.dataset.profitTier, elements.todayAvg.dataset.profitTier];
+          return { summary };
+        }
+      }
+    },
+    state: { currentUser: { id: 'profile-1' } }
+  });
+
+  await context.loadDashboardStats();
+
+  assert.equal(elements.todaySessions.textContent, '4');
+  assert.deepEqual(chipText(elements.todayProfit.innerHTML), ['-60.0', 'Chaos Orb']);
+  assert.equal(elements.todayProfit.dataset.profitTier, 'loss');
+  assert.deepEqual(chipText(elements.todayAvg.innerHTML), ['1.50', 'Divine Orb']);
+  assert.equal(elements.todayAvg.dataset.profitTier, 'rare');
+  assert.deepEqual(chipText(elements.todayPerHour.innerHTML), ['978', 'Divine Orb']);
+  assert.equal(elements.todayTime.textContent, '1:05');
+
+  // A winning day is signed and keeps the brass colour, however big it is; the '...' state drops the old tiers.
+  summary = { totalSessions: 6, totalProfit: 54000, avgProfitPerMap: 9000, avgProfitPerHour: 0, totalDuration: 0 };
+  await context.loadDashboardStats();
+  assert.deepEqual(tiersWhileLoading, [undefined, undefined]);
+  assert.deepEqual(chipText(elements.todayProfit.innerHTML), ['+540', 'Divine Orb']);
+  assert.equal(elements.todayProfit.dataset.profitTier, undefined);
+  assert.equal(elements.todayAvg.dataset.profitTier, 'unique');
+  assert.equal(elements.todayTime.textContent, '0:00');
+
+  // Before the first map there is no average to tier.
+  summary = { totalSessions: 0, totalProfit: 0, avgProfitPerMap: 0, avgProfitPerHour: 0, totalDuration: 0 };
+  await context.loadDashboardStats();
+  assert.equal(elements.todayAvg.dataset.profitTier, undefined);
+});
+
+test('recent loot shows each drop in the adaptive currency of its own league', () => {
+  const elements = { recentLootList: { innerHTML: '' } };
+  const context = createProfitDisplayContext(['renderRecentLoot'], {
+    elements,
+    escapeHTML: (value) => String(value),
+    timeAgo: () => '1m ago',
+    state: {
+      currentUser: { id: 'profile-1' },
+      // Divines cost 100c in Standard and 200c in Mirage.
+      profitCurrencyRates: {
+        'poe1:Standard': { divineChaos: 100, mirrorChaos: 200000 },
+        'poe1:Mirage': { divineChaos: 200, mirrorChaos: 200000 },
+        poe1: { divineChaos: 100, mirrorChaos: 200000 }
+      },
+      recentLoot: [
+        { itemName: 'Mirror of Kalandra', quantity: 2, chaosValue: 200000, session: { poeVersion: 'poe1', league: 'Standard', mapName: 'Crimson Temple Map' } },
+        { itemName: 'Divine Orb', quantity: 2, chaosValue: 200, session: { poeVersion: 'poe1', league: 'Mirage', mapName: 'Mesa Map' } },
+        { itemName: 'Chaos Orb', quantity: 40, chaosValue: 1, session: { poeVersion: 'poe1', league: 'Standard', mapName: 'Mesa Map' } }
+      ]
+    }
+  });
+
+  context.renderRecentLoot();
+
+  const chips = [...elements.recentLootList.innerHTML.matchAll(/<span class="value-chip">([^<]*) <img[^>]*alt="([^"]+)"/g)]
+    .map((match) => match.slice(1, 3));
+  assert.deepEqual(chips, [['2.00', 'Mirror of Kalandra'], ['2.00', 'Divine Orb'], ['40.0', 'Chaos Orb']]);
+});
+
+test("today's summary labels its rows with our icons and keeps currency art inside the value chips", () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const card = html.slice(html.indexOf('<div class="card stats-card">'));
+  const grid = card.slice(0, card.indexOf('<div class="card ', 1));
+
+  assert.doesNotMatch(grid, /<img/);
+  for (const id of ['map', 'sum', 'orb', 'arrow-up', 'hourglass']) {
+    assert.match(grid, new RegExp(`assets/icons\\.svg#${id}"`));
+  }
+  for (const id of ['today-sessions', 'today-profit', 'today-avg', 'today-per-hour', 'today-time']) {
+    assert.match(grid, new RegExp(`id="${id}"`));
+  }
+  assert.match(html, /id="last-map-result-meme"/);
 });
