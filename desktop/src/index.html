@@ -54,7 +54,10 @@
       <div class="user-info">
         <span id="username">Misafir</span>
         <div class="user-avatar" id="user-avatar">?</div>
-        <button id="logout-btn" class="btn btn-ghost btn-small" aria-label="Cikis yap" data-i18n="user.logout">Cikis</button>
+        <button id="logout-btn" class="btn btn-ghost btn-small" aria-label="Cikis yap">
+          <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sign-out"/></svg>
+          <span class="btn-label" data-i18n="user.logout">Cikis</span>
+        </button>
       </div>
       <div class="window-controls">
         <button class="win-ctrl" id="win-minimize" aria-label="Kucult">
@@ -118,7 +121,7 @@
             <h2 data-i18n="login.heading">Sign in with Path of Exile</h2>
             <p class="modal-subtitle compact" data-i18n="login.poeRequired">Juice Journal needs a linked Path of Exile account.</p>
             <div class="form-actions">
-              <button type="button" class="btn btn-primary btn-hero" id="poe-oauth-login">
+              <button type="button" class="btn btn-primary btn-hero btn-poe" id="poe-oauth-login">
                 <span class="btn-glyph btn-glyph-brand" aria-hidden="true">
                   <img src="assets/brand/mark-small.svg" alt="" width="20" height="20" draggable="false">
                 </span>
@@ -241,7 +244,13 @@
                     <span data-i18n="dashboard.playingAs">Playing as</span>
                     <select id="character-picker"></select>
                   </label>
-                  <button type="button" class="btn btn-secondary btn-small character-connect" id="character-connect-btn" data-i18n="dashboard.connectDevice" hidden>Connect Path of Exile on this device</button>
+                  <button type="button" class="btn btn-primary btn-poe character-connect" id="character-connect-btn" hidden>
+                    <span class="btn-glyph btn-glyph-brand" aria-hidden="true">
+                      <img src="assets/brand/mark-small.svg" alt="" width="14" height="14" draggable="false">
+                    </span>
+                    <span class="btn-label" data-i18n="dashboard.connectDevice">Reconnect Path of Exile</span>
+                    <svg class="icon btn-external" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#external"/></svg>
+                  </button>
                   <div class="character-meta-grid">
                     <div class="character-meta">
                       <span>Level</span>
@@ -287,7 +296,9 @@
             </div>
             <div class="session-actions">
               <button id="start-session-btn" class="btn btn-primary">
-                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#play"/></svg>
+                <span class="btn-glyph btn-glyph-play" aria-hidden="true">
+                  <svg class="icon icon-sm" width="13" height="13" aria-hidden="true"><use href="assets/icons.svg#play"/></svg>
+                </span>
                 <span data-i18n="dashboard.newMap">Yeni Map Baslat</span>
               </button>
               <button id="end-session-btn" class="btn btn-danger hidden">
@@ -577,7 +588,10 @@
                   <textarea id="session-drawer-notes" class="session-drawer-textarea" rows="5" maxlength="2000" data-i18n-placeholder="sessions.notesPlaceholder" placeholder="Important drops, mistakes, atlas setup, scarabs..."></textarea>
                 </div>
                 <div class="session-drawer-actions">
-                  <button id="session-drawer-save" class="btn btn-primary" type="button" data-i18n="sessions.saveNotes">Save Notes</button>
+                  <button id="session-drawer-save" class="btn btn-primary" type="button">
+                    <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#check"/></svg>
+                    <span class="btn-label" data-i18n="sessions.saveNotes">Save Notes</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -607,8 +621,8 @@
             <h2 data-i18n="currency.title">Currency Prices</h2>
             <div class="currency-header-actions">
               <div class="poe-toggle">
-                <button class="poe-toggle-btn active" data-poe="poe1">PoE 1</button>
-                <button class="poe-toggle-btn" data-poe="poe2">PoE 2</button>
+                <button class="poe-toggle-btn active" data-poe="poe1" aria-pressed="true">PoE 1</button>
+                <button class="poe-toggle-btn" data-poe="poe2" aria-pressed="false">PoE 2</button>
               </div>
               <select id="currency-league" class="currency-select">
                 <option value="">Standard</option>
@@ -709,11 +723,11 @@
                 <h3 data-i18n="settings.poeVersion">PoE Versiyonu</h3>
                 <div class="form-group">
                   <div class="poe-version-select">
-                    <button class="version-btn active" data-version="poe1">
+                    <button class="version-btn active" data-version="poe1" aria-pressed="true">
                       <svg class="icon" width="18" height="18" aria-hidden="true"><use href="assets/icons.svg#poe1"/></svg>
                       Path of Exile 1
                     </button>
-                    <button class="version-btn" data-version="poe2">
+                    <button class="version-btn" data-version="poe2" aria-pressed="false">
                       <svg class="icon" width="18" height="18" aria-hidden="true"><use href="assets/icons.svg#poe2"/></svg>
                       Path of Exile 2
                     </button>
@@ -725,7 +739,10 @@
                 <div class="form-group">
                   <div class="input-with-btn">
                     <input type="text" id="poe-path" placeholder="C:/Path of Exile/logs/Client.txt">
-                    <button id="browse-poe-path" class="btn btn-secondary btn-small" data-i18n="settings.browse">Gozat</button>
+                    <button id="browse-poe-path" class="btn btn-secondary btn-small">
+                      <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#folder"/></svg>
+                      <span class="btn-label" data-i18n="settings.browse">Gozat</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -755,8 +772,17 @@
                     <p id="poe-link-mode" class="poe-link-mode">Mock mode will be used until a real GGG OAuth client is configured.</p>
                   </div>
                   <div class="poe-account-actions">
-                    <button id="poe-connect-btn" class="btn btn-primary" data-i18n="settings.connectPoe">Connect Path of Exile</button>
-                    <button id="poe-disconnect-btn" class="btn btn-secondary hidden" data-i18n="settings.disconnectPoe">Disconnect</button>
+                    <button id="poe-connect-btn" class="btn btn-primary btn-poe">
+                      <span class="btn-glyph btn-glyph-brand" aria-hidden="true">
+                        <img src="assets/brand/mark-small.svg" alt="" width="14" height="14" draggable="false">
+                      </span>
+                      <span class="btn-label" data-i18n="settings.connectPoe">Reconnect Path of Exile</span>
+                      <svg class="icon btn-external" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#external"/></svg>
+                    </button>
+                    <button id="poe-disconnect-btn" class="btn btn-ghost hidden">
+                      <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#sign-out"/></svg>
+                      <span class="btn-label" data-i18n="settings.disconnectPoe">Disconnect</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -833,8 +859,14 @@
                 <h3 data-i18n="settings.onlineAccount">Online account</h3>
                 <p class="settings-desc" id="online-account-status" data-i18n="settings.onlineAccountOff">Turn on online features to sign in to the server.</p>
                 <div class="settings-actions-row">
-                  <button id="online-sign-in" class="btn btn-secondary btn-small" type="button" data-i18n="settings.onlineSignIn">Sign in with Path of Exile</button>
-                  <button id="online-sign-out" class="btn btn-secondary btn-small" type="button" data-i18n="settings.onlineSignOut">Sign out of the server</button>
+                  <button id="online-sign-in" class="btn btn-secondary btn-small" type="button">
+                    <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sign-in"/></svg>
+                    <span class="btn-label" data-i18n="settings.onlineSignIn">Sign in to the server</span>
+                  </button>
+                  <button id="online-sign-out" class="btn btn-ghost btn-small" type="button">
+                    <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sign-out"/></svg>
+                    <span class="btn-label" data-i18n="settings.onlineSignOut">Sign out of the server</span>
+                  </button>
                 </div>
               </div>
               <div class="settings-group">
@@ -848,7 +880,10 @@
                   <p class="settings-desc" data-i18n="settings.diagnosticsHint">Guvenli export yalnizca genel durum ozeti icerir. Hassas export oturum ve denetim ayrintilarini ekler.</p>
                 </div>
                 <div class="settings-actions-row">
-                  <button id="export-diagnostics" class="btn btn-secondary btn-small" data-i18n="settings.exportDiagnostics">Diagnostik Disa Aktar</button>
+                  <button id="export-diagnostics" class="btn btn-secondary btn-small">
+                    <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#export"/></svg>
+                    <span class="btn-label" data-i18n="settings.exportDiagnostics">Diagnostik Disa Aktar</span>
+                  </button>
                 </div>
               </div>
               <div class="settings-group">
@@ -892,15 +927,24 @@
                 <p id="app-update-status" class="settings-desc"></p>
                 <p id="app-update-detail" class="settings-desc"></p>
                 <div class="settings-actions-row">
-                  <button id="check-updates-btn" class="btn btn-secondary btn-small" data-i18n="settings.checkForUpdates">Check for Updates</button>
-                  <button id="install-update-btn" class="btn btn-primary btn-small hidden" data-i18n="settings.installUpdate">Restart to Install</button>
+                  <button id="check-updates-btn" class="btn btn-secondary btn-small">
+                    <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sync"/></svg>
+                    <span class="btn-label" data-i18n="settings.checkForUpdates">Check for Updates</span>
+                  </button>
+                  <button id="install-update-btn" class="btn btn-primary btn-small hidden">
+                    <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#export"/></svg>
+                    <span class="btn-label" data-i18n="settings.installUpdate">Restart to Install</span>
+                  </button>
                 </div>
               </div>
             </div>
 
             <!-- Settings Actions (visible on all tabs) -->
             <div class="settings-actions">
-              <button id="save-settings" class="btn btn-primary" data-i18n="settings.save">Kaydet</button>
+              <button id="save-settings" class="btn btn-primary">
+                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#check"/></svg>
+                <span class="btn-label" data-i18n="settings.save">Kaydet</span>
+              </button>
               <button id="reset-settings" class="btn btn-secondary" data-i18n="settings.reset">Varsayilanlara Sifirla</button>
             </div>
           </div>

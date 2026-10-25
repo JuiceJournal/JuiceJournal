@@ -151,13 +151,18 @@ test('settings html includes desktop update status controls', () => {
 });
 
 test('renderer about tab shows install action only when an update is downloaded', () => {
-  const context = loadFunctions(['renderAppUpdateState'], {
+  // Labels sit in a .btn-label span next to the icon, so writes must not touch the button's own text.
+  const buttonWithLabel = (extra) => {
+    const label = { textContent: '' };
+    return { ...extra, label, querySelector: (selector) => (selector === '.btn-label' ? label : null) };
+  };
+  const context = loadFunctions(['setButtonLabel', 'renderAppUpdateState'], {
     elements: {
       appVersionValue: { textContent: '' },
       appUpdateStatus: { textContent: '' },
       appUpdateDetail: { textContent: '' },
-      checkUpdatesBtn: { disabled: false, textContent: '' },
-      installUpdateBtn: { hidden: true, disabled: true, textContent: '' }
+      checkUpdatesBtn: buttonWithLabel({ disabled: false }),
+      installUpdateBtn: buttonWithLabel({ hidden: true, disabled: true })
     },
     state: {
       appUpdate: {
@@ -190,4 +195,7 @@ test('renderer about tab shows install action only when an update is downloaded'
   assert.equal(context.elements.installUpdateBtn.hidden, false);
   assert.equal(context.elements.installUpdateBtn.disabled, false);
   assert.equal(context.elements.checkUpdatesBtn.disabled, false);
+  assert.equal(context.elements.checkUpdatesBtn.label.textContent, 'settings.checkForUpdates');
+  assert.equal(context.elements.installUpdateBtn.label.textContent, 'settings.installUpdate');
+  assert.equal(context.elements.checkUpdatesBtn.textContent, undefined);
 });
