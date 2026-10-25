@@ -71,9 +71,31 @@
     return formatSelectedCurrency(selectProfitCurrency(chaosValue, rates), options);
   }
 
+  // The number next to a currency icon: chaos drops decimals once it is large, divine and mirror keep two below 10,
+  // thousands are grouped. It rounds first, so a value that rounds into the next band takes that band's precision.
+  function formatCurrencyAmount(value, type = 'chaos', { signed = false } = {}) {
+    const num = parseFloat(value);
+    if (!Number.isFinite(num) || num === 0) {
+      return '0';
+    }
+
+    const digitsFor = (abs) => (type === 'divine' || type === 'mirror'
+      ? (abs < 10 ? 2 : abs < 100 ? 1 : 0)
+      : (abs >= 100 ? 0 : abs >= 1 ? 1 : 2));
+    const digits = digitsFor(Math.abs(Number(num.toFixed(digitsFor(Math.abs(num))))));
+    const rounded = Number(num.toFixed(digits));
+    if (rounded === 0) {
+      return '0';
+    }
+
+    const formatted = rounded.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    return signed && rounded > 0 ? `+${formatted}` : formatted;
+  }
+
   return {
     normalizeProfitCurrencyRates,
     selectProfitCurrency,
-    formatProfitCurrencyText
+    formatProfitCurrencyText,
+    formatCurrencyAmount
   };
 });

@@ -1039,6 +1039,7 @@ test('map-entered events prompt for a session with the detected map instead of s
   const startCalls = [];
   const runtimeSnapshots = [];
   const context = loadFunctions(['handleMapEnteredEvent'], {
+    START_MAP_PROMPT_OVERLAY_MS: 7000,
     state: {
       currentSession: null,
       settings: {
@@ -1076,8 +1077,10 @@ test('map-entered events prompt for a session with the detected map instead of s
 
 test('map-entered events show an in-game start-map overlay prompt before opening the desktop modal', async () => {
   const overlayPrompts = [];
+  const overlayOptions = [];
   const startCalls = [];
   const context = loadFunctions(['handleMapEnteredEvent'], {
+    START_MAP_PROMPT_OVERLAY_MS: 7000,
     state: {
       currentSession: null,
       settings: {
@@ -1105,8 +1108,9 @@ test('map-entered events show an in-game start-map overlay prompt before opening
     window: {
       t: (key, values = {}) => values.mapName ? `${key}:${values.mapName}` : key,
       electronAPI: {
-        showStartMapPromptOverlay: async (payload) => {
+        showStartMapPromptOverlay: async (payload, options) => {
           overlayPrompts.push(payload);
+          overlayOptions.push(options);
         },
         hideStartMapPromptOverlay: async () => {
           overlayPrompts.push({ hidden: true, beforeDesktopModal: startCalls.length === 0 });
@@ -1137,6 +1141,9 @@ test('map-entered events show an in-game start-map overlay prompt before opening
     },
     { hidden: true, beforeDesktopModal: true }
   ]);
+  // Main gets the renderer's own close time, so the overlay counts down to the real close.
+  assert.deepEqual(JSON.parse(JSON.stringify(overlayOptions)), [{ expiresInMs: 7000 }]);
+  assert.match(fs.readFileSync(appJsPath, 'utf8'), /const START_MAP_PROMPT_OVERLAY_MS = 7000;/);
   assert.deepEqual(startCalls, [{ defaultMapName: 'Channel', source: 'map-detected' }]);
 });
 
@@ -1145,6 +1152,7 @@ test('map-entered events can start a session from the in-game start-map overlay 
   const startCalls = [];
   let overlayResultHandler = null;
   const context = loadFunctions(['handleMapEnteredEvent'], {
+    START_MAP_PROMPT_OVERLAY_MS: 7000,
     state: {
       currentSession: null,
       settings: {
@@ -1220,6 +1228,7 @@ test('map-entered events fall back to the desktop modal when the in-game prompt 
   const timeoutDelays = [];
   let overlayResultHandler = null;
   const context = loadFunctions(['handleMapEnteredEvent'], {
+    START_MAP_PROMPT_OVERLAY_MS: 7000,
     state: {
       currentSession: null,
       settings: {
@@ -1415,6 +1424,7 @@ function loadSessionEndedListener({ stashState = { lastMapResult: null } } = {})
     'getSessionTimestampMs',
     'getCompletedSessionDurationSeconds',
     'getCompletedSessionFarmTypeLabel',
+    'getScannedTopOutputs',
     'createCompletedSessionMapResult',
     'normalizeCompletedSessionPoeVersion',
     'shouldPersistCompletedSessionMapResult',
@@ -1618,6 +1628,7 @@ test('poe2 result smoke persists zero-profit map result and projects it into Las
     'getSessionTimestampMs',
     'getCompletedSessionDurationSeconds',
     'getCompletedSessionFarmTypeLabel',
+    'getScannedTopOutputs',
     'createCompletedSessionMapResult',
     'normalizeCompletedSessionPoeVersion',
     'shouldPersistCompletedSessionMapResult',
@@ -2559,7 +2570,7 @@ test('session drawer shows live duration while the session is active and the sto
 });
 
 const PROFIT_DISPLAY_FUNCTIONS = [
-  'formatChipNumber', 'currencyHTML', 'normalizeProfitPoeVersion', 'getProfitCurrencyModel', 'getProfitCurrencyRateKey',
+  'formatCurrencyAmount', 'currencyHTML', 'normalizeProfitPoeVersion', 'getProfitCurrencyModel', 'getProfitCurrencyRateKey',
   'getProfitCurrencyRates', 'profitCurrencyHTML', 'getProfitTierFor', 'applyProfitTier'
 ];
 
@@ -2597,30 +2608,6 @@ function createProfitDisplayContext(functionNames, overrides = {}) {
 }
 
 const chipText = (html) => html.match(/<span class="value-chip">([^<]*) <img[^>]*alt="([^"]+)"/).slice(1, 3);
-
-test('value chips group thousands and drop decimals the size of the number does not need', () => {
-  const { formatChipNumber } = createProfitDisplayContext([]);
-
-  assert.equal(formatChipNumber(97800, 'chaos'), '97,800');
-  assert.equal(formatChipNumber(540, 'chaos', { signed: true }), '+540');
-  assert.equal(formatChipNumber(-540, 'chaos', { signed: true }), '-540');
-  assert.equal(formatChipNumber(12.34, 'chaos'), '12.3');
-  assert.equal(formatChipNumber(0.456, 'chaos'), '0.46');
-  assert.equal(formatChipNumber(2, 'divine'), '2.00');
-  assert.equal(formatChipNumber(45.67, 'divine'), '45.7');
-  assert.equal(formatChipNumber(489.4, 'divine'), '489');
-  assert.equal(formatChipNumber(1.5, 'mirror'), '1.50');
-  assert.equal(formatChipNumber(0, 'chaos', { signed: true }), '0');
-  assert.equal(formatChipNumber('not a number', 'chaos'), '0');
-
-  // Values that round into the next band take that band's precision, and nothing rounds to a signed zero.
-  assert.equal(formatChipNumber(99.96, 'chaos'), '100');
-  assert.equal(formatChipNumber(0.996, 'chaos'), '1.0');
-  assert.equal(formatChipNumber(9.996, 'divine'), '10.0');
-  assert.equal(formatChipNumber(99.96, 'divine'), '100');
-  assert.equal(formatChipNumber(-0.001, 'chaos'), '0');
-  assert.equal(formatChipNumber(0.001, 'chaos', { signed: true }), '0');
-});
 
 test('the latest map result is a signed hero number in its tier colour with the tier badge', () => {
   const elements = {

@@ -45,3 +45,30 @@ test('game art ships with a notice and the About page credits Grinding Gear Game
   assert.match(indexHtml, /data-i18n="settings\.gameArtNotice"/);
   assert.equal((translations.match(/'settings\.gameArtNotice':/g) || []).length, 2);
 });
+
+test('the overlay knows the same bundled item art as the main window, and every file exists', () => {
+  const vm = require('node:vm');
+  const overlayJs = fs.readFileSync(path.join(srcDir, 'overlay.js'), 'utf8');
+  const readObject = (source, name) => vm.runInNewContext(`(${source.match(new RegExp(`var ${name} = (\\{[\\s\\S]*?\\});`))[1]})`);
+  const overlayKeys = readObject(overlayJs, 'LOCAL_ICON_KEYS');
+  const poe2Files = readObject(overlayJs, 'POE2_ICON_FILES');
+  const appKeys = vm.runInNewContext(`${getBlock(appJs, 'const LOCAL_ITEM_ICON_KEYS')}\nLOCAL_ITEM_ICON_KEYS`);
+
+  // Both objects come from other vm realms, so they are compared as plain data.
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(appKeys).map(([name, key]) => [name.toLowerCase(), key])))),
+    JSON.parse(JSON.stringify(overlayKeys))
+  );
+  const images = vm.runInNewContext(`${getBlock(appJs, 'const CURRENCY_IMAGE_VARIANTS')}\n${getBlock(appJs, 'const CURRENCY_IMAGES')}\n({ CURRENCY_IMAGE_VARIANTS, CURRENCY_IMAGES })`);
+  for (const key of new Set([...Object.values(overlayKeys), 'chaos', 'divine', 'mirror'])) {
+    const appPoe1 = images.CURRENCY_IMAGE_VARIANTS.poe1[key] || images.CURRENCY_IMAGES[key] || '';
+    const overlayPoe1 = key === 'transmute' ? '' : `assets/currency/poe1/${key}.png`;
+    assert.equal(overlayPoe1, appPoe1, `poe1 ${key}`);
+    const appPoe2 = images.CURRENCY_IMAGE_VARIANTS.poe2[key] || '';
+    const overlayPoe2 = poe2Files[key] ? `assets/currency/poe2/${poe2Files[key]}` : '';
+    assert.equal(overlayPoe2, appPoe2, `poe2 ${key}`);
+    for (const iconPath of [overlayPoe1, overlayPoe2].filter(Boolean)) {
+      assert.ok(fs.existsSync(path.join(srcDir, iconPath)), iconPath);
+    }
+  }
+});

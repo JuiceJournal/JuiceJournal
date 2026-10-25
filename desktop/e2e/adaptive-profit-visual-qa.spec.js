@@ -437,7 +437,13 @@ test('adaptive profit visual QA: captures dashboard, sessions, stash result, and
     const overlayWindow = await waitForOverlayWindow(electronApp);
 
     await expect(overlayWindow.locator('[data-overlay-state="visible"]')).toBeVisible();
-    await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText('2.00 mirror');
+    // The amount is followed by the mirror's bundled icon, which loads from the overlay's own files.
+    await expect(overlayWindow.locator('[data-overlay-primary] .jj-value')).toHaveText('+2.00');
+    const currencyIcon = overlayWindow.locator('[data-overlay-primary] .jj-value-icon');
+    await expect(currencyIcon).toHaveAttribute('src', 'assets/currency/poe1/mirror.png');
+    await expect(currencyIcon).toHaveAttribute('alt', 'Mirror of Kalandra');
+    expect(await currencyIcon.evaluate((img) => img.complete && img.naturalWidth > 0)).toBe(true);
+    await expect(overlayWindow.locator('[data-overlay-meta] .jj-meme-icon')).toHaveAttribute('src', 'assets/brand/reactions/mirror.svg');
     await overlayWindow.locator('[data-overlay-state="visible"]').screenshot({
       path: testInfo.outputPath('adaptive-profit-overlay.png')
     });

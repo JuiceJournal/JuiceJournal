@@ -334,6 +334,7 @@ test('renderer creates a completed map result directly from an ended session', (
     'getSessionTimestampMs',
     'getCompletedSessionDurationSeconds',
     'getCompletedSessionFarmTypeLabel',
+    'getScannedTopOutputs',
     'createCompletedSessionMapResult'
   ], {
     state: {
@@ -367,10 +368,19 @@ test('renderer creates a completed map result directly from an ended session', (
     totalLootChaos: '0',
     profitChaos: '0',
     poeVersion: 'poe2',
-    league: 'Mirage'
+    league: 'Mirage',
+    lootEntries: [
+      { itemName: 'Exalted Orb', quantity: 2, chaosValue: 12 },
+      { itemName: 'Regal Orb', quantity: 5, chaosValue: 1 }
+    ]
   });
 
   assert.equal(result.id, `map-result-session-1-${Date.parse('2026-05-02T15:12:05.000Z')}`);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.topOutputs)).map((entry) => [entry.label, entry.valueDelta]), [
+    ['Exalted Orb', 24],
+    ['Regal Orb', 5]
+  ]);
+  assert.equal(result.lootItemCount, 7);
   assert.equal(result.sessionId, 'session-1');
   assert.equal(result.farmType, 'Expedition');
   assert.equal(result.durationSeconds, 125);
@@ -389,6 +399,7 @@ test('renderer keeps the Divine and Mirror rates on a completed session result s
     'getProfitCurrencyLeague',
     'getProfitCurrencyRateKey',
     'getProfitCurrencyRates',
+    'getScannedTopOutputs',
     'createCompletedSessionMapResult'
   ], {
     state: {
@@ -437,6 +448,7 @@ test('ending a PoE1 map session routes through stash diff completion instead of 
     'getSessionTimestampMs',
     'getCompletedSessionDurationSeconds',
     'getCompletedSessionFarmTypeLabel',
+    'getScannedTopOutputs',
     'createCompletedSessionMapResult',
     'normalizeCompletedSessionPoeVersion',
     'shouldPersistCompletedSessionMapResult',
@@ -1120,4 +1132,25 @@ test('desktop preload exposes the prices-updated subscription', () => {
   assert.match(source, /onPricesUpdated:\s*\(callback\)\s*=>/);
   assert.match(source, /ipcRenderer\.on\('prices-updated'/);
   assert.match(source, /ALLOWED_CHANNELS = \[[^\]]*'prices-updated'[^\]]*\]/);
+});
+
+test('an OCR run keeps its three most valuable drops, grouped by item, for the overlay result card', () => {
+  const context = loadFunctions(['getScannedTopOutputs']);
+  const topOutputs = context.getScannedTopOutputs([
+    { itemName: 'Chaos Orb', quantity: 30, chaosValue: 1 },
+    { itemName: 'Divine Orb', quantity: 1, chaosValue: 150 },
+    { itemName: 'Chaos Orb', quantity: 20, chaosValue: 1 },
+    { itemName: 'divine  orb', quantity: 2, chaosValue: 150 },
+    { itemName: 'Orb of Alchemy', quantity: 4, chaosValue: 0.5 },
+    { itemName: 'Ambush Scarab', quantity: 1, chaosValue: 8 },
+    { itemName: 'Unpriced Thing', quantity: 3, chaosValue: 0 },
+    { itemName: '', quantity: 9, chaosValue: 99 }
+  ]);
+
+  assert.deepEqual(JSON.parse(JSON.stringify(topOutputs)), [
+    { label: 'Divine Orb', quantityDelta: 3, valueDelta: 450, currencyCode: 'chaos' },
+    { label: 'Chaos Orb', quantityDelta: 50, valueDelta: 50, currencyCode: 'chaos' },
+    { label: 'Ambush Scarab', quantityDelta: 1, valueDelta: 8, currencyCode: 'chaos' }
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.getScannedTopOutputs())), []);
 });

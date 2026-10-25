@@ -17,7 +17,6 @@
   };
 
   var lastRenderedMode = 'runtime';
-  var animFrameId = null;
   // The overlay never takes focus, so the prompt is mouse-only: the map name comes from the prompt state
   // and the farm type is picked from buttons.
   var startPromptKey = null;
@@ -34,10 +33,36 @@
     if (element) { element.textContent = value || ''; }
   }
 
-  // Game art for the top drop. The overlay CSP only allows local images, so the art comes from the main-process
-  // icon cache as a file:// URL. Keyed by the remote URL; '' while loading or when the icon is unavailable.
+  // Game art for the top drop. The overlay CSP only allows local images: bundled files for the core currencies
+  // (same names and same-game rule as the main window's loot rows), else the main-process icon cache as a file://
+  // URL, keyed by the remote URL; '' while loading or when the icon is unavailable.
   var cachedIconSources = Object.create(null);
   var secondaryIconUrl = '';
+  var LOCAL_ICON_KEYS = {
+    'chaos orb': 'chaos', 'divine orb': 'divine', 'exalted orb': 'exalted', 'mirror of kalandra': 'mirror',
+    'vaal orb': 'vaal', 'orb of alchemy': 'alchemy', 'orb of fusing': 'fusing', 'chromatic orb': 'chromatic',
+    'orb of alteration': 'alteration', "jeweller's orb": 'jewellers', 'orb of scouring': 'scouring',
+    'blessed orb': 'blessed', 'regal orb': 'regal', 'orb of regret': 'regret', "gemcutter's prism": 'gcp',
+    'orb of chance': 'chance', 'orb of transmutation': 'transmute'
+  };
+  var POE2_ICON_FILES = {
+    chaos: 'chaos.png', divine: 'divine.webp', mirror: 'mirror.png', exalted: 'exalted.png', regal: 'regal.png', transmute: 'transmute.png'
+  };
+  var CURRENCY_NAMES = { chaos: 'Chaos Orb', divine: 'Divine Orb', mirror: 'Mirror of Kalandra' };
+  var CURRENCY_TEXT_SUFFIX = { chaos: 'c', divine: ' div', mirror: ' mirror' };
+  var MEME_LABELS = { bricked: 'Bricked', pog: 'Pog', juiced: 'Juiced', mirror: 'Mirror tier' };
+  var SEPARATOR = ' \u00b7 ';
+
+  function getLocalIconPath(key, poeVersion) {
+    if (!key) return '';
+    if (poeVersion === 'poe2') return POE2_ICON_FILES[key] ? 'assets/currency/poe2/' + POE2_ICON_FILES[key] : '';
+    return key === 'transmute' ? '' : 'assets/currency/poe1/' + key + '.png';
+  }
+
+  function getLocalItemIconPath(label, poeVersion) {
+    var key = LOCAL_ICON_KEYS[String(label || '').trim().replace(/\s+/g, ' ').toLowerCase()];
+    return getLocalIconPath(key, poeVersion);
+  }
 
   // A farm id or label resolves to the data-farm-type that gives the name its league content colour.
   function getFarmTypeId(value) {
@@ -45,21 +70,60 @@
     return model && typeof model.resolveFarmTypeId === 'function' ? model.resolveFarmTypeId(value) : null;
   }
 
-  // The primary line is a name plus an optional value, so the value can carry the profit tier colour.
-  function setPrimary(name, value, farmTypeId) {
+  // The primary line is a name plus an optional value element, so the value can carry the profit tier colour.
+  function setPrimary(name, valueElement, farmTypeId) {
     if (!el.primary) return;
     var nameSpan = document.createElement('span');
     nameSpan.className = 'jj-primary-name';
     if (farmTypeId) { nameSpan.setAttribute('data-farm-type', farmTypeId); }
     nameSpan.textContent = name || '';
     el.primary.replaceChildren(nameSpan);
-    if (value) {
+    if (valueElement) {
       el.primary.append(' ');
-      var valueSpan = document.createElement('span');
-      valueSpan.className = 'jj-value';
-      valueSpan.textContent = value;
-      el.primary.appendChild(valueSpan);
+      el.primary.appendChild(valueElement);
     }
+  }
+
+  // The headline value: the signed amount in the run's currency, then that currency's bundled icon.
+  function createProfitValue(chaosValue, rates, poeVersion) {
+    var model = root.profitCurrencyModel;
+    var span = document.createElement('span');
+    span.className = 'jj-value';
+    if (!model || typeof model.formatCurrencyAmount !== 'function') {
+      span.textContent = formatSignedProfit(chaosValue, rates);
+      return span;
+    }
+    var selected = model.selectProfitCurrency(chaosValue, rates || {});
+    span.textContent = model.formatCurrencyAmount(selected.value, selected.type, { signed: true });
+    var icon = document.createElement('img');
+    icon.className = 'jj-value-icon';
+    icon.alt = CURRENCY_NAMES[selected.type] || '';
+    icon.draggable = false;
+    // If the bundled image cannot load, the currency is named in text instead ("+540c", "+2.00 div").
+    icon.addEventListener('error', function () {
+      icon.remove();
+      span.textContent += CURRENCY_TEXT_SUFFIX[selected.type] || 'c';
+    });
+    icon.src = getLocalIconPath(selected.type, poeVersion);
+    span.appendChild(icon);
+    return span;
+  }
+
+  // The result meta: the tier's flask reaction and its name (big runs and losses only), then the duration.
+  function setResultMeta(tier, durationText) {
+    if (!el.meta) return;
+    var model = root.profitTierModel;
+    var meme = tier && model && typeof model.getProfitTierMeme === 'function' ? model.getProfitTierMeme(tier) : null;
+    if (!meme) {
+      setText(el.meta, durationText);
+      return;
+    }
+    var icon = document.createElement('img');
+    icon.className = 'jj-meme-icon';
+    icon.src = 'assets/brand/reactions/' + meme + '.svg';
+    icon.alt = '';
+    icon.draggable = false;
+    el.meta.replaceChildren(icon, MEME_LABELS[meme] + (durationText ? SEPARATOR + durationText : ''));
   }
 
   function setSecondary(text, iconSrc) {
@@ -69,12 +133,16 @@
     if (iconSrc) prependSecondaryIcon(iconSrc);
   }
 
+  // Game art sits in a small slot well, as content; it is never recoloured.
   function prependSecondaryIcon(iconSrc) {
+    var slot = document.createElement('span');
+    slot.className = 'jj-slot';
     var icon = document.createElement('img');
     icon.src = iconSrc;
     icon.alt = '';
     icon.draggable = false;
-    el.secondary.prepend(icon);
+    slot.appendChild(icon);
+    el.secondary.prepend(slot);
   }
 
   function loadCachedIcon(iconUrl) {
@@ -140,19 +208,24 @@
   function renderMapResultMode(state) {
     var result = (state.mapResult && state.mapResult.result) || {};
     var rates = result.profitCurrencyRates || result.currencyRates || (state.mapResult && state.mapResult.profitCurrencyRates) || {};
+    var poeVersion = result.poeVersion === 'poe2' ? 'poe2' : 'poe1';
     var topOutput = Array.isArray(result.topOutputs) && result.topOutputs.length > 0 ? result.topOutputs[0] : null;
-    var iconUrl = topOutput && typeof topOutput.icon === 'string' ? topOutput.icon : '';
+    var localIcon = topOutput ? getLocalItemIconPath(topOutput.label, poeVersion) : '';
+    var iconUrl = !localIcon && topOutput && typeof topOutput.icon === 'string' ? topOutput.icon : '';
+    var itemCount = Math.max(0, parseInt(result.lootItemCount, 10) || 0);
     setText(el.kickerLabel, 'Map Complete');
-    setPrimary(result.farmType || 'Completed Map', formatSignedProfit(result.netProfit, rates), getFarmTypeId(result.farmType));
+    setPrimary(result.farmType || 'Completed Map', createProfitValue(result.netProfit, rates, poeVersion), getFarmTypeId(result.farmType));
     setSecondary(
-      topOutput ? (topOutput.label || '') + ' ' + formatSignedProfit(topOutput.valueDelta, rates) : 'Completed map result',
-      cachedIconSources[iconUrl]
+      topOutput
+        ? (topOutput.label || '') + ' ' + formatSignedProfit(topOutput.valueDelta, rates)
+        : (itemCount ? itemCount + (itemCount === 1 ? ' item scanned' : ' items scanned') : 'No loot scanned'),
+      localIcon || cachedIconSources[iconUrl]
     );
     if (iconUrl) {
       secondaryIconUrl = iconUrl;
       if (!(iconUrl in cachedIconSources)) loadCachedIcon(iconUrl);
     }
-    setText(el.meta, formatDuration(result.durationSeconds));
+    setResultMeta(getMapResultTier(state), formatDuration(result.durationSeconds));
   }
 
   function getMapResultTier(state) {
@@ -171,8 +244,9 @@
     var ctxParts = [prompt.farmType || 'Choose farm type'];
     if (prompt.poeVersion) ctxParts.push(prompt.poeVersion.replace(/^poe/i, 'PoE '));
     if (prompt.league) ctxParts.push(prompt.league);
-    setSecondary(ctxParts.filter(Boolean).join(' \u00b7 '));
-    setText(el.meta, 'confirm map start');
+    setSecondary(ctxParts.filter(Boolean).join(SEPARATOR));
+    // "closes in 6s" while the prompt counts down to closing on its own.
+    setText(el.meta, state.metaLine || 'confirm map start');
   }
 
   function renderStartMapForm(state) {
@@ -243,11 +317,6 @@
     root.electronAPI.chooseCharacterPromptOverlay({ characterId: characterId });
   }
 
-  function clearExitingAnimation() {
-    if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
-    if (el.card) el.card.setAttribute('data-overlay-exiting', 'false');
-  }
-
   function tickClock() {
     var model = root.overlayStateModel;
     if (clockState && model && typeof model.formatOverlayClock === 'function') {
@@ -271,9 +340,6 @@
     var visibility = state.visibility || 'waiting';
     var mode = state.mode || 'runtime';
     var tone = (state.mapResult && state.mapResult.tone) || state.tone || 'neutral';
-    var isExiting = visibility === 'hidden' && lastRenderedMode === 'map-result';
-
-    clearExitingAnimation();
 
     if (el.card) {
       el.card.dataset.overlayState = visibility;
@@ -285,18 +351,7 @@
       } else {
         delete el.card.dataset.profitTier;
       }
-
-      if (isExiting) {
-        el.card.setAttribute('data-overlay-exiting', 'true');
-        animFrameId = requestAnimationFrame(function () {
-          animFrameId = requestAnimationFrame(function () {
-            el.card.hidden = true;
-            el.card.setAttribute('data-overlay-exiting', 'false');
-          });
-        });
-      } else {
-        el.card.hidden = visibility === 'hidden';
-      }
+      el.card.hidden = visibility === 'hidden';
     }
 
     if (mode === 'map-result') {
