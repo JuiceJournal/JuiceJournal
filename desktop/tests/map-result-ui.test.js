@@ -1555,8 +1555,10 @@ test('prices-updated events give the dashboard views the Divine and Mirror rates
     renderSessionsList: () => renders.push('sessionsList'),
     updateActiveSessionUI: () => renders.push('activeSession'),
     renderRecentLoot: () => renders.push('recentLoot'),
+    renderSessionDrawer: (options) => renders.push(`sessionDrawer:keepForm=${options?.keepForm}`),
     loadDashboardStats: async () => renders.push('dashboardStats')
   });
+  context.state.selectedSession = { id: 'run-1' };
 
   context.setupIPCListeners();
   assert.equal(context.getProfitTierFor(200, 'poe1', { league: 'Mirage' }), 'normal');
@@ -1566,7 +1568,9 @@ test('prices-updated events give the dashboard views the Divine and Mirror rates
   // The rates come from the cache main just filled, so this refresh never asks poe.ninja itself.
   assert.deepEqual(rateRequests, [{ poeVersion: 'poe1', league: 'Mirage', cacheOnly: true }]);
   assert.equal(context.getProfitTierFor(200, 'poe1', { league: 'Mirage' }), 'rare');
-  assert.deepEqual(renders, ['latestMapResult', 'mapResultHistory', 'sessionsList', 'activeSession', 'recentLoot', 'dashboardStats']);
+  assert.deepEqual(renders, [
+    'latestMapResult', 'mapResultHistory', 'sessionsList', 'activeSession', 'recentLoot', 'sessionDrawer:keepForm=true', 'dashboardStats'
+  ]);
 });
 
 test('poe2 result smoke persists zero-profit map result and projects it into Last Map Result', async () => {
@@ -2544,7 +2548,7 @@ test('session drawer shows live duration while the session is active and the sto
     getLiveDuration: () => 240
   });
   const durationValue = () => elements.sessionDrawerSummary.innerHTML
-    .match(/sessions\.duration<\/span>\s*<span class="session-drawer-value">([^<]*)</)[1];
+    .match(/class="session-drawer-duration"[^>]*>([^<]*)</)[1];
 
   context.renderSessionDrawer();
   assert.equal(durationValue(), 'duration:240');
@@ -2558,6 +2562,17 @@ const PROFIT_DISPLAY_FUNCTIONS = [
   'formatChipNumber', 'currencyHTML', 'normalizeProfitPoeVersion', 'getProfitCurrencyModel', 'getProfitCurrencyRateKey',
   'getProfitCurrencyRates', 'profitCurrencyHTML', 'getProfitTierFor', 'applyProfitTier'
 ];
+
+// Runs app.js's own `const NAME = {...};` tables in a test context, so lookups use the real data.
+function loadConstants(context, names) {
+  const source = fs.readFileSync(appJsPath, 'utf8');
+  for (const name of names) {
+    const start = source.indexOf(`const ${name} = {`);
+    assert.notEqual(start, -1, `${name} should exist`);
+    vm.runInContext(source.slice(start, source.indexOf('\n};', start) + 3), context);
+  }
+  return context;
+}
 
 function createProfitDisplayContext(functionNames, overrides = {}) {
   return loadFunctions([...PROFIT_DISPLAY_FUNCTIONS, ...functionNames], {
@@ -2693,7 +2708,7 @@ test("today's summary tiers the per-map average, flags only a losing day and sho
 
 test('recent loot shows each drop in the adaptive currency of its own league', () => {
   const elements = { recentLootList: { innerHTML: '' } };
-  const context = createProfitDisplayContext(['renderRecentLoot'], {
+  const context = createProfitDisplayContext(['getLocalItemIconPath', 'itemSlotHTML', 'renderRecentLoot'], {
     elements,
     escapeHTML: (value) => String(value),
     timeAgo: () => '1m ago',
@@ -2712,6 +2727,7 @@ test('recent loot shows each drop in the adaptive currency of its own league', (
       ]
     }
   });
+  loadConstants(context, ['CURRENCY_IMAGE_VARIANTS', 'CURRENCY_IMAGES', 'LOCAL_ITEM_ICON_KEYS']);
 
   context.renderRecentLoot();
 
@@ -2733,4 +2749,157 @@ test("today's summary labels its rows with our icons and keeps currency art insi
     assert.match(grid, new RegExp(`id="${id}"`));
   }
   assert.match(html, /id="last-map-result-meme"/);
+});
+
+test('loot icons come from bundled art for the same game and never fall back to the other game', () => {
+  const context = loadConstants(
+    loadFunctions(['getLocalItemIconPath'], {}),
+    ['CURRENCY_IMAGE_VARIANTS', 'CURRENCY_IMAGES', 'LOCAL_ITEM_ICON_KEYS']
+  );
+
+  assert.equal(context.getLocalItemIconPath('Divine Orb', 'poe1'), 'assets/currency/poe1/divine.png');
+  assert.equal(context.getLocalItemIconPath('Divine Orb', 'poe2'), 'assets/currency/poe2/divine.webp');
+  assert.equal(context.getLocalItemIconPath('Vaal Orb', 'poe1'), 'assets/currency/poe1/vaal.png');
+  assert.equal(context.getLocalItemIconPath('Vaal Orb', 'poe2'), '', 'no PoE 1 art on a PoE 2 drop');
+  assert.equal(context.getLocalItemIconPath('Orb of Transmutation', 'poe2'), 'assets/currency/poe2/transmute.png');
+  assert.equal(context.getLocalItemIconPath('Orb of Transmutation', 'poe1'), '', 'no PoE 2 art on a PoE 1 drop');
+  assert.equal(context.getLocalItemIconPath('Ambush Scarab of Containment', 'poe1'), '');
+  // OCR keeps the casing it read, and prices ignore case, so icons do too.
+  assert.equal(context.getLocalItemIconPath('divine orb', 'poe1'), 'assets/currency/poe1/divine.png');
+  assert.equal(context.getLocalItemIconPath('  Divine   ORB ', 'poe1'), 'assets/currency/poe1/divine.png');
+  const names = Object.keys(vm.runInContext('LOCAL_ITEM_ICON_KEYS', context));
+  for (const name of names.filter((itemName) => itemName !== 'Orb of Transmutation')) {
+    assert.notEqual(context.getLocalItemIconPath(name, 'poe1'), '', `${name} has no PoE 1 art`);
+  }
+  for (const version of ['poe1', 'poe2']) {
+    for (const name of Object.keys(vm.runInContext('LOCAL_ITEM_ICON_KEYS', context))) {
+      const iconPath = context.getLocalItemIconPath(name, version);
+      if (iconPath) {
+        assert.ok(fs.existsSync(path.join(desktopDir, 'src', iconPath)), `${name} (${version}) points at a missing file`);
+      }
+    }
+  }
+});
+
+test('recent loot rows show the item art with its stack count, a chest for unknown items, and tiered values', () => {
+  const elements = { recentLootList: { innerHTML: '' } };
+  const context = createProfitDisplayContext(['getLocalItemIconPath', 'itemSlotHTML', 'renderRecentLoot'], {
+    elements,
+    escapeHTML: (value) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+    timeAgo: () => '5m ago',
+    state: {
+      currentUser: { id: 'profile-1' },
+      recentLoot: [
+        { itemName: 'Mirror of Kalandra', quantity: 2, chaosValue: 200000, session: { poeVersion: 'poe1', league: 'Standard', mapName: 'Crimson Temple Map' } },
+        { itemName: 'Ambush Scarab of Containment', quantity: 1, chaosValue: 3, session: { poeVersion: 'poe1', league: 'Standard', mapName: 'Mesa Map' } },
+        { itemName: 'Chaos Orb <img src=x>', quantity: 12500, chaosValue: 1, session: { poeVersion: 'poe1', league: 'Standard', mapName: '<b>Dunes</b>' } }
+      ]
+    }
+  });
+  loadConstants(context, ['CURRENCY_IMAGE_VARIANTS', 'CURRENCY_IMAGES', 'LOCAL_ITEM_ICON_KEYS']);
+
+  context.renderRecentLoot();
+
+  const [mirrorRow, scarabRow, oddRow] = elements.recentLootList.innerHTML.split('class="recent-loot-item"').slice(1);
+  // Names reach the page as text, and a merged stack too long for the corner reads as thousands.
+  assert.match(oddRow, /Chaos Orb &lt;img src=x&gt;/);
+  assert.match(oddRow, /&lt;b&gt;Dunes&lt;\/b&gt; · 5m ago/);
+  assert.match(oddRow, /<span class="stack">12k<\/span>/);
+  assert.match(mirrorRow, /<span class="item-slot"><img src="assets\/currency\/poe1\/mirror\.png" alt="" draggable="false"><span class="stack">2<\/span><\/span>/);
+  assert.match(mirrorRow, /class="recent-loot-value" data-profit-tier="mirror"/);
+  assert.match(mirrorRow, /Crimson Temple Map · 5m ago/);
+  assert.doesNotMatch(mirrorRow, /PoE 1 \/ Standard/);
+  assert.match(scarabRow, /<span class="item-slot"><svg[^>]*><use href="assets\/icons\.svg#chest"\/><\/svg><\/span>/);
+  assert.doesNotMatch(scarabRow, /class="stack"/, 'a single item has no stack count');
+});
+
+test('the run drawer leads with profit, counts loot by quantity and lists loot before the notes', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const order = ['sessions.lootBreakdown', 'sessions.categoryAnalytics', 'sessions.sessionNotes'].map((key) => html.indexOf(`data-i18n="${key}"`));
+  assert.deepEqual([...order].sort((a, b) => a - b), order);
+
+  const elements = {
+    sessionDrawerTitle: { textContent: '' },
+    sessionDrawerLootCount: { textContent: '' },
+    sessionDrawerSummary: { innerHTML: '' },
+    sessionDrawerAnalytics: { innerHTML: '' },
+    sessionDrawerLoot: { innerHTML: '' }
+  };
+  elements.sessionDrawerNotes = { value: '' };
+  const context = createProfitDisplayContext(['getLocalItemIconPath', 'itemSlotHTML', 'getMapResultProfitTier', 'profitMemeHTML', 'renderSessionDrawer'], {
+    elements,
+    PROFIT_MEME_LABELS: { bricked: 'Bricked', pog: 'Pog', juiced: 'Juiced', mirror: 'Mirror tier' },
+    buildSessionAnalytics: () => [{ label: 'Currency', totalValue: 300, quantity: 3, entries: 1 }],
+    escapeHTML: (value) => String(value),
+    timeAgo: () => '1m ago',
+    formatDuration: (seconds) => `duration:${seconds}`,
+    getLiveDuration: () => 240,
+    state: {
+      // Divines cost 100c in Standard but 50c in Mirage, where this run was played.
+      profitCurrencyRates: {
+        'poe1:Standard': { divineChaos: 100, mirrorChaos: 200000 },
+        'poe1:Mirage': { divineChaos: 50, mirrorChaos: 200000 },
+        poe1: { divineChaos: 100, mirrorChaos: 200000 }
+      },
+      selectedSession: {
+        id: 'run-1',
+        mapName: 'Crimson Temple',
+        status: 'completed',
+        mapTier: 16,
+        poeVersion: 'poe1',
+        league: 'Mirage',
+        durationSec: 330,
+        notes: 'saved notes',
+        profitChaos: 750,
+        totalLootChaos: 760,
+        costChaos: 10,
+        lootEntries: [
+          { itemName: 'Divine Orb', quantity: 3, chaosValue: 100, itemType: 'currency', createdAt: '2026-10-21T12:00:00.000Z' },
+          { itemName: 'Ambush Scarab of Containment', quantity: 2, chaosValue: 5, itemType: 'scarab', createdAt: '2026-10-21T12:01:00.000Z' }
+        ]
+      }
+    }
+  });
+  loadConstants(context, ['CURRENCY_IMAGE_VARIANTS', 'CURRENCY_IMAGES', 'LOCAL_ITEM_ICON_KEYS']);
+
+  context.renderSessionDrawer();
+
+  const summary = elements.sessionDrawerSummary.innerHTML;
+  assert.match(summary, /<span class="session-drawer-label">dashboard\.profit<\/span>/, 'a finished run is not live');
+  assert.match(summary, /class="session-drawer-profit" data-profit-tier="unique"><span class="value-chip">\+15\.0 /);
+  assert.match(summary, /data-meme="juiced"/);
+  assert.match(summary, /<span class="session-drawer-chip">T16<\/span>/);
+  assert.match(summary, /class="session-drawer-duration"[^>]*>duration:330</);
+  assert.equal(elements.sessionDrawerLootCount.textContent, '5');
+  assert.equal(elements.sessionDrawerNotes.value, 'saved notes');
+
+  // Everything in the drawer is priced with the run's own league, in one unit.
+  const [scarabRow, divineRow] = elements.sessionDrawerLoot.innerHTML.split('class="session-drawer-loot-item"').slice(1);
+  assert.match(divineRow, /<span class="item-slot item-slot--sm"><img src="assets\/currency\/poe1\/divine\.png"[^>]*><span class="stack">3<\/span><\/span>/);
+  assert.match(divineRow, /data-profit-tier="unique"><span class="value-chip">6\.00 [^>]*alt="Divine Orb"/);
+  assert.match(elements.sessionDrawerAnalytics.innerHTML, /<span class="value-chip">6\.00 [^>]*alt="Divine Orb"/);
+  // Unknown items keep an empty slot so the rows stay aligned.
+  assert.match(scarabRow, /<span class="item-slot item-slot--sm"><span class="stack">2<\/span><\/span>/);
+
+  // A price update redraws the numbers but leaves notes that are being typed alone.
+  elements.sessionDrawerNotes.value = 'typing...';
+  context.state.selectedSession = { ...context.state.selectedSession, status: 'active' };
+  context.renderSessionDrawer({ keepForm: true });
+  assert.equal(elements.sessionDrawerNotes.value, 'typing...');
+  assert.match(elements.sessionDrawerSummary.innerHTML, /<span class="session-drawer-label">dashboard\.liveProfit<\/span>/);
+  assert.match(elements.sessionDrawerSummary.innerHTML, /class="session-drawer-duration"[^>]*>duration:240</);
+});
+
+test('game art in item slots is never recoloured', () => {
+  const stylesCss = fs.readFileSync(path.join(desktopDir, 'src', 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const lootRules = stylesCss.match(/[^{}]*(?:\.item-slot|\.recent-loot|\.session-drawer-loot)[^{}]*\{[^}]*\}/g) || [];
+  assert.ok(lootRules.length > 0);
+  for (const rule of lootRules) {
+    assert.doesNotMatch(rule, /filter\s*:|mix-blend-mode\s*:/, rule.slice(0, rule.indexOf('{')).trim());
+  }
+
+  const appJs = fs.readFileSync(appJsPath, 'utf8');
+  const slotStart = appJs.indexOf('function itemSlotHTML');
+  const slotSource = appJs.slice(slotStart, slotStart + appJs.slice(slotStart).search(/\r?\n\}\r?\n/));
+  assert.doesNotMatch(slotSource, /style=|filter/);
 });
