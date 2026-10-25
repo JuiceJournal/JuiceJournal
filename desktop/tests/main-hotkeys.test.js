@@ -690,7 +690,6 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
     state: { settings: {}, currentUser: null },
     activeLeagueInputState: { dirty: false },
     updateActiveLeagueFieldContext() {},
-    syncDesktopCurrencyIcons() {},
     refreshOnlineAccount: async () => {},
     refreshTrackerData: async () => {}
   });

@@ -1477,9 +1477,10 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   flex-shrink: 0;
   overflow: hidden;
   border: 1px solid rgb(var(--ink-rgb) / 0.05);
+  /* Our line icons label the rows; currency art appears once, inside the value chip. */
+  background: var(--gold-glow);
+  color: var(--gold-light);
 }
-
-.stat-icon.maps { background: var(--blue-dim); color: var(--gold); }
 
 .stat-left {
   display: flex;
@@ -1547,16 +1548,14 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   border-radius: var(--bevel-sm);
 }
 
-.map-result-summary strong,
-.map-result-summary span {
+.map-result-summary > strong,
+.map-result-summary > span {
   display: block;
 }
 
 #last-map-result-farm-type {
   color: var(--farm-color, var(--text-bright));
-  font-family: var(--font-display);
-  font-size: 1.4rem;
-  letter-spacing: 0.05em;
+  font-size: 0.82rem;
 }
 
 #last-map-result-duration,
@@ -1565,14 +1564,42 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   font-size: 0.82rem;
 }
 
+.map-result-headline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 .last-map-result-card[data-result-state="empty"] #last-map-result-farm-type,
 .last-map-result-card[data-result-state="empty"] #last-map-result-duration,
 .last-map-result-card[data-result-state="empty"] #last-map-result-profit {
   color: var(--text-muted);
 }
 
+/* A finished map: the farm is a small chip, the profit is the hero and the duration a quiet meta line. */
+.last-map-result-card[data-result-state="ready"] #last-map-result-farm-type {
+  justify-self: start;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--bevel-xs);
+  background: color-mix(in srgb, var(--farm-color, var(--text-bright)) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--farm-color, var(--text-bright)) 40%, transparent);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 .last-map-result-card[data-result-state="ready"] #last-map-result-profit {
   color: var(--profit-tier-color, var(--text-bright));
+  font-size: 1.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.last-map-result-card[data-result-state="ready"] #last-map-result-duration {
+  color: var(--text-muted);
 }
 
 /* Map Result History */
@@ -3484,6 +3511,10 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 [data-profit-tier="unique"] { --profit-tier-color: var(--tier-unique); }
 [data-profit-tier="mirror"] { --profit-tier-color: var(--tier-mirror); }
 [data-profit-tier] { color: var(--profit-tier-color); }
+/* Big wins glow in their tier colour. The glow is static; overlay.html does not load this file. */
+[data-profit-tier="rare"] { text-shadow: 0 0 12px color-mix(in srgb, var(--profit-tier-color) 25%, transparent); }
+[data-profit-tier="unique"],
+[data-profit-tier="mirror"] { text-shadow: 0 0 12px color-mix(in srgb, var(--profit-tier-color) 45%, transparent); }
 
 /* ===== Farm types (each league's content colour on its name) ===== */
 [data-farm-type="abyss"] { --farm-color: var(--farm-abyss); }

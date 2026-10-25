@@ -159,10 +159,13 @@ const elements = {
   todaySessions: document.getElementById('today-sessions'),
   todayProfit: document.getElementById('today-profit'),
   todayAvg: document.getElementById('today-avg'),
+  todayPerHour: document.getElementById('today-per-hour'),
+  todayTime: document.getElementById('today-time'),
   lastMapResultCard: document.getElementById('last-map-result-card'),
   lastMapResultFarmType: document.getElementById('last-map-result-farm-type'),
   lastMapResultDuration: document.getElementById('last-map-result-duration'),
   lastMapResultProfit: document.getElementById('last-map-result-profit'),
+  lastMapResultMeme: document.getElementById('last-map-result-meme'),
   mapResultFilter: document.getElementById('map-result-filter'),
   mapResultHistory: document.getElementById('map-result-history'),
   recentLootList: document.getElementById('recent-loot-list'),
@@ -1057,7 +1060,6 @@ function syncRendererGameContext(version, options = {}) {
     elements.versionBtns.forEach((btn) => {
       setToggleButtonPressed(btn, btn.dataset.version === normalizedSettingsVersion);
     });
-    syncDesktopCurrencyIcons();
     void loadSettingsLeagueOptions(normalizedSettingsVersion);
   }
 
@@ -1465,7 +1467,6 @@ async function init() {
   renderFarmTypeSelector();
   renderMapResultHistory();
   updateActiveLeagueFieldContext();
-  syncDesktopCurrencyIcons();
   applyDashboardCapabilities();
   if (window.electronAPI?.getAppUpdateState) {
     state.appUpdate = await window.electronAPI.getAppUpdateState();
@@ -1726,24 +1727,24 @@ function getCurrencyAssetPath(type = 'chaos', poeVersion = state.settings.poeVer
   return CURRENCY_IMAGE_VARIANTS[poeVersion]?.[type] || CURRENCY_IMAGES[type] || CURRENCY_IMAGES.chaos;
 }
 
-function syncDesktopCurrencyIcons() {
-  const poeVersion = state.settings.poeVersion || 'poe1';
-  const statProfitIcon = document.getElementById('stat-profit-icon');
-  const statAvgIcon = document.getElementById('stat-avg-icon');
-
-  if (statProfitIcon) {
-    statProfitIcon.src = getCurrencyAssetPath('chaos', poeVersion);
+// Readable amounts: chaos drops decimals once it is large, divine and mirror keep two below 10, thousands are grouped.
+function formatChipNumber(value, type = 'chaos', { signed = false } = {}) {
+  const num = parseFloat(value);
+  if (!Number.isFinite(num) || num === 0) {
+    return '0';
   }
 
-  if (statAvgIcon) {
-    statAvgIcon.src = getCurrencyAssetPath('chaos', poeVersion);
-  }
+  const abs = Math.abs(num);
+  const digits = type === 'divine' || type === 'mirror'
+    ? (abs < 10 ? 2 : abs < 100 ? 1 : 0)
+    : (abs >= 100 ? 0 : abs >= 1 ? 1 : 2);
+  const formatted = num.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return signed && num > 0 ? `+${formatted}` : formatted;
 }
 
-function currencyHTML(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1') {
-  const num = parseFloat(value);
+function currencyHTML(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1', options = {}) {
   const imgPath = getCurrencyAssetPath(type, poeVersion);
-  const formatted = isNaN(num) ? '0' : (type === 'divine' || type === 'mirror' ? num.toFixed(2) : num.toFixed(1));
+  const formatted = formatChipNumber(value, type, options);
   const name = CURRENCY_NAMES[type] || type;
   return `<span class="value-chip">${formatted} <img src="${imgPath}" class="value-chip-icon" width="${iconSize}" height="${iconSize}" alt="${name}" title="${name}" draggable="false"></span>`;
 }
@@ -1787,8 +1788,7 @@ async function applyCachedItemIcons(container) {
 }
 
 function createCurrencyValueElement(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1') {
-  const num = parseFloat(value);
-  const formatted = isNaN(num) ? '0' : (type === 'divine' || type === 'mirror' ? num.toFixed(2) : num.toFixed(1));
+  const formatted = formatChipNumber(value, type);
   const span = document.createElement('span');
   span.className = 'value-chip';
   span.append(`${formatted} `);
@@ -1903,12 +1903,14 @@ function profitCurrencyHTML(value, iconSize = 18, poeVersion = state.settings.po
   const model = getProfitCurrencyModel();
   const rates = options.rates || getProfitCurrencyRates(normalizedVersion, options.league) || {};
 
+  const chipOptions = { signed: Boolean(options.signed) };
+
   if (!model || typeof model.selectProfitCurrency !== 'function') {
-    return currencyHTML(value, 'chaos', iconSize, normalizedVersion);
+    return currencyHTML(value, 'chaos', iconSize, normalizedVersion, chipOptions);
   }
 
   const selected = model.selectProfitCurrency(value, rates);
-  return currencyHTML(selected.value, selected.type, iconSize, normalizedVersion);
+  return currencyHTML(selected.value, selected.type, iconSize, normalizedVersion, chipOptions);
 }
 
 function formatAdaptiveProfitText(value, poeVersion = state.settings.poeVersion || 'poe1', options = {}) {
@@ -2101,7 +2103,6 @@ function setupEventListeners() {
     btn.addEventListener('click', () => {
       elements.versionBtns.forEach(b => setToggleButtonPressed(b, b === btn));
       state.settings.poeVersion = btn.dataset.version;
-      syncDesktopCurrencyIcons();
       updateActiveLeagueFieldContext({ syncValue: true });
       applyDashboardCapabilities();
       void loadSettingsLeagueOptions(btn.dataset.version);
@@ -3357,9 +3358,25 @@ function resetDashboardSummary() {
   elements.todaySessions.textContent = '0';
   elements.todayProfit.innerHTML = formatProfit(0, 18, state.settings.poeVersion || 'poe1');
   elements.todayAvg.innerHTML = formatProfit(0, 18, state.settings.poeVersion || 'poe1');
+  if (elements.todayPerHour) {
+    elements.todayPerHour.innerHTML = formatProfit(0, 18, state.settings.poeVersion || 'poe1');
+  }
+  if (elements.todayTime) {
+    elements.todayTime.textContent = formatHoursMinutes(0);
+  }
+  if (typeof applyProfitTier === 'function') {
+    applyProfitTier(elements.todayProfit, '');
+    applyProfitTier(elements.todayAvg, '');
+  }
 }
 
-function formatMapResultProfitHTML(result = {}, iconSize = 16) {
+// Time mapped reads as h:mm, like a clock.
+function formatHoursMinutes(seconds) {
+  const totalMinutes = Math.max(0, Math.floor((Number(seconds) || 0) / 60));
+  return `${Math.floor(totalMinutes / 60)}:${String(totalMinutes % 60).padStart(2, '0')}`;
+}
+
+function formatMapResultProfitHTML(result = {}, iconSize = 16, options = {}) {
   if (result?.profitUnavailable) {
     return '<span class="profit-unavailable">Not calculated</span>';
   }
@@ -3371,7 +3388,8 @@ function formatMapResultProfitHTML(result = {}, iconSize = 16) {
   return formatProfit(
     result?.netProfit || 0,
     iconSize,
-    result?.poeVersion || state.settings?.poeVersion || 'poe1'
+    result?.poeVersion || state.settings?.poeVersion || 'poe1',
+    options
   );
 }
 
@@ -3412,6 +3430,9 @@ function renderLatestMapResult() {
     if (typeof applyProfitTier === 'function') {
       applyProfitTier(elements.lastMapResultProfit, '');
     }
+    if (elements.lastMapResultMeme) {
+      elements.lastMapResultMeme.innerHTML = '';
+    }
     return;
   }
 
@@ -3421,9 +3442,14 @@ function renderLatestMapResult() {
     applyFarmType(elements.lastMapResultFarmType, latest.farmType);
   }
   elements.lastMapResultDuration.textContent = formatDuration(latest.durationSeconds || 0);
-  elements.lastMapResultProfit.innerHTML = formatMapResultProfitHTML(latest, 16);
-  if (typeof applyProfitTier === 'function' && typeof getMapResultProfitTier === 'function') {
-    applyProfitTier(elements.lastMapResultProfit, getMapResultProfitTier(latest));
+  // The latest result is the biggest number on the dashboard: signed, in its tier colour, with the tier's meme badge.
+  elements.lastMapResultProfit.innerHTML = formatMapResultProfitHTML(latest, 22, { signed: true });
+  const tier = typeof getMapResultProfitTier === 'function' ? getMapResultProfitTier(latest) : '';
+  if (typeof applyProfitTier === 'function') {
+    applyProfitTier(elements.lastMapResultProfit, tier);
+  }
+  if (elements.lastMapResultMeme) {
+    elements.lastMapResultMeme.innerHTML = typeof profitMemeHTML === 'function' ? profitMemeHTML(tier) : '';
   }
 }
 
@@ -4149,7 +4175,7 @@ function updateActiveSessionUI() {
         </div>
         <div class="session-info-item session-info-item--metric">
           <span class="session-info-label">${window.t('dashboard.liveProfit')}</span>
-          <span class="session-info-value" data-profit-tier="${profitTier}">${formatProfit(profitChaos, 16, state.currentSession.poeVersion || state.settings.poeVersion || 'poe1')}</span>
+          <span class="session-info-value" data-profit-tier="${profitTier}">${formatProfit(profitChaos, 16, state.currentSession.poeVersion || state.settings.poeVersion || 'poe1', { signed: true })}</span>
         </div>
         <div class="session-info-item">
           <span class="session-info-label">${window.t('dashboard.itemsCollected')}</span>
@@ -4442,6 +4468,8 @@ async function loadDashboardStats() {
   elements.todaySessions.textContent = '...';
   elements.todayProfit.textContent = '...';
   elements.todayAvg.textContent = '...';
+  if (elements.todayPerHour) elements.todayPerHour.textContent = '...';
+  if (elements.todayTime) elements.todayTime.textContent = '...';
 
   try {
     const trackerContext = typeof getSelectedTrackerContext === 'function'
@@ -4455,13 +4483,25 @@ async function loadDashboardStats() {
     const totalSessions = parseInt(summary.totalSessions || 0, 10);
     const totalProfit = parseFloat(summary.totalProfit || 0);
     const avgProfitPerMap = parseFloat(summary.avgProfitPerMap || 0);
+    const avgProfitPerHour = parseFloat(summary.avgProfitPerHour || 0);
     const formatProfit = typeof profitCurrencyHTML === 'function'
       ? profitCurrencyHTML
       : (value, iconSize, version) => currencyHTML(value, 'chaos', iconSize, version);
 
     elements.todaySessions.textContent = String(totalSessions);
-    elements.todayProfit.innerHTML = formatProfit(totalProfit, 18, poeVersion);
+    elements.todayProfit.innerHTML = formatProfit(totalProfit, 18, poeVersion, { signed: true });
     elements.todayAvg.innerHTML = formatProfit(avgProfitPerMap, 18, poeVersion);
+    if (elements.todayPerHour) {
+      elements.todayPerHour.innerHTML = formatProfit(avgProfitPerHour, 18, poeVersion);
+    }
+    if (elements.todayTime) {
+      elements.todayTime.textContent = formatHoursMinutes(summary.totalDuration);
+    }
+    // Tiers measure one run, so the per-map average carries one; the day's total only shows a loss.
+    if (typeof applyProfitTier === 'function') {
+      applyProfitTier(elements.todayProfit, totalProfit < 0 ? 'loss' : '');
+      applyProfitTier(elements.todayAvg, typeof getProfitTierFor === 'function' ? getProfitTierFor(avgProfitPerMap, poeVersion) : '');
+    }
   } catch (error) {
     resetDashboardSummary();
   }
@@ -4564,6 +4604,10 @@ function renderRecentLoot() {
     return;
   }
 
+  // Loot uses the adaptive currency too, so a divine drop reads as divines.
+  const formatLootValue = typeof profitCurrencyHTML === 'function'
+    ? profitCurrencyHTML
+    : (value, iconSize, poeVersion) => currencyHTML(value, 'chaos', iconSize, poeVersion);
   elements.recentLootList.innerHTML = state.recentLoot.map((loot) => {
     const session = loot.session || {};
     const totalValue = (parseFloat(loot.chaosValue || 0) * parseInt(loot.quantity || 1, 10)) || 0;
@@ -4579,7 +4623,7 @@ function renderRecentLoot() {
           <div class="recent-loot-meta">${escapeHTML(session.mapName || 'Unknown Map')} / ${contextLabel}</div>
         </div>
         <div class="recent-loot-side">
-          <div class="recent-loot-value">${currencyHTML(totalValue, 'chaos', 14, session.poeVersion || state.settings.poeVersion || 'poe1')}</div>
+          <div class="recent-loot-value">${formatLootValue(totalValue, 14, session.poeVersion || state.settings.poeVersion || 'poe1', { league: session.league })}</div>
           <div class="recent-loot-time">${timeAgo(loot.createdAt)}</div>
         </div>
       </article>
@@ -4632,7 +4676,6 @@ async function handleSaveSettings() {
     await refreshOnlineAccount();
     activeLeagueInputState.dirty = false;
     updateActiveLeagueFieldContext({ syncValue: true, forceValueSync: true });
-    syncDesktopCurrencyIcons();
 
     const contextChanged =
       previousContext.poeVersion !== settings.poeVersion ||
@@ -4675,7 +4718,6 @@ async function handleResetSettings() {
     applyLocalizedChrome();
     activeLeagueInputState.dirty = false;
     updateActiveLeagueFieldContext({ syncValue: true, forceValueSync: true });
-    syncDesktopCurrencyIcons();
     applyDashboardCapabilities();
     await loadSettingsLeagueOptions(resetVersion);
 
@@ -5796,6 +5838,7 @@ async function handlePricesUpdated({ poeVersion, league } = {}) {
   renderMapResultHistory();
   renderSessionsList();
   updateActiveSessionUI();
+  renderRecentLoot();
   if (state.currentUser) {
     await loadDashboardStats();
   }
