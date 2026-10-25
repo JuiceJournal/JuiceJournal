@@ -2626,10 +2626,7 @@ async function handleLogin(e) {
  */
 async function handlePoeOAuthLogin() {
   const button = document.getElementById('poe-oauth-login');
-  if (button) {
-    button.disabled = true;
-    button.classList.add('is-loading');
-  }
+  setButtonBusy(button, true, window.t('login.waitingBrowser'));
 
   try {
     const result = await window.electronAPI.signInWithPoe();
@@ -2654,10 +2651,7 @@ async function handlePoeOAuthLogin() {
   } catch (error) {
     showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
   } finally {
-    if (button) {
-      button.disabled = false;
-      button.classList.remove('is-loading');
-    }
+    setButtonBusy(button, false);
   }
 }
 
@@ -2967,9 +2961,7 @@ async function handleConnectPoeDevice() {
   if (buttons.some((button) => button.disabled)) {
     return;
   }
-  buttons.forEach((button) => {
-    button.disabled = true;
-  });
+  buttons.forEach((button) => setButtonBusy(button, true, window.t('login.waitingBrowser')));
 
   try {
     const result = await window.electronAPI.connectPoeDevice();
@@ -2982,9 +2974,7 @@ async function handleConnectPoeDevice() {
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
   } finally {
-    buttons.forEach((button) => {
-      button.disabled = false;
-    });
+    buttons.forEach((button) => setButtonBusy(button, false));
     renderPoeLinkStatus();
     renderCharacterSummaryCard();
   }
@@ -3065,10 +3055,7 @@ function renderPoeLinkStatus() {
 async function handlePoeDisconnect() {
   if (!state.currentUser) return;
 
-  if (elements.poeDisconnectBtn) {
-    elements.poeDisconnectBtn.disabled = true;
-    elements.poeDisconnectBtn.textContent = `${window.t('settings.disconnectPoe')}...`;
-  }
+  setButtonBusy(elements.poeDisconnectBtn, true);
 
   try {
     await window.electronAPI.disconnectPoeDevice();
@@ -3079,10 +3066,7 @@ async function handlePoeDisconnect() {
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.poeDisconnectError'), 'error');
   } finally {
-    if (elements.poeDisconnectBtn) {
-      elements.poeDisconnectBtn.disabled = false;
-      elements.poeDisconnectBtn.textContent = window.t('settings.disconnectPoe');
-    }
+    setButtonBusy(elements.poeDisconnectBtn, false);
   }
 }
 
@@ -3665,9 +3649,7 @@ async function handleMapResultPublish(resultId) {
   }
 
   try {
-    if (elements.farmPublishConfirmBtn) {
-      elements.farmPublishConfirmBtn.disabled = true;
-    }
+    setButtonBusy(elements.farmPublishConfirmBtn, true);
 
     const response = await window.electronAPI.publishMapResults({
       resultIds: [result.id || result.localRunId],
@@ -3684,9 +3666,7 @@ async function handleMapResultPublish(resultId) {
   } catch (error) {
     showToast('Farming Hub', getUserFacingErrorMessage(error, 'errors.farmPublish'), 'error');
   } finally {
-    if (elements.farmPublishConfirmBtn) {
-      elements.farmPublishConfirmBtn.disabled = false;
-    }
+    setButtonBusy(elements.farmPublishConfirmBtn, false);
   }
 }
 
@@ -4722,9 +4702,7 @@ async function handleResetSettings() {
  */
 async function handleTestConnection() {
   const btn = elements.testConnection;
-  const origText = btn.textContent;
-  btn.textContent = window.t('settings.testing');
-  btn.disabled = true;
+  setButtonBusy(btn, true, window.t('settings.testing'));
 
   try {
     // The main process sends the check, and only while online features are on.
@@ -4737,7 +4715,7 @@ async function handleTestConnection() {
     elements.connectionText.textContent = window.t('settings.disconnected');
     showToast(window.t('settings.api'), window.t('toast.connectionFailed'), 'error');
   } finally {
-    btn.textContent = origText;
+    setButtonBusy(btn, false);
     renderOnlineSettings();
   }
 }
@@ -4790,6 +4768,33 @@ async function handleOnlineSignOut() {
     await window.electronAPI.signOutOnline();
   } finally {
     await refreshOnlineAccount();
+  }
+}
+
+// A busy button shows a spinner and, when given one, a busy label; only the label text changes, so icons survive.
+function setButtonBusy(button, busy, busyLabel) {
+  if (!button) return;
+  const label = button.querySelector('.btn-label') || button;
+  button.disabled = busy;
+
+  if (busy) {
+    button.setAttribute('aria-busy', 'true');
+    if (busyLabel) {
+      // A second busy call must not take the busy text for the idle one.
+      if (button.dataset.idleLabel === undefined) {
+        button.dataset.idleLabel = label.textContent;
+      }
+      label.textContent = busyLabel;
+    }
+    return;
+  }
+
+  button.removeAttribute('aria-busy');
+  if (button.dataset.idleLabel !== undefined) {
+    // Translate again on the way back, in case the language changed while the button was busy.
+    const key = label.getAttribute('data-i18n');
+    label.textContent = key ? window.t(key) : button.dataset.idleLabel;
+    delete button.dataset.idleLabel;
   }
 }
 
@@ -5322,9 +5327,7 @@ async function openSessionDrawer(sessionId) {
 async function handleExportDiagnostics() {
   if (!elements.exportDiagnosticsBtn) return;
 
-  const originalLabel = elements.exportDiagnosticsBtn.textContent;
-  elements.exportDiagnosticsBtn.disabled = true;
-  elements.exportDiagnosticsBtn.textContent = window.t('settings.exportingDiagnostics');
+  setButtonBusy(elements.exportDiagnosticsBtn, true, window.t('settings.exportingDiagnostics'));
 
   try {
     const mode = elements.diagnosticsMode?.value === 'sensitive' ? 'sensitive' : 'safe';
@@ -5338,8 +5341,7 @@ async function handleExportDiagnostics() {
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.unexpectedError'), 'error');
   } finally {
-    elements.exportDiagnosticsBtn.disabled = false;
-    elements.exportDiagnosticsBtn.textContent = originalLabel;
+    setButtonBusy(elements.exportDiagnosticsBtn, false);
   }
 }
 
@@ -6415,7 +6417,7 @@ async function handleCurrencySync() {
   }
 
   const btn = document.getElementById('currency-sync-btn');
-  if (btn) { btn.disabled = true; btn.textContent = window.t('currency.syncing'); }
+  setButtonBusy(btn, true, window.t('currency.syncing'));
 
   try {
     const result = await window.electronAPI.syncCurrencyPrices({
@@ -6429,7 +6431,7 @@ async function handleCurrencySync() {
   } catch (e) {
     showToast(window.t('toast.currencyTitle'), getUserFacingErrorMessage(e, 'currency.syncFailed'), 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = window.t('currency.sync'); }
+    setButtonBusy(btn, false);
   }
 }
 

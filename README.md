@@ -76,7 +76,7 @@ If `npm install` warns that install scripts were skipped (npm 12 does this by de
 
 Good to know:
 
-- You must sign in with Path of Exile (**Continue with Path of Exile**) before you can use the app. It uses local port `34127`, which must be free.
+- You must sign in with your Path of Exile account (**Sign in with Path of Exile**) before you can use the app. It uses local port `34127`, which must be free.
 - If the log file was not found, set the `Client.txt` path in Settings. Turn on the overlay there too.
 - The OCR scan hotkeys, F9 and Ctrl+Shift+L, are only held while a session runs and the game window is in front (for the whole session if the app cannot read which window is in front); the game does not receive those two keys then. Change them in Settings → Hotkeys.
 - Closing the window keeps the app running in the tray.
