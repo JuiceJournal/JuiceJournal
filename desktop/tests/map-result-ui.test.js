@@ -1534,16 +1534,18 @@ test('prices-updated events give the dashboard views the Divine and Mirror rates
     'setProfitCurrencyRates',
     'refreshProfitCurrencyRates',
     'getProfitTierFor',
+    'renderPriceItemCount',
     'handlePricesUpdated',
     'setupIPCListeners'
   ], {
+    elements: { priceItemCount: { textContent: '—' } },
     state: {
       settings: { poeVersion: 'poe1' },
       profitCurrencyRates: {},
       currentUser: { id: 'user-1' }
     },
     window: {
-      t: (key) => key,
+      t: (key, values) => (values?.count !== undefined ? `${key}:${values.count}` : key),
       profitTierModel: require('../src/modules/profitTierModel'),
       electronAPI: {
         onMapEntered: (handler) => { listeners.mapEntered = handler; },
@@ -1573,7 +1575,8 @@ test('prices-updated events give the dashboard views the Divine and Mirror rates
   context.setupIPCListeners();
   assert.equal(context.getProfitTierFor(200, 'poe1', { league: 'Mirage' }), 'normal');
 
-  await listeners.pricesUpdated({ poeVersion: 'poe1', league: 'Mirage', itemCount: 900 });
+  await listeners.pricesUpdated({ poeVersion: 'poe1', league: 'Mirage', itemCount: 1900 });
+  assert.equal(context.elements.priceItemCount.textContent, 'dashboard.itemCount:1,900');
 
   // The rates come from the cache main just filled, so this refresh never asks poe.ninja itself.
   assert.deepEqual(rateRequests, [{ poeVersion: 'poe1', league: 'Mirage', cacheOnly: true }]);
@@ -2917,6 +2920,7 @@ function createActiveSessionHarness(session, extraState = {}) {
     sessionBadge: { textContent: '', classList: { toggle: (className, on) => (on ? badgeClasses.add(className) : badgeClasses.delete(className)) } }
   };
   let liveSeconds = 252;
+  const clockCalls = [];
   const context = createProfitDisplayContext(
     ['formatElapsedClock', 'getSessionFarmTypeId', 'getMapResultProfitTier', 'profitMemeHTML', 'updateActiveSessionUI', 'updateActiveSessionClock'],
     {
@@ -2924,11 +2928,14 @@ function createActiveSessionHarness(session, extraState = {}) {
       renderedActiveSessionHTML: null,
       renderedActiveSessionItems: null,
       PROFIT_MEME_LABELS: { bricked: 'Bricked', pog: 'Pog', juiced: 'Juiced', mirror: 'Mirror tier' },
-      escapeHTML: (value) => String(value),
+      escapeHTML: (value) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
       farmTypeAttr: (id) => ` data-farm-type="${id}"`,
       getSessionFarmTypeLabel: () => 'Ritual',
       getLiveDuration: () => liveSeconds,
       renderFarmTypeSelector: () => {},
+      document: { hidden: false },
+      startSessionClock: () => clockCalls.push('start'),
+      stopSessionClock: () => clockCalls.push('stop'),
       state: { currentSession: session, ...extraState }
     }
   );
@@ -2938,6 +2945,7 @@ function createActiveSessionHarness(session, extraState = {}) {
     hidden,
     badgeClasses,
     live,
+    clockCalls,
     html: () => html,
     writes: () => writes,
     setLiveSeconds: (seconds) => { liveSeconds = seconds; }
@@ -2973,6 +2981,7 @@ test('a running map shows a live hero, and the 1 s clock only rewrites the elaps
   assert.match(harness.html(), /data-meme="pog"/);
   assert.doesNotMatch(harness.html(), /dashboard\.liveLoot|sessions\.cost/, 'no loot/cost line without a cost');
   assert.equal(harness.live.elapsed.textContent, '4:12');
+  assert.deepEqual(harness.clockCalls, ['start'], 'a restored or loaded session starts the clock too');
 
   // The clock tick and an unchanged redraw leave the markup alone.
   harness.setLiveSeconds(3725);
@@ -2990,6 +2999,19 @@ test('a running map shows a live hero, and the 1 s clock only rewrites the elaps
   harness.context.updateActiveSessionUI();
   assert.equal(harness.writes(), 2);
   assert.deepEqual(harness.live.profit.classes, ['is-bumped']);
+
+  // A redraw for new prices (no new loot) does not bump.
+  harness.context.state.currentSession = { ...harness.context.state.currentSession, profitChaos: 401 };
+  harness.context.updateActiveSessionUI();
+  assert.equal(harness.writes(), 3);
+  assert.deepEqual(harness.live.profit.classes, []);
+});
+
+test('the active map card escapes the map name and league', () => {
+  const harness = createActiveSessionHarness({ ...RUNNING_SESSION, mapName: '<img src=x>Map', league: '<b>League</b>' });
+  harness.context.updateActiveSessionUI();
+  assert.match(harness.html(), /<strong class="session-live-map">&lt;img src=x&gt;Map<\/strong>/);
+  assert.match(harness.html(), /&lt;b&gt;League&lt;\/b&gt;/);
 });
 
 test('a run with a cost lists loot and cost, and the idle card goes back to waiting', () => {
@@ -3000,6 +3022,7 @@ test('a run with a cost lists loot and cost, and the idle card goes back to wait
 
   harness.context.state.currentSession = null;
   harness.context.updateActiveSessionUI();
+  assert.equal(harness.clockCalls.at(-1), 'stop');
   assert.equal(harness.elements.sessionCard.dataset.sessionState, 'idle');
   assert.deepEqual(harness.hidden, { start: false, end: true, scan: true });
   assert.equal(harness.elements.sessionBadge.textContent, 'dashboard.waiting');

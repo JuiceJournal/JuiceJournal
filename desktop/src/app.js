@@ -2806,6 +2806,10 @@ function applyLocalizedChrome() {
 
   renderUserIdentity();
   renderPoeLinkStatus();
+  // The active map card is written by JS (its badge too), so it follows the new language here.
+  if (typeof updateActiveSessionUI === 'function') {
+    updateActiveSessionUI();
+  }
 }
 
 // The renderer reads the local profile through the fields the server account used to fill.
@@ -4225,6 +4229,7 @@ function updateActiveSessionUI() {
   }
 
   if (!session) {
+    stopSessionClock();
     renderedActiveSessionHTML = null;
     renderedActiveSessionItems = null;
     elements.activeSession.innerHTML = `<p class="empty-state"><span class="empty-state-icon"><svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#ledger"/></svg></span>${window.t('dashboard.noActiveMap')}</p>`;
@@ -4296,6 +4301,9 @@ function updateActiveSessionUI() {
   }
   renderedActiveSessionItems = itemCount;
   updateActiveSessionClock();
+  if (!document.hidden) {
+    startSessionClock();
+  }
   renderFarmTypeSelector();
 }
 
@@ -5031,7 +5039,7 @@ async function syncPricesForCurrentStashRun(session = state.currentSession) {
   const result = await window.electronAPI.syncPrices({ league });
   stashState.pricesSynced = true;
   if (elements.priceItemCount && Number(result?.itemCount || 0) > 0) {
-    elements.priceItemCount.textContent = `${result.itemCount} items`;
+    renderPriceItemCount(result.itemCount);
   }
   if (typeof refreshProfitCurrencyRates === 'function') {
     await refreshProfitCurrencyRates(session?.poeVersion || getSelectedTrackerContext().poeVersion, league);
@@ -5586,9 +5594,7 @@ async function handleSyncPrices() {
     }
 
     stashState.pricesSynced = true;
-    if (elements.priceItemCount) {
-      elements.priceItemCount.textContent = `${result.itemCount} items`;
-    }
+    renderPriceItemCount(result.itemCount);
     await refreshProfitCurrencyRates(result.poeVersion || state.settings.poeVersion || 'poe1', league);
     showToast(window.t('stash.priceData'), window.t('stash.pricesSynced', { count: result.itemCount }), 'success');
   } catch (error) {
@@ -5924,7 +5930,7 @@ async function loadPriceStatus() {
   try {
     const status = await window.electronAPI.getPriceStatus();
     if (elements.priceItemCount && status.itemCount > 0) {
-      elements.priceItemCount.textContent = `${status.itemCount} items`;
+      renderPriceItemCount(status.itemCount);
       stashState.pricesSynced = true;
       await refreshProfitCurrencyRates(status.poeVersion || state.settings.poeVersion || 'poe1');
       renderLatestMapResult();
@@ -5942,7 +5948,16 @@ async function loadPriceStatus() {
 
 // Main loaded a league's poe.ninja prices (for a session, a stash run or the Currency page). Views drawn before
 // that had no Divine price, so they showed no profit tiers; they get the cached rates and are drawn again.
-async function handlePricesUpdated({ poeVersion, league } = {}) {
+// Today's Summary shows how many prices are loaded; "—" until the first load.
+function renderPriceItemCount(count) {
+  const itemCount = Number(count);
+  if (elements.priceItemCount && itemCount > 0) {
+    elements.priceItemCount.textContent = window.t('dashboard.itemCount', { count: itemCount.toLocaleString('en-US') });
+  }
+}
+
+async function handlePricesUpdated({ poeVersion, league, itemCount } = {}) {
+  renderPriceItemCount(itemCount);
   await refreshProfitCurrencyRates(poeVersion || state.settings.poeVersion || 'poe1', league, { cacheOnly: true });
   renderLatestMapResult();
   renderMapResultHistory();

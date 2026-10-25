@@ -1339,7 +1339,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 /* Active Session Card: a running map gets ember edges and hides the farm picker it no longer needs. */
-.session-card[data-session-state="active"] {
+.card.session-card[data-session-state="active"] {
   border-color: rgb(var(--ember-rgb) / 0.45);
 }
 
