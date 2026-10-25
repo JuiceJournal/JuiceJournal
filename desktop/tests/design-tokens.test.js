@@ -78,3 +78,12 @@ test('disabled buttons share one dimmed state and lose their hover', () => {
     assert.match(selector, /:not\(:disabled\)/, selector.trim());
   }
 });
+
+test('busy Path of Exile buttons spin in their flask tile, other buttons in place of their leading icon', () => {
+  const stylesCss = stripComments(fs.readFileSync(path.join(srcDir, 'styles.css'), 'utf8'));
+
+  // One spinner per button: the generic ::before skips .btn-poe, whose tile shows it instead of the flask.
+  assert.match(stylesCss, /\.btn\[aria-busy="true"\]:not\(\.btn-poe\)::before,\s*\.btn-poe\[aria-busy="true"\] \.btn-glyph-brand::before\s*\{/);
+  assert.match(stylesCss, /\.btn-poe\[aria-busy="true"\] \.btn-glyph-brand img\s*\{\s*display:\s*none;/);
+  assert.match(stylesCss, /\.btn\[aria-busy="true"\]:not\(\.btn-poe\) > \.icon:first-child\s*\{\s*display:\s*none;/);
+});

@@ -4741,7 +4741,10 @@ function renderOnlineSettings() {
     elements.onlineAccountStatus.textContent = window.t(statusKey);
   }
   if (elements.testConnection) elements.testConnection.disabled = !enabled;
-  if (elements.onlineSignIn) elements.onlineSignIn.disabled = !enabled || signedIn;
+  // A sign-in still waiting on the browser stays disabled, so a second click cannot start a second flow.
+  if (elements.onlineSignIn) {
+    elements.onlineSignIn.disabled = !enabled || signedIn || elements.onlineSignIn.getAttribute?.('aria-busy') === 'true';
+  }
   if (elements.onlineSignOut) elements.onlineSignOut.disabled = !signedIn;
 }
 
@@ -4758,8 +4761,10 @@ async function handleOnlineSignIn() {
   } catch (error) {
     showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
   } finally {
-    setButtonBusy(elements.onlineSignIn, false);
+    // Read the new account state first, so the button goes straight from busy to its final state.
     await refreshOnlineAccount();
+    setButtonBusy(elements.onlineSignIn, false);
+    renderOnlineSettings();
   }
 }
 
@@ -5968,10 +5973,7 @@ async function handleSessionMetadataSave() {
   } catch (error) {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.sessionUpdateError'), 'error');
   } finally {
-    if (elements.sessionDrawerSave) {
-      setButtonBusy(elements.sessionDrawerSave, false);
-      applyLocalizedChrome();
-    }
+    setButtonBusy(elements.sessionDrawerSave, false);
   }
 }
 

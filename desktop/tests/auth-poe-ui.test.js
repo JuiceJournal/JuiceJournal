@@ -353,6 +353,44 @@ test('test connection shows a busy button, then lets the online settings decide 
   assert.equal(button.disabled, true);
 });
 
+test('server sign-in stays busy and disabled while the browser is open, then shows the account state', async () => {
+  const calls = [];
+  const button = createButtonStub('settings.onlineSignIn', { text: 'Sign in to the server' });
+  const state = { onlineAccount: { enabled: true, signedIn: false } };
+  const context = loadFunctions(['setButtonBusy', 'renderOnlineSettings', 'handleOnlineSignIn'], {
+    state,
+    elements: { onlineSignIn: button },
+    window: {
+      electronAPI: {
+        startPoeLogin: async () => {
+          // Another settings action redraws the Online tab while the browser is still open.
+          context.renderOnlineSettings();
+          calls.push(['waiting', button.disabled, button.getAttribute('aria-busy'), button.label.textContent]);
+          return { success: true };
+        }
+      },
+      t: (key) => key
+    },
+    showToast: () => {},
+    getUserFacingErrorMessage: () => 'failed',
+    refreshOnlineAccount: async () => {
+      state.onlineAccount = { enabled: true, signedIn: true };
+      context.renderOnlineSettings();
+      calls.push(['refreshed', button.disabled, button.getAttribute('aria-busy')]);
+    }
+  });
+
+  await context.handleOnlineSignIn();
+
+  assert.deepEqual(calls, [
+    ['waiting', true, 'true', 'login.waitingBrowser'],
+    ['refreshed', true, 'true']
+  ]);
+  assert.equal(button.getAttribute('aria-busy'), null);
+  assert.equal(button.label.textContent, 'settings.onlineSignIn');
+  assert.equal(button.disabled, true, 'signed in, so Sign in stays off');
+});
+
 test('sign-in panel translates every line and keeps the button icons outside the label', () => {
   const html = fs.readFileSync(indexHtmlPath, 'utf8');
   const panel = html.match(/<div class="modal-panel oauth-only">([\s\S]*?)<!-- New Map Session Modal -->/)[1];

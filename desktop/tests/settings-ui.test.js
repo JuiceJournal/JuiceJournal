@@ -1403,3 +1403,30 @@ test('renderer keeps prior settings state and shows an error when settings save 
   assert.equal(savedToasts.length, 1);
   assert.deepEqual(savedToasts[0], ['toast.error', 'Invalid API URL', 'error']);
 });
+
+test('choosing a settings version marks only that button as pressed', () => {
+  const createToggle = (version) => {
+    const attributes = {};
+    const classes = new Set();
+    return {
+      dataset: { version },
+      attributes,
+      classes,
+      classList: { toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)) },
+      setAttribute: (name, value) => {
+        attributes[name] = value;
+      }
+    };
+  };
+  const versionBtns = [createToggle('poe1'), createToggle('poe2')];
+  const context = loadFunctions(['normalizePoeVersion', 'setToggleButtonPressed', 'applySettingsVersionSelection'], {
+    state: { settings: { poeVersion: 'poe1' } },
+    elements: { versionBtns }
+  });
+
+  assert.equal(context.applySettingsVersionSelection('poe2'), 'poe2');
+  assert.deepEqual(versionBtns.map((btn) => [btn.classes.has('active'), btn.attributes['aria-pressed']]), [
+    [false, 'false'],
+    [true, 'true']
+  ]);
+});
