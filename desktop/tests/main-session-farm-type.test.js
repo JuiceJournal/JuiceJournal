@@ -237,6 +237,7 @@ test('main session start writes the selected farm type to the local journal', as
 
 test('main start-map overlay prompt state can be shown and cleared independently of map results', () => {
   const overlayUpdates = [];
+  const timers = [];
   const context = loadFunctions([
     'normalizeStartMapPromptText',
     'normalizeStartMapPromptFarmTypeOptions',
@@ -244,6 +245,8 @@ test('main start-map overlay prompt state can be shown and cleared independently
     'hideStartMapPromptOverlay'
   ], {
     overlayStartMapPromptState: null,
+    START_MAP_PROMPT_OVERLAY_GRACE_MS: 3000,
+    setTimeout: (callback, delay) => timers.push({ callback, delay }),
     updateOverlayWindow() {
       overlayUpdates.push(JSON.parse(JSON.stringify(context.overlayStartMapPromptState)));
       return { updated: true };
@@ -300,6 +303,17 @@ test('main start-map overlay prompt state can be shown and cleared independently
     },
     null
   ]);
+
+  // Main's safety close fires 3 s after the prompt should have closed, and only for the prompt it was set for.
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].delay, 10000);
+  timers[0].callback();
+  assert.equal(overlayUpdates.length, 2, 'the prompt was already hidden, so nothing changes');
+
+  context.showStartMapPromptOverlay({ mapName: 'Dunes' }, { now: Date.parse('2026-05-06T12:01:00.000Z'), expiresInMs: 7000 });
+  timers[1].callback();
+  assert.equal(context.overlayStartMapPromptState, null, 'a prompt the renderer never closed is hidden by main');
+  assert.equal(overlayUpdates.at(-1), null);
 });
 
 test('main start-map overlay confirmation forwards the selected map details to the renderer', () => {

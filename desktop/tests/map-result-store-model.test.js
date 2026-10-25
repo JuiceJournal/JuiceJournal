@@ -368,10 +368,19 @@ test('renderer creates a completed map result directly from an ended session', (
     totalLootChaos: '0',
     profitChaos: '0',
     poeVersion: 'poe2',
-    league: 'Mirage'
+    league: 'Mirage',
+    lootEntries: [
+      { itemName: 'Exalted Orb', quantity: 2, chaosValue: 12 },
+      { itemName: 'Regal Orb', quantity: 5, chaosValue: 1 }
+    ]
   });
 
   assert.equal(result.id, `map-result-session-1-${Date.parse('2026-05-02T15:12:05.000Z')}`);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.topOutputs)).map((entry) => [entry.label, entry.valueDelta]), [
+    ['Exalted Orb', 24],
+    ['Regal Orb', 5]
+  ]);
+  assert.equal(result.lootItemCount, 7);
   assert.equal(result.sessionId, 'session-1');
   assert.equal(result.farmType, 'Expedition');
   assert.equal(result.durationSeconds, 125);
@@ -1131,7 +1140,7 @@ test('an OCR run keeps its three most valuable drops, grouped by item, for the o
     { itemName: 'Chaos Orb', quantity: 30, chaosValue: 1 },
     { itemName: 'Divine Orb', quantity: 1, chaosValue: 150 },
     { itemName: 'Chaos Orb', quantity: 20, chaosValue: 1 },
-    { itemName: 'Divine Orb', quantity: 2, chaosValue: 150 },
+    { itemName: 'divine  orb', quantity: 2, chaosValue: 150 },
     { itemName: 'Orb of Alchemy', quantity: 4, chaosValue: 0.5 },
     { itemName: 'Ambush Scarab', quantity: 1, chaosValue: 8 },
     { itemName: 'Unpriced Thing', quantity: 3, chaosValue: 0 },

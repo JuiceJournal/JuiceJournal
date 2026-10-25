@@ -76,6 +76,11 @@
     [data-overlay-mode="map-result"][data-profit-tier="unique"] { --tone: var(--tier-unique); }
     [data-overlay-mode="map-result"][data-profit-tier="mirror"] { --tone: var(--tier-mirror); }
 
+    /* Numbers need 7:1; the loss colour is about 6:1 on the plate, so a loss keeps it on the brackets and kicker
+       and shows the signed number in bright text. */
+    [data-overlay-mode="map-result"][data-profit-tier="loss"] .jj-value,
+    [data-overlay-mode="map-result"][data-overlay-tone="negative"] .jj-value { color: var(--text-bright); }
+
     [data-overlay-mode="start-map-prompt"],
     [data-overlay-mode="character-prompt"] { --tone: var(--brass); }
 

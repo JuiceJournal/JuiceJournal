@@ -1373,9 +1373,12 @@ const PROMPT = {
 test('main character prompt reports the picked character to the renderer and closes', () => {
   const { context, sent, timers } = loadCharacterPromptMain();
 
+  const shownAt = Date.now();
   context.showCharacterPromptOverlay(PROMPT);
   assert.equal(context.overlayCharacterPromptState.characters.length, 2);
   assert.equal(timers[0].delay, 8000);
+  const { expiresAt } = context.overlayCharacterPromptState;
+  assert.ok(expiresAt >= shownAt + 8000 && expiresAt <= Date.now() + 8000, 'expiresAt matches the 8 s timer');
 
   const result = context.chooseCharacterPromptOverlay({ characterId: 'poe2-high' });
 

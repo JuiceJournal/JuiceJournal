@@ -57,11 +57,12 @@ test('a selected chip shows a check mark, and a selected farm chip keeps its col
 });
 
 test('the result card and prompts slide in once, with no exit animation and none under reduced motion', () => {
-  const reducedMotion = overlayCss.slice(overlayCss.indexOf('@media (prefers-reduced-motion: reduce)'));
+  const reducedMotion = overlayCss.match(/@media \(prefers-reduced-motion: reduce\)\s*\{([^{}]*)\{\s*animation:\s*none;\s*\}\s*\}/);
+  assert.ok(reducedMotion, 'a reduced-motion block sets animation: none');
   for (const mode of ['map-result', 'start-map-prompt', 'character-prompt']) {
     const selector = `[data-overlay-mode="${mode}"][data-overlay-state="visible"]`;
     assert.ok(overlayCss.indexOf(selector) < overlayCss.indexOf('animation: jj-slide-in'), `${mode} slides in`);
-    assert.ok(reducedMotion.includes(selector), `${mode} does not move under reduced motion`);
+    assert.ok(reducedMotion[1].includes(selector), `${mode} does not move under reduced motion`);
   }
   assert.doesNotMatch(overlayHtml, /data-overlay-exiting|jj-slide-out/);
   assert.match(overlayCss, /\.jj-btn:active:not\(:disabled\),\s*\.jj-form-btn:active:not\(:disabled\),\s*\.jj-chip:active:not\(:disabled\)\s*\{\s*transform:\s*translateY\(1px\);/);

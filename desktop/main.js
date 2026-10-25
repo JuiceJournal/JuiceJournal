@@ -64,6 +64,9 @@ const MAP_RESULT_OVERLAY_DURATION_MS = 10_000;
 const SESSION_PRICES_WAIT_MS = 5_000;
 const SESSION_PRICES_RETRY_MS = 5 * 60_000;
 const CHARACTER_PROMPT_OVERLAY_DURATION_MS = 8_000;
+// The renderer closes an unanswered start prompt itself; if it never does (it reloaded), main hides the prompt
+// this long after it should have closed, so "closes in 0s" cannot stay on screen.
+const START_MAP_PROMPT_OVERLAY_GRACE_MS = 3_000;
 const OVERLAY_CLICKABLE_MODES = new Set(['start-map-prompt', 'map-result', 'character-prompt']);
 const MAX_AUDIT_TRAIL_ENTRIES = 200;
 const WINDOWS_APP_ICON_PATH = path.join(__dirname, 'src', 'assets', 'icon.ico');
@@ -2336,6 +2339,16 @@ function showStartMapPromptOverlay(prompt = {}, options = {}) {
     // The renderer closes an unanswered prompt after expiresInMs; the overlay counts down to this.
     expiresAt: Number.isFinite(expiresInMs) && expiresInMs > 0 ? createdAt + expiresInMs : null
   };
+
+  const shownPrompt = overlayStartMapPromptState;
+  if (shownPrompt.expiresAt) {
+    setTimeout(() => {
+      if (overlayStartMapPromptState === shownPrompt) {
+        overlayStartMapPromptState = null;
+        updateOverlayWindow();
+      }
+    }, shownPrompt.expiresAt - createdAt + START_MAP_PROMPT_OVERLAY_GRACE_MS);
+  }
 
   return updateOverlayWindow();
 }

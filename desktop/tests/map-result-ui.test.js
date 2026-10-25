@@ -1077,6 +1077,7 @@ test('map-entered events prompt for a session with the detected map instead of s
 
 test('map-entered events show an in-game start-map overlay prompt before opening the desktop modal', async () => {
   const overlayPrompts = [];
+  const overlayOptions = [];
   const startCalls = [];
   const context = loadFunctions(['handleMapEnteredEvent'], {
     START_MAP_PROMPT_OVERLAY_MS: 7000,
@@ -1107,8 +1108,9 @@ test('map-entered events show an in-game start-map overlay prompt before opening
     window: {
       t: (key, values = {}) => values.mapName ? `${key}:${values.mapName}` : key,
       electronAPI: {
-        showStartMapPromptOverlay: async (payload) => {
+        showStartMapPromptOverlay: async (payload, options) => {
           overlayPrompts.push(payload);
+          overlayOptions.push(options);
         },
         hideStartMapPromptOverlay: async () => {
           overlayPrompts.push({ hidden: true, beforeDesktopModal: startCalls.length === 0 });
@@ -1139,6 +1141,9 @@ test('map-entered events show an in-game start-map overlay prompt before opening
     },
     { hidden: true, beforeDesktopModal: true }
   ]);
+  // Main gets the renderer's own close time, so the overlay counts down to the real close.
+  assert.deepEqual(JSON.parse(JSON.stringify(overlayOptions)), [{ expiresInMs: 7000 }]);
+  assert.match(fs.readFileSync(appJsPath, 'utf8'), /const START_MAP_PROMPT_OVERLAY_MS = 7000;/);
   assert.deepEqual(startCalls, [{ defaultMapName: 'Channel', source: 'map-detected' }]);
 });
 
@@ -2565,7 +2570,7 @@ test('session drawer shows live duration while the session is active and the sto
 });
 
 const PROFIT_DISPLAY_FUNCTIONS = [
-  'currencyHTML', 'normalizeProfitPoeVersion', 'getProfitCurrencyModel', 'getProfitCurrencyRateKey',
+  'formatCurrencyAmount', 'currencyHTML', 'normalizeProfitPoeVersion', 'getProfitCurrencyModel', 'getProfitCurrencyRateKey',
   'getProfitCurrencyRates', 'profitCurrencyHTML', 'getProfitTierFor', 'applyProfitTier'
 ];
 

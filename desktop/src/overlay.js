@@ -99,8 +99,11 @@
     icon.className = 'jj-value-icon';
     icon.alt = CURRENCY_NAMES[selected.type] || '';
     icon.draggable = false;
-    // If the bundled image cannot load, the currency is named in text instead.
-    icon.addEventListener('error', function () { icon.replaceWith(CURRENCY_TEXT_SUFFIX[selected.type] || 'c'); });
+    // If the bundled image cannot load, the currency is named in text instead ("+540c", "+2.00 div").
+    icon.addEventListener('error', function () {
+      icon.remove();
+      span.textContent += CURRENCY_TEXT_SUFFIX[selected.type] || 'c';
+    });
     icon.src = getLocalIconPath(selected.type, poeVersion);
     span.appendChild(icon);
     return span;
@@ -215,7 +218,7 @@
     setSecondary(
       topOutput
         ? (topOutput.label || '') + ' ' + formatSignedProfit(topOutput.valueDelta, rates)
-        : (itemCount ? itemCount + (itemCount === 1 ? ' item scanned' : ' items scanned') : 'No loot recorded'),
+        : (itemCount ? itemCount + (itemCount === 1 ? ' item scanned' : ' items scanned') : 'No loot scanned'),
       localIcon || cachedIconSources[iconUrl]
     );
     if (iconUrl) {

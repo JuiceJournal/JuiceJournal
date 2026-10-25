@@ -35,7 +35,7 @@ function createElement(tagName = 'span') {
     append(...nodes) { element.children.push(...nodes); },
     appendChild(node) { element.children.push(node); return node; },
     prepend(...nodes) { element.children.unshift(...nodes); },
-    replaceWith(...nodes) { element.replacedWith = nodes; }
+    remove() { element.removed = true; }
   };
   return element;
 }
@@ -172,7 +172,8 @@ test('the result card shows the amount with its currency icon, the top drop in a
   assert.equal(currencyIcon.alt, 'Divine Orb');
   // A missing image falls back to naming the currency in text.
   currencyIcon.listeners.error();
-  assert.deepEqual(currencyIcon.replacedWith, [' div']);
+  assert.equal(currencyIcon.removed, true);
+  assert.equal(value.textContent, '+7.50 div');
 
   assert.equal(overlay.secondary.textContent, 'Divine Orb +6.00 div');
   const [slot] = overlay.secondary.children;
@@ -197,7 +198,19 @@ test('the result card uses the same game art only and says how much loot was sca
   renderResult(overlay, { netProfit: 0, topOutputs: [], lootItemCount: 1 });
   assert.equal(overlay.secondary.textContent, '1 item scanned');
   renderResult(overlay, { netProfit: 0, topOutputs: [] });
-  assert.equal(overlay.secondary.textContent, 'No loot recorded');
+  assert.equal(overlay.secondary.textContent, 'No loot scanned');
+});
+
+test('a loss keeps its colour on the card but shows the number in bright text', () => {
+  const overlay = loadOverlay();
+  renderResult(overlay, { netProfit: -540, durationSeconds: 250, topOutputs: [] });
+
+  assert.equal(overlay.card.dataset.profitTier, 'loss');
+  const [value] = overlay.primary.children.slice(2);
+  assert.equal(value.textContent, '-5.40');
+  const [meme, metaText] = overlay.meta.children;
+  assert.equal(meme.src, 'assets/brand/reactions/bricked.svg');
+  assert.equal(metaText, 'Bricked · 4m 10s');
 });
 
 test('a prompt counts down to closing on its own', () => {

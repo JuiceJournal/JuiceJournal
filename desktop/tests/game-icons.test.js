@@ -59,12 +59,16 @@ test('the overlay knows the same bundled item art as the main window, and every 
     JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(appKeys).map(([name, key]) => [name.toLowerCase(), key])))),
     JSON.parse(JSON.stringify(overlayKeys))
   );
-  for (const key of new Set(Object.values(overlayKeys))) {
-    if (key !== 'transmute') {
-      assert.ok(fs.existsSync(path.join(srcDir, 'assets', 'currency', 'poe1', `${key}.png`)), `poe1 ${key}`);
+  const images = vm.runInNewContext(`${getBlock(appJs, 'const CURRENCY_IMAGE_VARIANTS')}\n${getBlock(appJs, 'const CURRENCY_IMAGES')}\n({ CURRENCY_IMAGE_VARIANTS, CURRENCY_IMAGES })`);
+  for (const key of new Set([...Object.values(overlayKeys), 'chaos', 'divine', 'mirror'])) {
+    const appPoe1 = images.CURRENCY_IMAGE_VARIANTS.poe1[key] || images.CURRENCY_IMAGES[key] || '';
+    const overlayPoe1 = key === 'transmute' ? '' : `assets/currency/poe1/${key}.png`;
+    assert.equal(overlayPoe1, appPoe1, `poe1 ${key}`);
+    const appPoe2 = images.CURRENCY_IMAGE_VARIANTS.poe2[key] || '';
+    const overlayPoe2 = poe2Files[key] ? `assets/currency/poe2/${poe2Files[key]}` : '';
+    assert.equal(overlayPoe2, appPoe2, `poe2 ${key}`);
+    for (const iconPath of [overlayPoe1, overlayPoe2].filter(Boolean)) {
+      assert.ok(fs.existsSync(path.join(srcDir, iconPath)), iconPath);
     }
-  }
-  for (const file of Object.values(poe2Files)) {
-    assert.ok(fs.existsSync(path.join(srcDir, 'assets', 'currency', 'poe2', file)), `poe2 ${file}`);
   }
 });

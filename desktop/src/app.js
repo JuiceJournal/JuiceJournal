@@ -1779,9 +1779,14 @@ function itemSlotHTML(itemName, poeVersion, { small = false, quantity = 1, fallb
 }
 
 // The amount format is shared with the overlay through profitCurrencyModel.
+function formatCurrencyAmount(value, type = 'chaos', options = {}) {
+  const model = getProfitCurrencyModel();
+  return model ? model.formatCurrencyAmount(value, type, options) : String(Math.round(Number(value) || 0));
+}
+
 function currencyHTML(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1', options = {}) {
   const imgPath = getCurrencyAssetPath(type, poeVersion);
-  const formatted = getProfitCurrencyModel().formatCurrencyAmount(value, type, options);
+  const formatted = formatCurrencyAmount(value, type, options);
   const name = CURRENCY_NAMES[type] || type;
   return `<span class="value-chip">${formatted} <img src="${imgPath}" class="value-chip-icon" width="${iconSize}" height="${iconSize}" alt="${name}" title="${name}" draggable="false"></span>`;
 }
@@ -1825,7 +1830,7 @@ async function applyCachedItemIcons(container) {
 }
 
 function createCurrencyValueElement(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1') {
-  const formatted = getProfitCurrencyModel().formatCurrencyAmount(value, type);
+  const formatted = formatCurrencyAmount(value, type);
   const span = document.createElement('span');
   span.className = 'value-chip';
   span.append(`${formatted} `);
@@ -3255,7 +3260,7 @@ function createCompletedSessionMapResult(session = {}) {
     profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral',
     topInputs: [],
     topOutputs: getScannedTopOutputs(lootEntries),
-    lootItemCount: lootEntries.reduce((sum, loot) => sum + (parseInt(loot.quantity || 0, 10) || 0), 0),
+    lootItemCount: lootEntries.reduce((sum, loot) => sum + (parseInt(loot.quantity || 1, 10) || 1), 0),
     // The run's Divine and Mirror rates, as stash-diff results keep them: the overlay tiers the run by them.
     profitCurrencyRates: typeof getProfitCurrencyRates === 'function'
       ? getProfitCurrencyRates(poeVersion, league)
@@ -3264,17 +3269,19 @@ function createCompletedSessionMapResult(session = {}) {
   };
 }
 
-// An OCR run's most valuable drops, grouped by item, in the shape stash-diff results use.
+// An OCR run's most valuable drops, grouped by item, in the shape stash-diff results use. OCR keeps the casing it
+// read, so "Divine orb" and "Divine Orb" are one item, named as first seen.
 function getScannedTopOutputs(lootEntries = []) {
   const byItem = new Map();
   for (const loot of lootEntries) {
-    const label = String(loot?.itemName || '').trim();
+    const label = String(loot?.itemName || '').trim().replace(/\s+/g, ' ');
     if (!label) continue;
+    const key = label.toLowerCase();
     const quantity = parseInt(loot.quantity || 1, 10) || 1;
-    const entry = byItem.get(label) || { label, quantityDelta: 0, valueDelta: 0, currencyCode: 'chaos' };
+    const entry = byItem.get(key) || { label, quantityDelta: 0, valueDelta: 0, currencyCode: 'chaos' };
     entry.quantityDelta += quantity;
     entry.valueDelta += (parseFloat(loot.chaosValue || 0) || 0) * quantity;
-    byItem.set(label, entry);
+    byItem.set(key, entry);
   }
 
   return [...byItem.values()]
