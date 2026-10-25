@@ -815,6 +815,11 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   justify-content: center;
 }
 
+/* Flex items do not collapse margins, so the sub-line's margin alone spaces the hero. */
+.modal-panel.oauth-only .form-actions {
+  margin-top: 0;
+}
+
 .oauth-helper {
   font-size: 0.78rem;
   line-height: 1.5;

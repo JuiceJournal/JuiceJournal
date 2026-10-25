@@ -223,7 +223,8 @@ test('login art column describes shipped features and translates every line', ()
 
 test('device sign-in opens the local profile and loads its history', async () => {
   const calls = [];
-  const button = createButtonStub('login.poeOAuth');
+  // The markup text differs from t(key), so the restore below proves the label was translated again.
+  const button = createButtonStub('login.poeOAuth', { text: 'Sign in with Path of Exile' });
   const context = loadFunctions(['setButtonBusy', 'toProfileUser', 'handlePoeOAuthLogin'], {
     document: {
       getElementById: (id) => {
@@ -303,8 +304,10 @@ test('busy buttons without a translated label get their own text back', () => {
 
   context.setButtonBusy(plain, true, 'Working...');
   assert.equal(plain.textContent, 'Working...');
+  context.setButtonBusy(plain, true, 'Still working...');
+  assert.equal(plain.textContent, 'Still working...');
   context.setButtonBusy(plain, false);
-  assert.equal(plain.textContent, 'Disconnect');
+  assert.equal(plain.textContent, 'Disconnect', 'a second busy call keeps the idle text');
   assert.deepEqual({ ...plain.dataset }, {});
 
   context.setButtonBusy(translated, true, 'Testing...');
@@ -315,12 +318,48 @@ test('busy buttons without a translated label get their own text back', () => {
   assert.doesNotThrow(() => context.setButtonBusy(null, true, 'Missing'));
 });
 
+test('test connection shows a busy button, then lets the online settings decide its state', async () => {
+  const calls = [];
+  const button = createButtonStub('settings.testConnection', { text: 'Test connection', withLabelSpan: false });
+  const context = loadFunctions(['setButtonBusy', 'handleTestConnection'], {
+    elements: {
+      testConnection: button,
+      apiUrl: { value: 'http://127.0.0.1:3001' },
+      connectionDot: { classList: { add: () => {}, remove: () => {} } },
+      connectionText: { textContent: '' }
+    },
+    window: {
+      electronAPI: {
+        testOnlineConnection: async (url) => {
+          calls.push(['test', url, button.disabled, button.getAttribute('aria-busy'), button.textContent]);
+        }
+      },
+      t: (key) => key
+    },
+    showToast: () => {},
+    // Online features can be off, so the final disabled state is renderOnlineSettings' call, made after the restore.
+    renderOnlineSettings: () => {
+      calls.push(['render', button.getAttribute('aria-busy'), button.textContent]);
+      button.disabled = true;
+    }
+  });
+
+  await context.handleTestConnection();
+
+  assert.deepEqual(calls, [
+    ['test', 'http://127.0.0.1:3001', true, 'true', 'settings.testing'],
+    ['render', null, 'settings.testConnection']
+  ]);
+  assert.equal(button.disabled, true);
+});
+
 test('sign-in panel translates every line and keeps the button icons outside the label', () => {
   const html = fs.readFileSync(indexHtmlPath, 'utf8');
   const panel = html.match(/<div class="modal-panel oauth-only">([\s\S]*?)<!-- New Map Session Modal -->/)[1];
   const context = vm.createContext({ window: {}, document: { querySelectorAll: () => [] } });
   vm.runInContext(fs.readFileSync(path.join(desktopDir, 'src', 'modules', 'translations.js'), 'utf8'), context);
   const { en, tr } = context.window.Translations;
+  assert.ok(tr['login.waitingBrowser'] && tr['login.waitingBrowser'] !== en['login.waitingBrowser']);
 
   const button = panel.match(/<button[^>]*id="poe-oauth-login"[^>]*>([\s\S]*?)<\/button>/);
   assert.doesNotMatch(button[0].match(/<button[^>]*>/)[0], /data-i18n/, 'applyTranslations would wipe the icons');

@@ -4771,7 +4771,7 @@ async function handleOnlineSignOut() {
   }
 }
 
-// A busy button keeps its size and shows a spinner; only its label text changes, so icons survive.
+// A busy button shows a spinner and, when given one, a busy label; only the label text changes, so icons survive.
 function setButtonBusy(button, busy, busyLabel) {
   if (!button) return;
   const label = button.querySelector('.btn-label') || button;
@@ -4780,7 +4780,10 @@ function setButtonBusy(button, busy, busyLabel) {
   if (busy) {
     button.setAttribute('aria-busy', 'true');
     if (busyLabel) {
-      button.dataset.idleLabel = label.textContent;
+      // A second busy call must not take the busy text for the idle one.
+      if (button.dataset.idleLabel === undefined) {
+        button.dataset.idleLabel = label.textContent;
+      }
       label.textContent = busyLabel;
     }
     return;

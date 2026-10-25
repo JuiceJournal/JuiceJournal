@@ -4,7 +4,7 @@ Juice Journal signs in with your Path of Exile account on your own PC. There is 
 
 ## How it works
 
-1. You click **Continue with Path of Exile** (or **Connect Path of Exile** in Settings to reconnect). The app opens `www.pathofexile.com` in your default browser.
+1. You click **Sign in with Path of Exile** (or **Connect Path of Exile** in Settings to reconnect). The app opens `www.pathofexile.com` in your default browser.
 2. You approve access on GGG's site. GGG then redirects the browser to a short-lived local address on your PC (`http://127.0.0.1:34127/oauth/poe/callback`), so port `34127` must be free.
 3. The app exchanges the code for an access token. The flow uses PKCE (S256) and a random `state` value, and it gives up after 3 minutes.
 
