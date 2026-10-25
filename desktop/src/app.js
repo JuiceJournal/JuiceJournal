@@ -1734,12 +1734,18 @@ function formatChipNumber(value, type = 'chaos', { signed = false } = {}) {
     return '0';
   }
 
-  const abs = Math.abs(num);
-  const digits = type === 'divine' || type === 'mirror'
+  const digitsFor = (abs) => (type === 'divine' || type === 'mirror'
     ? (abs < 10 ? 2 : abs < 100 ? 1 : 0)
-    : (abs >= 100 ? 0 : abs >= 1 ? 1 : 2);
-  const formatted = num.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  return signed && num > 0 ? `+${formatted}` : formatted;
+    : (abs >= 100 ? 0 : abs >= 1 ? 1 : 2));
+  // A value that rounds up into the next band (99.96c, 9.996 div) takes that band's precision.
+  const digits = digitsFor(Math.abs(Number(num.toFixed(digitsFor(Math.abs(num))))));
+  const rounded = Number(num.toFixed(digits));
+  if (rounded === 0) {
+    return '0';
+  }
+
+  const formatted = rounded.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return signed && rounded > 0 ? `+${formatted}` : formatted;
 }
 
 function currencyHTML(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1', options = {}) {
@@ -4464,17 +4470,23 @@ async function loadDashboardStats() {
     return;
   }
 
-  const poeVersion = state.settings.poeVersion || 'poe1';
   elements.todaySessions.textContent = '...';
   elements.todayProfit.textContent = '...';
   elements.todayAvg.textContent = '...';
   if (elements.todayPerHour) elements.todayPerHour.textContent = '...';
   if (elements.todayTime) elements.todayTime.textContent = '...';
+  if (typeof applyProfitTier === 'function') {
+    applyProfitTier(elements.todayProfit, '');
+    applyProfitTier(elements.todayAvg, '');
+  }
 
   try {
     const trackerContext = typeof getSelectedTrackerContext === 'function'
       ? getSelectedTrackerContext()
       : {};
+    // Price and tier the numbers with the same game and league the stats were read for.
+    const poeVersion = trackerContext.poeVersion || state.settings.poeVersion || 'poe1';
+    const rateOptions = { league: trackerContext.league };
     const response = await window.electronAPI.getDashboardStats({
       poeVersion: trackerContext.poeVersion,
       league: trackerContext.league
@@ -4489,18 +4501,20 @@ async function loadDashboardStats() {
       : (value, iconSize, version) => currencyHTML(value, 'chaos', iconSize, version);
 
     elements.todaySessions.textContent = String(totalSessions);
-    elements.todayProfit.innerHTML = formatProfit(totalProfit, 18, poeVersion, { signed: true });
-    elements.todayAvg.innerHTML = formatProfit(avgProfitPerMap, 18, poeVersion);
+    elements.todayProfit.innerHTML = formatProfit(totalProfit, 18, poeVersion, { ...rateOptions, signed: true });
+    elements.todayAvg.innerHTML = formatProfit(avgProfitPerMap, 18, poeVersion, rateOptions);
     if (elements.todayPerHour) {
-      elements.todayPerHour.innerHTML = formatProfit(avgProfitPerHour, 18, poeVersion);
+      elements.todayPerHour.innerHTML = formatProfit(avgProfitPerHour, 18, poeVersion, rateOptions);
     }
     if (elements.todayTime) {
       elements.todayTime.textContent = formatHoursMinutes(summary.totalDuration);
     }
-    // Tiers measure one run, so the per-map average carries one; the day's total only shows a loss.
+    // Tiers measure one run, so the per-map average carries one (none before the first map); the day's total only shows a loss.
     if (typeof applyProfitTier === 'function') {
       applyProfitTier(elements.todayProfit, totalProfit < 0 ? 'loss' : '');
-      applyProfitTier(elements.todayAvg, typeof getProfitTierFor === 'function' ? getProfitTierFor(avgProfitPerMap, poeVersion) : '');
+      applyProfitTier(elements.todayAvg, totalSessions > 0 && typeof getProfitTierFor === 'function'
+        ? getProfitTierFor(avgProfitPerMap, poeVersion, rateOptions)
+        : '');
     }
   } catch (error) {
     resetDashboardSummary();
