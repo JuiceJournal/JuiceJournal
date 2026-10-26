@@ -175,6 +175,7 @@ const elements = {
   recentLootList: document.getElementById('recent-loot-list'),
 
   // Sessions
+  sessionsSummary: document.getElementById('sessions-summary'),
   sessionsList: document.getElementById('sessions-list'),
   sessionFilter: document.getElementById('session-filter'),
   sessionVersionFilter: document.getElementById('session-version-filter'),
@@ -4482,6 +4483,7 @@ async function loadSessions() {
     renderSessionsList();
   } catch (error) {
     elements.sessionsList.innerHTML = `<p class="empty-state">${getUserFacingErrorMessage(error, 'sessions.loadError')}</p>`;
+    renderSessionsSummary([]);
   }
 }
 
@@ -4774,19 +4776,22 @@ function renderSessionsList() {
 
   if (!state.currentUser) {
     elements.sessionsList.innerHTML = `<p class="empty-state">${window.t('sessions.empty')}</p>`;
+    renderSessionsSummary([]);
     closeSessionDrawer();
     return;
   }
 
   if (!state.sessions.length) {
     elements.sessionsList.innerHTML = `<p class="empty-state">${window.t('sessions.empty')}</p>`;
+    renderSessionsSummary([]);
     closeSessionDrawer();
     return;
   }
 
   const filteredSessions = getFilteredSessions();
+  renderSessionsSummary(filteredSessions);
   if (!filteredSessions.length) {
-    elements.sessionsList.innerHTML = '<p class="empty-state">No sessions match these filters.</p>';
+    elements.sessionsList.innerHTML = `<p class="empty-state">${window.t('sessions.noMatch')}</p>`;
     closeSessionDrawer();
     return;
   }
@@ -4798,7 +4803,16 @@ function renderSessionsList() {
     ? getProfitTierFor
     : (value) => (Number(value) < 0 ? 'loss' : 'normal');
   const memeFor = typeof profitMemeHTML === 'function' ? profitMemeHTML : () => '';
-  elements.sessionsList.innerHTML = filteredSessions.map((session) => {
+  // Sighted users get the column names once; screen readers get them inside each row instead.
+  const head = `
+    <div class="sessions-list-head" aria-hidden="true">
+      <span>${window.t('sessions.headMap')}</span>
+      <span>${window.t('sessions.duration')}</span>
+      <span>${window.t('sessions.headItems')}</span>
+      <span class="is-end">${window.t('sessions.headProfit')}</span>
+    </div>
+  `;
+  elements.sessionsList.innerHTML = head + filteredSessions.map((session) => {
     const profit = parseFloat(session.profitChaos || 0);
     const lootCount = Number.isFinite(session.lootCount)
       ? session.lootCount
@@ -4806,34 +4820,121 @@ function renderSessionsList() {
         ? session.lootEntries.reduce((sum, loot) => sum + parseInt(loot.quantity || 0, 10), 0)
         : 0);
     const poeVersion = getSessionPoeVersion(session);
-    const contextLabel = `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(session.league || 'Standard')} / <span${typeof farmTypeAttr === 'function' ? farmTypeAttr(getSessionFarmTypeId(session)) : ''}>${escapeHTML(getSessionFarmTypeLabel(session))}</span>`;
-    const duration = session.status === 'active'
+    const farmTypeId = getSessionFarmTypeId(session);
+    const contextLabel = `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(session.league || 'Standard')} / <span${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmTypeId) : ''}>${escapeHTML(getSessionFarmTypeLabel(session))}</span>`;
+    // The farm colour reaches only the row's edge; data-farm-type on the row would tint all of its text.
+    const farmEdgeId = typeof getFarmTypeIdFor === 'function' ? getFarmTypeIdFor(farmTypeId) : null;
+    const farmEdgeStyle = farmEdgeId ? ` style="--farm-color: var(--farm-${farmEdgeId})"` : '';
+    const isActive = session.status === 'active';
+    const duration = isActive
       ? formatDuration(getLiveDuration(session))
       : (session.durationSec ? formatDuration(session.durationSec) : '-');
-    const tier = session.mapTier ? `T${session.mapTier}` : '-';
+    const tierChip = session.mapTier ? `<span class="session-tier-chip">T${escapeHTML(session.mapTier)}</span>` : '';
     const startedAt = session.startedAt ? timeAgo(session.startedAt) : '-';
-    const safeStatus = ['active', 'completed', 'abandoned'].includes(session.status) ? session.status : 'unknown';
+    const profitTier = profitTierFor(profit, poeVersion);
+    // Completed is the normal case, so only active and abandoned runs get a status chip.
+    const statusChip = isActive || session.status === 'abandoned'
+      ? `<div class="session-status ${session.status}">${window.t(isActive ? 'sessions.active' : 'sessions.abandoned')}</div>`
+      : '';
 
     return `
-      <button class="session-item" type="button" data-session-id="${escapeHTML(session.id)}">
+      <button class="session-item${isActive ? ' is-active' : ''}" type="button" data-session-id="${escapeHTML(session.id)}"${farmEdgeStyle}>
         <div class="session-primary">
-          <div class="session-name">${escapeHTML(session.mapName || 'Unknown Map')}</div>
-          <div class="session-tier">${tier} / ${contextLabel} / ${startedAt}</div>
+          <div class="session-title">${tierChip}<span class="session-name" lang="en">${escapeHTML(session.mapName || 'Unknown Map')}</span></div>
+          <div class="session-meta">${contextLabel} / ${startedAt}</div>
         </div>
-        <div class="session-secondary">
-          <span class="session-secondary-label">${window.t('sessions.duration')}</span>
-          <span class="session-secondary-value">${duration}</span>
-        </div>
-        <div class="session-secondary">
-          <span class="session-secondary-label">${window.t('sessions.lootCount')}</span>
-          <span class="session-secondary-value">${lootCount}</span>
-        </div>
-        <div class="session-profit" data-profit-tier="${profitTierFor(profit, poeVersion)}">${formatProfit(profit, 16, poeVersion)}${memeFor(profitTierFor(profit, poeVersion))}</div>
-        <div class="session-status ${safeStatus}">${window.t(`sessions.${safeStatus}`)}</div>
+        <span class="session-stat"><span class="visually-hidden">${window.t('sessions.duration')} </span>${duration}</span>
+        <span class="session-stat"><span class="visually-hidden">${window.t('sessions.headItems')} </span>${lootCount}</span>
+        <div class="session-profit" data-profit-tier="${profitTier}">${formatProfit(profit, 16, poeVersion)}${memeFor(profitTier)}</div>
+        ${statusChip}
       </button>
     `;
   }).join('');
 
+}
+
+// The summary covers one game and league so it never adds up chaos from different economies: each half comes from
+// its filter when that is set, else from the tracker's context. With no completed runs there, the summary hides.
+function getSessionsSummaryContext() {
+  const versionFilter = getFilterValue(elements.sessionVersionFilter);
+  const leagueFilter = getFilterValue(elements.sessionLeagueFilter);
+  const tracker = getSelectedTrackerContext();
+  return {
+    poeVersion: versionFilter !== 'all' ? versionFilter : tracker.poeVersion,
+    league: leagueFilter !== 'all' ? leagueFilter : tracker.league
+  };
+}
+
+function isSessionInContext(session, context) {
+  return getSessionPoeVersion(session) === context.poeVersion && (session.league || 'Standard') === context.league;
+}
+
+function renderSessionsSummary(sessions = []) {
+  const summary = elements.sessionsSummary;
+  if (!summary) return;
+
+  const completed = sessions.filter((session) => session.status === 'completed');
+  const context = completed.length ? getSessionsSummaryContext() : null;
+  const runs = context ? completed.filter((session) => isSessionInContext(session, context)) : [];
+  if (!runs.length) {
+    summary.hidden = true;
+    summary.innerHTML = '';
+    return;
+  }
+
+  const { poeVersion, league } = context;
+  const profitOf = (session) => parseFloat(session.profitChaos || 0) || 0;
+  const tierFor = (value) => getProfitTierFor(value, poeVersion, { league });
+  // Tiers measure one run, so the average and the best run carry one; the total only shows a loss, as on the dashboard.
+  const valueHTML = (value, tier) => `<span class="sessions-summary-value"${tier ? ` data-profit-tier="${tier}"` : ''}>${profitCurrencyHTML(value, 18, poeVersion, { league, signed: true })}</span>`;
+  const total = runs.reduce((sum, session) => sum + profitOf(session), 0);
+  const best = runs.reduce((top, session) => (profitOf(session) > profitOf(top) ? session : top), runs[0]);
+  const runsLabel = runs.length === 1
+    ? window.t('sessions.summaryRunsOne')
+    : window.t('sessions.summaryRuns', { count: runs.length });
+
+  // Static bars for the last 30 runs, oldest on the left. Heights are log-scaled so one big drop does not flatten
+  // the rest; gains rise from the baseline and losses hang below it. When nothing gained, the baseline is the top
+  // edge, so a break-even run hangs below it too instead of leaving the strip. When both sides have runs, each keeps
+  // at least 5% of the 44px strip, room for the 2px minimum bar next to a big swing on the other side.
+  const bars = runs.slice(0, 30).reverse();
+  const magnitude = (value) => Math.log10(Math.abs(value) + 1);
+  const maxGain = Math.max(0, ...bars.filter((session) => profitOf(session) >= 0).map((session) => magnitude(profitOf(session))));
+  const maxLoss = Math.max(0, ...bars.filter((session) => profitOf(session) < 0).map((session) => magnitude(profitOf(session))));
+  const minSide = 5;
+  const baseline = !maxLoss ? 100 : !maxGain ? 0 : Math.min(100 - minSide, Math.max(minSide, (maxGain / (maxGain + maxLoss)) * 100));
+  const barsHTML = bars.map((session) => {
+    const profit = profitOf(session);
+    const below = profit < 0 || (profit === 0 && baseline === 0);
+    const peak = profit < 0 ? maxLoss : maxGain;
+    const size = peak ? (magnitude(profit) / peak) * (below ? 100 - baseline : baseline) : 0;
+    const title = `${session.mapName || 'Unknown Map'} ${formatAdaptiveProfitText(profit, poeVersion, { league, signed: true })}`;
+    return `<span class="sessions-summary-run${below ? ' is-below' : ''}" data-profit-tier="${tierFor(profit)}" title="${escapeHTML(title).replace(/"/g, '&quot;')}" style="--run-size: ${size.toFixed(1)}%"></span>`;
+  }).join('');
+
+  summary.innerHTML = `
+    <div class="sessions-summary-kicker">${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / <span lang="en">${escapeHTML(league)}</span> · ${runsLabel}</div>
+    <div class="sessions-summary-stats">
+      <div class="sessions-summary-stat">
+        <span class="sessions-summary-label">${window.t('sessions.summaryMaps')}</span>
+        <span class="sessions-summary-value">${runs.length}</span>
+      </div>
+      <div class="sessions-summary-stat">
+        <span class="sessions-summary-label">${window.t('sessions.summaryTotal')}</span>
+        ${valueHTML(total, total < 0 ? 'loss' : '')}
+      </div>
+      <div class="sessions-summary-stat">
+        <span class="sessions-summary-label">${window.t('sessions.summaryAverage')}</span>
+        ${valueHTML(total / runs.length, tierFor(total / runs.length))}
+      </div>
+      <div class="sessions-summary-stat">
+        <span class="sessions-summary-label">${window.t('sessions.summaryBest')}</span>
+        <span class="sessions-summary-best"><span class="sessions-summary-best-name" lang="en">${escapeHTML(best.mapName || 'Unknown Map')}</span>${valueHTML(profitOf(best), tierFor(profitOf(best)))}${profitMemeHTML(tierFor(profitOf(best)))}</span>
+      </div>
+    </div>
+    <div class="sessions-summary-runs" role="img" aria-label="${window.t('sessions.summaryBarsLabel', { count: bars.length })}" style="--baseline: ${baseline.toFixed(1)}%">${barsHTML}</div>
+  `;
+  summary.hidden = false;
 }
 
 function renderRecentLoot() {
