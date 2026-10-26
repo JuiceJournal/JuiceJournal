@@ -2619,14 +2619,246 @@ test('sessions list counts loot from list rows and shows live duration for the a
     timeAgo: () => 'just now',
     currencyHTML: (value) => `${value}c`,
     formatDuration: (seconds) => `duration:${seconds}`,
-    getLiveDuration: () => 240
+    getLiveDuration: () => 240,
+    renderSessionsSummary() {}
   });
 
   context.renderSessionsList();
 
-  const rows = elements.sessionsList.innerHTML.split('class="session-item"').slice(1);
-  const values = rows.map((row) => [...row.matchAll(/session-secondary-value">([^<]*)</g)].map((match) => match[1]));
-  assert.deepEqual(values, [['duration:240', '152'], ['duration:330', '1'], ['duration:60', '5']]);
+  const rows = elements.sessionsList.innerHTML.split('class="session-item').slice(1);
+  const values = rows.map((row) => [...row.matchAll(/session-stat"><span class="visually-hidden">([^<]*)<\/span>([^<]*)</g)].map((match) => `${match[1]}${match[2]}`));
+  // The column names sit once in the hidden-from-readers header row, so each cell repeats its own for screen readers.
+  assert.deepEqual(values, [
+    ['sessions.duration duration:240', 'sessions.headItems 152'],
+    ['sessions.duration duration:330', 'sessions.headItems 1'],
+    ['sessions.duration duration:60', 'sessions.headItems 5']
+  ]);
+  assert.match(elements.sessionsList.innerHTML, /class="sessions-list-head" aria-hidden="true"/);
+});
+
+test('sessions rows carry a tier chip, a farm-colour edge and a status chip only when it means something', () => {
+  const elements = { sessionsList: { innerHTML: '' } };
+  const summaryCalls = [];
+  const sessions = [
+    { id: 'active-1', mapName: 'Crimson Temple', mapTier: 16, status: 'active', poeVersion: 'poe1', farmTypeId: 'ritual', lootCount: 3 },
+    { id: 'done-1', mapName: 'Mesa', mapTier: 14, status: 'completed', poeVersion: 'poe1', farmTypeId: 'breach', durationSec: 330, lootCount: 1 },
+    { id: 'gone-1', mapName: 'Dunes', status: 'abandoned', poeVersion: 'poe1', farmTypeId: null, durationSec: 60, lootCount: 0 }
+  ];
+  let filteredSessions = sessions;
+  const state = { currentUser: { id: 'user-1' }, sessions };
+  const context = loadFunctions(['renderSessionsList'], {
+    elements,
+    state,
+    window: { t: (key) => key },
+    closeSessionDrawer() {},
+    getFilteredSessions: () => filteredSessions,
+    getSessionPoeVersion: (session) => session.poeVersion,
+    getSessionFarmTypeId: (session) => session.farmTypeId,
+    getFarmTypeIdFor: (value) => value || null,
+    farmTypeAttr: (value) => (value ? ` data-farm-type="${value}"` : ''),
+    getSessionFarmTypeLabel: (session) => session.farmTypeId || 'No farm type',
+    escapeHTML: (value) => String(value),
+    timeAgo: () => 'just now',
+    currencyHTML: (value) => `${value}c`,
+    formatDuration: (seconds) => `duration:${seconds}`,
+    getLiveDuration: () => 240,
+    renderSessionsSummary: (rows) => summaryCalls.push(rows.length)
+  });
+
+  context.renderSessionsList();
+
+  const html = elements.sessionsList.innerHTML;
+  const [head, ...rows] = html.split('<button ');
+  assert.match(head, /class="sessions-list-head"[\s\S]*sessions\.headMap[\s\S]*sessions\.duration[\s\S]*sessions\.headItems[\s\S]*sessions\.headProfit/);
+  assert.equal(rows.length, 3);
+  assert.match(rows[0], /^class="session-item is-active"[^>]*style="--farm-color: var\(--farm-ritual\)"/);
+  assert.match(rows[0], /<span class="session-tier-chip">T16<\/span><span class="session-name" lang="en">Crimson Temple<\/span>/);
+  assert.match(rows[0], /class="session-status active">sessions\.active</);
+  assert.match(rows[1], /^class="session-item"[^>]*style="--farm-color: var\(--farm-breach\)"/);
+  assert.doesNotMatch(rows[1], /session-status/);
+  assert.doesNotMatch(rows[2], /session-tier-chip|style=/);
+  assert.match(rows[2], /class="session-status abandoned">sessions\.abandoned</);
+  for (const row of rows) {
+    // data-farm-type on the row would tint all of its text; only the farm word in the meta line keeps it.
+    assert.doesNotMatch(row.slice(0, row.indexOf('>')), /data-farm-type/);
+    assert.doesNotMatch(row, /session-meta">T\d/);
+  }
+  assert.deepEqual(summaryCalls, [3]);
+
+  filteredSessions = [];
+  context.renderSessionsList();
+  assert.equal(elements.sessionsList.innerHTML, '<p class="empty-state">sessions.noMatch</p>');
+  assert.deepEqual(summaryCalls, [3, 0]);
+
+  // A status filter the server answers with no sessions at all.
+  state.sessions = [];
+  context.renderSessionsList();
+  assert.deepEqual(summaryCalls, [3, 0, 0]);
+
+  state.currentUser = null;
+  context.renderSessionsList();
+  assert.deepEqual(summaryCalls, [3, 0, 0, 0]);
+});
+
+test('sessions summary hides when the list fails to load', async () => {
+  const summaryCalls = [];
+  const elements = { sessionFilter: { value: 'all' }, sessionsList: { innerHTML: '' } };
+  const context = loadFunctions(['loadSessions'], {
+    elements,
+    state: { currentUser: { id: 'user-1' }, sessions: [] },
+    window: {
+      t: (key) => key,
+      electronAPI: { getSessions: async () => { throw new Error('offline'); } }
+    },
+    getUserFacingErrorMessage: (error, key) => key,
+    populateSessionFilterOptions() {},
+    renderSessionsList() {},
+    renderSessionsSummary: (rows) => summaryCalls.push(rows.length)
+  });
+
+  await context.loadSessions();
+
+  assert.equal(elements.sessionsList.innerHTML, '<p class="empty-state">sessions.loadError</p>');
+  assert.deepEqual(summaryCalls, [0]);
+});
+
+function loadSessionsSummary({ sessions, versionFilter = 'all', leagueFilter = 'all', tracker = { poeVersion: 'poe1', league: 'Mirage' } }) {
+  const elements = {
+    sessionsSummary: { innerHTML: '', hidden: true },
+    sessionVersionFilter: { value: versionFilter },
+    sessionLeagueFilter: { value: leagueFilter }
+  };
+  const calls = [];
+  const context = loadFunctions(['getFilterValue', 'isSessionInContext', 'getSessionsSummaryContext', 'renderSessionsSummary'], {
+    elements,
+    window: { t: (key, values) => (values ? `${key}:${JSON.stringify(values)}` : key) },
+    getSelectedTrackerContext: () => tracker,
+    getSessionPoeVersion: (session) => session.poeVersion || 'poe1',
+    getProfitTierFor: (value, poeVersion, options) => {
+      calls.push(['tier', poeVersion, options.league]);
+      return value < 0 ? 'loss' : value >= 100 ? 'rare' : 'normal';
+    },
+    profitCurrencyHTML: (value, iconSize, poeVersion, options) => {
+      calls.push(['chip', poeVersion, options.league]);
+      return `<chip>${value}</chip>`;
+    },
+    formatAdaptiveProfitText: (value) => `${value > 0 ? '+' : ''}${value}c`,
+    profitMemeHTML: (tier) => `<meme ${tier}>`,
+    escapeHTML: (value) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  });
+  context.renderSessionsSummary(sessions);
+  return { summary: elements.sessionsSummary, calls };
+}
+
+test('sessions summary adds up one game and league only and hides without completed runs', () => {
+  const sessions = [
+    { id: 'f', mapName: 'Say "hi"', status: 'completed', poeVersion: 'poe1', league: 'Mirage', profitChaos: 0 },
+    { id: 'e', mapName: 'Crimson Temple', status: 'active', poeVersion: 'poe1', league: 'Mirage', profitChaos: 800 },
+    { id: 'd', mapName: 'Arcade', status: 'completed', poeVersion: 'poe1', league: 'Standard', profitChaos: 5000 },
+    { id: 'c', mapName: 'Strand', status: 'completed', poeVersion: 'poe2', league: 'Dawn', profitChaos: 9999 },
+    { id: 'b', mapName: 'Dunes', status: 'completed', poeVersion: 'poe1', league: 'Mirage', profitChaos: -30 },
+    { id: 'a', mapName: 'Mesa', status: 'completed', poeVersion: 'poe1', league: 'Mirage', profitChaos: 120 }
+  ];
+  const { summary, calls } = loadSessionsSummary({ sessions });
+
+  assert.equal(summary.hidden, false);
+  assert.match(summary.innerHTML, /sessions-summary-kicker">PoE 1 \/ <span lang="en">Mirage<\/span> · sessions\.summaryRuns:\{"count":3\}</);
+  assert.match(summary.innerHTML, /sessions\.summaryMaps<\/span>\s*<span class="sessions-summary-value">3</);
+  assert.match(summary.innerHTML, /sessions\.summaryTotal<\/span>\s*<span class="sessions-summary-value"><chip>90<\/chip>/);
+  assert.match(summary.innerHTML, /sessions\.summaryAverage<\/span>\s*<span class="sessions-summary-value" data-profit-tier="normal"><chip>30<\/chip>/);
+  assert.match(summary.innerHTML, /sessions-summary-best-name" lang="en">Mesa<\/span><span class="sessions-summary-value" data-profit-tier="rare"><chip>120<\/chip><\/span><meme rare>/);
+  assert.ok(calls.length > 0);
+  assert.ok(calls.every(([, poeVersion, league]) => poeVersion === 'poe1' && league === 'Mirage'));
+
+  const bars = [...summary.innerHTML.matchAll(/<span class="sessions-summary-run([^"]*)" data-profit-tier="([^"]+)" title="([^"]*)" style="--run-size: ([\d.]+)%"/g)]
+    .map(([, below, tier, title, size]) => [below, tier, title, Number(size)]);
+  // Sessions arrive newest first; the bars run oldest to newest, and quotes in a map name cannot end the title attribute.
+  assert.deepEqual(bars.map(([below, tier, title]) => [below, tier, title]), [
+    ['', 'rare', 'Mesa +120c'],
+    [' is-below', 'loss', 'Dunes -30c'],
+    ['', 'normal', 'Say &quot;hi&quot; 0c']
+  ]);
+  const gain = Math.log10(121);
+  const loss = Math.log10(31);
+  assert.equal(bars[0][3], Number(((gain / (gain + loss)) * 100).toFixed(1)));
+  assert.equal(bars[1][3], Number(((loss / (gain + loss)) * 100).toFixed(1)));
+  assert.match(summary.innerHTML, new RegExp(`--baseline: ${((gain / (gain + loss)) * 100).toFixed(1)}%`));
+  assert.match(summary.innerHTML, /role="img" aria-label="sessions\.summaryBarsLabel:\{"count":3\}"/);
+
+  const empty = loadSessionsSummary({ sessions: sessions.filter((session) => session.status !== 'completed') });
+  assert.equal(empty.summary.hidden, true);
+  assert.equal(empty.summary.innerHTML, '');
+});
+
+test('sessions summary takes each half of its context from a filter, else the tracker, and hides when it is empty', () => {
+  const sessions = [
+    { id: 'n', mapName: 'Strand', status: 'completed', poeVersion: 'poe2', league: 'Dawn', profitChaos: 50 },
+    { id: 'o', mapName: 'Mesa', status: 'completed', poeVersion: 'poe1', league: 'Standard', profitChaos: -70 }
+  ];
+
+  const both = loadSessionsSummary({ sessions: sessions.slice(1), versionFilter: 'poe1', leagueFilter: 'Standard' });
+  assert.match(both.summary.innerHTML, /PoE 1 \/ <span lang="en">Standard<\/span> · sessions\.summaryRunsOne</);
+  // A losing total is the only tier the total shows.
+  assert.match(both.summary.innerHTML, /sessions\.summaryTotal<\/span>\s*<span class="sessions-summary-value" data-profit-tier="loss"><chip>-70<\/chip>/);
+
+  // League filter only: the game comes from the tracker (PoE 1 / Mirage).
+  const leagueOnly = loadSessionsSummary({ sessions: sessions.slice(1), leagueFilter: 'Standard' });
+  assert.match(leagueOnly.summary.innerHTML, /PoE 1 \/ <span lang="en">Standard<\/span>/);
+
+  // The tracker's PoE 1 / Mirage has no completed runs here, so the summary hides instead of picking another economy.
+  const none = loadSessionsSummary({ sessions });
+  assert.equal(none.summary.hidden, true);
+  assert.equal(none.summary.innerHTML, '');
+
+  // Game filter only: PoE 2 with the tracker's Mirage league matches nothing either.
+  const versionOnly = loadSessionsSummary({ sessions: sessions.slice(0, 1), versionFilter: 'poe2' });
+  assert.equal(versionOnly.summary.hidden, true);
+});
+
+test('sessions summary keeps every bar inside the strip, even next to a big swing', () => {
+  const barsOf = (profits) => {
+    const { summary } = loadSessionsSummary({
+      sessions: profits.map((profitChaos, index) => ({ id: `r${index}`, mapName: `Map ${index}`, status: 'completed', poeVersion: 'poe1', league: 'Mirage', profitChaos }))
+    });
+    const baseline = Number(summary.innerHTML.match(/--baseline: ([\d.]+)%/)[1]);
+    const bars = [...summary.innerHTML.matchAll(/class="sessions-summary-run( is-below)?"[^>]*--run-size: ([\d.]+)%/g)]
+      .map((match) => ({ below: Boolean(match[1]), size: Number(match[2]) }));
+    // The strip is 44px and the CSS draws at least 2px, so every bar needs its side's room and 2px of it.
+    for (const bar of bars) {
+      const room = bar.below ? 100 - baseline : baseline;
+      assert.ok(bar.size <= room + 0.05, `bar ${bar.size}% exceeds its ${room}% side`);
+      assert.ok((room / 100) * 44 >= 2, `side of ${room}% has no room for a 2px bar`);
+    }
+    return { baseline: baseline.toFixed(1), below: bars.map((bar) => bar.below) };
+  };
+
+  // Only losses and a break-even run: the baseline is the top edge and the break-even run hangs from it.
+  assert.deepEqual(barsOf([-50, 0, -5]), { baseline: '0.0', below: [true, true, true] });
+  // Only break-even runs: the baseline is the bottom edge and they rise from it.
+  assert.deepEqual(barsOf([0, 0]), { baseline: '100.0', below: [false, false] });
+  // Runs arrive newest first and draw oldest first. A tiny gain and a break-even run next to a big loss keep 5% above it.
+  assert.deepEqual(barsOf([0, 0.001, -1000]), { baseline: '5.0', below: [true, false, false] });
+  // A tiny loss next to a big gain keeps 5% below it.
+  assert.deepEqual(barsOf([-0.2, 5000]), { baseline: '95.0', below: [false, true] });
+});
+
+test('sessions summary draws at most the last 30 completed runs', () => {
+  const sessions = Array.from({ length: 40 }, (_, index) => ({
+    id: `run-${index}`,
+    mapName: `Map ${index}`,
+    status: 'completed',
+    poeVersion: 'poe1',
+    league: 'Mirage',
+    profitChaos: index + 1
+  }));
+  const { summary } = loadSessionsSummary({ sessions });
+  const titles = [...summary.innerHTML.matchAll(/title="([^"]+)"/g)].map((match) => match[1]);
+
+  // Index 0 is the newest run, so the 30 newest are 0-29, drawn oldest (29) to newest (0).
+  assert.equal(titles.length, 30);
+  assert.equal(titles[0], 'Map 29 +30c');
+  assert.equal(titles[29], 'Map 0 +1c');
+  assert.match(summary.innerHTML, /sessions\.summaryMaps<\/span>\s*<span class="sessions-summary-value">40</);
 });
 
 test('session drawer shows live duration while the session is active and the stored one after', () => {
