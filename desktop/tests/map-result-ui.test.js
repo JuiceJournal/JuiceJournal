@@ -1601,7 +1601,8 @@ test('prices-updated events give the dashboard views the Divine and Mirror rates
     updateActiveSessionUI: () => renders.push('activeSession'),
     renderRecentLoot: () => renders.push('recentLoot'),
     renderSessionDrawer: (options) => renders.push(`sessionDrawer:keepForm=${options?.keepForm}`),
-    loadDashboardStats: async () => renders.push('dashboardStats')
+    loadDashboardStats: async () => renders.push('dashboardStats'),
+    isPageActive: () => false
   });
   context.state.selectedSession = { id: 'run-1' };
 
@@ -1617,6 +1618,35 @@ test('prices-updated events give the dashboard views the Divine and Mirror rates
   assert.deepEqual(renders, [
     'latestMapResult', 'mapResultHistory', 'sessionsList', 'activeSession', 'recentLoot', 'sessionDrawer:keepForm=true', 'dashboardStats'
   ]);
+});
+
+test('prices-updated events reload an open Currency page for the same game and league from the cache only', async () => {
+  const run = async ({ activePage, event }) => {
+    const currencyLoads = [];
+    const context = loadFunctions(['handlePricesUpdated'], {
+      state: { settings: { poeVersion: 'poe1' }, currentUser: null },
+      currencyState: { poeVersion: 'poe1', league: 'Mirage' },
+      isPageActive: (page) => page === activePage,
+      loadCurrencyPrices: (options) => currencyLoads.push({ ...options }),
+      renderPriceItemCount() {},
+      refreshProfitCurrencyRates: async () => null,
+      renderLatestMapResult() {},
+      renderMapResultHistory() {},
+      renderSessionsList() {},
+      updateActiveSessionUI() {},
+      renderRecentLoot() {}
+    });
+    await context.handlePricesUpdated(event);
+    return currencyLoads;
+  };
+
+  assert.deepEqual(
+    await run({ activePage: 'currency', event: { poeVersion: 'poe1', league: 'Mirage', itemCount: 1900 } }),
+    [{ cacheOnly: true }]
+  );
+  assert.deepEqual(await run({ activePage: 'currency', event: { poeVersion: 'poe1', league: 'Standard' } }), []);
+  assert.deepEqual(await run({ activePage: 'currency', event: { poeVersion: 'poe2', league: 'Mirage' } }), []);
+  assert.deepEqual(await run({ activePage: 'dashboard', event: { poeVersion: 'poe1', league: 'Mirage' } }), []);
 });
 
 test('poe2 result smoke persists zero-profit map result and projects it into Last Map Result', async () => {
@@ -2470,9 +2500,11 @@ test('renderer offers sharing only with online features on and a server sign-in'
 test('renderer Farming Hub asks for nothing while online features are off', async () => {
   let hubRequests = 0;
   const farmingHubList = { innerHTML: '' };
-  const context = loadFunctions(['loadFarmingHubRuns'], {
+  const farmingHubFilters = { hidden: false };
+  const farmingHubRefreshBtn = { disabled: false };
+  const context = loadFunctions(['emptyStateHTML', 'loadFarmingHubRuns'], {
     state: { onlineAccount: { enabled: false, signedIn: false }, farmingHubRuns: [{ id: 'old-run' }] },
-    elements: { farmingHubList },
+    elements: { farmingHubList, farmingHubFilters, farmingHubRefreshBtn },
     escapeHTML: (value) => String(value),
     window: {
       t: (key) => key,
@@ -2490,6 +2522,193 @@ test('renderer Farming Hub asks for nothing while online features are off', asyn
   assert.equal(hubRequests, 0);
   assert.equal(context.state.farmingHubRuns.length, 0);
   assert.match(farmingHubList.innerHTML, /farmingHub\.onlineOff/);
+  // The off state is a panel with one way out, and the filters that cannot work are gone.
+  assert.equal(farmingHubFilters.hidden, true);
+  assert.equal(farmingHubRefreshBtn.disabled, true);
+  assert.ok(farmingHubList.innerHTML.startsWith('<div class="empty-state empty-state--rich empty-state--panel">'));
+  assert.ok(farmingHubList.innerHTML.includes('<use href="assets/icons.svg#publish"/>'));
+  assert.ok(farmingHubList.innerHTML.includes('<strong class="empty-state-title">farmingHub.offTitle</strong>'));
+  // One short hint above the button; the Online tab itself explains what the switch does.
+  assert.match(farmingHubList.innerHTML, /<span class="empty-state-hint">farmingHub\.onlineOff<\/span>/);
+  assert.match(
+    farmingHubList.innerHTML,
+    /<button type="button" class="btn btn-secondary btn-small" data-hub-action="open-online-settings"><svg [^>]*><use href="assets\/icons\.svg#link"\/><\/svg><span class="btn-label">farmingHub\.openOnlineSettings<\/span><\/button><\/div>$/
+  );
+});
+
+function createFarmingHubLoadContext(overrides = {}) {
+  const farmingHubList = { innerHTML: '' };
+  const farmingHubFilters = { hidden: true };
+  const farmingHubRefreshBtn = { disabled: true };
+  const state = { onlineAccount: { enabled: true, signedIn: true }, farmingHubRuns: [{ id: 'old-run' }] };
+  const filters = { limit: 50, league: 'Mirage' };
+  const hubRequests = [];
+  let rendered = 0;
+  const context = loadFunctions(['emptyStateHTML', 'loadFarmingHubRuns'], {
+    state,
+    elements: { farmingHubList, farmingHubFilters, farmingHubRefreshBtn },
+    escapeHTML: (value) => String(value),
+    getFarmingHubFilters: () => filters,
+    populateFarmingHubFarmOptions: () => {},
+    renderFarmingHubRuns: () => {
+      rendered += 1;
+    },
+    getUserFacingErrorMessage: (error, fallbackKey) => `error:${error.message}:${fallbackKey}`,
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        getFarmingHubRuns(params) {
+          hubRequests.push(params);
+          return overrides.getFarmingHubRuns(params);
+        }
+      }
+    }
+  });
+
+  return {
+    context,
+    state,
+    filters,
+    hubRequests,
+    farmingHubList,
+    farmingHubFilters,
+    farmingHubRefreshBtn,
+    rendered: () => rendered
+  };
+}
+
+test('renderer Farming Hub shows its filters and a translated loading line while online', async () => {
+  const runs = [{ id: 'run-1' }];
+  let resolveRuns;
+  const hub = createFarmingHubLoadContext({
+    getFarmingHubRuns: () => new Promise((resolve) => {
+      resolveRuns = resolve;
+    })
+  });
+
+  const loading = hub.context.loadFarmingHubRuns();
+
+  assert.equal(hub.farmingHubFilters.hidden, false);
+  assert.equal(hub.farmingHubRefreshBtn.disabled, false);
+  assert.equal(hub.farmingHubList.innerHTML, '<p class="empty-state">farmingHub.loading</p>');
+  assert.equal(hub.hubRequests.length, 1);
+  assert.equal(hub.hubRequests[0], hub.filters);
+
+  resolveRuns({ runs });
+  await loading;
+
+  assert.equal(hub.state.farmingHubRuns, runs);
+  assert.equal(hub.rendered(), 1);
+});
+
+test('renderer Farming Hub drops a reply that lands after online features turned off', async () => {
+  for (const outcome of ['resolve', 'reject']) {
+    let settle;
+    const hub = createFarmingHubLoadContext({
+      getFarmingHubRuns: () => new Promise((resolve, reject) => {
+        settle = outcome === 'resolve' ? () => resolve({ runs: [{ id: 'late-run' }] }) : () => reject(new Error('late'));
+      })
+    });
+
+    const staleLoad = hub.context.loadFarmingHubRuns();
+    hub.state.onlineAccount.enabled = false;
+    await hub.context.loadFarmingHubRuns();
+    const offPanel = hub.farmingHubList.innerHTML;
+    settle();
+    await staleLoad;
+
+    assert.match(offPanel, /empty-state--panel/, outcome);
+    assert.equal(hub.farmingHubList.innerHTML, offPanel, outcome);
+    assert.equal(hub.state.farmingHubRuns.length, 0, outcome);
+    assert.equal(hub.rendered(), 0, outcome);
+    assert.equal(hub.farmingHubFilters.hidden, true, outcome);
+  }
+});
+
+test('renderer Farming Hub shows a failed load and keeps Refresh for a retry', async () => {
+  const hub = createFarmingHubLoadContext({
+    getFarmingHubRuns: async () => {
+      throw new Error('offline');
+    }
+  });
+
+  await hub.context.loadFarmingHubRuns();
+
+  assert.equal(hub.farmingHubList.innerHTML, '<p class="empty-state">error:offline:toast.unexpectedError</p>');
+  assert.equal(hub.state.farmingHubRuns.length, 0);
+  assert.equal(hub.farmingHubRefreshBtn.disabled, false);
+  assert.equal(hub.rendered(), 0);
+});
+
+test('renderer Farming Hub says no runs match in the reader language', () => {
+  const farmingHubList = { innerHTML: '' };
+  const context = loadFunctions(['renderFarmingHubRuns'], {
+    state: { farmingHubRuns: [] },
+    elements: { farmingHubList },
+    escapeHTML: (value) => String(value),
+    window: { t: (key) => key }
+  });
+
+  context.renderFarmingHubRuns();
+
+  assert.equal(farmingHubList.innerHTML, '<p class="empty-state">farmingHub.noMatch</p>');
+  const source = fs.readFileSync(appJsPath, 'utf8');
+  assert.doesNotMatch(source, /Loading shared farm runs/);
+  assert.doesNotMatch(source, /No public farm runs/);
+});
+
+test('renderer Open Online settings switches to the Online tab and focuses the switch', () => {
+  const tabs = ['general', 'poe', 'hotkeys', 'notifications', 'api', 'about'];
+  const createToggle = (target) => ({
+    toggle(name, on) {
+      if (name === 'active') target.active = on;
+    }
+  });
+  const settingsNavBtns = tabs.map((tab) => {
+    const btn = { dataset: { settingsTab: tab }, active: tab === 'general', attributes: {} };
+    btn.classList = createToggle(btn);
+    btn.setAttribute = (name, value) => {
+      btn.attributes[name] = value;
+    };
+    return btn;
+  });
+  const settingsTabs = tabs.map((tab) => {
+    const panel = { id: `settings-${tab}`, active: tab === 'general' };
+    panel.classList = createToggle(panel);
+    return panel;
+  });
+  const calls = [];
+  const context = loadFunctions(['showSettingsTab', 'openOnlineSettings'], {
+    elements: {
+      settingsNavBtns,
+      settingsTabs,
+      onlineEnabled: { focus: () => calls.push('focus') }
+    },
+    // Records which tab was selected when the page switched.
+    navigateTo: (page) => calls.push(`navigate:${page}:${settingsNavBtns.find((btn) => btn.active).dataset.settingsTab}`)
+  });
+
+  context.openOnlineSettings();
+
+  assert.deepEqual(calls, ['navigate:settings:general', 'focus']);
+  assert.deepEqual(settingsNavBtns.filter((btn) => btn.active).map((btn) => btn.dataset.settingsTab), ['api']);
+  for (const btn of settingsNavBtns) {
+    assert.equal(btn.attributes['aria-selected'], btn.dataset.settingsTab === 'api' ? 'true' : 'false', btn.dataset.settingsTab);
+  }
+  assert.deepEqual(settingsTabs.filter((panel) => panel.active).map((panel) => panel.id), ['settings-api']);
+});
+
+test('empty states can sit on a panel with a sprite glyph and one action', () => {
+  const context = loadFunctions(['emptyStateHTML']);
+
+  assert.equal(
+    context.emptyStateHTML({ art: 'publish', panel: true, title: 'T', hint: 'H', action: '<button>x</button>' }),
+    '<div class="empty-state empty-state--rich empty-state--panel"><svg class="icon empty-state-glyph" width="28" height="28" aria-hidden="true"><use href="assets/icons.svg#publish"/></svg><strong class="empty-state-title">T</strong><span class="empty-state-hint">H</span><button>x</button></div>'
+  );
+  assert.equal(
+    context.emptyStateHTML({ title: 'T' }),
+    '<div class="empty-state empty-state--rich"><img class="empty-state-art" src="assets/brand/mark.svg" width="48" height="48" alt="" draggable="false"><strong class="empty-state-title">T</strong></div>'
+  );
 });
 
 test('renderer publish handler calls desktop bridge and refreshes local history', async () => {

@@ -16,6 +16,8 @@ const state = {
   leagueOptionsLoaded: false,
   sessions: [],
   farmingHubRuns: [],
+  // The newest Hub load; an older reply cannot cover the off panel or newer filters.
+  farmingHubLoadId: 0,
   // Saved online setting and whether the app holds a server session; the Farming Hub and sharing need both.
   onlineAccount: { enabled: false, signedIn: false },
   mapResults: [],
@@ -202,6 +204,7 @@ const elements = {
   farmingHubFarmFilter: document.getElementById('farming-hub-farm-filter'),
   farmingHubMinProfitFilter: document.getElementById('farming-hub-min-profit-filter'),
   farmingHubRefreshBtn: document.getElementById('farming-hub-refresh-btn'),
+  farmingHubFilters: document.querySelector('#farming-hub-page .farming-hub-filters'),
 
   // Settings
   apiUrl: document.getElementById('api-url'),
@@ -220,6 +223,7 @@ const elements = {
   testConnection: document.getElementById('test-connection'),
   connectionDot: document.getElementById('connection-dot'),
   connectionText: document.getElementById('connection-text'),
+  connectionStatus: document.querySelector('#settings-api .connection-status'),
   onlineEnabled: document.getElementById('online-enabled'),
   onlineAccountStatus: document.getElementById('online-account-status'),
   onlineSignIn: document.getElementById('online-sign-in'),
@@ -1775,13 +1779,16 @@ function itemSlotHTML(itemName, poeVersion, { small = false, quantity = 1, fallb
   return `<span class="item-slot${small ? ' item-slot--sm' : ''}">${art}${stack}</span>`;
 }
 
-// A dashboard empty state: our own art (the flask mark, or the chest sprite in an item slot), a title and the next step. Never game art.
-function emptyStateHTML({ art = 'mascot', title = '', hint = '' } = {}) {
+// An empty state shows our own art (the flask mark, the chest sprite in a slot, or a UI sprite glyph), a title and the next step.
+// `panel` puts a page-wide off state on its own plate, and `action` is the one button that leads out of it. Never game art.
+function emptyStateHTML({ art = 'mascot', title = '', hint = '', action = '', panel = false } = {}) {
   const artHTML = art === 'chest'
     ? '<span class="item-slot empty-state-art"><svg class="icon" width="24" height="24" aria-hidden="true"><use href="assets/icons.svg#chest"/></svg></span>'
-    : '<img class="empty-state-art" src="assets/brand/mark.svg" width="48" height="48" alt="" draggable="false">';
+    : art === 'publish'
+      ? '<svg class="icon empty-state-glyph" width="28" height="28" aria-hidden="true"><use href="assets/icons.svg#publish"/></svg>'
+      : '<img class="empty-state-art" src="assets/brand/mark.svg" width="48" height="48" alt="" draggable="false">';
   const hintHTML = hint ? `<span class="empty-state-hint">${hint}</span>` : '';
-  return `<div class="empty-state empty-state--rich">${artHTML}<strong class="empty-state-title">${title}</strong>${hintHTML}</div>`;
+  return `<div class="empty-state empty-state--rich${panel ? ' empty-state--panel' : ''}">${artHTML}<strong class="empty-state-title">${title}</strong>${hintHTML}${action}</div>`;
 }
 
 // The amount format is shared with the overlay through profitCurrencyModel.
@@ -2159,6 +2166,10 @@ function setupEventListeners() {
   if (elements.farmingHubFarmFilter) elements.farmingHubFarmFilter.addEventListener('change', loadFarmingHubRuns);
   if (elements.farmingHubMinProfitFilter) elements.farmingHubMinProfitFilter.addEventListener('change', loadFarmingHubRuns);
   if (elements.farmingHubRefreshBtn) elements.farmingHubRefreshBtn.addEventListener('click', loadFarmingHubRuns);
+  // The off panel's button is written with innerHTML, and CSP blocks inline onclick.
+  if (elements.farmingHubList) elements.farmingHubList.addEventListener('click', (event) => {
+    if (event.target.closest('[data-hub-action="open-online-settings"]')) openOnlineSettings();
+  });
 
   // Settings
   elements.saveSettingsBtn.addEventListener('click', handleSaveSettings);
@@ -2168,16 +2179,7 @@ function setupEventListeners() {
 
   // Settings tab navigation
   elements.settingsNavBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tab = btn.dataset.settingsTab;
-      elements.settingsNavBtns.forEach(b => {
-        b.classList.toggle('active', b === btn);
-        b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
-      });
-      elements.settingsTabs.forEach(t => {
-        t.classList.toggle('active', t.id === 'settings-' + tab);
-      });
-    });
+    btn.addEventListener('click', () => showSettingsTab(btn.dataset.settingsTab));
   });
 
   // Global language selector
@@ -2479,6 +2481,25 @@ function navigateTo(page) {
   } else if (page === 'currency') {
     loadCurrencyPage();
   }
+}
+
+// Marks one Settings tab and its panel as selected.
+function showSettingsTab(tab) {
+  elements.settingsNavBtns.forEach((b) => {
+    const selected = b.dataset.settingsTab === tab;
+    b.classList.toggle('active', selected);
+    b.setAttribute('aria-selected', selected ? 'true' : 'false');
+  });
+  elements.settingsTabs.forEach((t) => {
+    t.classList.toggle('active', t.id === 'settings-' + tab);
+  });
+}
+
+// The Hub's off panel leads straight to the Online switch.
+function openOnlineSettings() {
+  navigateTo('settings');
+  showSettingsTab('api');
+  elements.onlineEnabled?.focus();
 }
 
 /**
@@ -4618,14 +4639,27 @@ function getFarmingHubFilters() {
 async function loadFarmingHubRuns() {
   if (!elements.farmingHubList) return;
 
-  if (!state.onlineAccount?.enabled) {
+  const online = Boolean(state.onlineAccount?.enabled);
+  const loadId = (state.farmingHubLoadId || 0) + 1;
+  state.farmingHubLoadId = loadId;
+  if (elements.farmingHubFilters) elements.farmingHubFilters.hidden = !online;
+  if (elements.farmingHubRefreshBtn) elements.farmingHubRefreshBtn.disabled = !online;
+
+  if (!online) {
     state.farmingHubRuns = [];
-    elements.farmingHubList.innerHTML = `<p class="empty-state">${escapeHTML(window.t('farmingHub.onlineOff'))}</p>`;
+    const action = `<button type="button" class="btn btn-secondary btn-small" data-hub-action="open-online-settings"><svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#link"/></svg><span class="btn-label">${escapeHTML(window.t('farmingHub.openOnlineSettings'))}</span></button>`;
+    elements.farmingHubList.innerHTML = emptyStateHTML({
+      art: 'publish',
+      panel: true,
+      title: escapeHTML(window.t('farmingHub.offTitle')),
+      hint: escapeHTML(window.t('farmingHub.onlineOff')),
+      action
+    });
     return;
   }
 
   populateFarmingHubFarmOptions();
-  elements.farmingHubList.innerHTML = '<p class="empty-state">Loading shared farm runs...</p>';
+  elements.farmingHubList.innerHTML = `<p class="empty-state">${escapeHTML(window.t('farmingHub.loading'))}</p>`;
 
   try {
     if (!window.electronAPI?.getFarmingHubRuns) {
@@ -4633,10 +4667,12 @@ async function loadFarmingHubRuns() {
     }
 
     const response = await window.electronAPI.getFarmingHubRuns(getFarmingHubFilters());
+    if (loadId !== state.farmingHubLoadId) return;
     state.farmingHubRuns = response?.runs || [];
     populateFarmingHubFarmOptions();
     renderFarmingHubRuns();
   } catch (error) {
+    if (loadId !== state.farmingHubLoadId) return;
     state.farmingHubRuns = [];
     elements.farmingHubList.innerHTML = `<p class="empty-state">${escapeHTML(getUserFacingErrorMessage(error, 'toast.unexpectedError'))}</p>`;
   }
@@ -4646,7 +4682,7 @@ function renderFarmingHubRuns() {
   if (!elements.farmingHubList) return;
 
   if (!state.farmingHubRuns.length) {
-    elements.farmingHubList.innerHTML = '<p class="empty-state">No public farm runs match these filters.</p>';
+    elements.farmingHubList.innerHTML = `<p class="empty-state">${escapeHTML(window.t('farmingHub.noMatch'))}</p>`;
     return;
   }
 
@@ -5133,6 +5169,19 @@ function renderOnlineSettings() {
     elements.onlineSignIn.disabled = !enabled || signedIn || elements.onlineSignIn.getAttribute?.('aria-busy') === 'true';
   }
   if (elements.onlineSignOut) elements.onlineSignOut.disabled = !signedIn;
+
+  // Online off by choice is not a failure, so the status reads a grey 'Off', not a red 'Disconnected'.
+  if (elements.connectionStatus && elements.connectionText) {
+    const wasOff = elements.connectionStatus.classList.contains('is-off');
+    elements.connectionStatus.classList.toggle('is-off', !enabled);
+    // While online stays on, a connection test result is kept; only leaving the off state resets it.
+    if (!enabled || wasOff) {
+      const connectionKey = enabled ? 'settings.disconnected' : 'settings.onlineOffShort';
+      elements.connectionDot?.classList.remove('connected');
+      elements.connectionText.dataset.i18n = connectionKey;
+      elements.connectionText.textContent = window.t(connectionKey);
+    }
+  }
 }
 
 // Signs in to Juice Journal's server for the Farming Hub; the local profile is not touched.
@@ -6222,6 +6271,12 @@ async function handlePricesUpdated({ poeVersion, league, itemCount } = {}) {
   if (state.selectedSession) {
     renderSessionDrawer({ keepForm: true });
   }
+  // An open Currency page lists the new prices. The reload is cache-only: when another sync has replaced main's list
+  // since this event, it keeps the table as it is rather than start a poe.ninja sync. After the page's own Sync this
+  // runs next to handleCurrencySync's reload; both answer from the loaded list.
+  if (isPageActive('currency') && poeVersion === currencyState.poeVersion && league === currencyState.league) {
+    loadCurrencyPrices({ cacheOnly: true });
+  }
   if (state.currentUser) {
     await loadDashboardStats();
   }
@@ -6453,27 +6508,30 @@ function formatLootCategoryLabel(itemType) {
 
 // ==================== CURRENCY PAGE ====================
 
+// Category art is game content, so in both games a tab without its own bundled category art shows no icon,
+// never a stand-in orb. Currency keeps the real Chaos Orb.
+
 // PoE 1 item category types — includes PoE1-exclusive mechanics
 const POE1_CATEGORY_TYPES = [
   { value: '', labelKey: 'category.all', label: 'All', icon: null },
   { value: 'currency', labelKey: 'category.currency', label: 'Currency', icon: 'chaos' },
-  { value: 'fragment', labelKey: 'category.fragment', label: 'Fragment', icon: 'vaal' },
-  { value: 'scarab', labelKey: 'category.scarab', label: 'Scarab', icon: 'chance' },
-  { value: 'essence', labelKey: 'category.essence', label: 'Essence', icon: 'fusing' },
-  { value: 'fossil', labelKey: 'category.fossil', label: 'Fossil', icon: 'chromatic', poe1Only: true },
-  { value: 'map', labelKey: 'category.map', label: 'Map', icon: 'alchemy' },
-  { value: 'divination_card', labelKey: 'category.divCard', label: 'Div Card', icon: 'divine' },
-  { value: 'gem', labelKey: 'category.gem', label: 'Gem', icon: 'gcp' },
-  { value: 'unique', labelKey: 'category.unique', label: 'Unique', icon: 'exalted' },
-  { value: 'oil', labelKey: 'category.oil', label: 'Oil', icon: 'blessed', poe1Only: true },
-  { value: 'beast', labelKey: 'category.beast', label: 'Beast', icon: 'chance', poe1Only: true },
-  { value: 'incubator', labelKey: 'category.incubator', label: 'Incubator', icon: 'regret', poe1Only: true },
-  { value: 'delirium_orb', labelKey: 'category.deliriumOrb', label: 'Delirium Orb', icon: 'chromatic', poe1Only: true },
-  { value: 'catalyst', labelKey: 'category.catalyst', label: 'Catalyst', icon: 'scouring' },
-  { value: 'omen', labelKey: 'category.omen', label: 'Omen', icon: 'regal', poe1Only: true },
-  { value: 'tattoo', labelKey: 'category.tattoo', label: 'Tattoo', icon: 'blessed', poe1Only: true },
-  { value: 'base_type', labelKey: 'category.baseType', label: 'Base Type', icon: 'alchemy', poe1Only: true },
-  { value: 'other', labelKey: 'category.other', label: 'Other', icon: 'alteration' },
+  { value: 'fragment', labelKey: 'category.fragment', label: 'Fragment', icon: null },
+  { value: 'scarab', labelKey: 'category.scarab', label: 'Scarab', icon: null },
+  { value: 'essence', labelKey: 'category.essence', label: 'Essence', icon: null },
+  { value: 'fossil', labelKey: 'category.fossil', label: 'Fossil', icon: null, poe1Only: true },
+  { value: 'map', labelKey: 'category.map', label: 'Map', icon: null },
+  { value: 'divination_card', labelKey: 'category.divCard', label: 'Div Card', icon: null },
+  { value: 'gem', labelKey: 'category.gem', label: 'Gem', icon: null },
+  { value: 'unique', labelKey: 'category.unique', label: 'Unique', icon: null },
+  { value: 'oil', labelKey: 'category.oil', label: 'Oil', icon: null, poe1Only: true },
+  { value: 'beast', labelKey: 'category.beast', label: 'Beast', icon: null, poe1Only: true },
+  { value: 'incubator', labelKey: 'category.incubator', label: 'Incubator', icon: null, poe1Only: true },
+  { value: 'delirium_orb', labelKey: 'category.deliriumOrb', label: 'Delirium Orb', icon: null, poe1Only: true },
+  { value: 'catalyst', labelKey: 'category.catalyst', label: 'Catalyst', icon: null },
+  { value: 'omen', labelKey: 'category.omen', label: 'Omen', icon: null, poe1Only: true },
+  { value: 'tattoo', labelKey: 'category.tattoo', label: 'Tattoo', icon: null, poe1Only: true },
+  { value: 'base_type', labelKey: 'category.baseType', label: 'Base Type', icon: null, poe1Only: true },
+  { value: 'other', labelKey: 'category.other', label: 'Other', icon: null },
 ];
 
 // PoE 2 item category types — exchange API categories
@@ -6485,10 +6543,10 @@ const POE2_CATEGORY_TYPES = [
   { value: 'rune', labelKey: 'category.rune', label: 'Rune', icon: 'rune', poe2Only: true },
   { value: 'gem', labelKey: 'category.gem', label: 'Gem', icon: 'uncut-gem' },
   { value: 'soul_core', labelKey: 'category.soulCore', label: 'Soul Core', icon: 'soul-core', poe2Only: true },
-  { value: 'idol', labelKey: 'category.idol', label: 'Idol', icon: 'exalted', poe2Only: true },
+  { value: 'idol', labelKey: 'category.idol', label: 'Idol', icon: null, poe2Only: true },
   { value: 'expedition', labelKey: 'category.expedition', label: 'Expedition', icon: 'expedition', poe2Only: true },
-  { value: 'ultimatum', labelKey: 'category.ultimatum', label: 'Ultimatum', icon: 'regal', poe2Only: true },
-  { value: 'other', labelKey: 'category.other', label: 'Other', icon: 'transmute' },
+  { value: 'ultimatum', labelKey: 'category.ultimatum', label: 'Ultimatum', icon: null, poe2Only: true },
+  { value: 'other', labelKey: 'category.other', label: 'Other', icon: null },
 ];
 
 const currencyState = {
@@ -6500,6 +6558,10 @@ const currencyState = {
   sortDir: 'desc',
   prices: [],
   pricesRequest: 0,
+  // The 'game:league' the table lists now, and that list's Divine and Mirror prices.
+  listedKey: null,
+  rates: {},
+  syncing: false,
   searchTimer: null
 };
 
@@ -6514,18 +6576,14 @@ function updateTypeFilterDropdown() {
     currencyState.type = '';
   }
 
-  // Version badge before filter tabs
-  const versionTag = isPoe2
-    ? '<span class="currency-version-badge poe2">PoE 2</span>'
-    : '<span class="currency-version-badge poe1">PoE 1</span>';
-
-  container.innerHTML = versionTag + types.map(t => {
+  container.innerHTML = types.map(t => {
     const active = currencyState.type === t.value ? ' active' : '';
     const label = window.t ? (window.t(t.labelKey) || t.label) : t.label;
     const exclusiveClass = t.poe1Only ? ' poe1-exclusive' : (t.poe2Only ? ' poe2-exclusive' : '');
+    // The art sits next to its label, so it is decorative; a tab without art keeps an empty slot so labels line up.
     const iconHTML = t.icon
-      ? `<img src="${getCurrencyAssetPath(t.icon, currencyState.poeVersion)}" class="currency-tab-icon" width="14" height="14" draggable="false">`
-      : '';
+      ? `<img src="${getCurrencyAssetPath(t.icon, currencyState.poeVersion)}" class="currency-tab-icon" width="14" height="14" alt="" draggable="false">`
+      : '<span class="currency-tab-icon" aria-hidden="true"></span>';
     return `<button class="currency-type-btn${active}${exclusiveClass}" data-type="${t.value}" title="${label}">${iconHTML}<span>${label}</span></button>`;
   }).join('');
 
@@ -6610,7 +6668,8 @@ async function loadCurrencyPage() {
 
   const syncBtn = document.getElementById('currency-sync-btn');
   if (syncBtn) {
-    syncBtn.disabled = !canCurrentUserSyncPrices();
+    // A sync started on an earlier visit keeps the button busy; handleCurrencySync frees it when that sync ends.
+    syncBtn.disabled = currencyState.syncing || !canCurrentUserSyncPrices();
     syncBtn.title = canCurrentUserSyncPrices() ? '' : window.t('currency.syncRestricted');
   }
 }
@@ -6664,25 +6723,65 @@ async function loadCurrencyLeagues() {
   select.value = currencyState.league;
 }
 
-async function loadCurrencyPrices() {
+// Still rows in the table's shape while main waits for a poe.ninja sync, with nothing animated.
+function currencyLoadingRowsHTML() {
+  const placeholderRow = '<tr class="currency-row--placeholder" aria-hidden="true">'
+    + '<td class="currency-td-num"></td>'
+    + '<td class="currency-td-icon"><span class="item-slot"></span></td>'
+    + '<td class="currency-td-name"><span class="currency-bar"></span></td>'
+    + '<td class="currency-td-type"></td>'
+    + '<td class="currency-td-chaos"><span class="currency-bar currency-bar--value"></span></td>'
+    + '<td class="currency-td-divine"></td>'
+    + '<td class="currency-td-trend"></td>'
+    + '</tr>';
+  return `<tr class="currency-loading-row"><td colspan="7" class="currency-loading-label">${window.t('currency.waitingForSync')}</td></tr>`
+    + placeholderRow.repeat(8);
+}
+
+// `cacheOnly` (the reload after prices-updated) lists only what main already holds and never starts a sync. When
+// main holds another game or league by then, it answers prices null and the table keeps its rows.
+async function loadCurrencyPrices({ cacheOnly = false } = {}) {
   const tbody = document.getElementById('currency-table-body');
   if (!tbody) return;
   // A request queued behind a running sync can answer after a later one that main answered at once, so only the
-  // latest request renders.
-  const request = ++currencyState.pricesRequest;
-  // Main answers at once when the league's prices are loaded, so this row stays only while a poe.ninja sync runs.
-  tbody.innerHTML = `<tr><td colspan="7" class="currency-empty">${window.t('currency.waitingForSync')}</td></tr>`;
+  // latest request renders. A cache-only reload takes the latest request's turn, so it never drops an answer still
+  // waiting for a sync.
+  const request = cacheOnly ? currencyState.pricesRequest : ++currencyState.pricesRequest;
+  const poeVersion = currencyState.poeVersion;
+  const showLoadingRows = () => {
+    tbody.innerHTML = currencyLoadingRowsHTML();
+    const footer = document.getElementById('currency-footer');
+    if (footer) footer.textContent = '';
+  };
+  // A filter, search or reload of the listed game and league keeps its rows, because main usually answers those at
+  // once from the loaded list. Another game or league shows still rows, because main may first wait for a sync.
+  // Another league's sync can unload the listed one, and then main waits too, so kept rows that get no answer within
+  // 300 ms give way to still rows.
+  let slowAnswer = null;
+  if (!cacheOnly) {
+    if (currencyState.listedKey !== `${poeVersion}:${currencyState.league}`) {
+      showLoadingRows();
+    } else {
+      slowAnswer = setTimeout(() => {
+        if (request === currencyState.pricesRequest) showLoadingRows();
+      }, 300);
+    }
+  }
 
   try {
-    const params = { poeVersion: currencyState.poeVersion, limit: '500' };
+    const params = { poeVersion, limit: '500' };
     if (currencyState.league) params.league = currencyState.league;
     if (currencyState.type) params.type = currencyState.type;
     if (currencyState.search) params.search = currencyState.search;
+    if (cacheOnly) params.cacheOnly = true;
 
-    // json = { prices: [...], count, league, updatedAt } from the local poe.ninja cache
+    // json = { prices: [...], count, league, updatedAt, rates } from the local poe.ninja cache
     const json = await window.electronAPI.getCurrencyPrices(params);
     if (request !== currencyState.pricesRequest) return;
+    if (cacheOnly && json?.prices === null) return;
     currencyState.prices = json?.prices || json?.data?.prices || [];
+    currencyState.rates = json?.rates || {};
+    currencyState.listedKey = `${poeVersion}:${json?.league || currencyState.league}`;
     renderCurrencyTable();
 
     const footer = document.getElementById('currency-footer');
@@ -6692,17 +6791,39 @@ async function loadCurrencyPrices() {
       footer.textContent = `${count} items` + (updated ? ` · Last synced: ${timeAgo(updated)}` : '');
     }
   } catch (error) {
-    if (request !== currencyState.pricesRequest) return;
+    // A failed cache-only reload leaves the listed rows as they are.
+    if (request !== currencyState.pricesRequest || cacheOnly) return;
+    currencyState.listedKey = null;
     renderCurrencyEmptyRow(tbody, getUserFacingErrorMessage(error, 'currency.loadError'));
+  } finally {
+    clearTimeout(slowAnswer);
   }
 }
 
-function renderCurrencyEmptyRow(tbody, message) {
+function renderCurrencyEmptyRow(tbody, message, { syncAction = false } = {}) {
   const row = document.createElement('tr');
   const cell = document.createElement('td');
   cell.colSpan = 7;
   cell.className = 'currency-empty';
   cell.textContent = message == null ? '' : String(message);
+  if (syncAction) {
+    const action = document.createElement('div');
+    action.className = 'currency-empty-action';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-secondary btn-small';
+    button.insertAdjacentHTML('afterbegin', '<svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sync"/></svg>');
+    const label = document.createElement('span');
+    label.className = 'btn-label';
+    label.setAttribute('data-i18n', 'currency.syncNow');
+    label.textContent = window.t('currency.syncNow');
+    button.appendChild(label);
+    button.addEventListener('click', handleCurrencySync);
+    action.appendChild(button);
+    cell.appendChild(action);
+    // A row drawn while a sync runs shows that sync.
+    if (currencyState.syncing) setButtonBusy(button, true, window.t('currency.syncing'));
+  }
   row.appendChild(cell);
   tbody.replaceChildren(row);
 }
@@ -6723,7 +6844,12 @@ function renderCurrencyTable() {
   });
 
   if (sorted.length === 0) {
-    renderCurrencyEmptyRow(tbody, window.t('currency.noData'));
+    // Sync can fill a league or category the quick sync skipped, but not a search that matches nothing.
+    if (currencyState.search) {
+      renderCurrencyEmptyRow(tbody, window.t('currency.noMatch'));
+    } else {
+      renderCurrencyEmptyRow(tbody, window.t('currency.noData'), { syncAction: canCurrentUserSyncPrices() });
+    }
     return;
   }
 
@@ -6766,6 +6892,8 @@ function renderCurrencyTable() {
     const chaosCell = document.createElement('td');
     chaosCell.className = 'currency-td-chaos';
     chaosCell.appendChild(createCurrencyValueElement(chaos, 'chaos', 18, currencyState.poeVersion));
+    // A loot-filter colour for the item's own value, measured against this list's Divine and Mirror prices.
+    applyProfitTier(chaosCell, getProfitTierFor(chaos, currencyState.poeVersion, { rates: currencyState.rates || {} }));
 
     const divineCell = document.createElement('td');
     divineCell.className = 'currency-td-divine';
@@ -6842,13 +6970,17 @@ function timeAgo(date) {
 }
 
 async function handleCurrencySync() {
+  // The header Sync and the table's Sync now start one sync between them.
+  if (currencyState.syncing) return;
   if (!canCurrentUserSyncPrices()) {
     showToast(window.t('toast.currencyTitle'), window.t('currency.syncRestricted'), 'warning');
     return;
   }
 
-  const btn = document.getElementById('currency-sync-btn');
-  setButtonBusy(btn, true, window.t('currency.syncing'));
+  currencyState.syncing = true;
+  const syncButtons = () => [document.getElementById('currency-sync-btn'), ...document.querySelectorAll('.currency-empty-action .btn')];
+  const startedFromSyncButton = syncButtons().includes(document.activeElement);
+  syncButtons().forEach((button) => setButtonBusy(button, true, window.t('currency.syncing')));
 
   try {
     const result = await window.electronAPI.syncCurrencyPrices({
@@ -6862,7 +6994,15 @@ async function handleCurrencySync() {
   } catch (e) {
     showToast(window.t('toast.currencyTitle'), getUserFacingErrorMessage(e, 'currency.syncFailed'), 'error');
   } finally {
-    setButtonBusy(btn, false);
+    currencyState.syncing = false;
+    // Asked again, so a Sync now drawn during the sync goes idle too.
+    syncButtons().forEach((button) => setButtonBusy(button, false));
+    // The busy buttons were disabled and the table drawn again, so a keyboard user's focus may have dropped to the
+    // page. It goes back to a Sync control, unless the user moved it somewhere else meanwhile.
+    const focused = document.activeElement;
+    if (startedFromSyncButton && (!focused || focused === document.body || syncButtons().includes(focused))) {
+      (document.querySelector('.currency-empty-action .btn') || document.getElementById('currency-sync-btn'))?.focus();
+    }
   }
 }
 

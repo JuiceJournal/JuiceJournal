@@ -8,6 +8,7 @@ const desktopDir = path.resolve(__dirname, '..');
 const indexHtmlPath = path.join(desktopDir, 'src', 'index.html');
 const appJsPath = path.join(desktopDir, 'src', 'app.js');
 const mainJsPath = path.join(desktopDir, 'main.js');
+const stylesCssPath = path.join(desktopDir, 'src', 'styles.css');
 const translationsJsPath = path.join(desktopDir, 'src', 'modules', 'translations.js');
 
 function extractFunctionSource(source, functionName) {
@@ -1495,4 +1496,118 @@ test('choosing a settings version marks only that button as pressed', () => {
     [false, 'false'],
     [true, 'true']
   ]);
+});
+
+test('online status reads a grey Off while online is off, Disconnected once on, and keeps a test result', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  // Online is off by default, so the markup already reads Off before init renders it.
+  assert.match(html, /<div class="connection-status is-off">\s*<div class="connection-dot" id="connection-dot"><\/div>\s*<span id="connection-text" data-i18n="settings\.onlineOffShort">/);
+
+  const connectionStatus = createDatasetElement();
+  const connectionDot = createDatasetElement(['connected']);
+  const connectionText = { dataset: {}, textContent: '' };
+  const state = { onlineAccount: { enabled: false, signedIn: false } };
+  const context = loadFunctions(['renderOnlineSettings'], {
+    state,
+    elements: { connectionStatus, connectionDot, connectionText },
+    window: { t: (key) => `t:${key}` }
+  });
+
+  context.renderOnlineSettings();
+  assert.equal(connectionStatus.classList.contains('is-off'), true);
+  assert.equal(connectionDot.classList.contains('connected'), false);
+  assert.equal(connectionText.dataset.i18n, 'settings.onlineOffShort');
+  assert.equal(connectionText.textContent, 't:settings.onlineOffShort');
+
+  state.onlineAccount = { enabled: true, signedIn: false };
+  context.renderOnlineSettings();
+  assert.equal(connectionStatus.classList.contains('is-off'), false);
+  assert.equal(connectionText.dataset.i18n, 'settings.disconnected');
+  assert.equal(connectionText.textContent, 't:settings.disconnected');
+
+  // handleTestConnection writes its result and then renders again; the result stays while online stays on.
+  connectionDot.classList.add('connected');
+  connectionText.textContent = 't:settings.connected';
+  context.renderOnlineSettings();
+  assert.equal(connectionDot.classList.contains('connected'), true);
+  assert.equal(connectionText.textContent, 't:settings.connected');
+
+  state.onlineAccount = { enabled: false, signedIn: false };
+  context.renderOnlineSettings();
+  assert.equal(connectionStatus.classList.contains('is-off'), true);
+  assert.equal(connectionDot.classList.contains('connected'), false);
+  assert.equal(connectionText.textContent, 't:settings.onlineOffShort');
+});
+
+test('settings tabs use two columns, with full-width groups for long content', () => {
+  const css = fs.readFileSync(stylesCssPath, 'utf8');
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const cssRule = (selector) => {
+    const start = css.indexOf(`\n${selector} {`);
+    assert.notEqual(start, -1, `Missing ${selector} rule`);
+    return css.slice(start, css.indexOf('}', start));
+  };
+  const groupOpeningTag = (marker) => {
+    const markerIndex = html.indexOf(marker);
+    assert.notEqual(markerIndex, -1, `Missing ${marker}`);
+    const groupStart = html.lastIndexOf('<div class="settings-group', markerIndex);
+    return html.slice(groupStart, html.indexOf('>', groupStart) + 1);
+  };
+
+  assert.match(cssRule('.settings-layout'), /max-width: 1120px;/);
+  const activeTab = cssRule('.settings-tab.active');
+  assert.match(activeTab, /display: grid;/);
+  assert.match(activeTab, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+  // Paired groups end at one height.
+  assert.match(activeTab, /align-items: stretch;/);
+  assert.match(activeTab, /animation: pageIn /);
+  // Without dense packing the Tab order stays the visual order.
+  assert.doesNotMatch(activeTab, /grid-auto-flow/);
+  assert.doesNotMatch(cssRule('.settings-group'), /margin-bottom/);
+  assert.match(cssRule('.settings-group--wide'), /grid-column: 1 \/ -1;/);
+  assert.match(css, /@media \(max-width: 1100px\) \{\s*\.settings-tab\.active \{\s*grid-template-columns: minmax\(0, 1fr\);/);
+
+  for (const marker of [
+    'data-i18n="settings.poeVersion"',
+    'id="poe-path"',
+    'class="poe-account-card"',
+    'id="online-enabled"',
+    'data-i18n="settings.onlineAccount"',
+    'id="diagnostics-mode"',
+    'id="audit-trail-list"',
+    'about-info',
+    // The only group of its tab, or the last one of an odd count.
+    'id="enable-notifications"',
+    'id="app-update-status"'
+  ]) {
+    assert.match(groupOpeningTag(marker), /settings-group--wide/, marker);
+  }
+  for (const marker of ['id="global-language"', 'id="default-league"', 'id="scan-hotkey"', 'id="connection-text"']) {
+    assert.doesNotMatch(groupOpeningTag(marker), /settings-group--wide/, marker);
+  }
+});
+
+test('hotkey fields are the keycaps and explain how to capture', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const css = fs.readFileSync(stylesCssPath, 'utf8');
+
+  // The save flow and the hotkey tests read these fields and badges, so they stay in the DOM.
+  for (const id of ['scan-hotkey', 'scan-hotkey-display', 'stash-scan-hotkey', 'stash-scan-hotkey-display']) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.equal(html.match(/data-i18n="settings\.hotkeyCaptureHint"/g)?.length, 2);
+  for (const id of ['scan-hotkey', 'stash-scan-hotkey']) {
+    const input = html.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`))[0];
+    // With the badge hidden, the readonly field is the only control, so it takes its name from the heading.
+    assert.match(input, new RegExp(`aria-labelledby="${id}-title"`));
+    assert.match(input, new RegExp(`aria-describedby="${id}-hint"`));
+    assert.match(html, new RegExp(`<h3 id="${id}-title" data-i18n="settings\\.`));
+    assert.match(html, new RegExp(`<p class="settings-desc hotkey-hint" id="${id}-hint" data-i18n="settings\\.hotkeyCaptureHint">`));
+  }
+
+  assert.match(css, /\.hotkey-input \.hotkey-badge \{\s*display: none;\s*\}/);
+  assert.match(css, /\.hotkey-input \.hotkey-field \{[^}]*border-radius: var\(--bevel-sm\);/);
+  // Focus selects the value; the system selection colour must not cover the gold keycap text.
+  assert.match(css, /\.hotkey-input \.hotkey-field::selection \{\s*color: var\(--gold-light\);\s*background: transparent;\s*\}/);
+  assert.match(css, /\.connection-status\.is-off \.connection-dot \{\s*background: var\(--text-muted\);\s*box-shadow: none;\s*\}/);
 });

@@ -1541,12 +1541,16 @@ async function getProfitCurrencyRates(options = {}) {
 }
 
 // The Currency page lists the loaded game and league at once. It waits behind the price service's sync queue (a
-// session's full sync takes a while) only when the price list does not hold them yet.
+// session's full sync takes a while) only when the price list does not hold them yet. `cacheOnly` (the page's reload
+// after prices-updated) never waits or syncs: it answers prices null when the list holds another game or league.
 async function getCurrencyPrices(params = {}) {
   const { activeVersion: poeVersion, league } = resolveLeagueContext(params);
   const loaded = priceService.poeVersion === poeVersion
     && priceService.league === league
     && priceService.getStatus().itemCount > 0;
+  if (!loaded && params.cacheOnly) {
+    return { prices: null, count: 0, league, poeVersion, updatedAt: null, rates: {} };
+  }
   const status = loaded ? priceService.getStatus() : await priceService.ensureSynced(league, poeVersion);
   const prices = priceService.listPrices(params);
   return {
@@ -1554,7 +1558,12 @@ async function getCurrencyPrices(params = {}) {
     count: prices.length,
     league,
     poeVersion,
-    updatedAt: status.lastSync ? new Date(status.lastSync).toISOString() : null
+    updatedAt: status.lastSync ? new Date(status.lastSync).toISOString() : null,
+    // The Divine and Mirror prices of this same list, so the page colours values without a second request.
+    rates: {
+      divineChaos: readLocalChaosPrice('Divine Orb', poeVersion),
+      mirrorChaos: readLocalChaosPrice('Mirror of Kalandra', poeVersion)
+    }
   };
 }
 
