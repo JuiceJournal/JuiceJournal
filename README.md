@@ -35,8 +35,11 @@ Juice Journal has no accounts and no servers of its own. Your data is stored und
 - `profiles/<id>/journal.json`: your sessions and loot
 - `icon-cache/`: downloaded item icons
 - `ocr-cache/`: the OCR language data (`eng.traineddata`), downloaded on the first scan
+- `logs/errors.jsonl`: recent app errors and warnings (at most 128 KB), with names, paths and tokens removed where possible
 
 The OCR scan's screenshot is processed on your PC and is not uploaded.
+
+**Report a bug** (Settings → About, or **Report a problem** under *Having trouble signing in?* on the sign-in screen) builds a short text report on your PC: app and system versions, a settings summary without paths or addresses, local data sizes, the newest 20 entries of the error log and the type and time of the newest 10 activity log entries. It never adds account or character names, file paths, tokens, the server address or anything from your journal, and it tries to remove names, paths and tokens from error messages, so check the text before you post it. Nothing is sent: you copy the report and paste it into a public GitHub issue yourself. Windows clipboard history or cloud clipboard sync may keep the copied text.
 
 The app talks to these hosts only:
 
@@ -46,7 +49,7 @@ The app talks to these hosts only:
 | `poe.ninja` | Item prices (league and category only) |
 | `web.poecdn.com` | Item icons |
 | `cdn.jsdelivr.net` | OCR language data, first scan only |
-| GitHub | Checking for and downloading updates, installed builds only |
+| GitHub | Checking for and downloading updates, installed builds only. When you press **Copy and open GitHub issue**, your browser opens the new-issue page with only the app version and a short environment line (Windows and Electron versions, game, language, online on/off) in the address; the app itself sends nothing there |
 | The server address in Settings → Online (default `http://localhost:3001`, your own PC) | Only after you turn on online features there: the Farming Hub list and the server sign-in. Once signed in to the server, also sharing runs and the server's stash snapshots when the device has no Path of Exile connection. Online features are off by default, and while they are off nothing is sent to this address |
 
 There is no telemetry and there are no ads.

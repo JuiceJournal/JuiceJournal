@@ -215,7 +215,8 @@ class PriceService {
     if (slug) {
       url = `${NINJA_API_URLS[this.poeVersion]}/economy/exchange/${slug}/overview`;
     } else if (this.poeVersion === 'poe2') {
-      throw new Error(`Unknown PoE2 league: ${league}`);
+      // No league name: the error log keeps this message, and a private league is named by its owner.
+      throw new Error('Unknown PoE2 league');
     } else {
       url = POE1_CURRENCY_URL;
     }

@@ -37,6 +37,17 @@ test('poe1 price service reads currency types from the exchange API and items fr
   ]);
 });
 
+test('poe2 price service fails for a league poe.ninja does not list without naming it', async () => {
+  const service = new PriceService();
+  service.setPoeVersion('poe2');
+  service.client.get = async () => ({ data: { economyLeagues: [{ name: 'Rise of the Abyssal', url: 'abyss' }] } });
+
+  // The error log keeps this message, and a private league is named by its owner.
+  await assert.rejects(service._fetchCurrencyOverview('Fb52 Juice Party (PL12345)', 'Currency'), {
+    message: 'Unknown PoE2 league'
+  });
+});
+
 test('poe1 exchange data is indexed with chaos and divine values', () => {
   const service = new PriceService();
   service.setPoeVersion('poe1');

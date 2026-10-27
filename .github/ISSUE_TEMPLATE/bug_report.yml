@@ -1,0 +1,43 @@
+name: Bug report
+description: Something in Juice Journal does not work as it should
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: If you can make it happen again, list the steps.
+      placeholder: |
+        1. Open ...
+        2. Press ...
+        3. See ...
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Settings → About → Version. Filled in when you open this form from Juice Journal.
+      placeholder: 1.0.0 (source build, a1b2c3d)
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Windows version, game (PoE1 or PoE2) and app language. Filled in when you open this form from Juice Journal.
+      placeholder: Windows 10.0.26100 x64, Electron 41.3.0, PoE2, language en, online off
+  - type: textarea
+    id: report
+    attributes:
+      label: Juice Journal report
+      description: >-
+        Paste the report from Juice Journal here (Ctrl+V). If it is not on your clipboard, open
+        Settings → About → Report a bug (or Report a problem on the sign-in screen) and press Copy report.
+        Juice Journal tries to remove names, paths and tokens; check the text before you post, issues are public.
+        Do not attach a diagnostics export made with the Sensitive level.
+      render: txt

@@ -119,4 +119,6 @@
   /* Type */
   --font: 'Source Sans 3', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-display: 'Cinzel', Georgia, serif;
+  /* Both ship with Windows 10 and 11, so nothing is bundled or fetched. */
+  --font-mono: 'Cascadia Mono', Consolas, monospace;
 }

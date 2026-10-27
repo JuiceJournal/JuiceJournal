@@ -8,6 +8,8 @@ Juice Journal signs in with your Path of Exile account on your own PC. There is 
 2. You approve access on GGG's site. GGG then redirects the browser to a short-lived local address on your PC (`http://127.0.0.1:34127/oauth/poe/callback`), so port `34127` must be free.
 3. The app exchanges the code for an access token. The flow uses PKCE (S256) and a random `state` value, and it gives up after 3 minutes.
 
+If sign-in does not finish, press **Report a problem** under *Having trouble signing in?* on the sign-in screen. It shows a short report that you can check, copy and paste into a GitHub issue; nothing is sent automatically.
+
 Juice Journal is a *public* OAuth client: it has no client secret, which is how GGG requires desktop apps to work. GGG cannot verify that the app asking for access is the real Juice Journal, so only use a build you made yourself from this repository (or, once they exist, the [official releases](https://github.com/JuiceJournal/JuiceJournal/releases)).
 
 ## What it can access

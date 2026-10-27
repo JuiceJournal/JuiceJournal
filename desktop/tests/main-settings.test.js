@@ -1296,6 +1296,7 @@ test('setupLogParser forwards game session events from Client.txt to the rendere
     },
     require: () => ({ existsSync: () => true }),
     DEFAULT_POE_LOG_PATH: 'C:/Client.txt',
+    refreshRedactionTargets() { },
     LogParser: FakeLogParser,
     normalizePoeVersion: (version) => version || null,
     mainWindow: {

@@ -126,3 +126,42 @@ test('desktop renderer avoids raw HTML for toast and currency table rows', () =>
   assert.match(currencyBody, /normalizeSafeImageSrc\(item\.iconUrl\)/);
   assert.match(currencyBody, /tbody\.replaceChildren\(fragment\)/);
 });
+
+test('main records crashes with the monitor only', () => {
+  assert.match(mainJs, /process\.on\('uncaughtExceptionMonitor'/);
+  assert.doesNotMatch(mainJs, /process\.(?:on|once|prependListener)\(\s*['"](?:uncaughtException|unhandledRejection)['"]/);
+});
+
+test('both windows record renderer errors after navigation hardening', () => {
+  assert.match(
+    getFunctionBody(mainJs, 'createMainWindow'),
+    /hardenWindowNavigation\(mainWindow, TRUSTED_RENDERER_FILES\.main\);[\s\S]*attachRendererErrorCapture\(mainWindow, 'renderer'\)/
+  );
+  assert.match(
+    getFunctionBody(mainJs, 'createOverlayWindow'),
+    /hardenWindowNavigation\(overlayWindow, TRUSTED_RENDERER_FILES\.overlay\);[\s\S]*attachRendererErrorCapture\(overlayWindow, 'overlay'\)/
+  );
+});
+
+test('the bug report stays local and opens only the GitHub issue form', () => {
+  for (const functionName of ['collectBugReportInput', 'getBugReport']) {
+    assert.doesNotMatch(
+      getFunctionBody(mainJs, functionName),
+      /buildDiagnosticsPayload|buildSensitiveSettingsSnapshot|healthCheck|apiClient|getJournalStore|readJournal|assertDesktopUserAuthenticated/
+    );
+  }
+
+  const openBody = getFunctionBody(mainJs, 'openBugReportIssue');
+  assert.match(openBody, /startsWith\(`\$\{bugReportModel\.REPORT_ISSUE_URL\}\?`\)/);
+  assert.match(openBody, /ISSUE_URL_MAX_LENGTH/);
+  assert.doesNotMatch(getFunctionBody(mainJs, 'isAllowedExternalAuthUrl'), /github/i);
+  assert.doesNotMatch(indexHtml, /connect-src[^;]*github/i);
+});
+
+test('the bug report preview is written as text', () => {
+  const appJs = fs.readFileSync(path.join(desktopRoot, 'src', 'app.js'), 'utf8');
+  const body = getFunctionBody(appJs, 'loadBugReportPreview');
+
+  assert.doesNotMatch(body, /innerHTML/);
+  assert.match(body, /\.textContent\s*=/);
+});

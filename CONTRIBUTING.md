@@ -146,6 +146,10 @@ git status --short
 - Path of Exile sign-in uses GGG's public OAuth client flow. To use your own client, set `POE_CLIENT_ID` and `POE_REDIRECT_URI` when starting the app, or change the defaults for a fork you distribute (see `docs/path-of-exile-sign-in.md`).
 - Only use documented Path of Exile API endpoints and keep the app read-only towards the game: no injection, no memory reading, no input sent to the game, no writes to game files.
 
+## Reporting Bugs
+
+Open the [bug report form](https://github.com/JuiceJournal/JuiceJournal/issues/new?template=bug_report.yml). In the app, Settings → About → Report a bug (or **Report a problem** on the sign-in screen) shows a short report and copies it; paste it into the form and check it before you submit, because issues are public. Do not attach a diagnostics export made with the Sensitive level.
+
 ## Questions
 
 If scope is unclear, open an issue or draft PR early rather than guessing.

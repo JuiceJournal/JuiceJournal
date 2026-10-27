@@ -1576,6 +1576,7 @@ test('settings tabs use two columns, with full-width groups for long content', (
     'id="diagnostics-mode"',
     'id="audit-trail-list"',
     'about-info',
+    'id="bug-report-preview"',
     // The only group of its tab, or the last one of an odd count.
     'id="enable-notifications"',
     'id="app-update-status"'

@@ -52,6 +52,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRecentLoot: (params) => ipcRenderer.invoke('get-recent-loot', params),
   getAuditTrail: () => ipcRenderer.invoke('get-audit-trail'),
   exportDiagnostics: (mode) => ipcRenderer.invoke('export-diagnostics', mode),
+  getBugReport: () => ipcRenderer.invoke('get-bug-report'),
+  copyBugReport: (reportId) => ipcRenderer.invoke('copy-bug-report', reportId),
+  openBugReportIssue: (reportId) => ipcRenderer.invoke('open-bug-report-issue', reportId),
 
   // Stash & Prices
   syncPrices: (options) => ipcRenderer.invoke('sync-prices', options),
