@@ -111,6 +111,13 @@ let sessionClockInterval = null;
 const elements = {
   // Modals
   loginModal: document.getElementById('login-modal'),
+  loginSignInPanel: document.querySelector('#login-modal .modal-panel.oauth-only'),
+  loginReportProblemBtn: document.getElementById('login-report-problem'),
+  loginBugReportPanel: document.getElementById('login-bug-report-panel'),
+  loginBugReportPreview: document.getElementById('login-bug-report-preview'),
+  loginOpenBugReportIssueBtn: document.getElementById('login-open-bug-report-issue'),
+  loginCopyBugReportBtn: document.getElementById('login-copy-bug-report'),
+  loginBugReportBackBtn: document.getElementById('login-bug-report-back'),
   registerModal: document.getElementById('register-modal'),
   mapSessionModal: document.getElementById('map-session-modal'),
   mapSessionForm: document.getElementById('map-session-form'),
@@ -247,6 +254,11 @@ const elements = {
   appUpdateDetail: document.getElementById('app-update-detail'),
   checkUpdatesBtn: document.getElementById('check-updates-btn'),
   installUpdateBtn: document.getElementById('install-update-btn'),
+  settingsPage: document.getElementById('settings-page'),
+  settingsAboutTab: document.getElementById('settings-about'),
+  bugReportPreview: document.getElementById('bug-report-preview'),
+  openBugReportIssueBtn: document.getElementById('open-bug-report-issue'),
+  copyBugReportBtn: document.getElementById('copy-bug-report'),
 
   // User
   username: document.getElementById('username'),
@@ -278,6 +290,23 @@ const elements = {
   profitItemsList: document.getElementById('profit-items-list'),
   snapshotStepBefore: document.getElementById('snapshot-step-before'),
   snapshotStepAfter: document.getElementById('snapshot-step-after')
+};
+
+// Settings > About and the login screen show the same report with the same two buttons. reportId names the report
+// a view shows, so Copy and Open can tell main which text the user saw.
+const bugReportViews = {
+  about: {
+    preview: elements.bugReportPreview,
+    openButton: elements.openBugReportIssueBtn,
+    copyButton: elements.copyBugReportBtn,
+    reportId: null
+  },
+  login: {
+    preview: elements.loginBugReportPreview,
+    openButton: elements.loginOpenBugReportIssueBtn,
+    copyButton: elements.loginCopyBugReportBtn,
+    reportId: null
+  }
 };
 
 const activeLeagueInputState = {
@@ -2129,6 +2158,13 @@ function setupEventListeners() {
   if (elements.logoutBtn) {
     elements.logoutBtn.addEventListener('click', handleLogout);
   }
+  // Stays enabled while sign-in waits in the browser: a stuck sign-in is the main reason to report.
+  if (elements.loginReportProblemBtn) {
+    elements.loginReportProblemBtn.addEventListener('click', showLoginBugReport);
+  }
+  if (elements.loginBugReportBackBtn) {
+    elements.loginBugReportBackBtn.addEventListener('click', () => showLoginSignIn({ restoreFocus: true }));
+  }
 
   if (elements.characterConnectBtn) {
     elements.characterConnectBtn.addEventListener('click', handleConnectPoeDevice);
@@ -2252,6 +2288,11 @@ function setupEventListeners() {
   if (elements.installUpdateBtn) {
     elements.installUpdateBtn.addEventListener('click', handleInstallAppUpdate);
   }
+  // Report a bug: the About tab and the login screen share these handlers.
+  Object.values(bugReportViews).forEach((view) => {
+    if (view.openButton) view.openButton.addEventListener('click', () => handleOpenBugReportIssue(view));
+    if (view.copyButton) view.copyButton.addEventListener('click', () => handleCopyBugReport(view));
+  });
 
   // Stash Profit Tracker
   if (elements.syncPricesBtn) {
@@ -2480,6 +2521,11 @@ function navigateTo(page) {
     refreshTrackerData();
   } else if (page === 'currency') {
     loadCurrencyPage();
+  } else if (page === 'settings' && elements.settingsAboutTab?.classList.contains('active')
+    && elements.loginModal?.classList.contains('hidden')) {
+    // The selected tab survives leaving Settings, so coming back to About builds the report again. Not under the
+    // login modal: that would clear the login report, and signing in builds About's report anyway.
+    void loadBugReportPreview(bugReportViews.about);
   }
 }
 
@@ -2493,6 +2539,10 @@ function showSettingsTab(tab) {
   elements.settingsTabs.forEach((t) => {
     t.classList.toggle('active', t.id === 'settings-' + tab);
   });
+  // Each visit builds the report again, so it shows the latest errors. Not under the login modal, as in navigateTo.
+  if (tab === 'about' && elements.loginModal?.classList.contains('hidden')) {
+    void loadBugReportPreview(bugReportViews.about);
+  }
 }
 
 // The Hub's off panel leads straight to the Online switch.
@@ -2513,6 +2563,9 @@ function showLoginModal() {
   if (elements.registerModal) {
     elements.registerModal.classList.add('hidden');
   }
+
+  // A new visit starts at sign-in, even if the last one ended on the bug report.
+  showLoginSignIn();
 }
 
 // The overlay start prompt is mouse-only, so the player gets the spec'd 7 s once it is on screen.
@@ -2761,6 +2814,7 @@ async function handleLogin(e) {
 async function handlePoeOAuthLogin() {
   const button = document.getElementById('poe-oauth-login');
   setButtonBusy(button, true, window.t('login.waitingBrowser'));
+  let failed = false;
 
   try {
     const result = await window.electronAPI.signInWithPoe();
@@ -2770,6 +2824,10 @@ async function handlePoeOAuthLogin() {
       setCurrentUser(toProfileUser(result.profile));
       if (elements.loginModal) {
         elements.loginModal.classList.add('hidden');
+      }
+      // Signing out leaves Settings > About open under the modal, so its report is built again for the new sign-in.
+      if (elements.settingsPage?.classList.contains('active') && elements.settingsAboutTab?.classList.contains('active')) {
+        void loadBugReportPreview(bugReportViews.about);
       }
       await loadMapResultHistory();
       void syncPoeDeviceConnection();
@@ -2781,11 +2839,19 @@ async function handlePoeOAuthLogin() {
         getUserFacingErrorMessage({ error: result?.error }, 'errors.loginFailed'),
         'error'
       );
+      failed = true;
     }
   } catch (error) {
     showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
+    failed = true;
   } finally {
     setButtonBusy(button, false);
+  }
+
+  // Main logged the failure before it answered, so a report opened while sign-in waited is built again to show it.
+  if (failed && elements.loginModal?.classList.contains('hidden') === false
+    && elements.loginBugReportPanel?.classList.contains('hidden') === false) {
+    void loadBugReportPreview(bugReportViews.login);
   }
 }
 
@@ -5822,6 +5888,101 @@ async function handleExportDiagnostics() {
     showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.unexpectedError'), 'error');
   } finally {
     setButtonBusy(elements.exportDiagnosticsBtn, false);
+  }
+}
+
+// Main keeps only the report it built last, and Copy and the issue button send exactly that text, so the user sends
+// what they saw. Loading one view therefore clears the other, whose text main no longer keeps.
+async function loadBugReportPreview(view) {
+  if (!view?.preview) return;
+
+  Object.values(bugReportViews).forEach((other) => {
+    if (other === view || !other.preview) return;
+    other.preview.textContent = '';
+    other.reportId = null;
+    other.openButton.disabled = true;
+    other.copyButton.disabled = true;
+  });
+  view.reportId = null;
+  view.openButton.disabled = true;
+  view.copyButton.disabled = true;
+  view.preview.setAttribute('aria-busy', 'true');
+
+  try {
+    const { text, reportId } = await window.electronAPI.getBugReport();
+    view.preview.textContent = text;
+    view.reportId = reportId;
+    view.openButton.disabled = false;
+    view.copyButton.disabled = false;
+  } catch {
+    view.preview.textContent = window.t('settings.bugReportLoadFailed');
+    // Focus may already sit on the preview, so a screen reader would not read the new text; the toast is announced.
+    showToast(window.t('settings.reportBug'), window.t('settings.bugReportLoadFailed'), 'error');
+  } finally {
+    view.preview.removeAttribute('aria-busy');
+  }
+}
+
+async function handleCopyBugReport(view) {
+  setButtonBusy(view.copyButton, true);
+  let result = null;
+
+  try {
+    result = await window.electronAPI.copyBugReport(view.reportId);
+    if (!result?.stale) {
+      showToast(window.t('settings.reportBug'), window.t('toast.bugReportCopied'), 'success');
+    }
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.bugReportCopyFailed'), 'error');
+  } finally {
+    setButtonBusy(view.copyButton, false);
+  }
+
+  if (result?.stale) {
+    // Main built a newer report since this view loaded, so nothing was copied: show it and let the user check it.
+    showToast(window.t('settings.reportBug'), window.t('toast.bugReportChanged'), 'warning');
+    await loadBugReportPreview(view);
+  }
+}
+
+async function handleOpenBugReportIssue(view) {
+  setButtonBusy(view.openButton, true, window.t('settings.openingBugReportIssue'));
+  let result = null;
+
+  try {
+    result = await window.electronAPI.openBugReportIssue(view.reportId);
+    if (result?.opened === false) {
+      // Copied, but no browser opened: the toast names the address instead.
+      showToast(window.t('settings.reportBug'), window.t('toast.bugReportOpenManually', { url: result.url }), 'warning');
+    } else if (!result?.stale) {
+      showToast(window.t('settings.reportBug'), window.t('toast.bugReportIssueOpened'), 'success');
+    }
+  } catch (error) {
+    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.bugReportOpenFailed'), 'error');
+  } finally {
+    setButtonBusy(view.openButton, false);
+  }
+
+  if (result?.stale) {
+    // Nothing was copied or opened: the user checks the newer report before pressing again.
+    showToast(window.t('settings.reportBug'), window.t('toast.bugReportChanged'), 'warning');
+    await loadBugReportPreview(view);
+  }
+}
+
+// The login screen swaps its sign-in panel for the bug report in place; Back swaps it back.
+function showLoginBugReport() {
+  elements.loginSignInPanel?.classList.add('hidden');
+  elements.loginBugReportPanel?.classList.remove('hidden');
+  elements.loginBugReportPreview?.focus();
+  void loadBugReportPreview(bugReportViews.login);
+}
+
+function showLoginSignIn({ restoreFocus = false } = {}) {
+  elements.loginBugReportPanel?.classList.add('hidden');
+  elements.loginSignInPanel?.classList.remove('hidden');
+  if (restoreFocus) {
+    elements.loginReportProblemBtn?.focus();
   }
 }
 

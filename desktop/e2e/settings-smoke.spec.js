@@ -5,6 +5,7 @@ const path = require('path');
 const { once } = require('events');
 const { test, expect } = require('playwright/test');
 const { _electron: electron } = require('playwright');
+const { REPORT_ISSUE_URL, ISSUE_URL_MAX_LENGTH } = require('../src/modules/bugReportModel');
 
 const SMOKE_USER = {
   id: 'smoke-user-id',
@@ -179,6 +180,15 @@ async function signIn(page) {
   await expect(page.locator('#username')).toHaveText(SMOKE_USER.username);
 }
 
+// Windows may hand the clipboard text back with CRLF line ends.
+function toLf(text) {
+  return String(text).replace(/\r\n/g, '\n');
+}
+
+function readClipboard(electronApp) {
+  return electronApp.evaluate(({ clipboard }) => clipboard.readText());
+}
+
 async function closeServer(server) {
   if (!server?.listening) {
     return;
@@ -273,6 +283,13 @@ test('settings smoke: launches desktop app and shows core settings controls', as
   const backend = await startSmokeBackend();
   const isolatedProfile = createIsolatedProfile(testInfo, backend.baseUrl);
   const bootstrap = createBootstrapScript(testInfo);
+  const readErrorLog = () => {
+    try {
+      return fs.readFileSync(path.join(isolatedProfile.userDataDir, 'logs', 'errors.jsonl'), 'utf8');
+    } catch {
+      return '';
+    }
+  };
   let electronApp;
   let testError = null;
 
@@ -283,9 +300,40 @@ test('settings smoke: launches desktop app and shows core settings controls', as
       env: isolatedProfile.env,
     });
     const page = await waitForAppWindow(electronApp, /Juice Journal/i);
+    // The bug report buttons write the real clipboard, so main keeps the developer's one and puts it back in finally.
+    await electronApp.evaluate(({ clipboard }) => {
+      const image = clipboard.readImage();
+      globalThis.__e2eSavedClipboard = {
+        text: clipboard.readText(),
+        html: clipboard.readHTML(),
+        rtf: clipboard.readRTF(),
+        ...(image.isEmpty() ? {} : { image })
+      };
+    });
 
     await waitForGuestReady(page);
+
+    // A failed sign-in can be reported from the sign-in screen: the report takes the sign-in panel's place.
+    await page.locator('#login-report-problem').click();
+    await expect(page.locator('#login-bug-report-panel')).toBeVisible();
+    await expect(page.locator('#poe-oauth-login')).toBeHidden();
+    const loginPreview = page.locator('#login-bug-report-preview');
+    await expect(loginPreview).toBeFocused();
+    await expect(loginPreview).toContainText('Juice Journal bug report');
+    await expect(loginPreview).toContainText('Signed in (local profile): no');
+    await page.locator('#login-copy-bug-report').click();
+    const loginReport = toLf(await loginPreview.textContent());
+    await expect.poll(async () => toLf(await readClipboard(electronApp))).toBe(loginReport);
+    await page.locator('#login-bug-report-back').click();
+    await expect(page.locator('#poe-oauth-login')).toBeVisible();
+    await expect(page.locator('#login-report-problem')).toBeFocused();
+
     await signIn(page);
+    // Seeded right after sign-in: the renderer's console message is not ordered against later IPC calls.
+    await electronApp.evaluate(({ app }) => console.error(new Error(`e2e main failure in ${app.getPath('userData')}`)));
+    await page.evaluate(() => console.error('e2e renderer failure'));
+    await expect.poll(readErrorLog).toContain('e2e renderer failure');
+    await expect.poll(readErrorLog).toContain('e2e main failure in <userData>');
 
     await page.locator('.nav-btn[data-page="settings"]').click();
     await expect(page.locator('#settings-page')).toHaveClass(/active/);
@@ -348,6 +396,40 @@ test('settings smoke: launches desktop app and shows core settings controls', as
     await expect(page.locator('#settings-api')).toHaveClass(/active/);
     await expect(page.locator('.settings-nav-btn[data-settings-tab="api"]')).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('#online-enabled')).toBeFocused();
+
+    // Settings > About builds the report on this PC: both seeded errors, and no names, addresses or paths.
+    await page.locator('.settings-nav-btn[data-settings-tab="about"]').click();
+    const aboutPreview = page.locator('#bug-report-preview');
+    await expect(aboutPreview).toContainText('Juice Journal bug report');
+    await expect(aboutPreview).toContainText('Signed in (local profile): yes');
+    await expect(aboutPreview).toContainText('auditLogin');
+    await expect(aboutPreview).toContainText('e2e main failure in <userData>');
+    await expect(aboutPreview).toContainText('e2e renderer failure');
+    await expect(aboutPreview).toContainText('custom server: yes');
+    const aboutReport = toLf(await aboutPreview.textContent());
+    for (const privateText of [
+      SMOKE_USER.username,
+      `${SMOKE_USER.id}-ggg`,
+      backend.baseUrl,
+      isolatedProfile.userDataDir,
+      isolatedProfile.userDataDir.replace(/\\/g, '/'),
+      os.homedir()
+    ]) {
+      expect(aboutReport).not.toContain(privateText);
+    }
+    await page.locator('#copy-bug-report').click();
+    await expect.poll(async () => toLf(await readClipboard(electronApp))).toBe(aboutReport);
+    // Cleared first, so the clipboard check below proves the issue button copied the report too.
+    await electronApp.evaluate(({ clipboard }) => clipboard.clear());
+    await page.locator('#open-bug-report-issue').click();
+    await expect.poll(() => electronApp.evaluate(() => (globalThis.__e2eExternalUrls || []).length)).toBe(1);
+    const [issueUrl] = await electronApp.evaluate(() => globalThis.__e2eExternalUrls);
+    expect(issueUrl.startsWith(`${REPORT_ISSUE_URL}?`)).toBe(true);
+    expect(issueUrl.length).toBeLessThanOrEqual(ISSUE_URL_MAX_LENGTH);
+    const issueParams = new URL(issueUrl).searchParams;
+    expect([...issueParams.keys()].sort()).toEqual(['environment', 'template', 'version']);
+    expect(issueParams.get('template')).toBe('bug_report.yml');
+    expect(toLf(await readClipboard(electronApp))).toBe(aboutReport);
     expect(backend.requests).toEqual([]);
 
     // The Save button would also send the smoke server's random port, which settings reject, so only the switch is set.
@@ -369,6 +451,21 @@ test('settings smoke: launches desktop app and shows core settings controls', as
     const cleanupErrors = [];
 
     if (electronApp) {
+      try {
+        await electronApp.evaluate(({ clipboard }) => {
+          const saved = globalThis.__e2eSavedClipboard;
+          if (!saved) return;
+          const data = Object.fromEntries(Object.entries(saved).filter(([, value]) => value));
+          if (Object.keys(data).length) {
+            clipboard.write(data);
+          } else {
+            clipboard.clear();
+          }
+        });
+      } catch (error) {
+        cleanupErrors.push(`Clipboard restore failed: ${error.message}`);
+      }
+
       try {
         await shutdownElectronApp(electronApp);
       } catch (error) {

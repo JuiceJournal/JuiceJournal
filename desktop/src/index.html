@@ -139,6 +139,24 @@
               <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#info"/></svg>
               <span data-i18n="login.poeClientNote">GGG cannot verify desktop apps like Juice Journal. Sign in only if you installed it from the official GitHub page.</span>
             </p>
+            <p class="login-report-row">
+              <span data-i18n="login.troubleSigningIn">Having trouble signing in?</span>
+              <button type="button" class="btn btn-link" id="login-report-problem" data-i18n="login.reportProblem">Report a problem</button>
+            </p>
+          </div>
+
+          <div class="modal-panel bug-report-panel hidden" id="login-bug-report-panel" role="region" aria-labelledby="login-bug-report-title">
+            <h2 id="login-bug-report-title" data-i18n="settings.reportBug">Report a bug</h2>
+            <p class="modal-subtitle compact" data-i18n="settings.bugReportDesc">Nothing is sent automatically. Juice Journal tries to remove names, paths and tokens; check the text before you post. GitHub issues are public and need a GitHub account.</p>
+            <pre id="login-bug-report-preview" class="bug-report-preview" role="region" tabindex="0" aria-label="Bug report preview" data-i18n-aria="settings.bugReportPreviewAria"></pre>
+            <div class="settings-actions-row">
+              <button type="button" class="btn btn-primary btn-small" id="login-open-bug-report-issue">
+                <span class="btn-label" data-i18n="settings.openBugReportIssue">Copy and open GitHub issue</span>
+                <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#external"/></svg>
+              </button>
+              <button type="button" class="btn btn-secondary btn-small" id="login-copy-bug-report" data-i18n="settings.copyBugReport">Copy report</button>
+            </div>
+            <button type="button" class="btn btn-ghost btn-small bug-report-back" id="login-bug-report-back" data-i18n="login.backToSignIn">Back to sign-in</button>
           </div>
         </div>
       </div>
@@ -939,6 +957,19 @@
                     <span class="btn-label" data-i18n="settings.installUpdate">Restart to Install</span>
                   </button>
                 </div>
+              </div>
+              <div class="settings-group settings-group--wide" id="bug-report-group">
+                <h3 data-i18n="settings.reportBug">Report a bug</h3>
+                <p class="settings-desc" data-i18n="settings.bugReportDesc">Nothing is sent automatically. Juice Journal tries to remove names, paths and tokens; check the text before you post. GitHub issues are public and need a GitHub account.</p>
+                <pre id="bug-report-preview" class="bug-report-preview" role="region" tabindex="0" aria-label="Bug report preview" data-i18n-aria="settings.bugReportPreviewAria"></pre>
+                <div class="settings-actions-row">
+                  <button id="open-bug-report-issue" class="btn btn-primary btn-small" type="button">
+                    <span class="btn-label" data-i18n="settings.openBugReportIssue">Copy and open GitHub issue</span>
+                    <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#external"/></svg>
+                  </button>
+                  <button id="copy-bug-report" class="btn btn-secondary btn-small" type="button" data-i18n="settings.copyBugReport">Copy report</button>
+                </div>
+                <p class="settings-desc bug-report-note" data-i18n="settings.errorLogNote">Recent app errors are kept only on this PC, with names, paths and tokens removed where possible (up to 128 KB).</p>
               </div>
             </div>
 

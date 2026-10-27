@@ -206,6 +206,38 @@ test('desktop keys new in the Hub, Currency and Settings pass have their own ASC
   }
 });
 
+test('desktop bug report keys have their own ASCII Turkish strings', () => {
+  const translations = loadDesktopTranslations();
+  const newKeys = [
+    'settings.reportBug',
+    'settings.bugReportDesc',
+    'settings.bugReportPreviewAria',
+    'settings.bugReportLoadFailed',
+    'settings.openBugReportIssue',
+    'settings.openingBugReportIssue',
+    'settings.copyBugReport',
+    'settings.errorLogNote',
+    'login.troubleSigningIn',
+    'login.reportProblem',
+    'login.backToSignIn',
+    'toast.bugReportCopied',
+    'toast.bugReportIssueOpened',
+    'toast.bugReportOpenManually',
+    'toast.bugReportCopyFailed',
+    'toast.bugReportOpenFailed',
+    'toast.bugReportChanged',
+  ];
+
+  for (const key of newKeys) {
+    assert.ok(translations.en[key], `Missing en string for ${key}`);
+    assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
+    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
+  }
+  // The issue form, README and CONTRIBUTING quote this label.
+  assert.equal(translations.en['settings.reportBug'], 'Report a bug');
+  assert.match(translations.tr['toast.bugReportOpenManually'], /\{url\}/);
+});
+
 test('web english message dictionary covers every used localization key', async () => {
   const translations = await loadWebTranslations();
   const usedKeys = extractWebUsedKeys();

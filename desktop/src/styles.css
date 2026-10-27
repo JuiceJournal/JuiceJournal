@@ -310,10 +310,14 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 .btn-link {
+  padding: 0;
   background: transparent;
   color: var(--gold);
+  font-size: inherit;
   font-weight: 500;
   text-decoration: none;
+  text-transform: none;
+  letter-spacing: normal;
 }
 .btn-link:hover:not(:disabled) { text-decoration: underline; }
 
@@ -893,6 +897,18 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 
 .oauth-note .icon {
   margin-top: 0.15em;
+}
+
+/* When sign-in itself fails, this leads to the bug report. */
+.login-report-row {
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* The focus ring reaches 4px past the unpadded link; this keeps it off the question mark before it. */
+.login-report-row .btn-link {
+  margin-left: 0.25rem;
 }
 
 .form-divider {
@@ -3059,6 +3075,48 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 
 .about-row span:first-child {
   color: var(--text-secondary);
+}
+
+/* The report exactly as it will be pasted, wrapped so it never scrolls sideways. */
+.bug-report-preview {
+  max-height: 240px;
+  overflow: auto;
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 0.9rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--bevel-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bug-report-preview:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.bug-report-note {
+  margin: 0.75rem 0 0;
+}
+
+/* On the login screen the report takes the sign-in column's place. */
+.bug-report-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Lower than in About, so the panel stays within the sign-in panel's height when the Turkish buttons wrap. */
+.bug-report-panel .bug-report-preview {
+  max-height: 180px;
+}
+
+.bug-report-back {
+  align-self: flex-start;
+  margin-top: 1rem;
 }
 
 .settings-actions {

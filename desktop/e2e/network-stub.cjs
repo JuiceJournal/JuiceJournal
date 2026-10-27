@@ -3,6 +3,7 @@
 // JUICE_JOURNAL_E2E_POE_ACCOUNT holds the account: { sub, username, characters: { poe1: [], poe2: [] } }.
 // JUICE_JOURNAL_E2E_POE_SCOPE overrides the granted scopes; by default only what the built-in sign-in asks for.
 // JUICE_JOURNAL_E2E_PRICES holds poe.ninja chaos values by item name; every league is "Standard".
+// Other URLs (the bug report issue page) are recorded in globalThis.__e2eExternalUrls and never opened.
 const http = require('http');
 const path = require('path');
 const { shell } = require('electron');
@@ -12,10 +13,21 @@ const account = JSON.parse(process.env.JUICE_JOURNAL_E2E_POE_ACCOUNT || '{}');
 const grantedScope = process.env.JUICE_JOURNAL_E2E_POE_SCOPE || 'account:characters';
 const prices = JSON.parse(process.env.JUICE_JOURNAL_E2E_PRICES || '{}');
 
-// The "browser" approves at once and calls the app's loopback redirect.
-shell.openExternal = async (authUrl) => {
-  const url = new URL(authUrl);
-  const callback = new URL(url.searchParams.get('redirect_uri'));
+// The "browser" approves sign-in at once and calls the app's loopback redirect.
+shell.openExternal = async (externalUrl) => {
+  let url = null;
+  let callback = null;
+  try {
+    url = new URL(externalUrl);
+    callback = url.searchParams.has('redirect_uri') ? new URL(url.searchParams.get('redirect_uri')) : null;
+  } catch {
+    // Recorded below. Never reject: on Windows the app would then open the URL in a real browser through PowerShell.
+  }
+  if (!callback) {
+    (globalThis.__e2eExternalUrls ||= []).push(externalUrl);
+    return;
+  }
+
   callback.searchParams.set('code', 'e2e-code');
   callback.searchParams.set('state', url.searchParams.get('state'));
   http.get(callback, (response) => response.resume()).on('error', (error) => {

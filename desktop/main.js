@@ -9,7 +9,7 @@
  * - OCR-based stash scanning
  */
 
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen, shell, nativeImage, safeStorage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen, shell, nativeImage, safeStorage, clipboard } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const crypto = require('crypto');
 const http = require('http');
@@ -54,10 +54,13 @@ const {
   createAppUpdateState,
   applyAppUpdatePatch
 } = require('./src/modules/appUpdateModel');
+const bugReportModel = require('./src/modules/bugReportModel');
 const DEFAULT_POE_LOG_PATH = GameDetector.DEFAULT_POE_LOG_PATH;
 
 const APP_NAME = 'Juice Journal';
 const APP_ID = 'JuiceJournal.Desktop';
+// Same as the apiUrl store default below; any other address is a custom server.
+const DEFAULT_API_URL = 'http://localhost:3001';
 const DEFAULT_STRATEGY_PRESETS = ['Strongbox', 'Legion', 'Ritual', 'Expedition', 'Harvest', 'Boss Rush'];
 const MAP_RESULT_OVERLAY_DURATION_MS = 10_000;
 // An OCR scan waits this long for poe.ninja prices; loot without a price counts as 0.
@@ -69,6 +72,15 @@ const CHARACTER_PROMPT_OVERLAY_DURATION_MS = 8_000;
 const START_MAP_PROMPT_OVERLAY_GRACE_MS = 3_000;
 const OVERLAY_CLICKABLE_MODES = new Set(['start-map-prompt', 'map-result', 'character-prompt']);
 const MAX_AUDIT_TRAIL_ENTRIES = 200;
+// Local error log (logs/errors.jsonl). A trim keeps at most 50 lines and half the cap, so it rarely runs.
+const ERROR_LOG_MAX_BYTES = 128 * 1024;
+const ERROR_LOG_KEEP_LINES = 50;
+// The same message is written at most once per window; repeats in between are only counted.
+const ERROR_DEDUPE_WINDOW_MS = 10 * 60_000;
+const ERROR_DEDUPE_MAX_KEYS = 200;
+// poePaths: every Client.txt path seen in this run. poePath switches between the PoE1 and PoE2 folders, and
+// lines logged under either one must stay redacted.
+const errorLogState = { writing: false, recent: new Map(), poePaths: new Set(), redactionTargets: [] };
 const WINDOWS_APP_ICON_PATH = path.join(__dirname, 'src', 'assets', 'icon.ico');
 const APP_ICON_PATH = process.platform === 'win32'
   ? WINDOWS_APP_ICON_PATH
@@ -239,6 +251,9 @@ const store = new Store({
   },
 });
 
+// From here on, the startup migrations included, errors go to logs/errors.jsonl.
+installErrorCapture();
+
 // Migrate old 'tr' default to 'en' (one-time)
 function migrateLanguageSetting() {
   if (store.get('_langMigrated')) {
@@ -341,6 +356,8 @@ let gameDetector = null;
 let currentSession = null;
 let sessionPrices = null;
 let journalStore = null;
+// The bug report the user last saw. Copy and the issue button use exactly this text, and only with its id.
+let bugReport = null;
 let runtimeSessionState = createRuntimeSessionState();
 let overlayWindow = null;
 let overlayWindowIgnoresMouse = null;
@@ -669,6 +686,130 @@ function appendAuditTrail(key, values = {}, level = 'info') {
     createdAt: new Date().toISOString()
   });
   setAuditTrail(entries);
+}
+
+function getErrorLogPath() {
+  return path.join(app.getPath('userData'), 'logs', 'errors.jsonl');
+}
+
+// Names, paths and the server address to remove from logged text. Cached, because every store read parses
+// config.json; refreshed at startup, after sign-in, a settings save, before the log parser starts and for each
+// report.
+function refreshRedactionTargets() {
+  try {
+    const settings = store.store;
+    let username = null;
+    try {
+      username = os.userInfo().username;
+    } catch {
+      // Some Windows accounts have no user info; the Users-folder backstop still applies.
+    }
+    if (typeof settings.poePath === 'string' && settings.poePath) {
+      errorLogState.poePaths.add(settings.poePath);
+    }
+    errorLogState.redactionTargets = bugReportModel.buildRedactionTargets({
+      userData: app.getPath('userData'),
+      appPath: app.getAppPath(),
+      home: os.homedir(),
+      username,
+      poePaths: [...errorLogState.poePaths],
+      apiUrl: settings.apiUrl === DEFAULT_API_URL ? null : settings.apiUrl,
+      // The legacy defaultLeague key stays in config.json, and league lookups still fall back to it.
+      leagues: [settings.defaultLeaguePoe1, settings.defaultLeaguePoe2, settings.defaultLeague],
+      profiles: Object.values(settings.localProfiles || {}),
+      accountStates: Object.keys(settings)
+        .filter((key) => key.startsWith('lastKnownAccountState'))
+        .map((key) => settings[key])
+    });
+  } catch {
+    // Keep the previous targets; the pattern backstops still run.
+  }
+  return errorLogState.redactionTargets;
+}
+
+// Appends one redacted JSON line. Never logs and never throws: the console tee calls it.
+function recordError(source, level, value) {
+  if (errorLogState.writing) {
+    return;
+  }
+
+  errorLogState.writing = true;
+  try {
+    const entry = bugReportModel.normalizeErrorEntry({ at: new Date().toISOString(), source, level, error: value });
+    // Duplicates are dropped on the raw text, before any redaction or file access.
+    const key = `${entry.source}|${entry.level}|${entry.message.slice(0, 500)}`;
+    const now = Date.now();
+    const seen = errorLogState.recent.get(key);
+    if (seen && now - seen.at < ERROR_DEDUPE_WINDOW_MS) {
+      seen.repeats += 1;
+      return;
+    }
+
+    errorLogState.recent.delete(key);
+    if (errorLogState.recent.size >= ERROR_DEDUPE_MAX_KEYS) {
+      errorLogState.recent.delete(errorLogState.recent.keys().next().value);
+    }
+    errorLogState.recent.set(key, { at: now, repeats: 0 });
+
+    const line = bugReportModel.redactErrorEntry(
+      seen?.repeats ? { ...entry, repeats: seen.repeats } : entry,
+      errorLogState.redactionTargets
+    );
+    const logPath = getErrorLogPath();
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.appendFileSync(logPath, `${JSON.stringify(line)}\n`, 'utf8');
+    if (fs.statSync(logPath).size > ERROR_LOG_MAX_BYTES) {
+      fs.writeFileSync(logPath, bugReportModel.keepNewestLines(fs.readFileSync(logPath, 'utf8'), {
+        maxLines: ERROR_LOG_KEEP_LINES,
+        maxBytes: ERROR_LOG_MAX_BYTES / 2
+      }), 'utf8');
+    }
+  } catch {
+    // A full disk, a locked file or an odd value must not break the app.
+  } finally {
+    errorLogState.writing = false;
+  }
+}
+
+// Newest first; corrupt or half-written lines are skipped.
+function readRecentErrors(limit = 20) {
+  try {
+    return bugReportModel.parseErrorLog(fs.readFileSync(getErrorLogPath(), 'utf8'), limit);
+  } catch {
+    return [];
+  }
+}
+
+// uncaughtExceptionMonitor only watches, so Electron's own uncaughtException handler and its error dialog stay.
+// Unhandled rejections arrive through the console tee: Electron 41 prints them with console.error, and an
+// unhandledRejection listener would silence that print.
+function installErrorCapture() {
+  refreshRedactionTargets();
+  process.on('uncaughtExceptionMonitor', (error) => recordError('process', 'fatal', error));
+  app.on('render-process-gone', (event, webContents, details) => {
+    if (details?.reason !== 'clean-exit' && details?.reason !== 'killed') {
+      recordError('process', 'error', `Renderer process gone: ${details?.reason} (exit ${details?.exitCode})`);
+    }
+  });
+  app.on('child-process-gone', (event, details) => {
+    if (details?.reason !== 'clean-exit' && details?.reason !== 'killed') {
+      recordError('process', 'error', `${details?.type} process gone: ${details?.reason} (exit ${details?.exitCode})`);
+    }
+  });
+
+  for (const method of ['warn', 'error']) {
+    const original = console[method];
+    console[method] = (...args) => {
+      try {
+        original.apply(console, args);
+      } finally {
+        const level = bugReportModel.classifyMainConsoleMessage(method, args);
+        if (level) {
+          recordError('main', level, args);
+        }
+      }
+    };
+  }
 }
 
 function getCurrentUserId() {
@@ -1297,6 +1438,100 @@ async function buildDiagnosticsPayload(mode = 'safe') {
   };
 }
 
+// A source build names its commit in the bug report. Reads HEAD and a loose ref only, through a git worktree's .git
+// file too; anything else (packed refs, an installed build) gives null. Never throws.
+function readSourceCommit() {
+  if (app.isPackaged) {
+    return null;
+  }
+
+  try {
+    const repoRoot = path.join(__dirname, '..');
+    let gitDir = path.join(repoRoot, '.git');
+    let commonDir = gitDir;
+    if (fs.statSync(gitDir).isFile()) {
+      gitDir = path.resolve(repoRoot, /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(gitDir, 'utf8'))[1].trim());
+      commonDir = path.resolve(gitDir, fs.readFileSync(path.join(gitDir, 'commondir'), 'utf8').trim());
+    }
+
+    const head = fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
+    const ref = /^ref: (refs\/[\w./-]+)$/.exec(head)?.[1];
+    const sha = ref && !ref.includes('..') ? fs.readFileSync(path.join(commonDir, ref), 'utf8').trim() : head;
+    return /^[0-9a-f]{40}$/.test(sha) ? sha.slice(0, 7) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Everything the bug report prints, read on this PC only: no network call, no journal parse, no names, paths or
+// tokens. Works signed out too, so the sign-in screen can report a failed sign-in.
+function collectBugReportInput() {
+  const profile = getActiveProfile();
+  const apiUrl = store.get('apiUrl');
+  const poePath = store.get('poePath');
+  const auditTrail = getAuditTrail();
+  let journalBytes = null;
+  if (profile && /^[A-Za-z0-9_-]{1,64}$/.test(profile.id || '')) {
+    try {
+      journalBytes = fs.statSync(path.join(app.getPath('userData'), 'profiles', profile.id, 'journal.json')).size;
+    } catch {
+      // No journal yet.
+    }
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    app: {
+      version: app.getVersion(),
+      isPackaged: app.isPackaged,
+      commit: readSourceCommit(),
+      electron: process.versions.electron,
+      chrome: process.versions.chrome,
+      node: process.versions.node
+    },
+    os: { platform: process.platform, release: os.release(), arch: process.arch },
+    settings: {
+      ...buildSafeSettingsSnapshot(),
+      customServer: typeof apiUrl === 'string' && apiUrl !== DEFAULT_API_URL,
+      clientTxtFound: typeof poePath === 'string' && poePath !== '' && fs.existsSync(poePath)
+    },
+    signedIn: Boolean(profile),
+    sessionActive: currentSession?.status === 'active',
+    localData: {
+      journalBytes,
+      mapResults: profile ? getStoredMapResults().length : null,
+      activityEntries: auditTrail.length
+    },
+    errors: readRecentErrors(20),
+    // Keys and times only: the values can hold map names.
+    activity: auditTrail.slice(-10).reverse().map((entry) => ({ key: entry?.key, createdAt: entry?.createdAt }))
+  };
+}
+
+// Opening a report view builds the text again under a new id. Builds synchronously, so replies keep request order
+// and the last preview always matches the cache.
+function getBugReport() {
+  const input = collectBugReportInput();
+  bugReport = {
+    id: (bugReport?.id ?? 0) + 1,
+    // Log lines were redacted when written; the whole report is redacted again with today's names and paths.
+    text: bugReportModel.redactText(bugReportModel.buildBugReportText(input), refreshRedactionTargets()),
+    issueUrl: bugReportModel.buildIssueUrl(bugReportModel.buildIssueFields(input))
+  };
+  return { text: bugReport.text, reportId: bugReport.id };
+}
+
+// Copies the report the user last saw. Any other id means the view still shows older text: nothing is copied and the
+// renderer loads the report again.
+function copyBugReportToClipboard(reportId) {
+  if (!Number.isSafeInteger(reportId) || reportId !== bugReport?.id) {
+    return { stale: true };
+  }
+
+  clipboard.writeText(bugReport.text);
+  return { copied: true };
+}
+
 function prepareOCRImage(imageBuffer) {
   const image = nativeImage.createFromBuffer(imageBuffer);
   const size = image.getSize();
@@ -1764,6 +1999,41 @@ function openAuthUrlInBrowser(authUrl) {
   });
 }
 
+// Opens GitHub's new-issue form in the browser. Only main builds the URL, and the report itself is never in it.
+async function openBugReportIssue(url) {
+  if (
+    typeof url !== 'string'
+    || !url.startsWith(`${bugReportModel.REPORT_ISSUE_URL}?`)
+    || url.length > bugReportModel.ISSUE_URL_MAX_LENGTH
+  ) {
+    throw new Error('Invalid bug report URL');
+  }
+
+  try {
+    await shell.openExternal(url);
+    return { opened: true };
+  } catch (error) {
+    if (process.platform === 'win32') {
+      try {
+        await openUrlWithWindowsFallback(url, error);
+        return { opened: true };
+      } catch {
+        // The renderer names the address instead.
+      }
+    }
+    return { opened: false, url: bugReportModel.REPORT_ISSUE_URL };
+  }
+}
+
+// Copies first, so the report is on the clipboard by the time the issue form opens.
+async function copyAndOpenBugReportIssue(reportId) {
+  const copied = copyBugReportToClipboard(reportId);
+  if (copied.stale) {
+    return copied;
+  }
+  return { ...copied, ...(await openBugReportIssue(bugReport.issueUrl)) };
+}
+
 async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expectedState, codeVerifier }) {
   await closePoeAuthServer();
 
@@ -2058,6 +2328,20 @@ function hardenWindowNavigation(windowRef, entryFile) {
   windowRef.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 }
 
+// Renderer errors (uncaught throws and rejections, console.error) go to the error log. The listener takes only the
+// details object: Electron 41 warns about listeners that declare the old positional arguments.
+function attachRendererErrorCapture(windowRef, source) {
+  windowRef.webContents.on('console-message', (details) => {
+    if (!bugReportModel.shouldRecordRendererMessage(details)) {
+      return;
+    }
+
+    // Only the file name: the full source URL holds the install folder.
+    const where = details.sourceId ? ` (${path.basename(String(details.sourceId))}:${details.lineNumber})` : '';
+    recordError(source, 'error', `${details.message}${where}`);
+  });
+}
+
 function getRendererWindow(kind) {
   return kind === 'overlay' ? overlayWindow : mainWindow;
 }
@@ -2135,6 +2419,7 @@ function createMainWindow() {
   });
   mainWindow.setIcon(createWindowIcon());
   hardenWindowNavigation(mainWindow, TRUSTED_RENDERER_FILES.main);
+  attachRendererErrorCapture(mainWindow, 'renderer');
 
   // Load the dashboard shell.
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
@@ -2230,6 +2515,7 @@ function createOverlayWindow() {
   overlayWindowIgnoresMouse = true;
   overlayWindow.setAlwaysOnTop(true, 'screen-saver');
   hardenWindowNavigation(overlayWindow, TRUSTED_RENDERER_FILES.overlay);
+  attachRendererErrorCapture(overlayWindow, 'overlay');
   overlayWindow.loadFile(path.join(__dirname, 'src', 'overlay.html'));
   overlayWindow.webContents.once('did-finish-load', () => {
     updateOverlayWindow();
@@ -3146,6 +3432,8 @@ function setupLogParser() {
     }
   }
 
+  // A newly found Client.txt folder becomes a redaction target before the parser can log its path.
+  refreshRedactionTargets();
   logParser = new LogParser(poePath, {
     poeVersion: normalizePoeVersion(store.get('lastDetectedPoeVersion'))
       || normalizePoeVersion(store.get('poeVersion'))
@@ -3493,7 +3781,12 @@ function setupIPC() {
   ipcMain.handle('get-settings', () => getRendererSettings());
 
   ipcMain.handle('set-settings', (event, settings) => {
-    return applyDesktopSettings(settings);
+    try {
+      return applyDesktopSettings(settings);
+    } finally {
+      // A save that fails part-way may already have stored a new path or server address.
+      refreshRedactionTargets();
+    }
   });
 
   ipcMain.handle('get-local-profile', () => getActiveProfile());
@@ -3699,6 +3992,12 @@ function setupIPC() {
       filePath
     };
   });
+
+  // Report a bug also works on the sign-in screen. Main builds the text and the URL; the renderer only passes back
+  // the id of the report it shows, and a stale id copies and opens nothing.
+  ipcMain.handle('get-bug-report', () => getBugReport());
+  ipcMain.handle('copy-bug-report', (event, reportId) => copyBugReportToClipboard(reportId));
+  ipcMain.handle('open-bug-report-issue', (event, reportId) => copyAndOpenBugReportIssue(reportId));
 
   // Manuel loot ekle
   ipcMain.handle('add-loot', async (event, data) => {
@@ -4245,8 +4544,13 @@ function setupIPC() {
 
   ipcMain.handle('sign-in-with-poe', async () => {
     try {
-      return { success: true, profile: await signInWithPoe(), error: null };
+      const profile = await signInWithPoe();
+      refreshRedactionTargets();
+      return { success: true, profile, error: null };
     } catch (error) {
+      // A sign-in that failed after its profile was saved still brings a new account name.
+      refreshRedactionTargets();
+      console.warn('Path of Exile sign-in failed', error);
       return { success: false, profile: null, error: normalizeErrorMessage(error, 'Path of Exile sign-in failed') };
     }
   });
@@ -4257,6 +4561,7 @@ function setupIPC() {
       await reconnectPoeDevice();
       return { success: true, error: null };
     } catch (error) {
+      console.warn('Path of Exile reconnect failed', error);
       return { success: false, error: normalizeErrorMessage(error, 'Path of Exile sign-in failed') };
     }
   });
