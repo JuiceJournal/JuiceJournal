@@ -155,6 +155,11 @@ window.Translations = {
     'farmingHub.title': 'Farming Hub',
     'farmingHub.subtitle': 'Oyuncularin lokal ledger uzerinden paylastigi public runlar.',
     'farmingHub.onlineOff': 'Farming Hub icin online ozellikler gerekli. Ayarlar > Online bolumunden acin.',
+    'farmingHub.offTitle': 'Farming Hub kapali',
+    'farmingHub.openOnlineSettings': 'Online ayarlarini ac',
+    'farmingHub.refresh': 'Yenile',
+    'farmingHub.loading': 'Paylasilan farm runlari yukleniyor...',
+    'farmingHub.noMatch': 'Bu filtrelere uyan public run yok.',
 
     // Session info
     'session.map': 'Map',
@@ -210,6 +215,7 @@ window.Translations = {
     'settings.stashScanHotkey': 'Stash Tarama',
     'settings.stashScanHotkeyDesc': 'Alternatif stash tarama kisayolu',
     'settings.hotkeyHint': 'Kisayollari degistirmek icin Ayarlar > Kisayollar bolumune gidin',
+    'settings.hotkeyCaptureHint': 'Tiklayin, sonra yeni tuslara basin',
 
     // Settings - Notifications
     'settings.desktopNotifications': 'Masaustu bildirimlerini etkinlestir',
@@ -223,6 +229,7 @@ window.Translations = {
     'settings.connectionStatus': 'Baglanti Durumu',
     'settings.connected': 'Bagli',
     'settings.disconnected': 'Baglanti Yok',
+    'settings.onlineOffShort': 'Kapali',
     'settings.testConnection': 'Baglantiyi Test Et',
     'settings.testing': 'Test ediliyor...',
     'settings.onlineAccount': 'Online Hesap',
@@ -359,6 +366,7 @@ window.Translations = {
     'currency.searchPlaceholder': 'Item ara...',
     'currency.sync': 'Senkronize Et',
     'currency.syncing': 'Senkronize ediliyor...',
+    'currency.syncNow': 'Simdi Senkronize Et',
     'currency.syncSuccess': 'Fiyatlar basariyla senkronize edildi',
     'currency.syncFailed': 'Senkronizasyon basarisiz',
     'currency.syncRestricted': 'Fiyat senkronizasyonu yalnizca admin hesaplar icin aciktir',
@@ -370,6 +378,7 @@ window.Translations = {
     'currency.type': 'Tip',
     'currency.trend': 'Trend',
     'currency.noData': 'Fiyat verisi yok. Senkronize butonuna basin.',
+    'currency.noMatch': 'Bu aramaya uyan item yok.',
     'currency.waitingForSync': 'Fiyatlar poe.ninja uzerinden senkronize ediliyor...',
     'currency.loadError': 'Fiyatlar yuklenirken hata olustu',
 
@@ -964,6 +973,11 @@ window.Translations = {
     'farmingHub.title': 'Farming Hub',
     'farmingHub.subtitle': 'Public runs shared by players from their local ledger.',
     'farmingHub.onlineOff': 'The Farming Hub needs online features. Turn them on in Settings > Online.',
+    'farmingHub.offTitle': 'Farming Hub is off',
+    'farmingHub.openOnlineSettings': 'Open Online settings',
+    'farmingHub.refresh': 'Refresh',
+    'farmingHub.loading': 'Loading shared farm runs...',
+    'farmingHub.noMatch': 'No public farm runs match these filters.',
 
     // Session info
     'session.map': 'Map',
@@ -1019,6 +1033,7 @@ window.Translations = {
     'settings.stashScanHotkey': 'Stash Scan',
     'settings.stashScanHotkeyDesc': 'Alternative stash scan hotkey',
     'settings.hotkeyHint': 'Go to Settings > Hotkeys to change shortcuts',
+    'settings.hotkeyCaptureHint': 'Click, then press the new keys',
 
     // Settings - Notifications
     'settings.desktopNotifications': 'Enable desktop notifications',
@@ -1032,6 +1047,7 @@ window.Translations = {
     'settings.connectionStatus': 'Connection Status',
     'settings.connected': 'Connected',
     'settings.disconnected': 'Disconnected',
+    'settings.onlineOffShort': 'Off',
     'settings.testConnection': 'Test Connection',
     'settings.testing': 'Testing...',
     'settings.onlineAccount': 'Online Account',
@@ -1169,6 +1185,7 @@ window.Translations = {
     'currency.searchPlaceholder': 'Search items...',
     'currency.sync': 'Sync',
     'currency.syncing': 'Syncing...',
+    'currency.syncNow': 'Sync now',
     'currency.syncSuccess': 'Prices synced successfully',
     'currency.syncFailed': 'Sync failed',
     'currency.syncRestricted': 'Price sync is restricted to admin accounts',
@@ -1180,6 +1197,7 @@ window.Translations = {
     'currency.type': 'Type',
     'currency.trend': 'Trend',
     'currency.noData': 'No price data. Click Sync to fetch.',
+    'currency.noMatch': 'No items match this search.',
     'currency.waitingForSync': 'Syncing prices from poe.ninja...',
     'currency.loadError': 'Failed to load prices',
 

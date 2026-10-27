@@ -546,12 +546,13 @@
               <option value="all">All farms</option>
             </select>
             <input id="farming-hub-min-profit-filter" type="number" min="0" step="1" placeholder="Min chaos" aria-label="Minimum profit">
-            <button id="farming-hub-refresh-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
+            <button id="farming-hub-refresh-btn" class="btn btn-secondary btn-small" type="button">
+              <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sync"/></svg>
+              <span class="btn-label" data-i18n="farmingHub.refresh">Refresh</span>
+            </button>
           </div>
         </div>
-        <div id="farming-hub-list" class="farming-hub-list">
-          <p class="empty-state">No public farm runs loaded yet.</p>
-        </div>
+        <div id="farming-hub-list" class="farming-hub-list"></div>
       </section>
 
       <aside id="session-detail-drawer" class="session-drawer hidden" aria-hidden="true">
@@ -625,7 +626,10 @@
                 <option value="">Standard</option>
               </select>
               <input type="text" id="currency-search" class="currency-search" data-i18n-placeholder="currency.searchPlaceholder" placeholder="Search items...">
-              <button id="currency-sync-btn" class="btn btn-primary btn-small" data-i18n="currency.sync">Sync</button>
+              <button id="currency-sync-btn" class="btn btn-primary btn-small" type="button">
+                <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sync"/></svg>
+                <span class="btn-label" data-i18n="currency.sync">Sync</span>
+              </button>
             </div>
           </div>
         </div>
@@ -716,7 +720,7 @@
 
             <!-- PoE Tab -->
             <div class="settings-tab" id="settings-poe" role="tabpanel">
-              <div class="settings-group">
+              <div class="settings-group settings-group--wide">
                 <h3 data-i18n="settings.poeVersion">PoE Versiyonu</h3>
                 <div class="form-group">
                   <div class="poe-version-select">
@@ -731,7 +735,7 @@
                   </div>
                 </div>
               </div>
-              <div class="settings-group">
+              <div class="settings-group settings-group--wide">
                 <h3 data-i18n="settings.clientTxtPath">Client.txt Dosya Yolu</h3>
                 <div class="form-group">
                   <div class="input-with-btn">
@@ -760,7 +764,7 @@
                 </div>
                 <p class="settings-desc" data-i18n="settings.overlayDescription">Displays runtime session info and map results as an overlay on top of Path of Exile</p>
               </div>
-              <div class="settings-group">
+              <div class="settings-group settings-group--wide">
                 <h3 data-i18n="settings.poeAccount">Path of Exile Account</h3>
                 <div class="poe-account-card">
                   <div class="poe-account-copy">
@@ -788,30 +792,32 @@
             <!-- Hotkeys Tab -->
             <div class="settings-tab" id="settings-hotkeys" role="tabpanel">
               <div class="settings-group">
-                <h3 data-i18n="settings.scanHotkey">Loot Tarama</h3>
+                <h3 id="scan-hotkey-title" data-i18n="settings.scanHotkey">Loot Tarama</h3>
                 <p class="settings-desc" data-i18n="settings.scanHotkeyDesc">Stash ekranini taramak icin kullanilir</p>
                 <div class="form-group">
                   <div class="hotkey-input">
                     <span class="hotkey-badge" id="scan-hotkey-display">F9</span>
-                    <input type="text" id="scan-hotkey" value="F9" readonly class="hotkey-field" data-capture-hotkey="scan" spellcheck="false">
+                    <input type="text" id="scan-hotkey" value="F9" readonly class="hotkey-field" data-capture-hotkey="scan" spellcheck="false" aria-labelledby="scan-hotkey-title" aria-describedby="scan-hotkey-hint">
                   </div>
+                  <p class="settings-desc hotkey-hint" id="scan-hotkey-hint" data-i18n="settings.hotkeyCaptureHint">Click, then press the new keys</p>
                 </div>
               </div>
               <div class="settings-group">
-                <h3 data-i18n="settings.stashScanHotkey">Stash Tarama</h3>
+                <h3 id="stash-scan-hotkey-title" data-i18n="settings.stashScanHotkey">Stash Tarama</h3>
                 <p class="settings-desc" data-i18n="settings.stashScanHotkeyDesc">Alternatif stash tarama kisayolu</p>
                 <div class="form-group">
                   <div class="hotkey-input">
                     <span class="hotkey-badge" id="stash-scan-hotkey-display">Ctrl+Shift+L</span>
-                    <input type="text" id="stash-scan-hotkey" value="Ctrl+Shift+L" readonly class="hotkey-field" data-capture-hotkey="stash" spellcheck="false">
+                    <input type="text" id="stash-scan-hotkey" value="Ctrl+Shift+L" readonly class="hotkey-field" data-capture-hotkey="stash" spellcheck="false" aria-labelledby="stash-scan-hotkey-title" aria-describedby="stash-scan-hotkey-hint">
                   </div>
+                  <p class="settings-desc hotkey-hint" id="stash-scan-hotkey-hint" data-i18n="settings.hotkeyCaptureHint">Click, then press the new keys</p>
                 </div>
               </div>
             </div>
 
             <!-- Notifications Tab -->
             <div class="settings-tab" id="settings-notifications" role="tabpanel">
-              <div class="settings-group">
+              <div class="settings-group settings-group--wide">
                 <div class="form-group checkbox">
                   <label>
                     <input type="checkbox" id="enable-notifications" checked>
@@ -829,7 +835,7 @@
 
             <!-- Online Tab -->
             <div class="settings-tab" id="settings-api" role="tabpanel">
-              <div class="settings-group">
+              <div class="settings-group settings-group--wide">
                 <div class="form-group checkbox">
                   <label>
                     <input type="checkbox" id="online-enabled">
@@ -846,13 +852,13 @@
               </div>
               <div class="settings-group">
                 <h3 data-i18n="settings.connectionStatus">Baglanti Durumu</h3>
-                <div class="connection-status">
+                <div class="connection-status is-off">
                   <div class="connection-dot" id="connection-dot"></div>
-                  <span id="connection-text" data-i18n="settings.disconnected">Baglanti Yok</span>
+                  <span id="connection-text" data-i18n="settings.onlineOffShort">Off</span>
                 </div>
                 <button id="test-connection" class="btn btn-secondary btn-small" data-i18n="settings.testConnection">Baglantiyi Test Et</button>
               </div>
-              <div class="settings-group">
+              <div class="settings-group settings-group--wide">
                 <h3 data-i18n="settings.onlineAccount">Online account</h3>
                 <p class="settings-desc" id="online-account-status" data-i18n="settings.onlineAccountOff">Turn on online features to sign in to the server.</p>
                 <div class="settings-actions-row">
@@ -866,7 +872,7 @@
                   </button>
                 </div>
               </div>
-              <div class="settings-group">
+              <div class="settings-group settings-group--wide">
                 <h3 data-i18n="settings.diagnostics">Diagnostics</h3>
                 <div class="form-group">
                   <label for="diagnostics-mode" data-i18n="settings.diagnosticsMode">Diagnostik Seviyesi</label>
@@ -883,7 +889,7 @@
                   </button>
                 </div>
               </div>
-              <div class="settings-group">
+              <div class="settings-group settings-group--wide">
                 <h3 data-i18n="settings.auditTrail">Yerel Islem Gecmisi</h3>
                 <p class="settings-desc" data-i18n="settings.auditTrailDesc">Son calisma ve diagnostik olaylari.</p>
                 <div class="audit-trail-list" id="audit-trail-list">
@@ -894,7 +900,7 @@
 
             <!-- About Tab -->
             <div class="settings-tab" id="settings-about" role="tabpanel">
-              <div class="settings-group about-info">
+              <div class="settings-group settings-group--wide about-info">
                 <div class="about-logo">
                   <div class="logo-icon large">
                     <img src="assets/icon.png" alt="Juice Journal logo" class="brand-logo-image" draggable="false">
@@ -919,7 +925,7 @@
                 </div>
                 <p class="settings-desc about-notice" data-i18n="settings.gameArtNotice">Path of Exile art and names belong to Grinding Gear Games. Juice Journal is not affiliated with or endorsed by GGG.</p>
               </div>
-              <div class="settings-group">
+              <div class="settings-group settings-group--wide">
                 <h3 data-i18n="settings.updates">App Updates</h3>
                 <p id="app-update-status" class="settings-desc"></p>
                 <p id="app-update-detail" class="settings-desc"></p>

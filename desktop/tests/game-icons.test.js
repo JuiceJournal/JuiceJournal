@@ -37,6 +37,28 @@ test('PoE 2 category tabs use PoE 2 art instead of falling back to PoE 1 icons',
   }
 });
 
+test('category tabs only name bundled art of their own game, each once', () => {
+  const vm = require('node:vm');
+  const images = vm.runInNewContext(`${getBlock(appJs, 'const CURRENCY_IMAGE_VARIANTS')}\n${getBlock(appJs, 'const CURRENCY_IMAGES')}\n({ CURRENCY_IMAGE_VARIANTS, CURRENCY_IMAGES })`);
+  const categoryBlock = (name) => appJs.slice(appJs.indexOf(`const ${name}`)).split('];')[0];
+
+  // getCurrencyAssetPath falls back to a Chaos Orb for a key it does not know, which would draw a stand-in.
+  for (const [poeVersion, name] of [['poe1', 'POE1_CATEGORY_TYPES'], ['poe2', 'POE2_CATEGORY_TYPES']]) {
+    const tabIcons = [...categoryBlock(name).matchAll(/icon: '([\w-]+)'/g)].map((match) => match[1]);
+    assert.ok(tabIcons.length > 0, poeVersion);
+    assert.equal(new Set(tabIcons).size, tabIcons.length, `${poeVersion} tab icons repeat`);
+    for (const icon of tabIcons) {
+      const bundled = images.CURRENCY_IMAGE_VARIANTS[poeVersion][icon] || (poeVersion === 'poe1' && images.CURRENCY_IMAGES[icon]);
+      assert.ok(bundled, `${poeVersion} tab icon "${icon}" has no bundled image`);
+    }
+  }
+
+  // PoE 2 has no bundled art for these categories, so they show no orb in its place.
+  for (const value of ['idol', 'ultimatum', 'other']) {
+    assert.match(categoryBlock('POE2_CATEGORY_TYPES'), new RegExp(`value: '${value}',[^\\n]*icon: null`), value);
+  }
+});
+
 test('game art ships with a notice and the About page credits Grinding Gear Games', () => {
   const indexHtml = fs.readFileSync(path.join(srcDir, 'index.html'), 'utf8');
   const translations = fs.readFileSync(path.join(srcDir, 'modules', 'translations.js'), 'utf8');

@@ -300,6 +300,15 @@ test('settings smoke: launches desktop app and shows core settings controls', as
     await expect(page.locator('#poe-path')).toBeVisible();
     await expect(page.locator('#auto-start-session')).toBeVisible();
 
+    // The field itself is the keycap; the old badge stays in the DOM but is not drawn twice.
+    await page.locator('.settings-nav-btn[data-settings-tab="hotkeys"]').click();
+    await expect(page.locator('#settings-hotkeys')).toHaveClass(/active/);
+    await expect(page.locator('#scan-hotkey')).toHaveValue('F9');
+    await expect(page.locator('#scan-hotkey-display')).toBeHidden();
+    const hotkeyHints = page.locator('#settings-hotkeys .hotkey-hint');
+    await expect(hotkeyHints).toHaveCount(2);
+    await expect(hotkeyHints).toHaveText(['Click, then press the new keys', 'Click, then press the new keys']);
+
     await page.locator('.settings-nav-btn[data-settings-tab="api"]').click();
     await expect(page.locator('#settings-api')).toHaveClass(/active/);
     await expect(page.locator('#api-url')).toHaveValue(backend.baseUrl);
@@ -307,18 +316,38 @@ test('settings smoke: launches desktop app and shows core settings controls', as
     await expect(page.locator('#export-diagnostics')).toBeVisible();
     await expect(page.locator('#pending-sync-count')).toHaveCount(0);
 
+    // Short groups sit two to a row at the default window size, so the server address and its status share a row.
+    const apiUrlBox = await page.locator('#settings-api .settings-group:has(#api-url)').boundingBox();
+    const statusBox = await page.locator('#settings-api .settings-group:has(.connection-status)').boundingBox();
+    expect(Math.abs(statusBox.y - apiUrlBox.y)).toBeLessThanOrEqual(1);
+    expect(statusBox.x).toBeGreaterThanOrEqual(apiUrlBox.x + apiUrlBox.width);
+
     // Online features start off: the server hears nothing, even from the Farming Hub and the diagnostics export.
     await expect(page.locator('#online-enabled')).not.toBeChecked();
     await expect(page.locator('#test-connection')).toBeDisabled();
     await expect(page.locator('#online-sign-in')).toBeDisabled();
+    // Off by choice is not a failure: the status reads a grey 'Off', not 'Disconnected'.
+    await expect(page.locator('#settings-api .connection-status')).toHaveClass(/is-off/);
+    await expect(page.locator('#connection-text')).toHaveText('Off');
     const diagnosticsPath = path.join(isolatedProfile.rootDir, 'diagnostics.json');
     await electronApp.evaluate(({ dialog }, filePath) => {
       dialog.showSaveDialog = async () => ({ canceled: false, filePath });
     }, diagnosticsPath);
     await page.evaluate(() => window.electronAPI.exportDiagnostics('safe'));
     expect(JSON.parse(fs.readFileSync(diagnosticsPath, 'utf8')).api.status).toBe('disabled');
+    // Leave the Online tab, so the Hub's off panel has to switch back to it.
+    await page.locator('.settings-nav-btn[data-settings-tab="general"]').click();
+    await expect(page.locator('#settings-general')).toHaveClass(/active/);
     await page.locator('.nav-btn[data-page="farming-hub"]').click();
     await expect(page.locator('#farming-hub-list')).toContainText('needs online features');
+    await expect(page.locator('#farming-hub-page .farming-hub-filters')).toBeHidden();
+    await expect(page.locator('#farming-hub-refresh-btn')).toBeDisabled();
+    await expect(page.locator('#farming-hub-list')).toContainText('Farming Hub is off');
+    await page.locator('#farming-hub-list [data-hub-action="open-online-settings"]').click();
+    await expect(page.locator('#settings-page')).toHaveClass(/active/);
+    await expect(page.locator('#settings-api')).toHaveClass(/active/);
+    await expect(page.locator('.settings-nav-btn[data-settings-tab="api"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#online-enabled')).toBeFocused();
     expect(backend.requests).toEqual([]);
 
     // The Save button would also send the smoke server's random port, which settings reject, so only the switch is set.
@@ -326,9 +355,13 @@ test('settings smoke: launches desktop app and shows core settings controls', as
     await page.reload();
     await expect(page.locator('#username')).toHaveText(SMOKE_USER.username);
     await expect(page.locator('#online-enabled')).toBeChecked();
+    await expect(page.locator('#settings-api .connection-status')).not.toHaveClass(/is-off/);
+    await expect(page.locator('#connection-text')).toHaveText('Disconnected');
     await expect(page.locator('#test-connection')).toBeEnabled();
     await expect(page.locator('#online-sign-in')).toBeEnabled();
     await page.locator('.nav-btn[data-page="farming-hub"]').click();
+    await expect(page.locator('#farming-hub-page .farming-hub-filters')).toBeVisible();
+    await expect(page.locator('#farming-hub-refresh-btn')).toBeEnabled();
     await expect.poll(() => backend.requests).toContain('GET /api/farming-hub/runs');
   } catch (error) {
     testError = error;

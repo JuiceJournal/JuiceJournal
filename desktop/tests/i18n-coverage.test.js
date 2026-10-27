@@ -184,6 +184,28 @@ test('desktop locale dictionaries expose the full english key set after fallback
   }
 });
 
+test('desktop keys new in the Hub, Currency and Settings pass have their own ASCII Turkish strings', () => {
+  // tr falls back to en, so the coverage tests above stay green when a Turkish string is missing.
+  const translations = loadDesktopTranslations();
+  const newKeys = [
+    'farmingHub.offTitle',
+    'farmingHub.openOnlineSettings',
+    'farmingHub.refresh',
+    'farmingHub.loading',
+    'farmingHub.noMatch',
+    'currency.syncNow',
+    'currency.noMatch',
+    'settings.onlineOffShort',
+    'settings.hotkeyCaptureHint',
+  ];
+
+  for (const key of newKeys) {
+    assert.ok(translations.en[key], `Missing en string for ${key}`);
+    assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
+    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
+  }
+});
+
 test('web english message dictionary covers every used localization key', async () => {
   const translations = await loadWebTranslations();
   const usedKeys = extractWebUsedKeys();

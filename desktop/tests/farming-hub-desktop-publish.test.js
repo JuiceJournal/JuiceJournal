@@ -51,6 +51,21 @@ test('desktop farming hub has a navigation page and public list bridge', () => {
   assert.match(rendererSource, /async function loadFarmingHubRuns/);
 });
 
+test('desktop farming hub Refresh is a quiet sprite button and the off state has its own plate', () => {
+  const html = fs.readFileSync(path.join(root, 'src', 'index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'src', 'styles.css'), 'utf8');
+  const filters = html.match(/<div class="filters farming-hub-filters">[\s\S]*?<\/div>/)?.[0] || '';
+  const refresh = filters.match(/<button id="farming-hub-refresh-btn"[^>]*>[\s\S]*?<\/button>/)?.[0] || '';
+
+  assert.match(refresh, /class="btn btn-secondary btn-small"/);
+  assert.doesNotMatch(refresh, /btn-primary/);
+  assert.match(refresh, /<use href="assets\/icons\.svg#sync"\/>/);
+  assert.match(refresh, /<span class="btn-label" data-i18n="farmingHub\.refresh">/);
+  assert.doesNotMatch(html, /No public farm runs loaded yet\./);
+  assert.match(css, /\.farming-hub-filters\[hidden\] \{ display: none; \}/);
+  assert.match(css, /\.empty-state--panel \{[^}]*border-radius: var\(--bevel\);/);
+});
+
 test('desktop sessions page exposes local filter controls', () => {
   const html = fs.readFileSync(path.join(root, 'src', 'index.html'), 'utf8');
   const rendererSource = fs.readFileSync(path.join(root, 'src', 'app.js'), 'utf8');
