@@ -341,6 +341,34 @@ test('the sign-in panel links to a report panel with the same preview and button
   }
 });
 
+test('a failed sign-in shows inline, directly above Report a problem, and an empty text hides the line', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const signInPanel = markupAt(html, html.indexOf('<div class="modal-panel oauth-only">'));
+  const notice = elementMarkup(signInPanel, 'login-error');
+  assert.match(notice, /^<p class="inline-notice error login-error hidden" id="login-error" role="alert">/);
+  assert.match(
+    notice,
+    /<span class="notice-mark" aria-hidden="true"><svg class="icon" width="14" height="14"><use href="assets\/icons\.svg#alert"\/><\/svg><\/span>/
+  );
+  // Empty and without data-i18n: applyTranslations would otherwise wipe the reason on a language change.
+  assert.equal(elementMarkup(notice, 'login-error-text'), '<span id="login-error-text"></span>');
+  assert.match(signInPanel.slice(signInPanel.indexOf(notice) + notice.length), /^\s*<p class="login-report-row">/);
+  for (const id of ['login-error', 'login-error-text']) {
+    assert.equal(html.split(`id="${id}"`).length - 1, 1, `#${id} appears once`);
+  }
+
+  const loginError = { classList: createClassList('hidden') };
+  const loginErrorText = { textContent: '' };
+  const context = loadFunctions(['setLoginError'], { elements: { loginError, loginErrorText } });
+
+  context.setLoginError('Sign-in did not finish. Try again.');
+  assert.equal(loginError.classList.contains('hidden'), false);
+  assert.equal(loginErrorText.textContent, 'Sign-in did not finish. Try again.');
+  context.setLoginError('');
+  assert.equal(loginError.classList.contains('hidden'), true);
+  assert.equal(loginErrorText.textContent, '');
+});
+
 test('loadBugReportPreview shows the report as text, remembers its id and clears the other view', async () => {
   const about = createView();
   const login = createView();
@@ -388,7 +416,7 @@ test('loadBugReportPreview says when the report cannot be built and keeps both b
   assert.equal(about.copyButton.disabled, true);
   assert.equal(about.preview.getAttribute('aria-busy'), null);
   // Focus may already sit on the preview, so the toast is what a screen reader announces.
-  assert.deepEqual(toasts, [['settings.reportBug', 'settings.bugReportLoadFailed', 'error']]);
+  assert.deepEqual(toasts, [['settings.bugReportLoadFailed', 'toast.tryAgainShort', 'error']]);
 });
 
 test('Copy sends the id of the report on screen and says when it is on the clipboard', async () => {
@@ -408,7 +436,7 @@ test('Copy sends the id of the report on screen and says when it is on the clipb
   assert.equal(about.copyButton.disabled, false);
   assert.equal(about.copyButton.getAttribute('aria-busy'), null);
   assert.equal(about.copyButton.textContent, 'Copy report');
-  assert.deepEqual(toasts, [['settings.reportBug', 'toast.bugReportCopied', 'success']]);
+  assert.deepEqual(toasts, [['toast.bugReportCopied', '', 'success']]);
 });
 
 test('Copy reports a failure and gives the button back', async () => {
@@ -424,7 +452,8 @@ test('Copy reports a failure and gives the button back', async () => {
 
   assert.equal(about.copyButton.disabled, false);
   assert.equal(about.copyButton.getAttribute('aria-busy'), null);
-  assert.deepEqual(toasts, [['toast.error', 'toast.bugReportCopyFailed', 'error']]);
+  // The report itself is what fails here, so the hint does not send the user to report a bug.
+  assert.deepEqual(toasts, [['toast.bugReportCopyFailed', 'toast.tryAgainShort', 'error']]);
 });
 
 test('Copy and Open copy nothing when main built a newer report, and show that report instead', async () => {
@@ -440,7 +469,7 @@ test('Copy and Open copy nothing when main built a newer report, and show that r
 
     await context[handlerName](about);
 
-    assert.deepEqual(toasts, [['settings.reportBug', 'toast.bugReportChanged', 'warning']], handlerName);
+    assert.deepEqual(toasts, [['toast.bugReportChanged', 'toast.bugReportChangedHint', 'warning']], handlerName);
     assert.equal(about.preview.textContent, 'report 9', handlerName);
     assert.equal(about.reportId, 9, handlerName);
     for (const button of [about.openButton, about.copyButton]) {
@@ -467,7 +496,7 @@ test('the issue button sends the report id, waits with a busy label and says whe
   assert.equal(about.openButton.disabled, false);
   assert.equal(about.openButton.getAttribute('aria-busy'), null);
   assert.equal(about.openButton.label.textContent, 'settings.openBugReportIssue');
-  assert.deepEqual(toasts, [['settings.reportBug', 'toast.bugReportIssueOpened', 'success']]);
+  assert.deepEqual(toasts, [['toast.bugReportCopied', 'toast.bugReportIssueOpened', 'success']]);
 });
 
 test('the issue button names the address when no browser opened, and reports a failure', async () => {
@@ -484,8 +513,8 @@ test('the issue button names the address when no browser opened, and reports a f
   await context.handleOpenBugReportIssue(about);
 
   assert.deepEqual(toasts, [
-    ['settings.reportBug', `toast.bugReportOpenManually ${issueUrl}`, 'warning'],
-    ['toast.error', 'toast.bugReportOpenFailed', 'error']
+    ['toast.bugReportCopied', `toast.bugReportOpenManually ${issueUrl}`, 'warning'],
+    ['toast.bugReportOpenFailed', 'toast.tryAgainShort', 'error']
   ]);
   assert.equal(about.openButton.disabled, false);
   assert.equal(about.openButton.label.textContent, 'settings.openBugReportIssue');
@@ -601,13 +630,15 @@ test('signing in over Settings > About builds that report again', async () => {
       syncPoeDeviceConnection: async () => {},
       refreshTrackerData: async () => {},
       showToast: (...args) => toasts.push(args),
+      setLoginError: () => {},
       getUserFacingErrorMessage: (error) => String(error?.message || error),
       loadBugReportPreview: async (view) => loads.push(view)
     });
 
     await context.handlePoeOAuthLogin();
 
-    assert.deepEqual(toasts, [['login.title', 'toast.loginSuccess']]);
+    // The modal closing confirms the sign-in; there is no welcome toast.
+    assert.deepEqual(toasts, []);
     assert.equal(loads.length, expectedLoads, `settings ${settingsActive}, about ${aboutActive}`);
     assert.ok(loads.every((view) => view === views.about));
   }
@@ -624,6 +655,7 @@ test('a failed sign-in builds the login report again when it is open, so the rep
     for (const [reportOpen, expectedLoads] of [[true, 1], [false, 0]]) {
       const loads = [];
       const toasts = [];
+      const loginErrors = [];
       const views = { about: {}, login: {} };
       const context = loadFunctions(['handlePoeOAuthLogin'], {
         document: { getElementById: () => createButtonStub('login.poeOAuth') },
@@ -632,16 +664,20 @@ test('a failed sign-in builds the login report again when it is open, so the rep
           loginBugReportPanel: { classList: createClassList(...(reportOpen ? [] : ['hidden'])) }
         },
         bugReportViews: views,
-        window: { t: (key) => key, electronAPI: { signInWithPoe } },
+        window: { t: (key, values) => (values?.reason ? `${key}:${values.reason}` : key), electronAPI: { signInWithPoe } },
         setButtonBusy: () => {},
         showToast: (...args) => toasts.push(args),
+        setLoginError: (text) => loginErrors.push(text),
         getUserFacingErrorMessage: (error, fallbackKey) => fallbackKey,
         loadBugReportPreview: async (view) => loads.push(view)
       });
 
       await context.handlePoeOAuthLogin();
 
-      assert.deepEqual(toasts, [['toast.loginFailed', 'errors.loginFailed', 'error']], answer);
+      // The failure shows inline above Report a problem, cleared first; mapped text or the hint, never raw text.
+      assert.deepEqual(loginErrors, ['', 'login.failedInline:login.failedHint'], answer);
+      // With the report open the sign-in panel and its line are hidden, so a toast says it meanwhile.
+      assert.deepEqual(toasts, reportOpen ? [['login.failedTitle', '', 'error']] : [], answer);
       assert.equal(loads.length, expectedLoads, `${answer}, report open ${reportOpen}`);
       assert.ok(loads.every((view) => view === views.login));
     }

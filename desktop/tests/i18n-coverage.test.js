@@ -284,6 +284,66 @@ test('desktop Data tab keys have their own ASCII Turkish strings', () => {
   }
 });
 
+test('desktop notice keys have their own ASCII Turkish strings', () => {
+  const translations = loadDesktopTranslations();
+  const newKeys = [
+    'toast.dismiss', 'toast.mapProfit', 'toast.mapLoss', 'toast.mapUnpriced',
+    'toast.tryAgain', 'toast.tryAgainShort', 'toast.restartHint',
+    'toast.settingsLoadFailed', 'toast.settingsError', 'toast.settingsReset', 'toast.settingsResetFailed',
+    'settings.savedState', 'settings.connectionFailed',
+    'settings.hotkeyErrorRequired', 'settings.hotkeyErrorModifierOnly', 'settings.hotkeyErrorOneKey',
+    'settings.hotkeyErrorDuplicate', 'settings.hotkeyErrorInUse',
+    'toast.mapStartFailed', 'toast.mapEndFailed', 'toast.poeConnectFailed', 'toast.poeDisconnectError',
+    'login.failedTitle', 'login.failedInline', 'login.failedHint', 'toast.serverSignInFailed',
+    'toast.updateReadyTitle', 'toast.updateReadyBody', 'toast.updateRestart', 'toast.updateInstallFailed',
+    'toast.runOpenFailed', 'toast.sessionUpdateError', 'toast.farmPublished', 'toast.farmPublishFailed',
+    'toast.diagnosticsSaved', 'toast.diagnosticsExportedSafe', 'toast.diagnosticsExportedSensitive', 'toast.diagnosticsFailed',
+    'toast.logsClearFailedTitle', 'toast.bugReportChangedHint',
+    'stash.unavailableTitle', 'stash.pricesSyncedTitle', 'stash.pricesSynced', 'stash.pricesSyncFailed',
+    'stash.syncPricesFirst', 'stash.syncPricesFirstHint', 'stash.snapshotTakenTitle', 'stash.snapshotTaken',
+    'stash.snapshotFailed', 'stash.profitFailed', 'stash.baselineFailedTitle', 'stash.baselineFailed', 'stash.readingStash',
+    'stash.staleSnapshotTitle', 'stash.staleSnapshot', 'stash.completedWithoutStashTitle', 'stash.completedWithoutStash',
+    'currency.syncRestrictedTitle', 'currency.syncRestricted', 'currency.syncFailed',
+    'toast.noSession', 'toast.scanNothingFound', 'toast.scanNothingFoundHint', 'toast.scanFailed'
+  ];
+
+  for (const key of newKeys) {
+    assert.ok(translations.en[key], `Missing en string for ${key}`);
+    assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
+    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
+  }
+  // The inline sign-in line fills in its reason, and the hint names the link below it by its own label.
+  assert.match(translations.en['login.failedInline'], /\{reason\}/);
+  assert.match(translations.tr['login.failedInline'], /\{reason\}/);
+  assert.ok(translations.en['login.failedHint'].includes(translations.en['login.reportProblem']));
+  assert.ok(translations.tr['login.failedHint'].includes(translations.tr['login.reportProblem']));
+  // The try-again hint points to the bug report by the labels the app uses.
+  assert.ok(translations.en['toast.tryAgain'].includes(`${translations.en['nav.settings']} > ${translations.en['settings.about']}`));
+  assert.ok(translations.tr['toast.tryAgain'].includes(`${translations.tr['nav.settings']} > ${translations.tr['settings.about']}`));
+});
+
+test('retired toast keys are gone from every locale', () => {
+  const translations = loadDesktopTranslations();
+  const retiredKeys = [
+    'toast.loginSuccess', 'toast.loginFailed', 'toast.registerSuccess', 'toast.registerFailed', 'login.title', 'register.title',
+    'toast.mapEnteredTitle', 'toast.mapEnteredBody', 'toast.mapExitedTitle', 'toast.mapExitedBody',
+    'toast.sessionStartedTitle', 'toast.sessionStartedBody', 'toast.sessionCompletedTitle', 'toast.sessionProfitBody',
+    'toast.sessionLossBody', 'toast.currencyTitle', 'toast.poeTitle', 'toast.poeDisconnected', 'toast.settingsSaved',
+    'toast.connectionSuccess', 'toast.connectionFailed', 'toast.onlineSignedIn', 'toast.sessionUpdated',
+    'toast.sessionError', 'toast.endSessionError', 'toast.serverUnavailable', 'toast.diagnosticsExported',
+    'currency.syncSuccess', 'game.detected',
+    'toast.error', 'toast.lootAddedTitle', 'toast.scanComplete', 'toast.scanError'
+  ];
+  const appSource = read(path.join(desktopDir, 'src', 'app.js'));
+
+  for (const key of retiredKeys) {
+    for (const [localeCode, dictionary] of Object.entries(translations)) {
+      assert.equal(dictionary[key], undefined, `${localeCode} still defines ${key}`);
+    }
+    assert.ok(!appSource.includes(`'${key}'`), `app.js still uses ${key}`);
+  }
+});
+
 test('main process dialogs use keys that exist in en and tr', () => {
   // main.js t() falls back to the raw key, so a typo would show 'dataClearLogsTitle' in a dialog.
   const mainSource = read(path.join(desktopDir, 'main.js'));
@@ -310,6 +370,23 @@ test('main process dialogs use keys that exist in en and tr', () => {
   for (const key of ['dataClearLogsTitle', 'dataClearLogsMessage', 'dataClearLogsDetail', 'dataClearLogsConfirm', 'promptCancel']) {
     assert.ok(translations.en[key], `Missing en main process string for ${key}`);
     assert.ok(translations.tr[key], `Missing tr main process string for ${key}`);
+  }
+  // OS notifications name the outcome; the generic titles and the dropped notices are gone.
+  for (const key of [
+    'notificationError', 'notificationInfo', 'notificationMapStarted', 'notificationMapCompleted', 'mapStartedBody',
+    'mapProfit', 'mapLoss', 'gameDetected', 'gameSwitched', 'stashNoItems'
+  ]) {
+    assert.equal(translations.en[key], undefined, `en still defines ${key}`);
+    assert.equal(translations.tr[key], undefined, `tr still defines ${key}`);
+  }
+  for (const key of [
+    'scanNoMapTitle', 'noActiveSession', 'scanFailedTitle', 'screenCaptureFailed', 'scanNothingTitle', 'scanNoItems',
+    'lootScanFailed', 'sessionStartFailed', 'sessionEndFailed', 'notificationTryAgain', 'mapProfitBody', 'mapLossBody',
+    'mapDuration'
+  ]) {
+    assert.ok(translations.en[key], `Missing en main process string for ${key}`);
+    assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
+    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
   }
 });
 

@@ -119,7 +119,7 @@ test('desktop renderer avoids raw HTML for toast and currency table rows', () =>
   const toastBody = getFunctionBody(appJs, 'showToast');
   const currencyBody = getFunctionBody(appJs, 'renderCurrencyTable');
 
-  assert.doesNotMatch(toastBody, /\.innerHTML\s*=/);
+  assert.doesNotMatch(toastBody, /\.(?:innerHTML|outerHTML)\s*\+?=|\.insertAdjacentHTML\(/);
   assert.match(toastBody, /\.textContent\s*=/);
   assert.doesNotMatch(currencyBody, /tbody\.innerHTML\s*=\s*sorted\.map/);
   assert.match(currencyBody, /document\.createDocumentFragment\(\)/);

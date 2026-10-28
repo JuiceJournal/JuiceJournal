@@ -262,10 +262,14 @@ test('device sign-in opens the local profile and loads its history', async () =>
     syncPoeDeviceConnection: async () => calls.push(['syncPoeDeviceConnection']),
     refreshTrackerData: async () => calls.push(['refreshTrackerData']),
     showToast: (...args) => calls.push(['showToast', ...args]),
+    setLoginError: (text) => calls.push(['setLoginError', text]),
     getUserFacingErrorMessage: (error) => String(error?.error || error?.message || error)
   });
 
   await context.handlePoeOAuthLogin();
+
+  // The attempt clears the last failure line, and the modal closing is the confirmation: no welcome toast.
+  assert.deepEqual(calls.filter(([name]) => name === 'setLoginError' || name === 'showToast'), [['setLoginError', '']]);
 
   assert.deepEqual(
     calls.filter(([name]) => [
@@ -321,12 +325,13 @@ test('busy buttons without a translated label get their own text back', () => {
 test('test connection shows a busy button, then lets the online settings decide its state', async () => {
   const calls = [];
   const button = createButtonStub('settings.testConnection', { text: 'Test connection', withLabelSpan: false });
+  const connectionText = { textContent: '', dataset: {} };
   const context = loadFunctions(['setButtonBusy', 'handleTestConnection'], {
     elements: {
       testConnection: button,
       apiUrl: { value: 'http://127.0.0.1:3001' },
       connectionDot: { classList: { add: () => {}, remove: () => {} } },
-      connectionText: { textContent: '' }
+      connectionText
     },
     window: {
       electronAPI: {
@@ -336,7 +341,7 @@ test('test connection shows a busy button, then lets the online settings decide 
       },
       t: (key) => key
     },
-    showToast: () => {},
+    showToast: (...args) => calls.push(['showToast', ...args]),
     // Online features can be off, so the final disabled state is renderOnlineSettings' call, made after the restore.
     renderOnlineSettings: () => {
       calls.push(['render', button.getAttribute('aria-busy'), button.textContent]);
@@ -351,6 +356,80 @@ test('test connection shows a busy button, then lets the online settings decide 
     ['render', null, 'settings.testConnection']
   ]);
   assert.equal(button.disabled, true);
+  // The status line (role=status) carries the result instead of a toast, and keeps it across a language change.
+  assert.equal(connectionText.textContent, 'settings.connected');
+  assert.equal(connectionText.dataset.i18n, 'settings.connected');
+});
+
+test('a failed connection test says so in the status line, without a toast', async () => {
+  const calls = [];
+  const button = createButtonStub('settings.testConnection', { text: 'Test connection', withLabelSpan: false });
+  const connectionText = { textContent: 'settings.connected', dataset: { i18n: 'settings.connected' } };
+  const context = loadFunctions(['setButtonBusy', 'handleTestConnection'], {
+    elements: {
+      testConnection: button,
+      apiUrl: { value: 'http://127.0.0.1:3001' },
+      connectionDot: { classList: { add: () => {}, remove: (name) => calls.push(['dot', name]) } },
+      connectionText
+    },
+    window: {
+      electronAPI: {
+        testOnlineConnection: async () => {
+          throw new Error('connect ECONNREFUSED 127.0.0.1:3001');
+        }
+      },
+      t: (key) => key
+    },
+    showToast: (...args) => calls.push(['showToast', ...args]),
+    renderOnlineSettings: () => calls.push(['render'])
+  });
+
+  await context.handleTestConnection();
+
+  assert.deepEqual(calls, [['dot', 'connected'], ['render']]);
+  assert.equal(connectionText.textContent, 'settings.connectionFailed');
+  assert.equal(connectionText.dataset.i18n, 'settings.connectionFailed');
+  assert.equal(button.disabled, false);
+});
+
+test('a failed Path of Exile connect hands the whole reply to the error copy and never shows its raw text', async () => {
+  const toasts = [];
+  const mapped = [];
+  const replies = [
+    { success: false, errorCode: 'POE_DIFFERENT_ACCOUNT', error: 'That is a different Path of Exile account. Sign out to switch accounts.' },
+    { success: false, errorCode: null, error: "EACCES: permission denied, open 'C:\\Users\\someone\\poe-tokens.json'" }
+  ];
+  const characterConnectBtn = createButtonStub('character.connect');
+  const poeConnectBtn = createButtonStub('settings.poeConnect');
+  const context = loadFunctions(['setButtonBusy', 'handleConnectPoeDevice'], {
+    state: { account: { activePoeVersion: 'poe1' }, poeDeviceConnected: false },
+    elements: { characterConnectBtn, poeConnectBtn },
+    window: {
+      electronAPI: { connectPoeDevice: async () => replies.shift() },
+      t: (key) => key
+    },
+    showToast: (...args) => toasts.push(args),
+    // The real mapping, which reads errorCode first, is checked with the error helpers in settings-ui.
+    getUserFacingErrorMessage: (error, fallbackKey) => {
+      mapped.push(error);
+      return fallbackKey;
+    },
+    refreshDeviceCharacters: async () => assert.fail('a failed connect loads no characters'),
+    renderPoeLinkStatus: () => {},
+    renderCharacterSummaryCard: () => {}
+  });
+
+  await context.handleConnectPoeDevice();
+  await context.handleConnectPoeDevice();
+
+  assert.equal(mapped[0].errorCode, 'POE_DIFFERENT_ACCOUNT');
+  assert.deepEqual(toasts, [
+    ['toast.poeConnectFailed', 'toast.tryAgain', 'error'],
+    ['toast.poeConnectFailed', 'toast.tryAgain', 'error']
+  ]);
+  assert.equal(context.state.poeDeviceConnected, false);
+  assert.equal(poeConnectBtn.disabled, false);
+  assert.equal(poeConnectBtn.label.textContent, 'settings.poeConnect');
 });
 
 test('server sign-in stays busy and disabled while the browser is open, then shows the account state', async () => {
@@ -371,7 +450,9 @@ test('server sign-in stays busy and disabled while the browser is open, then sho
       },
       t: (key) => key
     },
-    showToast: () => {},
+    showToast: (...args) => calls.push(['showToast', ...args]),
+    // The account status line shows the sign-in; the announcer reads it out instead of a toast.
+    announceStatus: (text) => calls.push(['announce', text]),
     getUserFacingErrorMessage: () => 'failed',
     refreshOnlineAccount: async () => {
       state.onlineAccount = { enabled: true, signedIn: true };
@@ -384,6 +465,7 @@ test('server sign-in stays busy and disabled while the browser is open, then sho
 
   assert.deepEqual(calls, [
     ['waiting', true, 'true', 'login.waitingBrowser'],
+    ['announce', 'settings.onlineAccountSignedIn'],
     ['refreshed', true, 'true']
   ]);
   assert.equal(button.getAttribute('aria-busy'), null);

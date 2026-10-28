@@ -360,7 +360,7 @@ test('game-version change triggers active character refresh scheduling for poe2'
         onNavigate() {}
       }
     },
-    showToast() {},
+    showToast: (...args) => calls.push(['showToast', ...args]),
     formatDuration() { return '0m 0s'; },
     refreshTrackerData() {},
     updateActiveSessionUI() {},
@@ -392,6 +392,7 @@ test('game-version change triggers active character refresh scheduling for poe2'
   context.setupIPCListeners();
   context.window.electronAPI._handler({ version: 'poe2', logPath: 'F:/SteamLibrary/steamapps/common/Path of Exile 2/Client.txt' });
 
+  // The game badge and character card show the switch; there is no toast for it.
   assert.deepEqual(calls, [
     ['syncRendererGameContext', 'poe2', 'F:/SteamLibrary/steamapps/common/Path of Exile 2/Client.txt'],
     { version: 'poe2' }

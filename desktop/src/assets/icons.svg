@@ -219,4 +219,18 @@
       <path d="M6 6l12 12M18 6L6 18"/>
     </g>
   </symbol>
+
+  <symbol id="warn" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter">
+      <path d="M12 3.5l9 17H3z"/>
+      <path d="M12 9.5v4.5M12 17.25v.25"/>
+    </g>
+  </symbol>
+
+  <symbol id="alert" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter">
+      <path d="M8.5 3.5h7l5 5v7l-5 5h-7l-5-5v-7z"/>
+      <path d="M12 7.5v6M12 16.5v.25"/>
+    </g>
+  </symbol>
 </svg>
