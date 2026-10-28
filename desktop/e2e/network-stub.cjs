@@ -4,6 +4,7 @@
 // JUICE_JOURNAL_E2E_POE_SCOPE overrides the granted scopes; by default only what the built-in sign-in asks for.
 // JUICE_JOURNAL_E2E_PRICES holds poe.ninja chaos values by item name; every league is "Standard".
 // Other URLs (the bug report issue page) are recorded in globalThis.__e2eExternalUrls and never opened.
+// shell.openPath records the path in globalThis.__e2eOpenedPaths and opens nothing.
 const http = require('http');
 const path = require('path');
 const { shell } = require('electron');
@@ -33,6 +34,11 @@ shell.openExternal = async (externalUrl) => {
   http.get(callback, (response) => response.resume()).on('error', (error) => {
     console.error('e2e network stub could not reach the sign-in callback', error);
   });
+};
+
+shell.openPath = async (target) => {
+  (globalThis.__e2eOpenedPaths ||= []).push(target);
+  return '';
 };
 
 function poeNinjaResponse(url, params = {}) {

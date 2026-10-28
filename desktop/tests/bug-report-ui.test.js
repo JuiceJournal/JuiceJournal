@@ -300,9 +300,9 @@ test('Settings > About ends with a Report a bug group that shows the report and 
   );
   assert.match(group, /<p class="settings-desc bug-report-note" data-i18n="settings\.errorLogNote">/);
 
-  // Clearing the error log belongs to the Data tab, which does not exist yet.
+  // Clearing the error log lives in Settings > Data; About only points there.
   assert.doesNotMatch(group, /id="[^"]*clear/i);
-  assert.doesNotMatch(group, /Settings (?:>|→|&gt;) Data/);
+  assert.match(group, /Settings (?:>|&gt;) Data/);
 });
 
 test('the sign-in panel links to a report panel with the same preview and buttons and a way back', () => {

@@ -238,6 +238,81 @@ test('desktop bug report keys have their own ASCII Turkish strings', () => {
   assert.match(translations.tr['toast.bugReportOpenManually'], /\{url\}/);
 });
 
+test('desktop Data tab keys have their own ASCII Turkish strings', () => {
+  const translations = loadDesktopTranslations();
+  const newKeys = [
+    'settings.data',
+    'settings.dataAppliesNow',
+    'settings.dataFolder',
+    'settings.dataFolderDesc',
+    'settings.dataTotalSize',
+    'settings.dataSizeLoading',
+    'settings.dataSizeUnavailable',
+    'settings.openDataFolder',
+    'settings.clearLogs',
+    'settings.clearLogsDesc',
+    'settings.auditTrail',
+    'settings.diagnosticsHint',
+    'toast.logsCleared',
+    'toast.logsClearFailed',
+    'toast.dataActionBusy',
+    'toast.dataFolderOpenFailed',
+  ];
+
+  for (const key of newKeys) {
+    assert.ok(translations.en[key], `Missing en string for ${key}`);
+    assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
+    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
+  }
+  // The renamed log has one name in both languages.
+  assert.equal(translations.en['settings.auditTrail'], 'Activity log');
+  assert.equal(translations.tr['settings.auditTrail'], 'Etkinlik gunlugu');
+  // The README quotes these labels.
+  assert.equal(translations.en['settings.clearLogs'], 'Clear logs');
+  assert.equal(translations.en['settings.openDataFolder'], 'Open folder');
+  assert.equal(translations.en['settings.data'], 'Data');
+  assert.match(translations.en['settings.dataTotalSize'], /\{size\}/);
+  assert.match(translations.tr['settings.dataTotalSize'], /\{size\}/);
+  // About points to the tab and the button by their own labels.
+  assert.ok(translations.en['settings.errorLogNote'].includes(`${translations.en['settings.clearLogs']} in Settings > ${translations.en['settings.data']}`));
+  assert.ok(translations.tr['settings.errorLogNote'].includes(`Ayarlar > ${translations.tr['settings.data']}`));
+  assert.ok(translations.tr['settings.errorLogNote'].includes(translations.tr['settings.clearLogs']));
+  for (const [key, value] of Object.entries(translations.en)) {
+    if (key.startsWith('settings.') || key.startsWith('toast.')) {
+      assert.doesNotMatch(value, /audit/i, `en ${key} still says audit`);
+    }
+  }
+});
+
+test('main process dialogs use keys that exist in en and tr', () => {
+  // main.js t() falls back to the raw key, so a typo would show 'dataClearLogsTitle' in a dialog.
+  const mainSource = read(path.join(desktopDir, 'main.js'));
+  const start = mainSource.indexOf('const MAIN_PROCESS_TRANSLATIONS = {');
+  const end = mainSource.indexOf('\n};', start);
+  const translations = vm.runInNewContext(
+    `(${mainSource.slice(start + 'const MAIN_PROCESS_TRANSLATIONS = '.length, end + 2)})`
+  );
+  const enKeys = Object.keys(translations.en);
+
+  assert.deepEqual(Object.keys(translations.tr).sort(), [...enKeys].sort());
+  for (const [, key] of mainSource.matchAll(/[^\w.]t\(\s*'([A-Za-z0-9]+)'/g)) {
+    assert.ok(translations.en[key], `Missing main process string for ${key}`);
+  }
+  // Keys are never built at runtime: the only t( without a string literal is the definition.
+  assert.deepEqual(
+    [...mainSource.matchAll(/[^\w.]t\(\s*[^'\s]/g)].map((match) => mainSource.slice(match.index + 1, match.index + 19)),
+    ['t(key, values = {}']
+  );
+  for (const key of enKeys.filter((name) => name.startsWith('data'))) {
+    assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
+    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
+  }
+  for (const key of ['dataClearLogsTitle', 'dataClearLogsMessage', 'dataClearLogsDetail', 'dataClearLogsConfirm', 'promptCancel']) {
+    assert.ok(translations.en[key], `Missing en main process string for ${key}`);
+    assert.ok(translations.tr[key], `Missing tr main process string for ${key}`);
+  }
+});
+
 test('web english message dictionary covers every used localization key', async () => {
   const translations = await loadWebTranslations();
   const usedKeys = extractWebUsedKeys();

@@ -80,7 +80,8 @@ const ERROR_DEDUPE_WINDOW_MS = 10 * 60_000;
 const ERROR_DEDUPE_MAX_KEYS = 200;
 // poePaths: every Client.txt path seen in this run. poePath switches between the PoE1 and PoE2 folders, and
 // lines logged under either one must stay redacted.
-const errorLogState = { writing: false, recent: new Map(), poePaths: new Set(), redactionTargets: [] };
+// disabled: true while Settings > Data deletes the file, so nothing writes it back meanwhile.
+const errorLogState = { writing: false, disabled: false, recent: new Map(), poePaths: new Set(), redactionTargets: [] };
 const WINDOWS_APP_ICON_PATH = path.join(__dirname, 'src', 'assets', 'icon.ico');
 const APP_ICON_PATH = process.platform === 'win32'
   ? WINDOWS_APP_ICON_PATH
@@ -165,7 +166,11 @@ const MAIN_PROCESS_TRANSLATIONS = {
     gameClosed: '{game} kapatildi',
     gameSwitched: '{from} → {to} gecis yapildi',
     poeNoAccountId: 'Path of Exile hesap kimligini gondermedi.',
-    poeDifferentAccount: 'Bu farkli bir Path of Exile hesabi. Hesap degistirmek icin cikis yap.'
+    poeDifferentAccount: 'Bu farkli bir Path of Exile hesabi. Hesap degistirmek icin cikis yap.',
+    dataClearLogsTitle: 'Loglari temizle',
+    dataClearLogsMessage: 'Etkinlik gunlugu ve hata logu temizlensin mi?',
+    dataClearLogsDetail: 'Bu bilgisayarda silinirler ve geri alinamaz. Oturumlarin, lootun, map sonuclarin ve ayarlarin kalir. Disa aktardigin diagnostik dosyalari ve kopyaladigin raporlar degismez.',
+    dataClearLogsConfirm: 'Temizle'
   },
   en: {
     trayStillRunning: 'The app is still running in the system tray.',
@@ -221,7 +226,11 @@ const MAIN_PROCESS_TRANSLATIONS = {
     gameClosed: '{game} closed',
     gameSwitched: 'Switched {from} → {to}',
     poeNoAccountId: 'Path of Exile did not return an account id.',
-    poeDifferentAccount: 'That is a different Path of Exile account. Sign out to switch accounts.'
+    poeDifferentAccount: 'That is a different Path of Exile account. Sign out to switch accounts.',
+    dataClearLogsTitle: 'Clear logs',
+    dataClearLogsMessage: 'Clear the activity log and the error log?',
+    dataClearLogsDetail: 'This deletes them on this PC and cannot be undone. Your sessions, loot, map results and settings stay. Diagnostics files you exported and reports you copied are not changed.',
+    dataClearLogsConfirm: 'Clear'
   }
 };
 
@@ -358,6 +367,10 @@ let sessionPrices = null;
 let journalStore = null;
 // The bug report the user last saw. Copy and the issue button use exactly this text, and only with its id.
 let bugReport = null;
+// Settings > Data runs one data action at a time; a second call is told it is busy instead of opening a second dialog.
+let dataActionRunning = false;
+// The folder walk in progress; a summary asked for meanwhile gets its answer instead of walking again.
+let localDataSummaryLoad = null;
 let runtimeSessionState = createRuntimeSessionState();
 let overlayWindow = null;
 let overlayWindowIgnoresMouse = null;
@@ -729,7 +742,7 @@ function refreshRedactionTargets() {
 
 // Appends one redacted JSON line. Never logs and never throws: the console tee calls it.
 function recordError(source, level, value) {
-  if (errorLogState.writing) {
+  if (errorLogState.writing || errorLogState.disabled) {
     return;
   }
 
@@ -777,6 +790,25 @@ function readRecentErrors(limit = 20) {
     return bugReportModel.parseErrorLog(fs.readFileSync(getErrorLogPath(), 'utf8'), limit);
   } catch {
     return [];
+  }
+}
+
+// Settings > Data: deletes logs/errors.jsonl and keeps the logs folder (recordError recreates it anyway). Logging is
+// off meanwhile, so the console tee cannot write the file back while it is being deleted. False while another
+// program holds the file (EPERM or EBUSY).
+async function clearErrorLog() {
+  const wasDisabled = errorLogState.disabled;
+  errorLogState.disabled = true;
+  try {
+    await fs.promises.rm(getErrorLogPath(), { force: true });
+    // Otherwise an error that repeats right after the clear would only be counted, not written.
+    errorLogState.recent.clear();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    // A caller that turned logging off for longer keeps it off.
+    errorLogState.disabled = wasDisabled;
   }
 }
 
@@ -2032,6 +2064,100 @@ async function copyAndOpenBugReportIssue(reportId) {
     return copied;
   }
   return { ...copied, ...(await openBugReportIssue(bugReport.issueUrl)) };
+}
+
+// Settings > Data: bytes under target. Never follows a symlink or junction; an entry that vanished, is locked or
+// unreadable counts as 0, so this never throws. One entry at a time: the browser cache holds many files, and the
+// app's own file and network calls share the thread pool with this walk.
+async function getPathSize(target) {
+  try {
+    const stats = await fs.promises.lstat(target);
+    if (stats.isSymbolicLink()) {
+      return 0;
+    }
+    if (!stats.isDirectory()) {
+      return stats.size;
+    }
+    let total = 0;
+    for (const entry of await fs.promises.readdir(target, { withFileTypes: true })) {
+      if (!entry.isSymbolicLink()) {
+        total += await getPathSize(path.join(target, entry.name));
+      }
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+
+// Only Settings > Data shows the folder path; it never goes into the bug report, the error log or a toast. A data
+// folder moved behind a junction is measured at its target; links inside it are still skipped.
+function getLocalDataSummary() {
+  if (!localDataSummaryLoad) {
+    const folderPath = app.getPath('userData');
+    localDataSummaryLoad = fs.promises.realpath(folderPath)
+      .catch(() => folderPath)
+      .then(async (root) => ({ folderPath, totalBytes: await getPathSize(root) }))
+      .finally(() => {
+        localDataSummaryLoad = null;
+      });
+  }
+  return localDataSummaryLoad;
+}
+
+// Opens the data folder in File Explorer. The OS error text can name the path, so only a flag goes back.
+async function openDataFolder() {
+  try {
+    return { opened: !(await shell.openPath(app.getPath('userData'))) };
+  } catch {
+    return { opened: false };
+  }
+}
+
+// One confirm in main (Cancel is the default), then the activity log and the error log. Writes no activity entry about
+// the clearing and answers with step names only, because fs error texts name the full path.
+async function clearLogs() {
+  if (dataActionRunning) {
+    return { busy: true };
+  }
+
+  dataActionRunning = true;
+  try {
+    let choice;
+    try {
+      choice = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        buttons: [t('dataClearLogsConfirm'), t('promptCancel')],
+        defaultId: 1,
+        cancelId: 1,
+        noLink: true,
+        title: t('dataClearLogsTitle'),
+        message: t('dataClearLogsMessage'),
+        detail: t('dataClearLogsDetail')
+      });
+    } catch {
+      // Returned, not thrown: Electron logs a failed handler, and that line would go into the error log.
+      return { cleared: false, failed: ['confirm'] };
+    }
+    if (choice.response !== 0) {
+      return { canceled: true };
+    }
+
+    const failed = [];
+    try {
+      setAuditTrail([]);
+    } catch {
+      failed.push('activityLog');
+    }
+    if (!(await clearErrorLog())) {
+      failed.push('errorLog');
+    }
+    // The cached report lists both logs: Copy now reports stale and the view builds the report again.
+    bugReport = null;
+    return failed.length ? { cleared: false, failed } : { cleared: true };
+  } finally {
+    dataActionRunning = false;
+  }
 }
 
 async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expectedState, codeVerifier }) {
@@ -3998,6 +4124,11 @@ function setupIPC() {
   ipcMain.handle('get-bug-report', () => getBugReport());
   ipcMain.handle('copy-bug-report', (event, reportId) => copyBugReportToClipboard(reportId));
   ipcMain.handle('open-bug-report-issue', (event, reportId) => copyAndOpenBugReportIssue(reportId));
+
+  // Settings > Data. No renderer input: main picks the folder and asks for the confirm itself.
+  ipcMain.handle('get-local-data-summary', () => getLocalDataSummary());
+  ipcMain.handle('open-data-folder', () => openDataFolder());
+  ipcMain.handle('clear-logs', () => clearLogs());
 
   // Manuel loot ekle
   ipcMain.handle('add-loot', async (event, data) => {

@@ -304,6 +304,21 @@ test('recordError appends one JSON line and creates the logs folder', () => {
   assert.deepEqual(state.mkdirCalls, [[`${USER_DATA}\\logs`, { recursive: true }]]);
 });
 
+test('recordError writes nothing while the log is being cleared', () => {
+  const { context, state, errorLogState, readLines } = loadErrorLog();
+
+  errorLogState.disabled = true;
+  context.recordError('main', 'error', new Error('during clear'));
+  assert.equal(state.appendCalls, 0);
+  // Not remembered either, so the same error is written once logging is back.
+  assert.equal(errorLogState.recent.size, 0);
+
+  errorLogState.disabled = false;
+  context.recordError('main', 'error', new Error('during clear'));
+  assert.equal(state.appendCalls, 1);
+  assert.equal(readLines().length, 1);
+});
+
 test('recordError writes no account, character, league, server or path it knows about', () => {
   const { context, state, readLines } = loadErrorLog({
     settings: {

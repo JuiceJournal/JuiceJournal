@@ -36,6 +36,9 @@ Juice Journal has no accounts and no servers of its own. Your data is stored und
 - `icon-cache/`: downloaded item icons
 - `ocr-cache/`: the OCR language data (`eng.traineddata`), downloaded on the first scan
 - `logs/errors.jsonl`: recent app errors and warnings (at most 128 KB), with names, paths and tokens removed where possible
+- `Cache`, `GPUCache` and other folders that Electron creates for the app window
+
+Settings → Data shows this folder and its total size. **Open folder** opens it in File Explorer. **Clear logs** deletes the activity log and the error log after you confirm; your sessions, loot, map results and settings stay. Diagnostics files you exported and reports you copied are not changed.
 
 The OCR scan's screenshot is processed on your PC and is not uploaded.
 
@@ -83,7 +86,7 @@ Good to know:
 - If the log file was not found, set the `Client.txt` path in Settings. Turn on the overlay there too.
 - The OCR scan hotkeys, F9 and Ctrl+Shift+L, are only held while a session runs and the game window is in front (for the whole session if the app cannot read which window is in front); the game does not receive those two keys then. Change them in Settings → Hotkeys.
 - Closing the window keeps the app running in the tray.
-- Deleting `%APPDATA%\Juice Journal\` removes all of your local data.
+- Settings → Data shows where your local data is stored. To delete that folder by hand, quit from the tray first (right-click the tray icon, then **Quit**); deleting `%APPDATA%\Juice Journal\` removes all of your local data.
 
 Build a Windows installer into `desktop/dist/`:
 

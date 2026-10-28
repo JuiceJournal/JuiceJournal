@@ -432,6 +432,45 @@ test('settings smoke: launches desktop app and shows core settings controls', as
     expect(toLf(await readClipboard(electronApp))).toBe(aboutReport);
     expect(backend.requests).toEqual([]);
 
+    // Settings > Data: the isolated folder, its size, Open folder (stubbed) and Clear logs behind main's confirm.
+    await page.locator('.settings-nav-btn[data-settings-tab="data"]').click();
+    await expect(page.locator('#settings-data')).toHaveClass(/active/);
+    await expect(page.locator('#data-folder-path')).toHaveText(isolatedProfile.userDataDir);
+    await expect(page.locator('#data-total-size')).toHaveText(/^Total size: [\d,.]+ (KB|MB)$/);
+    await expect(page.locator('#settings-data #audit-trail-list .audit-entry')).not.toHaveCount(0);
+    await expect(page.locator('#settings-api #audit-trail-list')).toHaveCount(0);
+    await page.locator('#open-data-folder').click();
+    await expect.poll(() => electronApp.evaluate(() => globalThis.__e2eOpenedPaths || [])).toEqual([isolatedProfile.userDataDir]);
+    await electronApp.evaluate(({ dialog }) => {
+      globalThis.__e2eMessageBoxes = [];
+      globalThis.__e2eMessageBoxResponse = 1;
+      dialog.showMessageBox = async (...args) => {
+        globalThis.__e2eMessageBoxes.push(args.at(-1));
+        return { response: globalThis.__e2eMessageBoxResponse, checkboxChecked: false };
+      };
+    });
+    await page.locator('#clear-logs').click();
+    await expect.poll(() => electronApp.evaluate(() => globalThis.__e2eMessageBoxes.length)).toBe(1);
+    const [confirmOptions] = await electronApp.evaluate(() => globalThis.__e2eMessageBoxes);
+    expect(confirmOptions).toMatchObject({ type: 'warning', defaultId: 1, cancelId: 1, noLink: true, buttons: ['Clear', 'Cancel'] });
+    expect(Object.values(confirmOptions).flat().join('\n')).not.toContain(isolatedProfile.userDataDir);
+    await expect(page.locator('#clear-logs')).toBeEnabled();
+    await expect(page.locator('#settings-data #audit-trail-list .audit-entry')).not.toHaveCount(0);
+    expect(readErrorLog()).toContain('e2e renderer failure');
+    await electronApp.evaluate(() => { globalThis.__e2eMessageBoxResponse = 0; });
+    await page.locator('#clear-logs').click();
+    await expect(page.locator('#toast-container')).toContainText('Logs cleared.');
+    await expect(page.locator('#settings-data #audit-trail-list .audit-entry')).toHaveCount(0);
+    await expect(page.locator('#audit-trail-list')).toContainText('No activity yet');
+    await expect.poll(readErrorLog).not.toContain('e2e renderer failure');
+    expect(readErrorLog()).not.toContain('e2e main failure');
+    await expect(page.locator('#toast-container')).not.toContainText(isolatedProfile.userDataDir);
+    await page.locator('.settings-nav-btn[data-settings-tab="about"]').click();
+    await expect(aboutPreview).toContainText('activity entries 0');
+    await expect(aboutPreview).not.toContainText('e2e renderer failure');
+    await expect(aboutPreview).not.toContainText('e2e main failure');
+    expect(backend.requests).toEqual([]);
+
     // The Save button would also send the smoke server's random port, which settings reject, so only the switch is set.
     await page.evaluate(() => window.electronAPI.setSettings({ onlineEnabled: true }));
     await page.reload();

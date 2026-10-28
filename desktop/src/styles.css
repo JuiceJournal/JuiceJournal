@@ -2799,6 +2799,12 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   line-height: 1.4;
 }
 
+/* A tab-wide line above the groups, such as the Data tab's note that its buttons act right away. */
+.settings-tab-note {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .hotkey-hint {
   margin: 0.5rem 0 0;
 }
@@ -3026,6 +3032,24 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 .audit-entry-time {
   font-size: 0.72rem;
   color: var(--text-muted);
+}
+
+/* The data folder path: selectable, and wrapping anywhere so a long path never widens the group. */
+.data-folder-path {
+  display: block;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--bevel-sm);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.clear-logs-note {
+  margin-top: 0.75rem;
 }
 
 /* About Page */

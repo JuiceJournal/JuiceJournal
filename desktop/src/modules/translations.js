@@ -177,6 +177,7 @@ window.Translations = {
     'settings.hotkeys': 'Kisayollar',
     'settings.notifications': 'Bildirimler',
     'settings.api': 'Online',
+    'settings.data': 'Veriler',
     'settings.about': 'Hakkinda',
 
     // Settings - General
@@ -245,12 +246,23 @@ window.Translations = {
     'settings.diagnosticsMode': 'Diagnostik Seviyesi',
     'settings.diagnosticsSafe': 'Guvenli',
     'settings.diagnosticsSensitive': 'Hassas',
-    'settings.diagnosticsHint': 'Guvenli export yalnizca genel durum ozeti icerir. Hassas export oturum ve denetim ayrintilarini ekler.',
+    'settings.diagnosticsHint': 'Guvenli export yalnizca genel durum ozeti icerir. Hassas export oturum ve etkinlik gunlugu ayrintilarini ekler.',
     'settings.exportDiagnostics': 'Diagnostik Disa Aktar',
     'settings.exportingDiagnostics': 'Aktariliyor...',
-    'settings.auditTrail': 'Yerel Islem Gecmisi',
+    'settings.auditTrail': 'Etkinlik gunlugu',
     'settings.auditTrailDesc': 'Son calisma ve diagnostik olaylari.',
     'settings.auditTrailEmpty': 'Henuz kayit yok',
+
+    // Settings - Data
+    'settings.dataAppliesNow': 'Bu sekmedeki dugmeler hemen calisir; Kaydet gerekmez.',
+    'settings.dataFolder': 'Verilerin nerede',
+    'settings.dataFolderDesc': 'Ayarlar, gunlugun, item ikonlari, OCR dil verisi ve loglar bu klasorde tutulur; uygulama penceresinin tarayici onbellegi de burada.',
+    'settings.dataTotalSize': 'Toplam boyut: {size}',
+    'settings.dataSizeLoading': 'Klasor olculuyor...',
+    'settings.dataSizeUnavailable': 'Klasor olculemedi.',
+    'settings.openDataFolder': 'Klasoru ac',
+    'settings.clearLogs': 'Loglari temizle',
+    'settings.clearLogsDesc': 'Bu bilgisayardaki etkinlik gunlugunu ve hata logunu siler. Oturumlarin, lootun, map sonuclarin ve ayarlarin kalir. Disa aktardigin diagnostik dosyalari ve kopyaladigin raporlar degismez.',
 
     // Settings - About
     'settings.version': 'Versiyon',
@@ -263,7 +275,7 @@ window.Translations = {
     'settings.openBugReportIssue': "Kopyala ve GitHub issue'su ac",
     'settings.openingBugReportIssue': 'GitHub aciliyor...',
     'settings.copyBugReport': 'Raporu kopyala',
-    'settings.errorLogNote': 'Son uygulama hatalari yalnizca bu bilgisayarda tutulur; adlar, yollar ve tokenlar mumkun oldugunca silinir (en fazla 128 KB).',
+    'settings.errorLogNote': 'Son uygulama hatalari yalnizca bu bilgisayarda tutulur; adlar, yollar ve tokenlar mumkun oldugunca silinir (en fazla 128 KB). Silmek icin Ayarlar > Veriler bolumundeki Loglari temizle dugmesini kullan.',
     'settings.license': 'Lisans',
     'settings.gameArtNotice': "Path of Exile gorselleri ve adlari Grinding Gear Games'e aittir. Juice Journal, GGG ile bagli degildir ve GGG tarafindan onaylanmamistir.",
     'settings.updates': 'Uygulama Guncellemeleri',
@@ -329,6 +341,10 @@ window.Translations = {
     'toast.bugReportCopyFailed': 'Rapor kopyalanamadi.',
     'toast.bugReportOpenFailed': 'Rapor kopyalanamadi ya da GitHub acilamadi.',
     'toast.bugReportChanged': 'Rapor degisti. Yeni metni kontrol et, sonra tekrar bas.',
+    'toast.logsCleared': 'Loglar temizlendi.',
+    'toast.logsClearFailed': 'Loglar tam temizlenemedi. Veri klasorunde bir dosyayi acik tutan programi kapatip tekrar dene.',
+    'toast.dataActionBusy': 'Baska bir veri islemi hala suruyor.',
+    'toast.dataFolderOpenFailed': 'Veri klasoru acilamadi.',
 
     // Error messages
     'errors.invalidCredentials': 'Kullanici adi veya sifre hatali',
@@ -1011,6 +1027,7 @@ window.Translations = {
     'settings.hotkeys': 'Hotkeys',
     'settings.notifications': 'Notifications',
     'settings.api': 'Online',
+    'settings.data': 'Data',
     'settings.about': 'About',
 
     // Settings - General
@@ -1079,12 +1096,23 @@ window.Translations = {
     'settings.diagnosticsMode': 'Diagnostics Level',
     'settings.diagnosticsSafe': 'Safe',
     'settings.diagnosticsSensitive': 'Sensitive',
-    'settings.diagnosticsHint': 'Safe export includes only a high-level health summary. Sensitive export adds session and audit details.',
+    'settings.diagnosticsHint': 'Safe export includes only a high-level health summary. Sensitive export adds session and activity log details.',
     'settings.exportDiagnostics': 'Export Diagnostics',
     'settings.exportingDiagnostics': 'Exporting...',
-    'settings.auditTrail': 'Local Audit Trail',
+    'settings.auditTrail': 'Activity log',
     'settings.auditTrailDesc': 'Recent runtime and diagnostics events.',
-    'settings.auditTrailEmpty': 'No audit entries yet',
+    'settings.auditTrailEmpty': 'No activity yet',
+
+    // Settings - Data
+    'settings.dataAppliesNow': 'Buttons on this tab act right away; Save is not needed.',
+    'settings.dataFolder': 'Where your data is',
+    'settings.dataFolderDesc': 'Settings, your journal, item icons, the OCR language data and the logs are kept in this folder, together with the browser cache of the app window.',
+    'settings.dataTotalSize': 'Total size: {size}',
+    'settings.dataSizeLoading': 'Measuring the folder...',
+    'settings.dataSizeUnavailable': 'Could not measure the folder.',
+    'settings.openDataFolder': 'Open folder',
+    'settings.clearLogs': 'Clear logs',
+    'settings.clearLogsDesc': 'Deletes the activity log and the error log on this PC. Your sessions, loot, map results and settings stay. Diagnostics files you exported and reports you copied are not changed.',
 
     // Settings - About
     'settings.version': 'Version',
@@ -1097,7 +1125,7 @@ window.Translations = {
     'settings.openBugReportIssue': 'Copy and open GitHub issue',
     'settings.openingBugReportIssue': 'Opening GitHub...',
     'settings.copyBugReport': 'Copy report',
-    'settings.errorLogNote': 'Recent app errors are kept only on this PC, with names, paths and tokens removed where possible (up to 128 KB).',
+    'settings.errorLogNote': 'Recent app errors are kept only on this PC, with names, paths and tokens removed where possible (up to 128 KB). To delete them, use Clear logs in Settings > Data.',
     'settings.license': 'License',
     'settings.gameArtNotice': 'Path of Exile art and names belong to Grinding Gear Games. Juice Journal is not affiliated with or endorsed by GGG.',
     'settings.updates': 'App Updates',
@@ -1163,6 +1191,10 @@ window.Translations = {
     'toast.bugReportCopyFailed': 'Could not copy the report.',
     'toast.bugReportOpenFailed': 'Could not copy the report or open GitHub.',
     'toast.bugReportChanged': 'The report changed. Check the new text, then press again.',
+    'toast.logsCleared': 'Logs cleared.',
+    'toast.logsClearFailed': 'The logs could not be fully cleared. Close any program that has a file in the data folder open, then try again.',
+    'toast.dataActionBusy': 'Another data action is still running.',
+    'toast.dataFolderOpenFailed': 'Could not open the data folder.',
 
     // Error messages
     'errors.invalidCredentials': 'Invalid username or password',
