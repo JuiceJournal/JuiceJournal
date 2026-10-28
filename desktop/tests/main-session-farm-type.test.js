@@ -397,7 +397,7 @@ test('main session start surfaces journal failures to the renderer', async () =>
     /Local desktop sign-in is required/
   );
 
-  assert.deepEqual(notificationCalls, [['notificationError', 'sessionStartFailed']]);
+  assert.deepEqual(notificationCalls, [['sessionStartFailed', 'notificationTryAgain']]);
 });
 
 test('main session end completes a PoE2 zero-profit session in the journal', async () => {
@@ -442,6 +442,40 @@ test('main session end completes a PoE2 zero-profit session in the journal', asy
   assert.equal(messages[0].payload.status, 'completed');
   assert.equal(messages[0].payload.poeVersion, 'poe2');
   assert.equal(context.currentSession, null);
+});
+
+test('main map end notification names the map and reads the profit or loss with the duration', async () => {
+  const endMap = async (options) => {
+    const backend = createJournalBackend();
+    const active = backend.start({ mapName: 'Channel', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-1');
+    const notifications = [];
+    const context = loadFunctions(['endCurrentSession'], {
+      ...backend.context,
+      currentSession: active,
+      appendAuditTrail() {},
+      showNotification: (title, body) => notifications.push([title, body]),
+      t: (key, values = {}) => [key, values.value, values.minutes, values.seconds]
+        .filter((part) => part !== undefined)
+        .join('|'),
+      updateOverlayWindow() {},
+      mainWindow: null
+    });
+    await context.endCurrentSession(options);
+    return notifications;
+  };
+
+  assert.deepEqual(await endMap({ endedAt: '2026-05-06T12:05:30.000Z' }), [['Channel', 'mapProfitBody|0 · mapDuration|5|30']]);
+  assert.deepEqual(
+    await endMap({ endedAt: '2026-05-06T12:04:12.000Z', totalLootChaos: 412.4, profitChaos: 411.6 }),
+    [['Channel', 'mapProfitBody|+412 · mapDuration|4|12']]
+  );
+  // The loss label carries the sign, so the number is not signed twice.
+  assert.deepEqual(
+    await endMap({ endedAt: '2026-05-06T12:05:30.000Z', totalLootChaos: 0, profitChaos: -85 }),
+    [['Channel', 'mapLossBody|85 · mapDuration|5|30']]
+  );
+  // An end time before the start leaves no duration, so the notice leaves it out.
+  assert.deepEqual(await endMap({ endedAt: '2026-05-06T11:59:00.000Z' }), [['Channel', 'mapProfitBody|0']]);
 });
 
 test('main session end can target a journal session id after process state is lost', async () => {
@@ -796,10 +830,123 @@ test('main OCR scan does not add loot to a session that ended while it read the 
     showNotification: (title, body) => notifications.push([title, body])
   });
 
-  await context.captureAndScan();
+  const result = await context.captureAndScan();
 
   assert.deepEqual(backend.journal.sessions[0].lootEntries, []);
-  assert.deepEqual(notifications, [['notificationError', 'noActiveSession']]);
+  assert.deepEqual(notifications, [['scanNoMapTitle', 'noActiveSession']]);
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { reason: 'noSession' });
+});
+
+test('main OCR scan answers the Scan Loot button with the item count or the reason it added none', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-scan-outcome');
+  const scan = async (overrides = {}) => {
+    const notifications = [];
+    const context = loadOcrScan(backend, session, createFakePriceService(), {
+      showNotification: (title, body) => notifications.push([title, body]),
+      ...overrides
+    });
+    const result = await context.captureAndScan();
+    return { result: JSON.parse(JSON.stringify(result)), notifications };
+  };
+
+  const added = await scan();
+  assert.deepEqual(added.result, { count: 1 });
+  assert.deepEqual(added.notifications.map(([title]) => title), ['notificationLootAdded']);
+
+  assert.deepEqual(await scan({ ocrScanner: { scanImage: async () => [] } }), {
+    result: { reason: 'noItems' },
+    notifications: [['scanNothingTitle', 'scanNoItems']]
+  });
+  assert.deepEqual(await scan({ require: () => ({ desktopCapturer: { getSources: async () => [] } }) }), {
+    result: { reason: 'captureFailed' },
+    notifications: [['scanFailedTitle', 'screenCaptureFailed']]
+  });
+  assert.deepEqual(await scan({ ocrScanner: { scanImage: async () => { throw new Error('OCR worker crashed'); } } }), {
+    result: { reason: 'failed' },
+    notifications: [['scanFailedTitle', 'lootScanFailed']]
+  });
+  assert.deepEqual(await scan({ currentSession: null }), {
+    result: { reason: 'noSession' },
+    notifications: [['scanNoMapTitle', 'noActiveSession']]
+  });
+  // Only the first scan added loot.
+  assert.equal(backend.journal.sessions[0].lootEntries.length, 1);
+});
+
+test('main sends OS notifications only while the main window is not in front', () => {
+  const notify = (mainWindow, notificationsEnabled = true) => {
+    const shown = [];
+    const context = loadFunctions(['showNotification'], {
+      store: { get: (key) => (key === 'notifications' ? notificationsEnabled : undefined) },
+      APP_ICON_PATH: 'icon',
+      require: () => ({
+        Notification: class {
+          constructor(options) {
+            shown.push(options.title);
+          }
+
+          show() {}
+        }
+      }),
+      mainWindow
+    });
+    context.showNotification('Channel', 'Profit +412c');
+    return shown;
+  };
+  const windowState = ({ destroyed = false, visible = true, focused = true } = {}) => ({
+    isDestroyed: () => destroyed,
+    isVisible: () => visible,
+    isFocused: () => focused
+  });
+
+  assert.deepEqual(notify(windowState()), []);
+  assert.deepEqual(notify(windowState({ focused: false })), ['Channel']);
+  assert.deepEqual(notify(windowState({ visible: false })), ['Channel']);
+  assert.deepEqual(notify(windowState({ destroyed: true })), ['Channel']);
+  assert.deepEqual(notify(null), ['Channel']);
+  assert.deepEqual(notify(windowState({ focused: false }), false), []);
+});
+
+test('the tray Add Loot and Start New Map report in the window they bring to the front', async () => {
+  let template = [];
+  let startFails = false;
+  const sent = [];
+  const shownPages = [];
+  const context = loadFunctions(['refreshTrayMenu'], {
+    tray: { setToolTip() {}, setContextMenu() {} },
+    mainWindow: { isVisible: () => false, webContents: { send: (channel, data) => sent.push([channel, data]) } },
+    Menu: {
+      buildFromTemplate(items) {
+        template = items;
+        return items;
+      }
+    },
+    t: (key) => key,
+    APP_NAME: 'Juice Journal',
+    getValidatedHotkeySettings: () => ({ scanHotkey: 'F9' }),
+    showMainWindow: (page) => shownPages.push(page),
+    hideMainWindowToTray() {},
+    async startNewSession() {
+      if (startFails) {
+        throw new Error('journal write failed');
+      }
+    },
+    captureAndScan: () => assert.fail('the tray scan runs through the Scan Loot handler'),
+    app: {}
+  });
+
+  context.refreshTrayMenu();
+  const item = (label) => template.find((entry) => entry.label?.startsWith(label));
+  item('trayAddLoot').click();
+  item('trayNewSession').click();
+  startFails = true;
+  item('trayNewSession').click();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  // The window is in front, where OS notifications are held back, so the renderer shows the outcome.
+  assert.deepEqual(shownPages, ['dashboard', 'dashboard', 'dashboard']);
+  assert.deepEqual(sent, [['tray-action', 'scanLoot'], ['tray-action', 'startMapFailed']]);
 });
 
 test('main tells the main window when the session prices have loaded', async () => {
@@ -1243,10 +1390,21 @@ test('reconnecting with another GGG account drops the token and keeps the profil
   calls.length = 0;
 
   await context.reconnectPoeDevice();
-  await assert.rejects(() => context.reconnectPoeDevice(), /poeDifferentAccount/);
+  await assert.rejects(() => context.reconnectPoeDevice(), (error) => {
+    assert.match(error.message, /poeDifferentAccount/);
+    // The renderer reads the code, so the reason reaches the player without main's text.
+    assert.equal(error.code, 'POE_DIFFERENT_ACCOUNT');
+    return true;
+  });
 
   assert.equal(context.getActiveProfile().id, profile.id);
   assert.deepEqual(calls, ['clearTokens', ['persistPoeClientTokens', null]]);
+
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+  assert.match(
+    source,
+    /await reconnectPoeDevice\(\);[\s\S]{0,300}return \{\s*success: false,\s*errorCode: error\?\.code \|\| null,/
+  );
 });
 
 test('a failed legacy move keeps the profile inactive and is retried at the next sign-in', async () => {

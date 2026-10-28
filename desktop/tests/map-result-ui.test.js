@@ -699,7 +699,7 @@ test('starting a poe1 map session schedules baseline snapshot without blocking s
   await context.handleStartSession();
   baselineResolve(true);
 
-  // The session-started event from main already toasts the start, so a second toast here would double it.
+  // The Active map card switches to running, so starting a map raises no toast.
   assert.deepEqual(calls, [
     ['startSession', 'Dunes Map'],
     'updateActiveSessionUI',
@@ -708,35 +708,122 @@ test('starting a poe1 map session schedules baseline snapshot without blocking s
   ]);
 });
 
-test('loot-added toasts use the singular copy for one item', () => {
+test('loot, map exit, session start and stash snapshot events refresh the tracker without a toast', () => {
   const listeners = {};
   const toasts = [];
+  const refreshes = [];
+  const calls = [];
+  const state = { currentSession: null };
   const context = loadFunctions(['setupIPCListeners'], {
-    state: { currentSession: null },
+    state,
     window: {
-      t: (key, values = {}) => `${key}:${values.count ?? ''}`,
+      t: (key) => key,
       electronAPI: {
         onMapEntered: (handler) => { listeners.mapEntered = handler; },
         onMapExited: (handler) => { listeners.mapExited = handler; },
         onSessionStarted: (handler) => { listeners.sessionStarted = handler; },
         onSessionEnded: (handler) => { listeners.sessionEnded = handler; },
         onLootAdded: (handler) => { listeners.lootAdded = handler; },
-        onNavigate: (handler) => { listeners.navigate = handler; }
+        onNavigate: (handler) => { listeners.navigate = handler; },
+        onStashSnapshotTaken: (handler) => { listeners.stashSnapshotTaken = handler; }
       }
     },
-    showToast: (title, body) => toasts.push([title, body]),
-    refreshTrackerData: async () => {},
+    showToast: (...args) => toasts.push(args),
+    showMapResultToast: (...args) => toasts.push(['showMapResultToast', ...args]),
+    setRuntimeSessionState: (runtimeSession) => calls.push(['runtime', runtimeSession.mapName]),
+    updateActiveSessionUI: () => calls.push('updateActiveSessionUI'),
+    ensureSessionClock: () => calls.push('ensureSessionClock'),
+    refreshTrackerData: async (options) => refreshes.push(options),
     isPageActive: () => false
   });
 
   context.setupIPCListeners();
   listeners.lootAdded({ items: [{ name: 'Chaos Orb' }] });
-  listeners.lootAdded({ items: [{ name: 'Chaos Orb' }, { name: 'Divine Orb' }, { name: 'Exalted Orb' }] });
+  // The session-ended result is the one notice per map; leaving the map area and starting a map show on the cards.
+  listeners.mapExited({ mapName: 'Tower', duration: 60, runtimeSession: { mapName: 'Tower' } });
+  listeners.sessionStarted({ id: 's1', mapName: 'Tower' });
 
-  assert.deepEqual(toasts, [
-    ['toast.lootAddedTitle:', 'toast.lootAddedBodyOne:1'],
-    ['toast.lootAddedTitle:', 'toast.lootAddedBody:3']
+  // The item count, the profit tile and the Scan Loot outcome cover it.
+  assert.deepEqual(toasts, []);
+  assert.equal(state.currentSession.id, 's1');
+  assert.deepEqual(calls, [['runtime', 'Tower'], 'updateActiveSessionUI', 'ensureSessionClock']);
+  assert.deepEqual(JSON.parse(JSON.stringify(refreshes)), [
+    { includeSessions: false },
+    { includeSessions: true },
+    { includeSessions: true }
   ]);
+  // An automatic baseline snapshot raises nothing, so nobody listens for it.
+  assert.equal(listeners.stashSnapshotTaken, undefined);
+});
+
+test('tray actions run the Scan Loot handler and report a failed map start in the window', () => {
+  const listeners = {};
+  const toasts = [];
+  const scans = [];
+  const scanScreenBtn = { disabled: false };
+  const context = loadFunctions(['setupIPCListeners'], {
+    state: { currentSession: null },
+    elements: { scanScreenBtn },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        onMapEntered: () => {},
+        onMapExited: () => {},
+        onSessionStarted: () => {},
+        onSessionEnded: () => {},
+        onLootAdded: () => {},
+        onNavigate: () => {},
+        onTrayAction: (handler) => { listeners.trayAction = handler; }
+      }
+    },
+    handleScanScreen: () => scans.push('scan'),
+    showToast: (...args) => toasts.push(args)
+  });
+
+  context.setupIPCListeners();
+  listeners.trayAction('scanLoot');
+  // A scan already running keeps the button busy, so the tray does not start a second one.
+  scanScreenBtn.disabled = true;
+  listeners.trayAction('scanLoot');
+  listeners.trayAction('startMapFailed');
+
+  assert.deepEqual(scans, ['scan']);
+  assert.deepEqual(toasts, [['toast.mapStartFailed', 'toast.tryAgain', 'error']]);
+});
+
+test('an update that finished downloading raises one sticky toast with Restart now', () => {
+  const listeners = {};
+  const toasts = [];
+  const handleInstallAppUpdate = async () => {};
+  const context = loadFunctions(['setupIPCListeners'], {
+    state: { currentSession: null, appUpdate: null },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        onMapEntered: () => {},
+        onMapExited: () => {},
+        onSessionStarted: () => {},
+        onSessionEnded: () => {},
+        onLootAdded: () => {},
+        onNavigate: () => {},
+        onAppUpdateStateChanged: (handler) => { listeners.appUpdate = handler; }
+      }
+    },
+    renderAppUpdateState: () => {},
+    handleInstallAppUpdate,
+    showToast: (...args) => toasts.push(args)
+  });
+
+  context.setupIPCListeners();
+  listeners.appUpdate({ enabled: true, available: true, downloaded: false, progress: 40 });
+  listeners.appUpdate({ enabled: true, available: true, downloaded: true });
+  listeners.appUpdate({ enabled: true, available: true, downloaded: true });
+
+  assert.equal(toasts.length, 1);
+  const [title, message, type, options] = toasts[0];
+  assert.deepEqual([title, message, type], ['toast.updateReadyTitle', 'toast.updateReadyBody', 'success']);
+  assert.equal(options.action.label, 'toast.updateRestart');
+  assert.equal(options.action.onSelect, handleInstallAppUpdate);
 });
 
 test('renderer keeps an active session visible when current-session refresh fails', async () => {
@@ -833,6 +920,24 @@ test('poe1 end session completes without stash profit when stash tracking is una
   assert.deepEqual(calls, [['completeWithoutProfit', 'session-1', null]]);
 });
 
+test('poe1 end session without stash tracking says so when the map could not be ended', async () => {
+  const calls = [];
+  const context = loadFunctions(['completePoe1SessionWithStashProfit'], {
+    state: { currentSession: { id: 'session-1', mapName: 'Dunes Map', poeVersion: 'poe1' } },
+    window: { t: (key) => key },
+    isActiveSessionPoe1: () => true,
+    isStashTrackingEnabled: () => false,
+    completePoe1SessionWithoutStashProfit: async () => false,
+    showToast: (...args) => calls.push(args)
+  });
+
+  const result = await context.completePoe1SessionWithStashProfit();
+
+  assert.equal(result, false);
+  // Main's OS notice is only for a window in the background, so the failed end is said in the app.
+  assert.deepEqual(calls, [['toast.mapEndFailed', 'toast.tryAgain', 'error']]);
+});
+
 test('poe1 end session without stash profit lets the journal value the recorded loot', async () => {
   const endSessionCalls = [];
   const calls = [];
@@ -899,7 +1004,7 @@ test('poe1 end session after a stash failure still warns that the stash diff was
 
   await context.completePoe1SessionWithoutStashProfit(undefined, new Error('Missing before-stash baseline'));
 
-  assert.deepEqual(calls, [['stash.profitTracker', 'warning']]);
+  assert.deepEqual(calls, [['stash.completedWithoutStashTitle', 'warning']]);
 });
 
 test('starting a poe1 session makes no stash request when the sign-in lacks account:stashes', async () => {
@@ -1078,7 +1183,7 @@ test('map-entered events prompt for a session with the detected map instead of s
   assert.deepEqual(toasts, []);
 });
 
-test('map-entered toasts only when no start prompt follows', async () => {
+test('map-entered events without a start prompt raise no toast', async () => {
   const cases = [
     { currentSession: null, mapSessionPromptActive: false, settings: { autoStartSession: false } },
     { currentSession: { id: 'running' }, mapSessionPromptActive: false, settings: { autoStartSession: true } },
@@ -1103,7 +1208,8 @@ test('map-entered toasts only when no start prompt follows', async () => {
 
     await context.handleMapEnteredEvent({ mapName: 'Tower' });
 
-    assert.deepEqual(toasts, [['toast.mapEnteredTitle', 'toast.mapEnteredBody:Tower']]);
+    // The Active map card shows the map; entering one is routine.
+    assert.deepEqual(toasts, []);
     assert.deepEqual(startCalls, []);
   }
 });
@@ -1387,6 +1493,7 @@ test('session-ended events persist completed map results for automatic log exits
   const listeners = {};
   const persistedResults = [];
   const refreshCalls = [];
+  const mapToasts = [];
   const context = loadFunctions([
     'normalizeCompletedSessionPoeVersion',
     'shouldPersistCompletedSessionMapResult',
@@ -1412,6 +1519,7 @@ test('session-ended events persist completed map results for automatic log exits
     updateActiveSessionUI: () => {},
     stopSessionClock: () => {},
     showToast: () => {},
+    showMapResultToast: (result) => mapToasts.push({ ...result }),
     refreshTrackerData: async (options) => {
       refreshCalls.push({ ...options });
     },
@@ -1445,6 +1553,8 @@ test('session-ended events persist completed map results for automatic log exits
     netProfit: 0,
     poeVersion: 'poe2'
   }]);
+  // One notice per finished map, built from the saved result.
+  assert.deepEqual(mapToasts, persistedResults);
   assert.deepEqual(refreshCalls, [{ includeSessions: true }]);
 });
 
@@ -1452,6 +1562,7 @@ function loadSessionEndedListener({ stashState = { lastMapResult: null } } = {})
   const listeners = {};
   const persisted = [];
   const overlayResults = [];
+  const mapToasts = [];
   const context = loadFunctions([
     'getSessionNumber',
     'getSessionTimestampMs',
@@ -1499,11 +1610,12 @@ function loadSessionEndedListener({ stashState = { lastMapResult: null } } = {})
     updateActiveSessionUI: () => {},
     stopSessionClock: () => {},
     showToast: () => {},
+    showMapResultToast: (result) => mapToasts.push(JSON.parse(JSON.stringify(result))),
     refreshTrackerData: async () => {}
   });
 
   context.setupIPCListeners();
-  return { context, listeners, persisted, overlayResults };
+  return { context, listeners, persisted, overlayResults, mapToasts };
 }
 
 function createEndedPoe1Session(overrides = {}) {
@@ -1524,7 +1636,7 @@ function createEndedPoe1Session(overrides = {}) {
 }
 
 test('session-ended events show the map result overlay with the loot recorded in the session', async () => {
-  const { context, listeners, persisted, overlayResults } = loadSessionEndedListener();
+  const { context, listeners, persisted, overlayResults, mapToasts } = loadSessionEndedListener();
 
   await listeners.sessionEnded(createEndedPoe1Session({ totalLootChaos: 42, profitChaos: 42 }));
   await listeners.sessionEnded(createEndedPoe1Session({
@@ -1541,10 +1653,15 @@ test('session-ended events show the map result overlay with the loot recorded in
   assert.deepEqual(persisted.map((result) => result.id), overlayResults.map((result) => result.id));
   // A PoE1 map without loot is still a completed result, so the dashboard lists it.
   assert.equal(context.isDisplayableMapResult(persisted[1]), true);
+  // Map exited and session completed are one notice, and a zero result is no warning.
+  assert.deepEqual(
+    mapToasts.map((result) => [result.sessionId, result.netProfit, result.durationSeconds]),
+    [['session-1', 42, 240], ['session-2', 0, 180]]
+  );
 });
 
 test('session-ended events leave sessions completed by a stash diff to that result', async () => {
-  const { listeners, persisted, overlayResults } = loadSessionEndedListener({
+  const { listeners, persisted, overlayResults, mapToasts } = loadSessionEndedListener({
     stashState: { lastMapResult: { id: 'map-result-session-1-1778068800000', sessionId: 'session-1' } }
   });
 
@@ -1552,6 +1669,8 @@ test('session-ended events leave sessions completed by a stash diff to that resu
 
   assert.deepEqual(persisted, []);
   assert.deepEqual(overlayResults, []);
+  // The stash diff saved its own result, so the notice is filled in from main's session-ended payload.
+  assert.deepEqual(mapToasts, [{ mapName: 'Dunes Map', netProfit: 35, poeVersion: 'poe1', durationSeconds: 240 }]);
 });
 
 test('prices-updated events give the dashboard views the Divine and Mirror rates main just loaded', async () => {
@@ -1737,6 +1856,7 @@ test('poe2 result smoke persists zero-profit map result and projects it into Las
     updateActiveSessionUI: () => {},
     stopSessionClock: () => {},
     showToast: () => {},
+    showMapResultToast: () => {},
     refreshTrackerData: async () => {}
   });
 
@@ -1829,7 +1949,11 @@ test('end map button uses the shared visible icon wrapper', () => {
   const html = fs.readFileSync(indexHtmlPath, 'utf8');
 
   assert.match(html, /id="end-session-btn"[\s\S]*class="btn-glyph btn-glyph-stop"/);
-  assert.match(html, /id="end-session-btn"[\s\S]*data-i18n="dashboard\.endMap"/);
+  // The Reading stash busy label goes into the label span, so the stop glyph stays.
+  assert.match(
+    html,
+    /<button[^>]*id="end-session-btn"[^>]*>(?:(?!<\/button>)[\s\S])*?<span class="btn-label" data-i18n="dashboard\.endMap">/
+  );
 });
 
 test('renderer shows an empty last map result state when no completed result exists', () => {
@@ -2762,6 +2886,7 @@ test('renderer publish handler calls desktop bridge and refreshes local history'
       publisherDisplayName: 'Esquetta'
     }),
     window: {
+      t: (key) => key,
       electronAPI: {
         async publishMapResults(payload) {
           publishPayload = payload;
@@ -2801,7 +2926,7 @@ test('renderer publish handler calls desktop bridge and refreshes local history'
   });
   assert.equal(context.state.mapResults[0].publishState, 'published');
   assert.deepEqual(toasts, [
-    { title: 'Farming Hub', message: 'Farm result published.', type: 'success' }
+    { title: 'toast.farmPublished', message: '', type: 'success' }
   ]);
   assert.deepEqual(busyWhilePublishing, [true, 'true']);
   assert.equal(farmPublishConfirmBtn.disabled, false);
@@ -3120,6 +3245,59 @@ test('session drawer shows live duration while the session is active and the sto
   state.selectedSession = { ...state.selectedSession, status: 'completed', endedAt: '2026-10-21T12:01:30.000Z', durationSec: 330 };
   context.renderSessionDrawer();
   assert.equal(durationValue(), 'duration:330');
+});
+
+test('saving run notes says Saved on the drawer button instead of a toast, and a failure gets the error copy', async () => {
+  const calls = [];
+  const sessionDrawerSave = { id: 'drawer-save' };
+  const state = {
+    selectedSession: { id: 'run-1', notes: '' },
+    currentSession: null,
+    sessions: [{ id: 'run-1', notes: '' }, { id: 'run-2', notes: '' }]
+  };
+  const replies = [
+    async (id, payload) => ({ id, strategyTag: payload.strategyTag, notes: payload.notes }),
+    async () => {
+      throw new Error("EPERM: operation not permitted, open 'C:\\Users\\someone\\journal.json'");
+    }
+  ];
+  const context = loadFunctions(['handleSessionMetadataSave'], {
+    state,
+    elements: {
+      sessionDrawerSave,
+      sessionDrawerStrategy: { value: 'Ritual' },
+      sessionDrawerNotes: { value: 'Two scarabs' }
+    },
+    window: {
+      t: (key) => key,
+      electronAPI: { updateSessionDetails: (...args) => replies.shift()(...args) }
+    },
+    setButtonBusy: (button, busy) => calls.push(['busy', button.id, busy]),
+    markButtonSaved: (button) => calls.push(['saved', button.id]),
+    renderSessionDrawer: () => calls.push('renderSessionDrawer'),
+    renderSessionsList: () => calls.push('renderSessionsList'),
+    updateActiveSessionUI: () => calls.push('updateActiveSessionUI'),
+    showToast: (...args) => calls.push(['showToast', ...args]),
+    getUserFacingErrorMessage: (error, fallbackKey) => fallbackKey
+  });
+
+  await context.handleSessionMetadataSave();
+  assert.deepEqual(calls, [
+    ['busy', 'drawer-save', true],
+    'renderSessionDrawer',
+    'renderSessionsList',
+    ['saved', 'drawer-save'],
+    ['busy', 'drawer-save', false]
+  ]);
+  assert.equal(state.sessions[0].notes, 'Two scarabs');
+
+  calls.length = 0;
+  await context.handleSessionMetadataSave();
+  assert.deepEqual(calls, [
+    ['busy', 'drawer-save', true],
+    ['showToast', 'toast.sessionUpdateError', 'toast.tryAgain', 'error'],
+    ['busy', 'drawer-save', false]
+  ]);
 });
 
 const PROFIT_DISPLAY_FUNCTIONS = [

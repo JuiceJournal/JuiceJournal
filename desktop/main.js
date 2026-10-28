@@ -123,23 +123,22 @@ const MAIN_PROCESS_TRANSLATIONS = {
     trayNewSession: 'Yeni Map Session',
     trayAddLoot: 'Loot Ekle',
     trayQuit: 'Cikis',
-    notificationError: 'Hata',
-    notificationInfo: 'Bilgi',
     notificationLootAdded: 'Loot Eklendi',
-    notificationMapStarted: 'Map Basladi',
-    notificationMapCompleted: 'Map Tamamlandi',
     notificationAutoSession: 'Otomatik Session',
-    noActiveSession: 'Aktif map session bulunmuyor. Once yeni bir map baslatin.',
-    screenCaptureFailed: 'Ekran goruntusu alinamadi',
-    stashNoItems: 'Stash icinde tanimlanabilir item bulunamadi',
-    lootScanFailed: 'Loot tarama sirasinda hata olustu',
-    sessionStartFailed: 'Session baslatilamadi',
-    sessionEndFailed: 'Session bitirilemedi',
-    mapStartedBody: '{mapName} mapi baslatildi',
+    notificationTryAgain: 'Juice Journal uygulamasini ac ve tekrar dene.',
+    scanNoMapTitle: 'Aktif map yok',
+    noActiveSession: 'Once bir map baslat, sonra lootunu tara.',
+    scanFailedTitle: 'Tarama basarisiz',
+    screenCaptureFailed: 'Ekran goruntusu alinamadi.',
+    scanNothingTitle: 'Item bulunamadi',
+    scanNoItems: 'Lootun ekranda gorundugunden emin ol, sonra tekrar tara.',
+    lootScanFailed: 'Ekran okunurken bir sorun oldu. Tekrar dene.',
+    sessionStartFailed: 'Map baslatilamadi',
+    sessionEndFailed: 'Map bitirilemedi',
     lootAddedBody: '{count} item eklendi. Toplam: {value}c',
-    mapProfitBody: '{label}: {value}c',
-    mapProfit: 'Kar',
-    mapLoss: 'Zarar',
+    mapProfitBody: 'Kazanc {value}c',
+    mapLossBody: 'Zarar {value}c',
+    mapDuration: '{minutes}dk {seconds}sn',
     autoSessionBody: '{mapName} mapi baslatildi',
     promptStart: 'Baslat',
     promptCancel: 'Iptal',
@@ -162,9 +161,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     pricesSyncFailed: 'Fiyat guncelleme basarisiz',
     poeNotLinked: 'PoE hesabi bagli degil. Ayarlardan baglayabilirsiniz.',
     profitCalculated: 'Kar hesaplandi: {value}c',
-    gameDetected: '{game} algilandi',
     gameClosed: '{game} kapatildi',
-    gameSwitched: '{from} → {to} gecis yapildi',
     poeNoAccountId: 'Path of Exile hesap kimligini gondermedi.',
     poeDifferentAccount: 'Bu farkli bir Path of Exile hesabi. Hesap degistirmek icin cikis yap.',
     dataClearLogsTitle: 'Loglari temizle',
@@ -183,23 +180,22 @@ const MAIN_PROCESS_TRANSLATIONS = {
     trayNewSession: 'Start New Map',
     trayAddLoot: 'Add Loot',
     trayQuit: 'Quit',
-    notificationError: 'Error',
-    notificationInfo: 'Info',
     notificationLootAdded: 'Loot Added',
-    notificationMapStarted: 'Map Started',
-    notificationMapCompleted: 'Map Completed',
     notificationAutoSession: 'Auto Session',
-    noActiveSession: 'No active map session. Start a new map first.',
-    screenCaptureFailed: 'Failed to capture the screen',
-    stashNoItems: 'No recognizable items were found in the stash',
-    lootScanFailed: 'An error occurred while scanning loot',
-    sessionStartFailed: 'Failed to start the session',
-    sessionEndFailed: 'Failed to end the session',
-    mapStartedBody: '{mapName} map started',
+    notificationTryAgain: 'Open Juice Journal and try again.',
+    scanNoMapTitle: 'No map running',
+    noActiveSession: 'Start a map, then scan your loot.',
+    scanFailedTitle: 'Scan failed',
+    screenCaptureFailed: 'Could not capture the screen.',
+    scanNothingTitle: 'No items found',
+    scanNoItems: 'Make sure the loot is visible on screen, then scan again.',
+    lootScanFailed: 'Something went wrong while reading the screen. Try again.',
+    sessionStartFailed: 'Could not start the map',
+    sessionEndFailed: 'Could not end the map',
     lootAddedBody: '{count} items added. Total: {value}c',
-    mapProfitBody: '{label}: {value}c',
-    mapProfit: 'Profit',
-    mapLoss: 'Loss',
+    mapProfitBody: 'Profit {value}c',
+    mapLossBody: 'Loss {value}c',
+    mapDuration: '{minutes}m {seconds}s',
     autoSessionBody: '{mapName} map started',
     promptStart: 'Start',
     promptCancel: 'Cancel',
@@ -222,9 +218,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     pricesSyncFailed: 'Price sync failed',
     poeNotLinked: 'PoE account not linked. Connect it in Settings.',
     profitCalculated: 'Profit calculated: {value}c',
-    gameDetected: '{game} detected',
     gameClosed: '{game} closed',
-    gameSwitched: 'Switched {from} → {to}',
     poeNoAccountId: 'Path of Exile did not return an account id.',
     poeDifferentAccount: 'That is a different Path of Exile account. Sign out to switch accounts.',
     dataClearLogsTitle: 'Clear logs',
@@ -1711,18 +1705,20 @@ function refreshTrayMenu() {
       click: () => showMainWindow('settings')
     },
     { type: 'separator' },
+    // These two bring the window to the front, where OS notifications are held back, so the outcome shows in the app.
     {
       label: t('trayNewSession'),
       click: () => {
         showMainWindow('dashboard');
-        startNewSession();
+        startNewSession().catch(() => mainWindow?.webContents.send('tray-action', 'startMapFailed'));
       }
     },
     {
       label: `${t('trayAddLoot')} (${getValidatedHotkeySettings().scanHotkey})`,
       click: () => {
         showMainWindow('dashboard');
-        captureAndScan();
+        // The Scan Loot button's handler scans and reports the outcome.
+        mainWindow?.webContents.send('tray-action', 'scanLoot');
       }
     },
     { type: 'separator' },
@@ -2377,7 +2373,9 @@ async function reconnectPoeDevice() {
   const account = await connectPoeDevice();
   if (account?.sub !== getActiveProfile()?.poeSub) {
     dropPoeDeviceConnection();
-    throw new Error(t('poeDifferentAccount'));
+    const error = new Error(t('poeDifferentAccount'));
+    error.code = 'POE_DIFFERENT_ACCOUNT';
+    throw error;
   }
 }
 
@@ -3144,14 +3142,12 @@ function releaseInactiveScanHotkeys() {
   }
 }
 
-/**
- * Ekran goruntusu al ve OCR tara
- */
+// Answers the Scan Loot button with { count } or { reason }; an F9 scan from the game is told by the OS notification.
 async function captureAndScan() {
   try {
     if (!currentSession) {
-      showNotification(t('notificationError'), t('noActiveSession'));
-      return;
+      showNotification(t('scanNoMapTitle'), t('noActiveSession'));
+      return { reason: 'noSession' };
     }
 
     // Prices load while the screen is read; a slow or unreachable poe.ninja holds the scan for a few seconds at most.
@@ -3168,8 +3164,8 @@ async function captureAndScan() {
     });
 
     if (sources.length === 0) {
-      showNotification(t('notificationError'), t('screenCaptureFailed'));
-      return;
+      showNotification(t('scanFailedTitle'), t('screenCaptureFailed'));
+      return { reason: 'captureFailed' };
     }
 
     const screenshot = prepareOCRImage(sources[0].thumbnail.toPNG());
@@ -3178,15 +3174,15 @@ async function captureAndScan() {
     const items = await ocrScanner.scanImage(screenshot);
 
     if (items.length === 0) {
-      showNotification(t('notificationInfo'), t('stashNoItems'));
-      return;
+      showNotification(t('scanNothingTitle'), t('scanNoItems'));
+      return { reason: 'noItems' };
     }
 
     await prices;
     // The session may have ended (or another started) while the scan ran.
     if (currentSession?.id !== scannedSession.id) {
-      showNotification(t('notificationError'), t('noActiveSession'));
-      return;
+      showNotification(t('scanNoMapTitle'), t('noActiveSession'));
+      return { reason: 'noSession' };
     }
 
     const result = addLootToCurrentSession(items, 'ocr');
@@ -3201,9 +3197,10 @@ async function captureAndScan() {
       mainWindow.webContents.send('loot-added', { items: result.lootEntries, totalValue });
     }
 
-    return result;
+    return { count: result.lootEntries.length };
   } catch (error) {
-    showNotification(t('notificationError'), t('lootScanFailed'));
+    showNotification(t('scanFailedTitle'), t('lootScanFailed'));
+    return { reason: 'failed' };
   }
 }
 
@@ -3249,9 +3246,6 @@ async function startNewSession(input = {}) {
       void loadSessionPrices(session);
     }
 
-    // Bildirim goster
-    showNotification(t('notificationMapStarted'), t('mapStartedBody', { mapName }));
-
     // Renderer'a bilgi gonder
     if (mainWindow) {
       mainWindow.webContents.send('session-started', session);
@@ -3259,7 +3253,7 @@ async function startNewSession(input = {}) {
 
     return session;
   } catch (error) {
-    showNotification(t('notificationError'), t('sessionStartFailed'));
+    showNotification(t('sessionStartFailed'), t('notificationTryAgain'));
     throw error;
   }
 }
@@ -3418,12 +3412,15 @@ async function endCurrentSession(options = {}) {
     const session = { ...ended.session, ...completionPayload };
     appendAuditTrail('auditSessionEnded', { mapName: session.mapName });
 
-    const profit = parseFloat(session.profitChaos);
-    const message = profit >= 0
-      ? t('mapProfitBody', { label: t('mapProfit'), value: profit.toFixed(1) })
-      : t('mapProfitBody', { label: t('mapLoss'), value: Math.abs(profit).toFixed(1) });
-
-    showNotification(t('notificationMapCompleted'), message);
+    // The OS notice names the map; the in-app result and the overlay card carry the rest.
+    const profit = Math.round(parseFloat(session.profitChaos) || 0);
+    const outcome = profit < 0
+      ? t('mapLossBody', { value: Math.abs(profit) })
+      : t('mapProfitBody', { value: profit > 0 ? `+${profit}` : String(profit) });
+    const duration = durationSeconds
+      ? ` · ${t('mapDuration', { minutes: Math.floor(durationSeconds / 60), seconds: durationSeconds % 60 })}`
+      : '';
+    showNotification(session.mapName || t('unknownMap'), `${outcome}${duration}`);
 
     // Renderer'a bilgi gonder
     if (mainWindow) {
@@ -3437,7 +3434,7 @@ async function endCurrentSession(options = {}) {
 
     return session;
   } catch (error) {
-    showNotification(t('notificationError'), t('sessionEndFailed'));
+    showNotification(t('sessionEndFailed'), t('notificationTryAgain'));
     throw toRendererError(error, t('sessionEndFailed'));
   }
 }
@@ -3470,6 +3467,11 @@ async function promptMapName() {
  */
 function showNotification(title, body) {
   if (!store.get('notifications')) return;
+
+  // The window in front already shows the in-app notice; the OS notification is for when the player is elsewhere.
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused()) {
+    return;
+  }
 
   const notification = new (require('electron').Notification)({
     title,
@@ -3568,7 +3570,7 @@ function setupLogParser() {
 
   logParser.on('mapEntered', (data) => {
     handleMapEntered(data).catch(() => {
-        showNotification(t('notificationError'), t('sessionStartFailed'));
+        showNotification(t('sessionStartFailed'), t('notificationTryAgain'));
     });
   });
 
@@ -3621,7 +3623,6 @@ function setupGameDetector() {
     const gameLabel = version === 'poe2' ? 'Path of Exile 2' : 'Path of Exile';
     console.log(`[GameDetector] ${gameLabel} launched`);
     applyGameVersion(version, { processes });
-    showNotification(t('notificationInfo'), t('gameDetected', { game: gameLabel }));
   });
 
   gameDetector.on('gameSwitched', ({ from, to, processes }) => {
@@ -3629,7 +3630,6 @@ function setupGameDetector() {
     const toLabel = to === 'poe2' ? 'PoE 2' : 'PoE 1';
     console.log(`[GameDetector] Switched from ${fromLabel} to ${toLabel}`);
     applyGameVersion(to, { processes });
-    showNotification(t('notificationInfo'), t('gameSwitched', { from: fromLabel, to: toLabel }));
   });
 
   gameDetector.on('gameClosed', ({ version }) => {
@@ -4693,7 +4693,12 @@ function setupIPC() {
       return { success: true, error: null };
     } catch (error) {
       console.warn('Path of Exile reconnect failed', error);
-      return { success: false, error: normalizeErrorMessage(error, 'Path of Exile sign-in failed') };
+      // The renderer turns a known code, such as a different account, into its own copy.
+      return {
+        success: false,
+        errorCode: error?.code || null,
+        error: normalizeErrorMessage(error, 'Path of Exile sign-in failed')
+      };
     }
   });
 

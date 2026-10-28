@@ -66,6 +66,7 @@ const ERROR_MESSAGE_KEY_MAP = {
   STATS_PERSONAL_LOAD_FAILED: 'errors.unexpected',
   STATS_LEADERBOARD_LOAD_FAILED: 'errors.unexpected',
   STATS_SUMMARY_LOAD_FAILED: 'errors.unexpected',
+  POE_DIFFERENT_ACCOUNT: 'errors.poeDifferentAccount',
   'Invalid username or password': 'errors.invalidCredentials',
   'Username or email is required': 'errors.usernameOrEmailRequired',
   'Password is required': 'errors.passwordRequired',
@@ -102,7 +103,12 @@ const ERROR_MESSAGE_KEY_MAP = {
   'Turn on online features to share farm runs': 'errors.onlineDisabled',
   'The request timed out': 'errors.requestTimeout',
   'An unexpected error occurred': 'errors.unexpected',
-  'Unauthorized request': 'errors.loginFailed'
+  'Unauthorized request': 'errors.loginFailed',
+  'Invalid API URL': 'errors.invalidApiUrl',
+  'Hotkey is required': 'settings.hotkeyErrorRequired',
+  'Hotkey must include a non-modifier key': 'settings.hotkeyErrorModifierOnly',
+  'Hotkey must include only one non-modifier key': 'settings.hotkeyErrorOneKey',
+  'Hotkeys must be unique': 'settings.hotkeyErrorDuplicate'
 };
 
 let sessionClockInterval = null;
@@ -113,6 +119,8 @@ const elements = {
   loginModal: document.getElementById('login-modal'),
   loginSignInPanel: document.querySelector('#login-modal .modal-panel.oauth-only'),
   loginReportProblemBtn: document.getElementById('login-report-problem'),
+  loginError: document.getElementById('login-error'),
+  loginErrorText: document.getElementById('login-error-text'),
   loginBugReportPanel: document.getElementById('login-bug-report-panel'),
   loginBugReportPreview: document.getElementById('login-bug-report-preview'),
   loginOpenBugReportIssueBtn: document.getElementById('login-open-bug-report-issue'),
@@ -135,10 +143,6 @@ const elements = {
   farmPublishInvestmentKnown: document.getElementById('farm-publish-investment-known'),
   farmPublishConfirmBtn: document.getElementById('farm-publish-confirm-btn'),
   farmPublishCancelBtn: document.getElementById('farm-publish-cancel-btn'),
-
-  // Forms
-  loginForm: document.getElementById('login-form'),
-  registerForm: document.getElementById('register-form'),
 
   // Navigation
   navButtons: document.querySelectorAll('.nav-btn'),
@@ -274,6 +278,7 @@ const elements = {
 
   // Toast
   toastContainer: document.getElementById('toast-container'),
+  toastAnnouncer: document.getElementById('toast-announcer'),
 
   // Stash Profit Tracker
   stashTrackerCard: document.getElementById('stash-tracker-card'),
@@ -1271,7 +1276,7 @@ function getCurrentStashUnavailableText() {
 }
 
 function showStashUnavailableToast() {
-  showToast(window.t('toast.error'), getCurrentStashUnavailableText(), 'warning');
+  showToast(window.t('stash.unavailableTitle'), getCurrentStashUnavailableText(), 'info');
 }
 
 function renderRuntimeSessionState() {
@@ -1707,7 +1712,7 @@ async function loadSettings() {
     updateActiveLeagueFieldContext({ syncValue: true, forceValueSync: true });
     await loadSettingsLeagueOptions(ver);
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.settingsError'), 'error');
+    showToast(window.t('toast.settingsLoadFailed'), getUserFacingErrorMessage(error, 'toast.restartHint'), 'error');
   }
 }
 
@@ -2146,12 +2151,6 @@ function setupEventListeners() {
   });
 
   // Auth
-  if (elements.loginForm) {
-    elements.loginForm.addEventListener('submit', handleLogin);
-  }
-  if (elements.registerForm) {
-    elements.registerForm.addEventListener('submit', handleRegister);
-  }
   const showRegisterButton = document.getElementById('show-register');
   if (showRegisterButton) {
     showRegisterButton.addEventListener('click', showRegisterModal);
@@ -2355,7 +2354,7 @@ function setupIPCListeners() {
   // Map olaylari
   window.electronAPI.onMapEntered((data) => {
     handleMapEnteredEvent(data).catch((error) => {
-      showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.sessionStart'), 'error');
+      showToast(window.t('toast.mapStartFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
     });
   });
 
@@ -2363,10 +2362,6 @@ function setupIPCListeners() {
     if (data?.runtimeSession) {
       setRuntimeSessionState(data.runtimeSession);
     }
-    showToast(window.t('toast.mapExitedTitle'), window.t('toast.mapExitedBody', {
-      mapName: data.mapName,
-      duration: formatDuration(data.duration)
-    }));
     refreshTrackerData({ includeSessions: true });
   });
 
@@ -2375,7 +2370,6 @@ function setupIPCListeners() {
     state.currentSession = session;
     updateActiveSessionUI();
     ensureSessionClock();
-    showToast(window.t('toast.sessionStartedTitle'), window.t('toast.sessionStartedBody', { mapName: session.mapName }));
     refreshTrackerData({ includeSessions: true });
   });
 
@@ -2391,20 +2385,19 @@ function setupIPCListeners() {
         console.warn('Failed to show map result overlay', error);
       }
     }
+    // One notice per finished map. A PoE1 stash diff saved its own result before ending, so the session fills in.
     const rawProfit = parseFloat(session?.profitChaos);
-    const profit = Number.isFinite(rawProfit) ? rawProfit : 0;
-    const message = profit >= 0
-      ? window.t('toast.sessionProfitBody', { value: profit.toFixed(1) })
-      : window.t('toast.sessionLossBody', { value: Math.abs(profit).toFixed(1) });
-    showToast(window.t('toast.sessionCompletedTitle'), message, profit >= 0 ? 'success' : 'warning');
+    showMapResultToast(mapResult || {
+      mapName: session?.mapName || '',
+      netProfit: Number.isFinite(rawProfit) ? rawProfit : 0,
+      poeVersion: session?.poeVersion,
+      durationSeconds: getCompletedSessionDurationSeconds(session || {})
+    });
     await refreshTrackerData({ includeSessions: true });
   });
 
   // Loot olaylari
-  window.electronAPI.onLootAdded((data) => {
-    const itemCount = Array.isArray(data.items) ? data.items.length : 1;
-    const bodyKey = itemCount === 1 ? 'toast.lootAddedBodyOne' : 'toast.lootAddedBody';
-    showToast(window.t('toast.lootAddedTitle'), window.t(bodyKey, { count: itemCount }));
+  window.electronAPI.onLootAdded(() => {
     refreshTrackerData({ includeSessions: isPageActive('sessions') });
   });
 
@@ -2412,13 +2405,6 @@ function setupIPCListeners() {
     window.electronAPI.onAuditTrailUpdated((data) => {
       state.auditTrail = data?.entries || [];
       renderAuditTrail();
-    });
-  }
-
-  // Stash events
-  if (window.electronAPI.onStashSnapshotTaken) {
-    window.electronAPI.onStashSnapshotTaken((data) => {
-      showToast(window.t('stash.profitTracker'), window.t('stash.snapshotTaken', { count: data.itemCount }), 'success');
     });
   }
 
@@ -2438,7 +2424,9 @@ function setupIPCListeners() {
       state.appUpdate = data || null;
       renderAppUpdateState();
       if (!wasDownloaded && data?.downloaded) {
-        showToast(window.t('toast.updateReadyTitle'), window.t('toast.updateReadyBody'), 'success');
+        showToast(window.t('toast.updateReadyTitle'), window.t('toast.updateReadyBody'), 'success', {
+          action: { label: window.t('toast.updateRestart'), onSelect: handleInstallAppUpdate }
+        });
       }
     });
   }
@@ -2446,9 +2434,6 @@ function setupIPCListeners() {
   // Game detection
   if (window.electronAPI.onGameVersionChanged) {
     window.electronAPI.onGameVersionChanged(({ version, logPath, runtimeSession }) => {
-      const gameLabel = version === 'poe2' ? 'Path of Exile 2' : 'Path of Exile';
-      showToast(window.t('stash.profitTracker'), window.t('game.detected', { game: gameLabel }), 'info');
-
       if (runtimeSession) {
         setRuntimeSessionState(runtimeSession);
       }
@@ -2505,6 +2490,17 @@ function setupIPCListeners() {
   window.electronAPI.onNavigate((page) => {
     navigateTo(page);
   });
+
+  // The tray's Add Loot and Start New Map bring this window to the front, so their outcome shows here.
+  if (window.electronAPI.onTrayAction) {
+    window.electronAPI.onTrayAction((action) => {
+      if (action === 'scanLoot' && !elements.scanScreenBtn.disabled) {
+        handleScanScreen();
+      } else if (action === 'startMapFailed') {
+        showToast(window.t('toast.mapStartFailed'), window.t('toast.tryAgain'), 'error');
+      }
+    });
+  }
 }
 
 /**
@@ -2600,9 +2596,8 @@ async function handleMapEnteredEvent(data = {}) {
     && !state.currentSession
     && !state.mapSessionPromptActive;
 
-  // A start prompt (overlay or desktop modal) names the map itself, so only toast when none follows.
+  // A start prompt (overlay or desktop modal) names the map; without one the Active map card is enough.
   if (!shouldPromptForSession) {
-    showToast(window.t('toast.mapEnteredTitle'), window.t('toast.mapEnteredBody', { mapName: data.mapName }));
     return;
   }
 
@@ -2797,33 +2792,14 @@ function showRegisterModal() {
   }
 }
 
-/**
- * Giris islemi
- */
-async function handleLogin(e) {
-  e.preventDefault();
-
-  const username = document.getElementById('login-username').value;
-  const password = document.getElementById('login-password').value;
-
-  try {
-    const result = await window.electronAPI.login({ username, password });
-
-    if (result.success) {
-      setCurrentUser({
-        ...result.data.user,
-        capabilities: result.data.capabilities || {}
-      });
-      elements.loginModal.classList.add('hidden');
-      void syncPoeDeviceConnection();
-      await refreshTrackerData();
-      showToast(window.t('login.title'), window.t('toast.loginSuccess'));
-    } else {
-      showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage({ error: result.error }, 'errors.loginFailed'), 'error');
-    }
-  } catch (error) {
-    showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
+// A failed sign-in shows in the open modal, above Report a problem; an empty text hides the line.
+function setLoginError(text) {
+  if (!elements.loginError || !elements.loginErrorText) {
+    return;
   }
+
+  elements.loginError.classList.toggle('hidden', !text);
+  elements.loginErrorText.textContent = text;
 }
 
 /**
@@ -2834,6 +2810,8 @@ async function handleLogin(e) {
 async function handlePoeOAuthLogin() {
   const button = document.getElementById('poe-oauth-login');
   setButtonBusy(button, true, window.t('login.waitingBrowser'));
+  // A new attempt clears the last failure.
+  setLoginError('');
   let failed = false;
 
   try {
@@ -2852,55 +2830,23 @@ async function handlePoeOAuthLogin() {
       await loadMapResultHistory();
       void syncPoeDeviceConnection();
       await refreshTrackerData();
-      showToast(window.t('login.title'), window.t('toast.loginSuccess'));
     } else {
-      showToast(
-        window.t('toast.loginFailed'),
-        getUserFacingErrorMessage({ error: result?.error }, 'errors.loginFailed'),
-        'error'
-      );
+      setLoginError(window.t('login.failedInline', { reason: getUserFacingErrorMessage({ error: result?.error }, 'login.failedHint') }));
       failed = true;
     }
   } catch (error) {
-    showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
+    setLoginError(window.t('login.failedInline', { reason: getUserFacingErrorMessage(error, 'login.failedHint') }));
     failed = true;
   } finally {
     setButtonBusy(button, false);
   }
 
   // Main logged the failure before it answered, so a report opened while sign-in waited is built again to show it.
+  // The inline line waits on the hidden sign-in panel, so a toast says it meanwhile.
   if (failed && elements.loginModal?.classList.contains('hidden') === false
     && elements.loginBugReportPanel?.classList.contains('hidden') === false) {
+    showToast(window.t('login.failedTitle'), '', 'error');
     void loadBugReportPreview(bugReportViews.login);
-  }
-}
-
-/**
- * Kayit islemi
- */
-async function handleRegister(e) {
-  e.preventDefault();
-
-  const username = document.getElementById('register-username').value;
-  const email = document.getElementById('register-email').value;
-  const password = document.getElementById('register-password').value;
-
-  try {
-    const result = await window.electronAPI.register({ username, email, password });
-
-    if (result.success) {
-      setCurrentUser({
-        ...result.data.user,
-        capabilities: result.data.capabilities || {}
-      });
-      elements.registerModal.classList.add('hidden');
-      await refreshTrackerData();
-      showToast(window.t('register.title'), window.t('toast.registerSuccess'));
-    } else {
-      showToast(window.t('toast.registerFailed'), getUserFacingErrorMessage({ error: result.error }, 'errors.registerFailed'), 'error');
-    }
-  } catch (error) {
-    showToast(window.t('toast.registerFailed'), getUserFacingErrorMessage(error, 'errors.registerFailed'), 'error');
   }
 }
 
@@ -3203,13 +3149,14 @@ async function handleConnectPoeDevice() {
   try {
     const result = await window.electronAPI.connectPoeDevice();
     if (!result?.success) {
-      showToast(window.t('toast.error'), result?.error || window.t('errors.loginFailed'), 'error');
+      // The reply carries main's error code, so a different account says how to switch instead of try again.
+      showToast(window.t('toast.poeConnectFailed'), getUserFacingErrorMessage(result, 'toast.tryAgain'), 'error');
       return;
     }
     state.poeDeviceConnected = true;
     await refreshDeviceCharacters(state.account?.activePoeVersion);
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
+    showToast(window.t('toast.poeConnectFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   } finally {
     buttons.forEach((button) => setButtonBusy(button, false));
     renderPoeLinkStatus();
@@ -3299,9 +3246,10 @@ async function handlePoeDisconnect() {
     state.poeDeviceConnected = false;
     renderPoeLinkStatus();
     renderCharacterSummaryCard();
-    showToast(window.t('toast.poeTitle'), window.t('toast.poeDisconnected'), 'success');
+    // The link status line shows it; the announcer reads it out, since the hidden button took focus with it.
+    announceStatus(window.t('settings.poeNotLinked'));
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.poeDisconnectError'), 'error');
+    showToast(window.t('toast.poeDisconnectError'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   } finally {
     setButtonBusy(elements.poeDisconnectBtn, false);
   }
@@ -3990,9 +3938,9 @@ async function handleMapResultPublish(resultId) {
 
     renderLatestMapResult();
     renderMapResultHistory();
-    showToast('Farming Hub', 'Farm result published.', 'success');
+    showToast(window.t('toast.farmPublished'), '', 'success');
   } catch (error) {
-    showToast('Farming Hub', getUserFacingErrorMessage(error, 'errors.farmPublish'), 'error');
+    showToast(window.t('toast.farmPublishFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   } finally {
     setButtonBusy(elements.farmPublishConfirmBtn, false);
   }
@@ -4372,7 +4320,7 @@ async function handleStartSession(options = {}) {
       await refreshTrackerData({ includeSessions: true });
     }
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.sessionStart'), 'error');
+    showToast(window.t('toast.mapStartFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   }
 }
 
@@ -4385,7 +4333,18 @@ async function handleEndSession() {
   if (!await requestEndSessionConfirmation(state.currentSession)) return;
 
   if (typeof completePoe1SessionWithStashProfit === 'function' && isActiveSessionPoe1(state.currentSession)) {
-    await completePoe1SessionWithStashProfit();
+    // Reading the stash can take a few tries; the button says so instead of a toast per try, and the announcer reads
+    // it out once.
+    const busyLabel = isStashTrackingEnabled() ? window.t('stash.readingStash') : undefined;
+    setButtonBusy(elements.endSessionBtn, true, busyLabel);
+    if (busyLabel) {
+      announceStatus(busyLabel);
+    }
+    try {
+      await completePoe1SessionWithStashProfit();
+    } finally {
+      setButtonBusy(elements.endSessionBtn, false);
+    }
     return;
   }
 
@@ -4406,7 +4365,7 @@ async function handleEndSession() {
     updateActiveSessionUI();
     await refreshTrackerData({ includeSessions: true });
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'errors.sessionEnd'), 'error');
+    showToast(window.t('toast.mapEndFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   }
 }
 
@@ -4554,7 +4513,7 @@ function updateActiveSessionClock() {
  */
 async function handleScanScreen() {
   if (!state.currentSession) {
-    showToast(window.t('toast.error'), window.t('toast.noSession'), 'warning');
+    showToast(window.t('dashboard.noActiveMap'), window.t('toast.noSession'), 'warning');
     return;
   }
 
@@ -4563,10 +4522,20 @@ async function handleScanScreen() {
   elements.scanScreenLabel.textContent = window.t('dashboard.scanning');
 
   try {
-    await window.electronAPI.scanScreen();
-    showToast(window.t('dashboard.scanScreen'), window.t('toast.scanComplete'));
+    // Main answers with the number of items it added, or why it added none.
+    const result = await window.electronAPI.scanScreen();
+    if (result?.count > 0) {
+      const countKey = result.count === 1 ? 'toast.lootAddedBodyOne' : 'toast.lootAddedBody';
+      showToast(window.t(countKey, { count: result.count }), '', 'success');
+    } else if (result?.reason === 'noItems') {
+      showToast(window.t('toast.scanNothingFound'), window.t('toast.scanNothingFoundHint'), 'warning');
+    } else if (result?.reason === 'noSession') {
+      showToast(window.t('dashboard.noActiveMap'), window.t('toast.noSession'), 'warning');
+    } else {
+      showToast(window.t('toast.scanFailed'), window.t('toast.tryAgain'), 'error');
+    }
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.scanError'), 'error');
+    showToast(window.t('toast.scanFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   } finally {
     elements.scanScreenBtn.disabled = false;
     elements.scanScreenLabel.textContent = window.t('dashboard.scanScreen');
@@ -5122,7 +5091,7 @@ async function handleSaveSettings() {
       stashScanHotkey: elements.stashScanHotkey ? elements.stashScanHotkey.value : undefined
     });
   } catch (error) {
-    showToast(window.t('toast.error'), error.message || 'Invalid hotkeys', 'error');
+    showToast(window.t('toast.settingsError'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
     return;
   }
 
@@ -5160,9 +5129,9 @@ async function handleSaveSettings() {
     if (contextChanged && state.currentUser) {
       await refreshTrackerData({ includeSessions: true, includeCurrency: true });
     }
-    showToast(window.t('nav.settings'), window.t('toast.settingsSaved'));
+    markButtonSaved(elements.saveSettingsBtn);
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.settingsError'), 'error');
+    showToast(window.t('toast.settingsError'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   }
 }
 
@@ -5208,9 +5177,9 @@ async function handleResetSettings() {
       } catch { }
     }
 
-    showToast(window.t('nav.settings'), window.t('toast.settingsSaved'));
+    showToast(window.t('toast.settingsReset'), '', 'success');
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.settingsError'), 'error');
+    showToast(window.t('toast.settingsResetFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   }
 }
 
@@ -5225,12 +5194,12 @@ async function handleTestConnection() {
     // The main process sends the check, and only while online features are on.
     await window.electronAPI.testOnlineConnection(elements.apiUrl.value);
     elements.connectionDot.classList.add('connected');
+    elements.connectionText.dataset.i18n = 'settings.connected';
     elements.connectionText.textContent = window.t('settings.connected');
-    showToast(window.t('settings.api'), window.t('toast.connectionSuccess'), 'success');
   } catch {
     elements.connectionDot.classList.remove('connected');
-    elements.connectionText.textContent = window.t('settings.disconnected');
-    showToast(window.t('settings.api'), window.t('toast.connectionFailed'), 'error');
+    elements.connectionText.dataset.i18n = 'settings.connectionFailed';
+    elements.connectionText.textContent = window.t('settings.connectionFailed');
   } finally {
     setButtonBusy(btn, false);
     renderOnlineSettings();
@@ -5285,12 +5254,13 @@ async function handleOnlineSignIn() {
   try {
     const result = await window.electronAPI.startPoeLogin();
     if (result?.success) {
-      showToast(window.t('settings.onlineAccount'), window.t('toast.onlineSignedIn'), 'success');
+      // The account status line shows it; the announcer reads it out.
+      announceStatus(window.t('settings.onlineAccountSignedIn'));
     } else {
-      showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage({ error: result?.error }, 'errors.loginFailed'), 'error');
+      showToast(window.t('toast.serverSignInFailed'), getUserFacingErrorMessage({ error: result?.error }, 'toast.tryAgain'), 'error');
     }
   } catch (error) {
-    showToast(window.t('toast.loginFailed'), getUserFacingErrorMessage(error, 'errors.loginFailed'), 'error');
+    showToast(window.t('toast.serverSignInFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   } finally {
     // Read the new account state first, so the button goes straight from busy to its final state.
     await refreshOnlineAccount();
@@ -5345,56 +5315,284 @@ function setButtonBusy(button, busy, busyLabel) {
   }
 }
 
-// Errors and warnings stay long enough to read; info and success get out of the way.
+// A save confirms on its own button for 2 s instead of with a toast; the announcer still reads it out.
+const SAVED_STATE_MS = 2000;
+
+// Reads out an outcome that a button or status line shows instead of a toast; the line goes once it has been read.
+function announceStatus(text) {
+  const line = document.createElement('p');
+  line.textContent = text;
+  elements.toastAnnouncer.appendChild(line);
+  setTimeout(() => line.remove(), SAVED_STATE_MS);
+}
+
+function markButtonSaved(button) {
+  const label = button?.querySelector('.btn-label');
+  if (!label) {
+    return;
+  }
+
+  announceStatus(window.t('settings.savedState'));
+  label.textContent = window.t('settings.savedState');
+  setTimeout(() => {
+    label.textContent = window.t(label.getAttribute('data-i18n'));
+  }, SAVED_STATE_MS);
+}
+
+// Errors and warnings stay long enough to read; info and success get out of the way. A toast with an action stays
+// until it is used or dismissed.
 const TOAST_DURATION_MS = { info: 4000, success: 5000, warning: 8000, error: 8000 };
 const TOAST_STACK_LIMIT = 3;
 // Removes a leaving toast even when its exit animation never reports an end (hidden window, reduced motion).
 const TOAST_EXIT_FALLBACK_MS = 300;
+// Each type has its own glyph shape, so the type never rests on the tile colour alone; a finished map shows the map.
+const TOAST_GLYPH_SVG = {
+  info: '<svg class="icon" width="18" height="18"><use href="assets/icons.svg#info"/></svg>',
+  success: '<svg class="icon" width="18" height="18"><use href="assets/icons.svg#check"/></svg>',
+  warning: '<svg class="icon" width="18" height="18"><use href="assets/icons.svg#warn"/></svg>',
+  error: '<svg class="icon" width="18" height="18"><use href="assets/icons.svg#alert"/></svg>',
+  map: '<svg class="icon" width="18" height="18"><use href="assets/icons.svg#map"/></svg>'
+};
+const TOAST_CLOSE_SVG = '<svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#close"/></svg>';
+// The dismiss button, announcer line and timer holds of each visible toast.
+const toastHandles = new WeakMap();
+// Where keyboard focus was before it entered the stack; it goes back there when the last toast closes.
+let toastReturnFocus = null;
+// The element that had focus when the window went to the background; the window coming back focuses it again.
+let toastFocusBeforeBlur = null;
+// Numbers the toast titles, so each dismiss button can point at the notice it closes.
+let toastSerial = 0;
 
-function showToast(title, message, type = 'info') {
+// The plate: status tile, body with its title, and a real dismiss button. Only fixed sprite markup goes in as HTML.
+function createToastShell(type, glyph) {
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
-  if (type === 'error') {
-    toast.setAttribute('role', 'alert');
-  }
-
-  const titleElement = document.createElement('div');
-  titleElement.className = 'toast-title';
-  titleElement.textContent = title == null ? '' : String(title);
-
-  const messageElement = document.createElement('div');
-  messageElement.className = 'toast-message';
-  messageElement.textContent = message == null ? '' : String(message);
-
-  toast.append(titleElement, messageElement);
-
-  // The oldest steps aside so at most TOAST_STACK_LIMIT stay on screen.
-  const visibleToasts = Array.from(elements.toastContainer.querySelectorAll('.toast:not(.leaving)'));
-  visibleToasts.slice(0, Math.max(0, visibleToasts.length - TOAST_STACK_LIMIT + 1)).forEach((oldToast) => dismissToast(oldToast));
-  elements.toastContainer.appendChild(toast);
-
-  // Hovering holds the toast and leaving resumes the time it had left; a click dismisses it.
-  let remainingMs = TOAST_DURATION_MS[type] || TOAST_DURATION_MS.info;
-  let startedAt = Date.now();
-  let timerId = setTimeout(() => dismissToast(toast), remainingMs);
-  toast.addEventListener('mouseenter', () => {
-    clearTimeout(timerId);
-    remainingMs -= Date.now() - startedAt;
-  });
-  toast.addEventListener('mouseleave', () => {
-    startedAt = Date.now();
-    timerId = setTimeout(() => dismissToast(toast), remainingMs);
-  });
-  toast.addEventListener('click', () => dismissToast(toast));
+  const mark = document.createElement('span');
+  mark.className = 'toast-mark';
+  mark.setAttribute('aria-hidden', 'true');
+  mark.innerHTML = TOAST_GLYPH_SVG[glyph];
+  const body = document.createElement('div');
+  body.className = 'toast-body';
+  const title = document.createElement('p');
+  title.className = 'toast-title';
+  toastSerial += 1;
+  title.id = `toast-title-${toastSerial}`;
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'toast-close';
+  close.setAttribute('aria-label', window.t('toast.dismiss'));
+  close.setAttribute('data-i18n-aria', 'toast.dismiss');
+  // Every toast has a Dismiss button, so each one names its notice by the title.
+  close.setAttribute('aria-describedby', title.id);
+  close.innerHTML = TOAST_CLOSE_SVG;
+  toast.append(mark, body, close);
+  return { toast, mark, body, title, close };
 }
 
-function dismissToast(toast) {
+// No braces in the parameter list: tests/security-hardening.test.js reads the body from the first brace.
+function showToast(title, message, type = 'info', options) {
+  const kind = TOAST_DURATION_MS[type] ? type : 'info';
+  const action = options?.action || null;
+  const shell = createToastShell(kind, kind);
+  shell.title.textContent = title == null ? '' : String(title);
+  shell.body.append(shell.title);
+  if (message) {
+    const messageElement = document.createElement('p');
+    messageElement.className = 'toast-message';
+    messageElement.textContent = String(message);
+    shell.body.append(messageElement);
+  }
+  // An error is read out once, assertively and without the button names; the rest go through the polite announcer.
+  if (kind === 'error') {
+    shell.body.setAttribute('role', 'alert');
+  }
+
+  if (action) {
+    const actions = document.createElement('div');
+    actions.className = 'toast-actions';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-secondary btn-small';
+    button.textContent = action.label;
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      dismissToast(shell.toast, event.detail === 0);
+      action.onSelect();
+    });
+    actions.append(button);
+    shell.toast.append(actions);
+  }
+
+  return mountToast(shell, kind, {
+    sticky: Boolean(action),
+    announcement: kind === 'error' ? '' : [title, message].filter(Boolean).join('. ')
+  });
+}
+
+// The one routine notice: a finished map with its signed value in the profit tier, as on the overlay result card.
+function showMapResultToast(result = {}) {
+  const tier = getMapResultProfitTier(result);
+  const shell = createToastShell('success', 'map');
+  shell.toast.classList.add('toast--result');
+  if (tier) {
+    shell.mark.setAttribute('data-profit-tier', tier);
+  }
+
+  const head = document.createElement('div');
+  head.className = 'toast-head';
+  shell.title.textContent = result.mapName || window.t('misc.unknownMap');
+  // A name too long for the plate ends in an ellipsis; the tooltip keeps all of it.
+  shell.title.title = shell.title.textContent;
+  head.append(shell.title);
+  if (!result.profitUnavailable) {
+    const value = document.createElement('span');
+    value.className = 'toast-value';
+    if (tier) {
+      value.setAttribute('data-profit-tier', tier);
+    }
+    value.innerHTML = formatMapResultProfitHTML(result, 16, { signed: true });
+    head.append(value);
+  }
+
+  const label = result.profitUnavailable
+    ? window.t('toast.mapUnpriced')
+    : window.t(Number(result.netProfit) < 0 ? 'toast.mapLoss' : 'toast.mapProfit');
+  const seconds = Math.round(Number(result.durationSeconds) || 0);
+  const meta = document.createElement('div');
+  meta.className = 'toast-meta';
+  const messageElement = document.createElement('p');
+  messageElement.className = 'toast-message';
+  messageElement.textContent = seconds > 0 ? `${label} · ${formatDuration(seconds)}` : label;
+  meta.append(messageElement);
+  if (!result.profitUnavailable) {
+    // Extreme tiers get the flask mascot reaction, as on the Last Map Result card, on this row so the first row keeps
+    // its room for the map name.
+    meta.insertAdjacentHTML('beforeend', profitMemeHTML(tier));
+  }
+  shell.body.append(head, meta);
+
+  const amount = result.profitUnavailable
+    ? ''
+    : ` ${formatAdaptiveProfitText(result.netProfit || 0, result.poeVersion || state.settings.poeVersion || 'poe1', { signed: true })}`;
+  return mountToast(shell, 'success', { announcement: `${shell.title.textContent}. ${label}${amount}` });
+}
+
+function mountToast(shell, type, { sticky = false, announcement = '' } = {}) {
+  const { toast, close } = shell;
+  // The oldest timed toast steps aside so at most TOAST_STACK_LIMIT stay on screen; one waiting for an action, or one
+  // the player is pointing at or has focused, stays.
+  const visibleToasts = Array.from(elements.toastContainer.querySelectorAll('.toast:not(.leaving)'));
+  const overflow = Math.max(0, visibleToasts.length - TOAST_STACK_LIMIT + 1);
+  visibleToasts
+    .filter((oldToast) => {
+      const oldHolds = toastHandles.get(oldToast)?.holds;
+      return !oldToast.dataset.sticky && !oldHolds?.has('pointer') && !oldHolds?.has('focus');
+    })
+    .slice(0, overflow)
+    .forEach((oldToast) => dismissToast(oldToast));
+  if (sticky) {
+    toast.dataset.sticky = 'true';
+  }
+  elements.toastContainer.appendChild(toast);
+
+  let line = null;
+  if (announcement) {
+    line = document.createElement('p');
+    line.textContent = announcement;
+    elements.toastAnnouncer.appendChild(line);
+  }
+
+  // The pointer, keyboard focus and a window in the background each hold the toast; it counts down only when none
+  // does, from the time it had left.
+  const holds = new Set(document.hasFocus() ? [] : ['window']);
+  let remainingMs = TOAST_DURATION_MS[type] || TOAST_DURATION_MS.info;
+  let startedAt = 0;
+  let timerId = null;
+  const update = () => {
+    if (sticky) {
+      return;
+    }
+    if (holds.size > 0 && timerId !== null) {
+      clearTimeout(timerId);
+      timerId = null;
+      remainingMs -= Date.now() - startedAt;
+    } else if (holds.size === 0 && timerId === null) {
+      startedAt = Date.now();
+      timerId = setTimeout(() => dismissToast(toast), remainingMs);
+    }
+  };
+  const hold = (reason) => {
+    holds.add(reason);
+    update();
+  };
+  const release = (reason) => {
+    holds.delete(reason);
+    update();
+  };
+  toastHandles.set(toast, { close, line, holds, hold, release });
+
+  toast.addEventListener('mouseenter', () => hold('pointer'));
+  toast.addEventListener('mouseleave', () => release('pointer'));
+  toast.addEventListener('focusin', (event) => {
+    // The window coming back focuses the same element again with no relatedTarget; focus never left the stack, so
+    // the place to go back to stays. Focus that came from nowhere (a click with nothing focused) has no place to go
+    // back to, so an older one is dropped rather than focused later.
+    const windowReturned = !event.relatedTarget && event.target === toastFocusBeforeBlur;
+    toastFocusBeforeBlur = null;
+    if (!windowReturned && !elements.toastContainer.contains(event.relatedTarget)) {
+      toastReturnFocus = event.relatedTarget;
+    }
+    hold('focus');
+  });
+  toast.addEventListener('focusout', (event) => {
+    if (!toast.contains(event.relatedTarget)) {
+      release('focus');
+    }
+  });
+  // Escape closes only this toast, so a modal or drawer behind it stays open.
+  toast.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      dismissToast(toast, true);
+    }
+  });
+  // Enter or Space on the dismiss button clicks with no click count, so that click came from the keyboard.
+  toast.addEventListener('click', (event) => dismissToast(toast, event.detail === 0));
+  update();
+  return toast;
+}
+
+// The player is in the game while the window is in the background, so the toasts wait for their return.
+window.addEventListener('blur', () => {
+  toastFocusBeforeBlur = document.activeElement;
+  elements.toastContainer.querySelectorAll('.toast:not(.leaving)').forEach((toast) => toastHandles.get(toast)?.hold('window'));
+});
+window.addEventListener('focus', () => {
+  elements.toastContainer.querySelectorAll('.toast:not(.leaving)').forEach((toast) => toastHandles.get(toast)?.release('window'));
+});
+
+function dismissToast(toast, fromKeyboard = false) {
   if (!toast.isConnected || toast.classList.contains('leaving')) {
     return;
   }
 
+  // From the keyboard, focus moves on to the next toast, or back to where it was before it entered the stack. A
+  // pointer close sends it straight back, so no other toast is left holding focus and its timer.
+  if (toast.contains(document.activeElement)) {
+    const next = fromKeyboard
+      ? Array.from(elements.toastContainer.querySelectorAll('.toast:not(.leaving)')).find((other) => other !== toast)
+      : null;
+    const target = next ? toastHandles.get(next)?.close : toastReturnFocus;
+    if (target?.isConnected) {
+      target.focus();
+    }
+  }
+
   toast.classList.add('leaving');
-  const remove = () => toast.remove();
+  const remove = () => {
+    toast.remove();
+    toastHandles.get(toast)?.line?.remove();
+  };
   toast.addEventListener('animationend', remove, { once: true });
   setTimeout(remove, TOAST_EXIT_FALLBACK_MS);
 }
@@ -5403,8 +5601,12 @@ async function handleCheckForAppUpdate() {
   try {
     state.appUpdate = await window.electronAPI.checkForAppUpdate();
     renderAppUpdateState();
-  } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'settings.updateError'), 'error');
+  } catch {
+    // The About status line carries the failure, next to Check for Updates; the announcer reads it out.
+    if (elements.appUpdateStatus) {
+      elements.appUpdateStatus.textContent = window.t('settings.updateError');
+    }
+    announceStatus(window.t('settings.updateError'));
   }
 }
 
@@ -5508,11 +5710,7 @@ async function takeAutomaticBeforeSnapshotForSession(session = state.currentSess
     return true;
   } catch (error) {
     console.warn('Failed to create automatic PoE1 before-stash baseline', error);
-    showToast(
-      window.t('stash.profitTracker'),
-      'Unable to create the before-stash baseline for this PoE 1 map. Profit cannot be calculated until a baseline exists.',
-      'warning'
-    );
+    showToast(window.t('stash.baselineFailedTitle'), window.t('stash.baselineFailed'), 'warning');
     return false;
   }
 }
@@ -5588,11 +5786,6 @@ async function takeStashSnapshotForCurrentRunWithRetry(type, session = state.cur
         throw error;
       }
 
-      showToast(
-        window.t('stash.profitTracker'),
-        'Stash snapshot is not ready yet. Retrying before completing the map...',
-        'info'
-      );
       await waitForStashSnapshotRetryDelay(delayMs);
     }
   }
@@ -5616,11 +5809,7 @@ async function takeAfterSnapshotWithStashRefreshRetry(session = state.currentSes
       }
 
       console.warn('Using the last available after-stash snapshot after refresh failed', error);
-      showToast(
-        window.t('stash.profitTracker'),
-        'Stash refresh timed out. Using the latest available snapshot to complete the map.',
-        'warning'
-      );
+      showToast(window.t('stash.staleSnapshotTitle'), window.t('stash.staleSnapshot'), 'warning');
     }
 
     report = await window.electronAPI.calculateProfit(
@@ -5632,11 +5821,6 @@ async function takeAfterSnapshotWithStashRefreshRetry(session = state.currentSes
       return report;
     }
 
-    showToast(
-      window.t('stash.profitTracker'),
-      'No stash changes detected yet. Waiting for the Path of Exile stash API to refresh...',
-      'info'
-    );
     await waitForStashSnapshotRetryDelay();
   }
 
@@ -5700,11 +5884,7 @@ async function completePoe1SessionWithoutStashProfit(session = state.currentSess
     updateActiveSessionUI();
     await refreshTrackerData({ includeSessions: true });
     if (error) {
-      showToast(
-        window.t('stash.profitTracker'),
-        'Stash refresh failed, so the map was completed with the loot recorded during it.',
-        'warning'
-      );
+      showToast(window.t('stash.completedWithoutStashTitle'), window.t('stash.completedWithoutStash'), 'warning');
     }
 
     return true;
@@ -5720,7 +5900,12 @@ async function completePoe1SessionWithStashProfit() {
   }
 
   if (!isStashTrackingEnabled()) {
-    return completePoe1SessionWithoutStashProfit(state.currentSession);
+    // Main's OS notice is only for a window in the background, so a failed end is said here as well.
+    const completed = await completePoe1SessionWithoutStashProfit(state.currentSession);
+    if (!completed) {
+      showToast(window.t('toast.mapEndFailed'), window.t('toast.tryAgain'), 'error');
+    }
+    return completed;
   }
 
   await waitForPendingBeforeSnapshotForSession(state.currentSession);
@@ -5739,7 +5924,7 @@ async function completePoe1SessionWithStashProfit() {
       return true;
     }
 
-    showToast(window.t('toast.error'), window.t('stash.profitFailed'), 'error');
+    showToast(window.t('toast.mapEndFailed'), window.t('toast.tryAgain'), 'error');
     return false;
   }
 
@@ -5804,7 +5989,7 @@ async function completePoe1SessionWithStashProfit() {
       }
     }
 
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.profitFailed'), 'error');
+    showToast(window.t('toast.mapEndFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
     return false;
   }
 }
@@ -5813,7 +5998,7 @@ async function handleInstallAppUpdate() {
   try {
     await window.electronAPI.installAppUpdate();
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'settings.updateError'), 'error');
+    showToast(window.t('toast.updateInstallFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   }
 }
 
@@ -5849,6 +6034,8 @@ const ERROR_PATTERN_MAP = [
   { pattern: /rate.?limit|429|too many/i, key: 'errors.rateLimit' },
   { pattern: /server error|500|502|503/i, key: 'errors.serverError' },
   { pattern: /invalid.*(username|password|credentials)/i, key: 'errors.invalidCredentials' },
+  // Main cannot register a hotkey that another app already holds; trying again cannot help.
+  { pattern: /register global shortcut/i, key: 'settings.hotkeyErrorInUse' },
 ];
 
 function localizeKnownErrorMessage(message) {
@@ -5894,7 +6081,7 @@ async function openSessionDrawer(sessionId) {
     state.selectedSession = session;
     renderSessionDrawer();
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'sessions.loadError'), 'error');
+    showToast(window.t('toast.runOpenFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
     closeSessionDrawer();
   }
 }
@@ -5911,10 +6098,10 @@ async function handleExportDiagnostics() {
       const toastKey = mode === 'sensitive'
         ? 'toast.diagnosticsExportedSensitive'
         : 'toast.diagnosticsExportedSafe';
-      showToast(window.t('settings.about'), window.t(toastKey), 'success');
+      showToast(window.t('toast.diagnosticsSaved'), window.t(toastKey), 'success');
     }
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.unexpectedError'), 'error');
+    showToast(window.t('toast.diagnosticsFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   } finally {
     setButtonBusy(elements.exportDiagnosticsBtn, false);
   }
@@ -5969,7 +6156,7 @@ async function handleOpenDataFolder() {
   }
 
   if (!opened) {
-    showToast(window.t('toast.error'), window.t('toast.dataFolderOpenFailed'), 'error');
+    showToast(window.t('toast.dataFolderOpenFailed'), window.t('toast.tryAgain'), 'error');
   }
 }
 
@@ -5991,7 +6178,7 @@ async function handleClearLogs() {
 
   if (result?.canceled) return;
   if (result?.busy) {
-    showToast(window.t('settings.data'), window.t('toast.dataActionBusy'), 'warning');
+    showToast(window.t('toast.dataActionBusy'), '', 'warning');
     return;
   }
   // The logs may have changed, so no view keeps showing cleared lines; each builds its report again on its next visit.
@@ -6003,9 +6190,9 @@ async function handleClearLogs() {
     view.copyButton.disabled = true;
   });
   if (result?.cleared) {
-    showToast(window.t('settings.data'), window.t('toast.logsCleared'), 'success');
+    showToast(window.t('toast.logsCleared'), '', 'success');
   } else {
-    showToast(window.t('toast.error'), window.t('toast.logsClearFailed'), 'error');
+    showToast(window.t('toast.logsClearFailedTitle'), window.t('toast.logsClearFailed'), 'error');
   }
   void loadDataSummary();
 }
@@ -6036,7 +6223,7 @@ async function loadBugReportPreview(view) {
   } catch {
     view.preview.textContent = window.t('settings.bugReportLoadFailed');
     // Focus may already sit on the preview, so a screen reader would not read the new text; the toast is announced.
-    showToast(window.t('settings.reportBug'), window.t('settings.bugReportLoadFailed'), 'error');
+    showToast(window.t('settings.bugReportLoadFailed'), window.t('toast.tryAgainShort'), 'error');
   } finally {
     view.preview.removeAttribute('aria-busy');
   }
@@ -6049,17 +6236,17 @@ async function handleCopyBugReport(view) {
   try {
     result = await window.electronAPI.copyBugReport(view.reportId);
     if (!result?.stale) {
-      showToast(window.t('settings.reportBug'), window.t('toast.bugReportCopied'), 'success');
+      showToast(window.t('toast.bugReportCopied'), '', 'success');
     }
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.bugReportCopyFailed'), 'error');
+    showToast(window.t('toast.bugReportCopyFailed'), getUserFacingErrorMessage(error, 'toast.tryAgainShort'), 'error');
   } finally {
     setButtonBusy(view.copyButton, false);
   }
 
   if (result?.stale) {
     // Main built a newer report since this view loaded, so nothing was copied: show it and let the user check it.
-    showToast(window.t('settings.reportBug'), window.t('toast.bugReportChanged'), 'warning');
+    showToast(window.t('toast.bugReportChanged'), window.t('toast.bugReportChangedHint'), 'warning');
     await loadBugReportPreview(view);
   }
 }
@@ -6072,19 +6259,19 @@ async function handleOpenBugReportIssue(view) {
     result = await window.electronAPI.openBugReportIssue(view.reportId);
     if (result?.opened === false) {
       // Copied, but no browser opened: the toast names the address instead.
-      showToast(window.t('settings.reportBug'), window.t('toast.bugReportOpenManually', { url: result.url }), 'warning');
+      showToast(window.t('toast.bugReportCopied'), window.t('toast.bugReportOpenManually', { url: result.url }), 'warning');
     } else if (!result?.stale) {
-      showToast(window.t('settings.reportBug'), window.t('toast.bugReportIssueOpened'), 'success');
+      showToast(window.t('toast.bugReportCopied'), window.t('toast.bugReportIssueOpened'), 'success');
     }
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.bugReportOpenFailed'), 'error');
+    showToast(window.t('toast.bugReportOpenFailed'), getUserFacingErrorMessage(error, 'toast.tryAgainShort'), 'error');
   } finally {
     setButtonBusy(view.openButton, false);
   }
 
   if (result?.stale) {
     // Nothing was copied or opened: the user checks the newer report before pressing again.
-    showToast(window.t('settings.reportBug'), window.t('toast.bugReportChanged'), 'warning');
+    showToast(window.t('toast.bugReportChanged'), window.t('toast.bugReportChangedHint'), 'warning');
     await loadBugReportPreview(view);
   }
 }
@@ -6180,9 +6367,9 @@ async function handleSyncPrices() {
     stashState.pricesSynced = true;
     renderPriceItemCount(result.itemCount);
     await refreshProfitCurrencyRates(result.poeVersion || state.settings.poeVersion || 'poe1', league);
-    showToast(window.t('stash.priceData'), window.t('stash.pricesSynced', { count: result.itemCount }), 'success');
+    showToast(window.t('stash.pricesSyncedTitle'), window.t('stash.pricesSynced', { count: result.itemCount }), 'success');
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.pricesSyncFailed'), 'error');
+    showToast(window.t('stash.pricesSyncFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   } finally {
     btn.disabled = !isStashTrackingEnabled();
     btn.innerHTML = origHTML;
@@ -6204,7 +6391,7 @@ async function handleTakeSnapshot(type) {
 
   // Check if prices are synced first
   if (!stashState.pricesSynced) {
-    showToast(window.t('toast.error'), window.t('stash.syncPricesFirst'), 'warning');
+    showToast(window.t('stash.syncPricesFirst'), window.t('stash.syncPricesFirstHint'), 'warning');
     return;
   }
 
@@ -6261,9 +6448,9 @@ async function handleTakeSnapshot(type) {
       }
     }
 
-    showToast(window.t('stash.profitTracker'), window.t('stash.snapshotTaken', { count: result.itemCount }), 'success');
+    showToast(window.t('stash.snapshotTakenTitle'), window.t('stash.snapshotTaken', { count: result.itemCount }), 'success');
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.snapshotFailed'), 'error');
+    showToast(window.t('stash.snapshotFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   } finally {
     btn.disabled = !isStashTrackingEnabled();
     btn.innerHTML = origHTML;
@@ -6327,7 +6514,7 @@ async function handleCalculateProfit() {
       }
     }
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'stash.profitFailed'), 'error');
+    showToast(window.t('stash.profitFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   } finally {
     elements.calculateProfitBtn.disabled = !isStashTrackingEnabled();
   }
@@ -6725,9 +6912,9 @@ async function handleSessionMetadataSave() {
 
     renderSessionDrawer();
     renderSessionsList();
-    showToast(window.t('sessions.detailKicker'), window.t('toast.sessionUpdated'), 'success');
+    markButtonSaved(elements.sessionDrawerSave);
   } catch (error) {
-    showToast(window.t('toast.error'), getUserFacingErrorMessage(error, 'toast.sessionUpdateError'), 'error');
+    showToast(window.t('toast.sessionUpdateError'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   } finally {
     setButtonBusy(elements.sessionDrawerSave, false);
   }
@@ -7253,7 +7440,7 @@ async function handleCurrencySync() {
   // The header Sync and the table's Sync now start one sync between them.
   if (currencyState.syncing) return;
   if (!canCurrentUserSyncPrices()) {
-    showToast(window.t('toast.currencyTitle'), window.t('currency.syncRestricted'), 'warning');
+    showToast(window.t('currency.syncRestrictedTitle'), window.t('currency.syncRestricted'), 'warning');
     return;
   }
 
@@ -7263,16 +7450,16 @@ async function handleCurrencySync() {
   syncButtons().forEach((button) => setButtonBusy(button, true, window.t('currency.syncing')));
 
   try {
-    const result = await window.electronAPI.syncCurrencyPrices({
+    // The table refreshing with the new prices says the sync worked.
+    await window.electronAPI.syncCurrencyPrices({
       league: currencyState.league,
       poeVersion: currencyState.poeVersion
     });
-    showToast(window.t('toast.currencyTitle'), window.t('currency.syncSuccess'), 'success');
     await refreshProfitCurrencyRates(currencyState.poeVersion, currencyState.league);
     await loadCurrencyLeagues();
     await loadCurrencyPrices();
   } catch (e) {
-    showToast(window.t('toast.currencyTitle'), getUserFacingErrorMessage(e, 'currency.syncFailed'), 'error');
+    showToast(window.t('currency.syncFailed'), getUserFacingErrorMessage(e, 'toast.tryAgain'), 'error');
   } finally {
     currencyState.syncing = false;
     // Asked again, so a Sync now drawn during the sync goes idle too.

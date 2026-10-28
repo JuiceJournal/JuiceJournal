@@ -459,7 +459,7 @@ test('settings smoke: launches desktop app and shows core settings controls', as
     expect(readErrorLog()).toContain('e2e renderer failure');
     await electronApp.evaluate(() => { globalThis.__e2eMessageBoxResponse = 0; });
     await page.locator('#clear-logs').click();
-    await expect(page.locator('#toast-container')).toContainText('Logs cleared.');
+    await expect(page.locator('#toast-container')).toContainText('Logs cleared');
     await expect(page.locator('#settings-data #audit-trail-list .audit-entry')).toHaveCount(0);
     await expect(page.locator('#audit-trail-list')).toContainText('No activity yet');
     await expect.poll(readErrorLog).not.toContain('e2e renderer failure');

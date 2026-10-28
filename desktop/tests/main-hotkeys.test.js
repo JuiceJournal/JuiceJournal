@@ -686,6 +686,7 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
       elements.defaultLeagueSelect.value = value;
     },
     showToast() {},
+    markButtonSaved() {},
     getUserFacingErrorMessage: (error) => error.message,
     state: { settings: {}, currentUser: null },
     activeLeagueInputState: { dirty: false },
@@ -773,6 +774,7 @@ test('renderer scan button swaps only its label while scanning, so the icon surv
       electronAPI: {
         async scanScreen() {
           duringScan.push([scanScreenBtn.disabled, scanScreenLabel.textContent]);
+          return { count: 3 };
         }
       }
     },
@@ -786,7 +788,53 @@ test('renderer scan button swaps only its label while scanning, so the icon surv
   assert.deepEqual(duringScan, [[true, 'dashboard.scanning']]);
   assert.equal(scanScreenBtn.disabled, false);
   assert.equal(scanScreenLabel.textContent, 'dashboard.scanScreen');
-  assert.deepEqual(toasts, [['dashboard.scanScreen', 'toast.scanComplete']]);
+  assert.deepEqual(toasts, [['toast.lootAddedBody', '', 'success']]);
+});
+
+test('renderer Scan Loot shows the one outcome main reports for the scan', async () => {
+  const scanWith = async (scanScreen, currentSession = { id: 'session-1' }) => {
+    const toasts = [];
+    const scanScreenBtn = { disabled: false };
+    const scanScreenLabel = { textContent: 'dashboard.scanScreen' };
+    const context = loadFunctions(appJsPath, ['handleScanScreen'], {
+      state: { currentSession },
+      elements: { scanScreenBtn, scanScreenLabel },
+      window: {
+        t: (key, values = {}) => (values.count === undefined ? key : `${key}|${values.count}`),
+        electronAPI: { scanScreen }
+      },
+      showToast: (...args) => toasts.push(args),
+      getUserFacingErrorMessage: (error, fallbackKey) => fallbackKey
+    });
+    await context.handleScanScreen();
+    assert.equal(scanScreenBtn.disabled, false);
+    assert.equal(scanScreenLabel.textContent, 'dashboard.scanScreen');
+    return toasts;
+  };
+
+  assert.deepEqual(await scanWith(async () => ({ count: 1 })), [['toast.lootAddedBodyOne|1', '', 'success']]);
+  assert.deepEqual(await scanWith(async () => ({ count: 3 })), [['toast.lootAddedBody|3', '', 'success']]);
+  assert.deepEqual(
+    await scanWith(async () => ({ reason: 'noItems' })),
+    [['toast.scanNothingFound', 'toast.scanNothingFoundHint', 'warning']]
+  );
+  assert.deepEqual(
+    await scanWith(async () => ({ reason: 'noSession' })),
+    [['dashboard.noActiveMap', 'toast.noSession', 'warning']]
+  );
+  assert.deepEqual(await scanWith(async () => undefined), [['toast.scanFailed', 'toast.tryAgain', 'error']]);
+  assert.deepEqual(
+    await scanWith(async () => ({ reason: 'captureFailed' })),
+    [['toast.scanFailed', 'toast.tryAgain', 'error']]
+  );
+  assert.deepEqual(await scanWith(async () => {
+    throw new Error('IPC channel closed');
+  }), [['toast.scanFailed', 'toast.tryAgain', 'error']]);
+  // Without a running map the button asks for one and does not scan.
+  assert.deepEqual(
+    await scanWith(async () => assert.fail('scanned without a map'), null),
+    [['dashboard.noActiveMap', 'toast.noSession', 'warning']]
+  );
 });
 
 test('dashboard scan button sits next to End Map with the real hotkey, a label slot and no fallback wording', () => {

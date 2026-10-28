@@ -484,6 +484,11 @@ test('ending a PoE1 map session routes through stash diff completion instead of 
     'handleEndSession'
   ], {
     state,
+    elements: { endSessionBtn: {} },
+    isStashTrackingEnabled: () => true,
+    // A busy call without a label leaves it as it is, so a missing label is recorded as null.
+    setButtonBusy: (button, busy, label) => calls.push(['busy', busy, label ?? null]),
+    announceStatus: (text) => calls.push(['announce', text]),
     requestEndSessionConfirmation: async () => true,
     window: {
       t: (key) => key,
@@ -532,7 +537,13 @@ test('ending a PoE1 map session routes through stash diff completion instead of 
 
   assert.equal(state.currentSession.id, 'session-2');
   assert.equal(persisted.length, 0);
-  assert.deepEqual(calls, ['completePoe1SessionWithStashProfit']);
+  // Reading the stash can take a few tries; End map says so instead of a toast per try, and it is read out once.
+  assert.deepEqual(calls, [
+    ['busy', true, 'stash.readingStash'],
+    ['announce', 'stash.readingStash'],
+    'completePoe1SessionWithStashProfit',
+    ['busy', false, null]
+  ]);
 });
 
 test('renderer history loader keeps startup alive when map-result history is unavailable', async () => {
@@ -793,7 +804,6 @@ test('poe1 after snapshot retries when the first stash API read has no changes',
   assert.deepEqual(calls, [
     ['snapshot', 'after', 1],
     ['calculateProfit', 1],
-    ['showToast', 'stash.profitTracker', 'info'],
     'retryDelay',
     ['snapshot', 'after', 2],
     ['calculateProfit', 2]
@@ -850,7 +860,6 @@ test('poe1 after snapshot retries transient snapshot failures before calculating
   assert.equal(report.summary.netProfitChaos, 5);
   assert.deepEqual(calls, [
     ['snapshot', 'after', 1],
-    ['showToast', 'stash.profitTracker', 'info'],
     'retryDelay',
     ['snapshot', 'after', 2],
     ['calculateProfit', 2]
@@ -903,11 +912,10 @@ test('poe1 after snapshot uses the last available after snapshot when refresh ke
   assert.equal(report.summary.netProfitChaos, 5);
   assert.deepEqual(calls, [
     ['snapshot', 'after'],
-    ['showToast', 'stash.profitTracker', 'info'],
     'retryDelay',
     ['snapshot', 'after'],
     ['warn', 'Using the last available after-stash snapshot after refresh failed'],
-    ['showToast', 'stash.profitTracker', 'warning'],
+    ['showToast', 'stash.staleSnapshotTitle', 'warning'],
     ['calculateProfit', 'before', 'after-existing']
   ]);
 });

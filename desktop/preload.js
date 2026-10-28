@@ -119,6 +119,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onNavigate: (callback) => {
     ipcRenderer.on('navigate', (event, page) => callback(page));
   },
+  onTrayAction: (callback) => {
+    ipcRenderer.on('tray-action', (event, action) => callback(action));
+  },
   onStashSnapshotTaken: (callback) => {
     ipcRenderer.on('stash-snapshot-taken', (event, data) => callback(data));
   },
@@ -160,7 +163,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const ALLOWED_CHANNELS = [
       'map-entered', 'map-exited', 'session-started', 'session-ended',
       'loot-added',
-      'audit-trail-updated', 'navigate', 'stash-snapshot-taken',
+      'audit-trail-updated', 'navigate', 'tray-action', 'stash-snapshot-taken',
       'profit-calculated', 'prices-updated', 'game-version-changed', 'game-closed',
       'game-session-entered', 'game-session-left', 'character-log-line',
       'app-update-state-changed',

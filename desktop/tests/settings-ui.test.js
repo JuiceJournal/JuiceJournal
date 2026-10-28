@@ -538,6 +538,7 @@ test('saving settings uses the visible league control for the active PoE version
     updateActiveLeagueFieldContext: () => {},
     refreshTrackerData: async () => {},
     showToast: () => {},
+    markButtonSaved: () => {},
     getUserFacingErrorMessage: (error) => String(error)
   });
 
@@ -551,6 +552,8 @@ test('saving settings uses the visible league control for the active PoE version
 test('saving settings redraws the idle map card so its auto-start hint follows the setting', async () => {
   let redraws = 0;
   const toasts = [];
+  const saved = [];
+  const saveButton = { id: 'save-settings' };
   const context = loadFunctions([
     'getActiveLeagueControlType',
     'getActiveLeagueFieldElement',
@@ -567,7 +570,8 @@ test('saving settings redraws the idle map card so its auto-start hint follows t
       scanHotkey: { value: 'F9' },
       stashScanHotkey: { value: 'Ctrl+Shift+L' },
       defaultLeague: { value: 'Standard', hidden: false, disabled: false },
-      defaultLeagueSelect: { value: '', hidden: true, disabled: true }
+      defaultLeagueSelect: { value: '', hidden: true, disabled: true },
+      saveSettingsBtn: saveButton
     },
     document: {
       querySelector: (selector) => (
@@ -609,13 +613,16 @@ test('saving settings redraws the idle map card so its auto-start hint follows t
     updateActiveLeagueFieldContext: () => {},
     refreshTrackerData: async () => {},
     showToast: (title, message, type) => toasts.push(type),
+    markButtonSaved: (button) => saved.push(button),
     getUserFacingErrorMessage: (error) => String(error)
   });
 
   await context.handleSaveSettings();
 
   assert.equal(redraws, 1);
-  assert.deepEqual(toasts, [undefined], 'the save succeeds');
+  // The save succeeds: Save reads Saved for a moment instead of a toast.
+  assert.deepEqual(toasts, []);
+  assert.deepEqual(saved, [saveButton]);
 });
 
 test('reset settings persists only resettable settings and preserves signed-in header identity', async () => {
@@ -1294,7 +1301,7 @@ test('reset snapshots is blocked while stash tracking is unavailable', () => {
   assert.equal(context.stashState.beforeSnapshotId, 'before');
   assert.equal(context.stashState.afterSnapshotId, 'after');
   assert.equal(context.elements.takeAfterSnapshotBtn.disabled, false);
-  assert.deepEqual(toasts, [['toast.error', 'stash.capabilityUnavailable.poe2', 'warning']]);
+  assert.deepEqual(toasts, [['stash.unavailableTitle', 'stash.capabilityUnavailable.poe2', 'info']]);
 });
 
 test('async price sync completion does not re-enable or mutate stale stash UI after capability changes', async () => {
@@ -1388,6 +1395,7 @@ test('stale profit result rendering is ignored while stash tracking is unavailab
 
 test('renderer keeps prior settings state and shows an error when settings save is rejected', async () => {
   const savedToasts = [];
+  const mappedErrors = [];
   const draftApplications = [];
   const context = loadFunctions([
     'getActiveLeagueControlType',
@@ -1458,7 +1466,11 @@ test('renderer keeps prior settings state and shows an error when settings save 
     showToast: (...args) => {
       savedToasts.push(args);
     },
-    getUserFacingErrorMessage: (error) => String(error.message || error)
+    // The real mapping is checked with the error helpers; here the handler must hand the error over, never its text.
+    getUserFacingErrorMessage: (error, fallbackKey) => {
+      mappedErrors.push(error.message);
+      return fallbackKey;
+    }
   });
 
   await context.handleSaveSettings();
@@ -1467,8 +1479,147 @@ test('renderer keeps prior settings state and shows an error when settings save 
   assert.equal(context.state.settings.apiUrl, 'http://localhost:3001');
   assert.equal(context.state.settings.poeVersion, 'poe1');
   assert.equal(context.state.settings.defaultLeaguePoe2, 'Dawn of the Hunt');
-  assert.equal(savedToasts.length, 1);
-  assert.deepEqual(savedToasts[0], ['toast.error', 'Invalid API URL', 'error']);
+  assert.deepEqual(mappedErrors, ['Invalid API URL']);
+  assert.deepEqual(savedToasts, [['toast.settingsError', 'toast.tryAgain', 'error']]);
+});
+
+test('renderer saves nothing and shows the error copy, not the raw text, when the hotkeys do not validate', async () => {
+  const savedToasts = [];
+  const saves = [];
+  const context = loadFunctions(['handleSaveSettings'], {
+    elements: {
+      scanHotkey: { value: 'F9' },
+      stashScanHotkey: { value: 'F9' }
+    },
+    document: { querySelector: () => null },
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe1', league: 'Standard' }),
+    getHotkeyModel: () => ({
+      validateHotkeys: () => {
+        throw new Error("EPERM: operation not permitted, open 'C:\\Users\\someone\\settings.json'");
+      }
+    }),
+    normalizePoeVersion: (value) => value,
+    getSettingsLeagueVersion: () => 'poe1',
+    getLeagueSettingKey: () => 'defaultLeaguePoe1',
+    getActiveLeagueFieldValue: () => 'Standard',
+    window: {
+      electronAPI: { setSettings: async (settings) => saves.push(settings) },
+      t: (key) => key
+    },
+    state: { settings: {} },
+    showToast: (...args) => savedToasts.push(args),
+    getUserFacingErrorMessage: (error, fallbackKey) => fallbackKey
+  });
+
+  await context.handleSaveSettings();
+
+  assert.deepEqual(saves, []);
+  assert.deepEqual(savedToasts, [['toast.settingsError', 'toast.tryAgain', 'error']]);
+});
+
+test('a save reads Saved on its own button for a moment, and the announcer reads it out', () => {
+  const timers = [];
+  const announcer = {
+    lines: [],
+    appendChild(line) {
+      this.lines.push(line);
+      line.remove = () => {
+        this.lines = this.lines.filter((other) => other !== line);
+      };
+    }
+  };
+  const label = { textContent: 't:settings.save', getAttribute: (name) => (name === 'data-i18n' ? 'settings.save' : null) };
+  const button = { querySelector: (selector) => (selector === '.btn-label' ? label : null) };
+  const context = loadFunctions(['announceStatus', 'markButtonSaved'], {
+    SAVED_STATE_MS: 2000,
+    elements: { toastAnnouncer: announcer },
+    document: { createElement: () => ({ textContent: '' }) },
+    window: { t: (key) => `t:${key}` },
+    setTimeout: (callback, delay) => timers.push([callback, delay])
+  });
+
+  context.markButtonSaved(button);
+  assert.equal(label.textContent, 't:settings.savedState');
+  assert.deepEqual(announcer.lines.map((line) => line.textContent), ['t:settings.savedState']);
+  assert.deepEqual(timers.map(([, delay]) => delay), [2000, 2000]);
+
+  timers.forEach(([callback]) => callback());
+  assert.equal(label.textContent, 't:settings.save', 'the label is translated again, in case the language changed');
+  assert.deepEqual(announcer.lines, []);
+
+  // A button without a label span is left alone.
+  assert.doesNotThrow(() => context.markButtonSaved({ querySelector: () => null }));
+  assert.doesNotThrow(() => context.markButtonSaved(null));
+  assert.equal(timers.length, 2);
+});
+
+function loadErrorHelpers() {
+  const source = fs.readFileSync(appJsPath, 'utf8');
+  const keyMapStart = source.indexOf('const ERROR_MESSAGE_KEY_MAP = {');
+  assert.notEqual(keyMapStart, -1);
+  const keyMap = source.slice(keyMapStart, source.indexOf('\n};', keyMapStart) + 3);
+  // extractRawErrorMessage holds a regex with quotes, which the function extractor cannot read, so the error helpers
+  // load as the one block they are, from extractRawErrorMessage through getUserFacingErrorMessage.
+  const helpersStart = source.indexOf('function extractRawErrorMessage');
+  const lastHelper = extractFunctionSource(source, 'getUserFacingErrorMessage');
+  const helpers = source.slice(helpersStart, source.indexOf(lastHelper) + lastHelper.length);
+  assert.match(helpers, /const ERROR_PATTERN_MAP = \[/);
+  const context = vm.createContext({ window: { t: (key) => key } });
+  vm.runInContext(`${keyMap}\n${helpers}\nthis.getUserFacingErrorMessage = getUserFacingErrorMessage;`, context);
+  return context;
+}
+
+test('errors the player can fix name the fix instead of try again', () => {
+  const context = loadErrorHelpers();
+
+  // Main rejects a server address it will not use; only a new address helps.
+  assert.equal(context.getUserFacingErrorMessage(new Error('Invalid API URL'), 'toast.tryAgain'), 'errors.invalidApiUrl');
+  assert.equal(
+    context.getUserFacingErrorMessage(new Error("Error invoking remote method 'set-settings': Error: Invalid API URL"), 'toast.tryAgain'),
+    'errors.invalidApiUrl'
+  );
+  // A reconnect with another Path of Exile account comes back as a reply with a code; its text is main's, so the
+  // code decides.
+  assert.equal(
+    context.getUserFacingErrorMessage(
+      { success: false, errorCode: 'POE_DIFFERENT_ACCOUNT', error: 'Bu farkli bir Path of Exile hesabi.' },
+      'toast.tryAgain'
+    ),
+    'errors.poeDifferentAccount'
+  );
+  assert.equal(
+    context.getUserFacingErrorMessage({ success: false, errorCode: 'EACCES', error: "EACCES: open 'C:\\Users\\someone\\a.json'" }, 'toast.tryAgain'),
+    'toast.tryAgain'
+  );
+});
+
+test('hotkey errors reach the toast as their own reason, from the renderer check or from main', () => {
+  const context = loadErrorHelpers();
+
+  // Every Error text hotkeyModel throws at the user, except the capture guard for a missing keyboard event.
+  const hotkeyModelSource = fs.readFileSync(path.join(desktopDir, 'src', 'modules', 'hotkeyModel.js'), 'utf8');
+  const thrown = [...new Set([...hotkeyModelSource.matchAll(/throw new Error\('([^']+)'\)/g)].map(([, text]) => text))]
+    .filter((text) => text !== 'Keyboard event is required');
+  assert.ok(thrown.length >= 4, thrown.join(', '));
+  for (const text of thrown) {
+    assert.match(context.getUserFacingErrorMessage(new Error(text), 'toast.tryAgain'), /^settings\.hotkeyError/, text);
+    assert.match(
+      context.getUserFacingErrorMessage(new Error(`Error invoking remote method 'set-settings': Error: ${text}`), 'toast.tryAgain'),
+      /^settings\.hotkeyError/,
+      text
+    );
+  }
+
+  // Main cannot register a key another app holds; trying again would not help.
+  assert.equal(
+    context.getUserFacingErrorMessage(
+      new Error("Error invoking remote method 'set-settings': Error: Unable to register global shortcut: Ctrl+Shift+L"),
+      'toast.tryAgain'
+    ),
+    'settings.hotkeyErrorInUse'
+  );
+  // Anything else falls back to the hint, never to raw text.
+  assert.equal(context.getUserFacingErrorMessage(new Error('EPERM: C:\\Users\\someone'), 'toast.tryAgain'), 'toast.tryAgain');
 });
 
 test('choosing a settings version marks only that button as pressed', () => {
@@ -1501,7 +1652,7 @@ test('choosing a settings version marks only that button as pressed', () => {
 test('online status reads a grey Off while online is off, Disconnected once on, and keeps a test result', () => {
   const html = fs.readFileSync(indexHtmlPath, 'utf8');
   // Online is off by default, so the markup already reads Off before init renders it.
-  assert.match(html, /<div class="connection-status is-off">\s*<div class="connection-dot" id="connection-dot"><\/div>\s*<span id="connection-text" data-i18n="settings\.onlineOffShort">/);
+  assert.match(html, /<div class="connection-status is-off">\s*<div class="connection-dot" id="connection-dot"><\/div>\s*<span id="connection-text" data-i18n="settings\.onlineOffShort" role="status">/);
 
   const connectionStatus = createDatasetElement();
   const connectionDot = createDatasetElement(['connected']);
@@ -1901,11 +2052,11 @@ function loadDataHandlerContext(functionName, buttonKey, electronAPI) {
 }
 
 test('Clear logs reports each outcome with a static text, after the button gets its focus back', async () => {
-  const failedToast = ['toast.error', 'toast.logsClearFailed', 'error'];
+  const failedToast = ['toast.logsClearFailedTitle', 'toast.logsClearFailed', 'error'];
   const outcomes = [
-    ['cleared', async () => ({ cleared: true }), [['settings.data', 'toast.logsCleared', 'success']], 1, true],
+    ['cleared', async () => ({ cleared: true }), [['toast.logsCleared', '', 'success']], 1, true],
     ['canceled', async () => ({ canceled: true }), [], 0, false],
-    ['busy', async () => ({ busy: true }), [['settings.data', 'toast.dataActionBusy', 'warning']], 0, false],
+    ['busy', async () => ({ busy: true }), [['toast.dataActionBusy', '', 'warning']], 0, false],
     ['partial', async () => ({ cleared: false, failed: ['errorLog'] }), [failedToast], 1, true],
     ['confirm failed', async () => ({ cleared: false, failed: ['confirm'] }), [failedToast], 1, true],
     ['rejected', async () => {
@@ -1937,7 +2088,7 @@ test('Clear logs reports each outcome with a static text, after the button gets 
 });
 
 test('Open folder warns with a static text only when the folder did not open, after the button gets its focus back', async () => {
-  const failedToast = ['toast.error', 'toast.dataFolderOpenFailed', 'error'];
+  const failedToast = ['toast.dataFolderOpenFailed', 'toast.tryAgain', 'error'];
   const outcomes = [
     ['opened', async () => ({ opened: true }), []],
     ['not opened', async () => ({ opened: false }), [failedToast]],

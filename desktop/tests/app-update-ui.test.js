@@ -199,3 +199,51 @@ test('renderer about tab shows install action only when an update is downloaded'
   assert.equal(context.elements.installUpdateBtn.label.textContent, 'settings.installUpdate');
   assert.equal(context.elements.checkUpdatesBtn.textContent, undefined);
 });
+
+test('a failed update check shows in the About status line and is read out, without a toast', async () => {
+  const toasts = [];
+  const announced = [];
+  const state = { appUpdate: { enabled: true, currentVersion: '1.0.0' } };
+  const context = loadFunctions(['handleCheckForAppUpdate'], {
+    state,
+    elements: { appUpdateStatus: { textContent: 'settings.updateUpToDate' } },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        checkForAppUpdate: async () => {
+          throw new Error("Error invoking remote method 'check-for-app-update': Error: net::ERR_INTERNET_DISCONNECTED");
+        }
+      }
+    },
+    renderAppUpdateState: () => assert.fail('a failed check keeps the last state'),
+    announceStatus: (text) => announced.push(text),
+    showToast: (...args) => toasts.push(args)
+  });
+
+  await context.handleCheckForAppUpdate();
+
+  assert.equal(context.elements.appUpdateStatus.textContent, 'settings.updateError');
+  assert.deepEqual(announced, ['settings.updateError']);
+  assert.deepEqual(toasts, []);
+  assert.equal(state.appUpdate.currentVersion, '1.0.0');
+});
+
+test('a failed install says which step failed, with the try-again hint instead of raw text', async () => {
+  const toasts = [];
+  const context = loadFunctions(['handleInstallAppUpdate'], {
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        installAppUpdate: async () => {
+          throw new Error('EPERM: operation not permitted, C:\\Users\\someone\\AppData\\Local\\juice-journal-updater');
+        }
+      }
+    },
+    getUserFacingErrorMessage: (error, fallbackKey) => fallbackKey,
+    showToast: (...args) => toasts.push(args)
+  });
+
+  await context.handleInstallAppUpdate();
+
+  assert.deepEqual(toasts, [['toast.updateInstallFailed', 'toast.tryAgain', 'error']]);
+});

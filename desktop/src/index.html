@@ -139,6 +139,10 @@
               <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#info"/></svg>
               <span data-i18n="login.poeClientNote">GGG cannot verify desktop apps like Juice Journal. Sign in only if you installed it from the official GitHub page.</span>
             </p>
+            <p class="inline-notice error login-error hidden" id="login-error" role="alert">
+              <span class="notice-mark" aria-hidden="true"><svg class="icon" width="14" height="14"><use href="assets/icons.svg#alert"/></svg></span>
+              <span id="login-error-text"></span>
+            </p>
             <p class="login-report-row">
               <span data-i18n="login.troubleSigningIn">Having trouble signing in?</span>
               <button type="button" class="btn btn-link" id="login-report-problem" data-i18n="login.reportProblem">Report a problem</button>
@@ -313,7 +317,7 @@
                   <span class="btn-glyph btn-glyph-stop" aria-hidden="true">
                     <svg class="icon icon-sm" width="13" height="13" aria-hidden="true"><use href="assets/icons.svg#stop"/></svg>
                   </span>
-                  <span data-i18n="dashboard.endMap">Map'i Bitir</span>
+                  <span class="btn-label" data-i18n="dashboard.endMap">Map'i Bitir</span>
                 </button>
                 <button id="scan-screen-btn" class="btn btn-primary hidden">
                   <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#scan"/></svg>
@@ -876,7 +880,7 @@
                 <h3 data-i18n="settings.connectionStatus">Baglanti Durumu</h3>
                 <div class="connection-status is-off">
                   <div class="connection-dot" id="connection-dot"></div>
-                  <span id="connection-text" data-i18n="settings.onlineOffShort">Off</span>
+                  <span id="connection-text" data-i18n="settings.onlineOffShort" role="status">Off</span>
                 </div>
                 <button id="test-connection" class="btn btn-secondary btn-small" data-i18n="settings.testConnection">Baglantiyi Test Et</button>
               </div>
@@ -1015,7 +1019,8 @@
     </main>
 
     <!-- Toast Notifications -->
-    <div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
+    <div id="toast-container"></div>
+    <div id="toast-announcer" class="visually-hidden" role="status" aria-live="polite" aria-atomic="false"></div>
   </div>
 
   <script src="modules/translations.js"></script>
