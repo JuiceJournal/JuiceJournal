@@ -165,3 +165,67 @@ test('the bug report preview is written as text', () => {
   assert.doesNotMatch(body, /innerHTML/);
   assert.match(body, /\.textContent\s*=/);
 });
+
+test('Settings > Data acts locally: no renderer input, main window only, opens only the data folder', () => {
+  const preloadJs = fs.readFileSync(path.join(desktopRoot, 'preload.js'), 'utf8');
+  const setupBody = getFunctionBody(mainJs, 'setupIPC');
+  const scopesStart = mainJs.indexOf('const IPC_RENDERER_SCOPES');
+
+  for (const line of [
+    "ipcMain.handle('get-local-data-summary', () => getLocalDataSummary());",
+    "ipcMain.handle('open-data-folder', () => openDataFolder());",
+    "ipcMain.handle('clear-logs', () => clearLogs());"
+  ]) {
+    assert.ok(setupBody.includes(line), `setupIPC should register ${line}`);
+  }
+  // Left out of the scopes, so only the main window may call them.
+  assert.notEqual(scopesStart, -1);
+  assert.doesNotMatch(mainJs.slice(scopesStart, mainJs.indexOf('});', scopesStart)), /local-data|data-folder|clear-logs/);
+  for (const line of [
+    "getLocalDataSummary: () => ipcRenderer.invoke('get-local-data-summary'),",
+    "openDataFolder: () => ipcRenderer.invoke('open-data-folder'),",
+    "clearLogs: () => ipcRenderer.invoke('clear-logs'),"
+  ]) {
+    assert.ok(preloadJs.includes(line), `preload should expose ${line}`);
+  }
+
+  const openBody = getFunctionBody(mainJs, 'openDataFolder');
+  assert.ok(openBody.includes("shell.openPath(app.getPath('userData'))"));
+  assert.doesNotMatch(openBody, /openExternal|execFile|spawn|powershell/i);
+
+  for (const functionName of ['getPathSize', 'getLocalDataSummary', 'openDataFolder', 'clearErrorLog', 'clearLogs']) {
+    assert.doesNotMatch(
+      getFunctionBody(mainJs, functionName),
+      /apiClient|axios|http|fetch\(|healthCheck|buildDiagnosticsPayload/,
+      `${functionName} must stay local`
+    );
+  }
+
+  const clearBody = getFunctionBody(mainJs, 'clearLogs');
+  for (const part of ['dialog.showMessageBox(mainWindow, {', 'defaultId: 1,', 'cancelId: 1,', 'noLink: true,']) {
+    assert.ok(clearBody.includes(part), `clearLogs should contain ${part}`);
+  }
+  assert.ok(!clearBody.includes('appendAuditTrail'));
+  // Flags, sizes and step names only: fs and shell error texts name the full path, a log line would carry it into the
+  // error log, and during a clear it would undo the clear.
+  for (const functionName of ['getPathSize', 'getLocalDataSummary', 'openDataFolder', 'clearErrorLog', 'clearLogs']) {
+    const body = getFunctionBody(mainJs, functionName);
+    assert.ok(!body.includes('.message'), `${functionName} must not pass on error text`);
+    assert.ok(!body.includes('console.'), `${functionName} must not log`);
+  }
+});
+
+test('the Data tab writes the path and the size as text', () => {
+  const appJs = fs.readFileSync(path.join(desktopRoot, 'src', 'app.js'), 'utf8');
+  const summaryBody = getFunctionBody(appJs, 'loadDataSummary');
+
+  assert.doesNotMatch(summaryBody, /innerHTML/);
+  assert.match(summaryBody, /\.textContent\s*=/);
+  // Toasts use static keys only: an error text could name the folder, and a toast can end up in a public issue.
+  for (const functionName of ['handleClearLogs', 'handleOpenDataFolder']) {
+    const body = getFunctionBody(appJs, functionName);
+    assert.doesNotMatch(body, /innerHTML/, functionName);
+    assert.ok(!body.includes('.message'), `${functionName} must not show error text`);
+    assert.ok(!body.includes('getUserFacingErrorMessage'), `${functionName} must not show error text`);
+  }
+});

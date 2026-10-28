@@ -55,6 +55,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBugReport: () => ipcRenderer.invoke('get-bug-report'),
   copyBugReport: (reportId) => ipcRenderer.invoke('copy-bug-report', reportId),
   openBugReportIssue: (reportId) => ipcRenderer.invoke('open-bug-report-issue', reportId),
+  getLocalDataSummary: () => ipcRenderer.invoke('get-local-data-summary'),
+  openDataFolder: () => ipcRenderer.invoke('open-data-folder'),
+  clearLogs: () => ipcRenderer.invoke('clear-logs'),
 
   // Stash & Prices
   syncPrices: (options) => ipcRenderer.invoke('sync-prices', options),

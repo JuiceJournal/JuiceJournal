@@ -256,6 +256,11 @@ const elements = {
   installUpdateBtn: document.getElementById('install-update-btn'),
   settingsPage: document.getElementById('settings-page'),
   settingsAboutTab: document.getElementById('settings-about'),
+  settingsDataTab: document.getElementById('settings-data'),
+  dataFolderPath: document.getElementById('data-folder-path'),
+  dataTotalSize: document.getElementById('data-total-size'),
+  openDataFolderBtn: document.getElementById('open-data-folder'),
+  clearLogsBtn: document.getElementById('clear-logs'),
   bugReportPreview: document.getElementById('bug-report-preview'),
   openBugReportIssueBtn: document.getElementById('open-bug-report-issue'),
   copyBugReportBtn: document.getElementById('copy-bug-report'),
@@ -324,6 +329,8 @@ let characterVisualModelPromise = null;
 let activeCharacterRefreshTimer = null;
 let activeCharacterRefreshRetryTimer = null;
 let activeCharacterRefreshRequestId = 0;
+// Each Data tab load gets a number, so an older, slower answer never overwrites a newer one.
+let dataSummaryRequestId = 0;
 let characterReconcileTimer = null;
 // GGG moved the `current` flag about 10 minutes after Play in a live PoE2 test (2026-10-21).
 const CHARACTER_RECONCILE_DELAY_MS = 11 * 60 * 1000;
@@ -2282,6 +2289,12 @@ function setupEventListeners() {
   if (elements.exportDiagnosticsBtn) {
     elements.exportDiagnosticsBtn.addEventListener('click', handleExportDiagnostics);
   }
+  if (elements.openDataFolderBtn) {
+    elements.openDataFolderBtn.addEventListener('click', handleOpenDataFolder);
+  }
+  if (elements.clearLogsBtn) {
+    elements.clearLogsBtn.addEventListener('click', handleClearLogs);
+  }
   if (elements.checkUpdatesBtn) {
     elements.checkUpdatesBtn.addEventListener('click', handleCheckForAppUpdate);
   }
@@ -2526,6 +2539,9 @@ function navigateTo(page) {
     // The selected tab survives leaving Settings, so coming back to About builds the report again. Not under the
     // login modal: that would clear the login report, and signing in builds About's report anyway.
     void loadBugReportPreview(bugReportViews.about);
+  } else if (page === 'settings' && elements.settingsDataTab?.classList.contains('active')) {
+    // As with About: the selected tab survives leaving Settings, so coming back to Data measures again.
+    void loadDataSummary();
   }
 }
 
@@ -2542,6 +2558,10 @@ function showSettingsTab(tab) {
   // Each visit builds the report again, so it shows the latest errors. Not under the login modal, as in navigateTo.
   if (tab === 'about' && elements.loginModal?.classList.contains('hidden')) {
     void loadBugReportPreview(bugReportViews.about);
+  }
+  // The folder size is measured in main on each visit, so it includes what the app wrote since.
+  if (tab === 'data') {
+    void loadDataSummary();
   }
 }
 
@@ -2968,6 +2988,15 @@ function applyLocalizedChrome() {
   // So is Recent Loot's empty state; it redraws from state, with no IPC.
   if (typeof renderRecentLoot === 'function') {
     renderRecentLoot();
+  }
+  // The activity log is drawn by JS as well, and now sits on the Data tab next to translated headings.
+  if (typeof renderAuditTrail === 'function') {
+    renderAuditTrail();
+  }
+  // The Data tab's size line has no data-i18n either. Reset to Defaults can change the language on that tab, so an
+  // open Data tab measures again and writes the line in the new language.
+  if (elements.settingsDataTab?.classList.contains('active')) {
+    void loadDataSummary();
   }
 }
 
@@ -5889,6 +5918,96 @@ async function handleExportDiagnostics() {
   } finally {
     setButtonBusy(elements.exportDiagnosticsBtn, false);
   }
+}
+
+// Sizes count in 1024s like File Explorer: whole KB below 1 MB, then MB with one decimal. en-US digits, like the
+// other counts in the app.
+function formatDataSize(bytes) {
+  const value = Number.isFinite(bytes) && bytes > 0 ? bytes : 0;
+  const kilobytes = Math.ceil(value / 1024);
+  if (kilobytes < 1024) {
+    return kilobytes.toLocaleString('en-US') + ' KB';
+  }
+  return (value / (1024 * 1024)).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' MB';
+}
+
+// The folder and its size come from main on each visit, as text only. A newer load wins over an older, slower one.
+async function loadDataSummary() {
+  if (!elements.dataTotalSize || !elements.dataFolderPath) return;
+  const requestId = ++dataSummaryRequestId;
+  elements.dataTotalSize.textContent = window.t('settings.dataSizeLoading');
+  elements.dataTotalSize.setAttribute('aria-busy', 'true');
+  try {
+    const summary = await window.electronAPI.getLocalDataSummary();
+    if (requestId !== dataSummaryRequestId) return;
+    elements.dataFolderPath.textContent = summary?.folderPath || '';
+    elements.dataTotalSize.textContent = window.t('settings.dataTotalSize', { size: formatDataSize(summary?.totalBytes) });
+  } catch {
+    if (requestId !== dataSummaryRequestId) return;
+    elements.dataTotalSize.textContent = window.t('settings.dataSizeUnavailable');
+  } finally {
+    if (requestId === dataSummaryRequestId) {
+      elements.dataTotalSize.removeAttribute('aria-busy');
+    }
+  }
+}
+
+// Main opens the folder it owns and answers only whether it did, so no path or OS error text reaches a toast.
+async function handleOpenDataFolder() {
+  const button = elements.openDataFolderBtn;
+  setButtonBusy(button, true);
+  let opened = false;
+  try {
+    opened = (await window.electronAPI.openDataFolder())?.opened === true;
+  } catch {
+    // Reported below with a static text: the error text can name the folder.
+  } finally {
+    setButtonBusy(button, false);
+    // Disabling the button dropped its focus; keyboard users carry on from it. As in handleClearLogs, focus comes
+    // back before the toast.
+    button.focus();
+  }
+
+  if (!opened) {
+    showToast(window.t('toast.error'), window.t('toast.dataFolderOpenFailed'), 'error');
+  }
+}
+
+// Main asks first (Cancel is the default) and clears the activity log and the error log together. The list empties
+// through the audit-trail-updated event. A rejected call is reported like a failed clear, with a static text only.
+async function handleClearLogs() {
+  const button = elements.clearLogsBtn;
+  setButtonBusy(button, true);
+  let result = null;
+  try {
+    result = await window.electronAPI.clearLogs();
+  } catch {
+    result = { cleared: false };
+  } finally {
+    setButtonBusy(button, false);
+    // The native confirm took focus away. It comes back before the toast, so moving it does not cut the toast off.
+    button.focus();
+  }
+
+  if (result?.canceled) return;
+  if (result?.busy) {
+    showToast(window.t('settings.data'), window.t('toast.dataActionBusy'), 'warning');
+    return;
+  }
+  // The logs may have changed, so no view keeps showing cleared lines; each builds its report again on its next visit.
+  Object.values(bugReportViews).forEach((view) => {
+    if (!view.preview) return;
+    view.preview.textContent = '';
+    view.reportId = null;
+    view.openButton.disabled = true;
+    view.copyButton.disabled = true;
+  });
+  if (result?.cleared) {
+    showToast(window.t('settings.data'), window.t('toast.logsCleared'), 'success');
+  } else {
+    showToast(window.t('toast.error'), window.t('toast.logsClearFailed'), 'error');
+  }
+  void loadDataSummary();
 }
 
 // Main keeps only the report it built last, and Copy and the issue button send exactly that text, so the user sends

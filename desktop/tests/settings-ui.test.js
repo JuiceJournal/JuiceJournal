@@ -1574,6 +1574,7 @@ test('settings tabs use two columns, with full-width groups for long content', (
     'id="online-enabled"',
     'data-i18n="settings.onlineAccount"',
     'id="diagnostics-mode"',
+    'id="data-folder-path"',
     'id="audit-trail-list"',
     'about-info',
     'id="bug-report-preview"',
@@ -1586,6 +1587,382 @@ test('settings tabs use two columns, with full-width groups for long content', (
   for (const marker of ['id="global-language"', 'id="default-league"', 'id="scan-hotkey"', 'id="connection-text"']) {
     assert.doesNotMatch(groupOpeningTag(marker), /settings-group--wide/, marker);
   }
+});
+
+test('Settings has a Data tab before About with the folder, its size and the logs', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const css = fs.readFileSync(stylesCssPath, 'utf8');
+  const cssRule = (selector) => {
+    const start = css.indexOf(`\n${selector} {`);
+    assert.notEqual(start, -1, `Missing ${selector} rule`);
+    return css.slice(start, css.indexOf('}', start));
+  };
+
+  assert.deepEqual(
+    [...html.matchAll(/data-settings-tab="([^"]+)"/g)].map(([, tab]) => tab),
+    ['general', 'poe', 'hotkeys', 'notifications', 'api', 'data', 'about']
+  );
+  const navMarker = html.indexOf('data-settings-tab="data"');
+  const navButton = html.slice(html.lastIndexOf('<button', navMarker), html.indexOf('</button>', navMarker));
+  for (const part of [
+    '<use href="assets/icons.svg#chest"/>',
+    '<span data-i18n="settings.data">Data</span>',
+    'role="tab"',
+    'aria-selected="false"'
+  ]) {
+    assert.ok(navButton.includes(part), part);
+  }
+
+  const apiIndex = html.indexOf('id="settings-api"');
+  const dataIndex = html.indexOf('id="settings-data"');
+  const aboutIndex = html.indexOf('id="settings-about"');
+  assert.ok(apiIndex !== -1 && apiIndex < dataIndex && dataIndex < aboutIndex, 'Online, Data, About');
+
+  const panel = html.slice(html.lastIndexOf('<div', dataIndex), html.indexOf('<!-- About Tab -->', dataIndex));
+  assert.ok(panel.startsWith('<div class="settings-tab" id="settings-data" role="tabpanel">'));
+  // A tab-wide line first: the buttons below act right away, and the Save bar stays as on About.
+  assert.ok(
+    panel.slice(panel.indexOf('>') + 1).trimStart()
+      .startsWith('<p class="settings-desc settings-tab-note" data-i18n="settings.dataAppliesNow">')
+  );
+  for (const part of [
+    // Filled with textContent by loadDataSummary, so no data-i18n would overwrite them.
+    '<code id="data-folder-path" class="data-folder-path"></code>',
+    '<p id="data-total-size" class="settings-desc"></p>',
+    '<button id="open-data-folder" class="btn btn-secondary btn-small" type="button">',
+    '<use href="assets/icons.svg#folder"/>',
+    '<span class="btn-label" data-i18n="settings.openDataFolder">',
+    '<h3 data-i18n="settings.auditTrail">Activity log</h3>',
+    'id="audit-trail-list"',
+    '<p class="settings-desc clear-logs-note" id="clear-logs-note" data-i18n="settings.clearLogsDesc">',
+    '<button id="clear-logs" class="btn btn-danger btn-small" type="button" aria-describedby="clear-logs-note">',
+    '<use href="assets/icons.svg#trash"/>',
+    '<span class="btn-label" data-i18n="settings.clearLogs">'
+  ]) {
+    assert.ok(panel.includes(part), part);
+  }
+  // The activity log moved here from the Online tab.
+  assert.ok(!html.slice(apiIndex, dataIndex).includes('audit-trail-list'));
+  for (const id of [
+    'settings-data',
+    'data-folder-path',
+    'data-total-size',
+    'open-data-folder',
+    'audit-trail-list',
+    'clear-logs-note',
+    'clear-logs'
+  ]) {
+    assert.equal(html.split(`id="${id}"`).length - 1, 1, id);
+  }
+
+  assert.match(cssRule('.settings-tab-note'), /grid-column: 1 \/ -1;/);
+  const folderPath = cssRule('.data-folder-path');
+  for (const declaration of [
+    'font-family: var(--font-mono);',
+    'border-radius: var(--bevel-sm);',
+    'overflow-wrap: anywhere;'
+  ]) {
+    assert.ok(folderPath.includes(declaration), declaration);
+  }
+});
+
+test('the Data tab measures the folder on each visit', () => {
+  const tabs = ['api', 'data', 'about'];
+  const navButtons = tabs.map((tab) => ({ ...createDatasetElement(), dataset: { settingsTab: tab }, setAttribute: () => {} }));
+  const panels = tabs.map((tab) => ({ ...createDatasetElement(), id: `settings-${tab}` }));
+  const counts = { reports: 0, data: 0 };
+  const context = loadFunctions(['showSettingsTab', 'navigateTo'], {
+    elements: {
+      settingsNavBtns: navButtons,
+      settingsTabs: panels,
+      settingsDataTab: panels[1],
+      settingsAboutTab: panels[2],
+      loginModal: createDatasetElement(['hidden']),
+      navButtons: [],
+      pages: []
+    },
+    bugReportViews: { about: {}, login: {} },
+    closeSessionDrawer: () => {},
+    loadBugReportPreview: async () => {
+      counts.reports += 1;
+    },
+    loadDataSummary: async () => {
+      counts.data += 1;
+    }
+  });
+
+  context.showSettingsTab('api');
+  assert.deepEqual(counts, { reports: 0, data: 0 });
+  context.showSettingsTab('data');
+  assert.deepEqual(counts, { reports: 0, data: 1 });
+  // The selected tab survives leaving Settings, so coming back measures again.
+  context.navigateTo('settings');
+  assert.deepEqual(counts, { reports: 0, data: 2 });
+
+  context.showSettingsTab('about');
+  assert.deepEqual(counts, { reports: 1, data: 2 });
+  context.navigateTo('settings');
+  assert.deepEqual(counts, { reports: 2, data: 2 });
+});
+
+test('data sizes count in 1024s: whole KB below 1 MB, then MB with one decimal', () => {
+  const { formatDataSize } = loadFunctions(['formatDataSize']);
+
+  for (const [bytes, expected] of [
+    [0, '0 KB'],
+    [NaN, '0 KB'],
+    [undefined, '0 KB'],
+    [1, '1 KB'],
+    [1536, '2 KB'],
+    [1048575, '1 MB'],
+    [1048576, '1 MB'],
+    [1572864, '1.5 MB'],
+    [5 * 1024 ** 3, '5,120 MB']
+  ]) {
+    assert.equal(formatDataSize(bytes), expected, String(bytes));
+  }
+});
+
+function loadDataSummaryContext(getLocalDataSummary) {
+  const attrs = {};
+  const elements = {
+    dataFolderPath: { textContent: '' },
+    dataTotalSize: {
+      textContent: '',
+      attrs,
+      setAttribute: (name, value) => {
+        attrs[name] = String(value);
+      },
+      removeAttribute: (name) => {
+        delete attrs[name];
+      }
+    }
+  };
+  const toasts = [];
+  const context = loadFunctions(['formatDataSize', 'loadDataSummary'], {
+    dataSummaryRequestId: 0,
+    elements,
+    window: {
+      t: (key, values) => (values ? `${key} ${JSON.stringify(values)}` : key),
+      electronAPI: { getLocalDataSummary }
+    },
+    showToast: (...args) => toasts.push(args)
+  });
+  return { context, elements, toasts };
+}
+
+test('the Data tab writes the folder and its size as text, and a newer load wins', async () => {
+  let resolveSummary;
+  const pending = loadDataSummaryContext(() => new Promise((resolve) => {
+    resolveSummary = resolve;
+  }));
+  const load = pending.context.loadDataSummary();
+  assert.equal(pending.elements.dataTotalSize.textContent, 'settings.dataSizeLoading');
+  assert.equal(pending.elements.dataTotalSize.attrs['aria-busy'], 'true');
+  resolveSummary({ folderPath: 'X', totalBytes: 1572864 });
+  await load;
+  assert.equal(pending.elements.dataFolderPath.textContent, 'X');
+  assert.equal(pending.elements.dataTotalSize.textContent, 'settings.dataTotalSize {"size":"1.5 MB"}');
+  assert.equal(pending.elements.dataTotalSize.attrs['aria-busy'], undefined);
+
+  // A failed measurement says so in the size line only; a toast would interrupt every visit.
+  const failed = loadDataSummaryContext(async () => {
+    throw new Error('EPERM: C:\\Users\\someone\\AppData\\Roaming\\Juice Journal');
+  });
+  await failed.context.loadDataSummary();
+  assert.equal(failed.elements.dataTotalSize.textContent, 'settings.dataSizeUnavailable');
+  assert.equal(failed.elements.dataFolderPath.textContent, '');
+  assert.equal(failed.elements.dataTotalSize.attrs['aria-busy'], undefined);
+  assert.deepEqual(failed.toasts, []);
+
+  // The first visit answers last: the second visit's numbers stay.
+  const resolvers = [];
+  const overlapping = loadDataSummaryContext(() => new Promise((resolve) => resolvers.push(resolve)));
+  const first = overlapping.context.loadDataSummary();
+  const second = overlapping.context.loadDataSummary();
+  resolvers[1]({ folderPath: 'new', totalBytes: 2048 });
+  await second;
+  resolvers[0]({ folderPath: 'old', totalBytes: 1024 });
+  await first;
+  assert.equal(overlapping.elements.dataFolderPath.textContent, 'new');
+  assert.equal(overlapping.elements.dataTotalSize.textContent, 'settings.dataTotalSize {"size":"2 KB"}');
+  assert.equal(overlapping.elements.dataTotalSize.attrs['aria-busy'], undefined);
+});
+
+test('a language change writes the size line of an open Data tab again in the new language', async () => {
+  let language = 'tr';
+  const dataTab = createDatasetElement(['active']);
+  const elements = {
+    settingsDataTab: dataTab,
+    dataFolderPath: { textContent: '' },
+    dataTotalSize: { textContent: '', setAttribute: () => {}, removeAttribute: () => {} }
+  };
+  let summaries = 0;
+  const context = loadFunctions(['formatDataSize', 'loadDataSummary', 'applyLocalizedChrome'], {
+    dataSummaryRequestId: 0,
+    elements,
+    renderUserIdentity: () => {},
+    renderPoeLinkStatus: () => {},
+    window: {
+      applyTranslations: () => {},
+      t: (key, values) => `${language}:${key}${values ? ` ${values.size}` : ''}`,
+      electronAPI: {
+        getLocalDataSummary: async () => {
+          summaries += 1;
+          return { folderPath: 'X', totalBytes: 2048 };
+        }
+      }
+    }
+  });
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+  await context.loadDataSummary();
+  assert.equal(elements.dataTotalSize.textContent, 'tr:settings.dataTotalSize 2 KB');
+
+  // Reset to Defaults on the Data tab sets English and redraws the chrome; the size line has no data-i18n.
+  language = 'en';
+  context.applyLocalizedChrome();
+  assert.equal(elements.dataTotalSize.textContent, 'en:settings.dataSizeLoading');
+  await settle();
+  assert.equal(elements.dataTotalSize.textContent, 'en:settings.dataTotalSize 2 KB');
+  assert.equal(summaries, 2);
+
+  // A Data tab that is not open is measured on its next visit instead.
+  dataTab.classList.remove('active');
+  language = 'tr';
+  context.applyLocalizedChrome();
+  await settle();
+  assert.equal(summaries, 2);
+});
+
+test('a language change redraws the activity log in the new language', () => {
+  let language = 'en';
+  const elements = { auditTrailList: { innerHTML: '' } };
+  const context = loadFunctions(['renderAuditTrail', 'applyLocalizedChrome'], {
+    elements,
+    state: { auditTrail: [{ key: 'audit.login', createdAt: '2026-10-28T10:00:00.000Z', level: 'info' }] },
+    escapeHTML: (value) => value,
+    timeAgo: () => 'now',
+    renderUserIdentity: () => {},
+    renderPoeLinkStatus: () => {},
+    window: {
+      applyTranslations: () => {},
+      t: (key) => `${language}:${key}`
+    }
+  });
+
+  context.renderAuditTrail();
+  assert.match(elements.auditTrailList.innerHTML, /en:audit\.login/);
+
+  language = 'tr';
+  context.applyLocalizedChrome();
+  assert.match(elements.auditTrailList.innerHTML, /tr:audit\.login/);
+  assert.doesNotMatch(elements.auditTrailList.innerHTML, /en:audit\.login/);
+});
+
+// Records the button, toast and reload calls of a Data tab handler in one list, so tests can check their order.
+function loadDataHandlerContext(functionName, buttonKey, electronAPI) {
+  const events = [];
+  const toasts = [];
+  const counts = { reloads: 0 };
+  const button = {
+    disabled: false,
+    focusCount: 0,
+    focus() {
+      this.focusCount += 1;
+      events.push('focus');
+    }
+  };
+  const createView = () => ({
+    preview: { textContent: 'error: e2e renderer failure' },
+    openButton: { disabled: false },
+    copyButton: { disabled: false },
+    reportId: 3
+  });
+  const views = { about: createView(), login: createView() };
+  const context = loadFunctions([functionName], {
+    elements: { [buttonKey]: button },
+    bugReportViews: views,
+    window: { t: (key) => key, electronAPI },
+    setButtonBusy: (target, busy) => {
+      assert.equal(target, button);
+      target.disabled = busy;
+      events.push(`busy:${busy}`);
+    },
+    showToast: (...args) => {
+      toasts.push(args);
+      events.push('toast');
+    },
+    loadDataSummary: async () => {
+      counts.reloads += 1;
+    }
+  });
+  return { context, button, views, events, toasts, counts };
+}
+
+test('Clear logs reports each outcome with a static text, after the button gets its focus back', async () => {
+  const failedToast = ['toast.error', 'toast.logsClearFailed', 'error'];
+  const outcomes = [
+    ['cleared', async () => ({ cleared: true }), [['settings.data', 'toast.logsCleared', 'success']], 1, true],
+    ['canceled', async () => ({ canceled: true }), [], 0, false],
+    ['busy', async () => ({ busy: true }), [['settings.data', 'toast.dataActionBusy', 'warning']], 0, false],
+    ['partial', async () => ({ cleared: false, failed: ['errorLog'] }), [failedToast], 1, true],
+    ['confirm failed', async () => ({ cleared: false, failed: ['confirm'] }), [failedToast], 1, true],
+    ['rejected', async () => {
+      throw new Error('EBUSY: C:\\Users\\someone\\AppData\\Roaming\\Juice Journal\\logs\\errors.jsonl');
+    }, [failedToast], 1, true]
+  ];
+
+  for (const [outcome, clearLogs, expectedToasts, expectedReloads, viewsReset] of outcomes) {
+    const run = loadDataHandlerContext('handleClearLogs', 'clearLogsBtn', { clearLogs });
+
+    await run.context.handleClearLogs();
+
+    assert.deepEqual(run.toasts, expectedToasts, outcome);
+    assert.ok(!JSON.stringify(run.toasts).includes('someone'), outcome);
+    assert.equal(run.counts.reloads, expectedReloads, outcome);
+    // The native confirm took focus; it comes back before the toast, so moving it does not cut the toast off.
+    assert.deepEqual(run.events, ['busy:true', 'busy:false', 'focus', ...expectedToasts.map(() => 'toast')], outcome);
+    assert.equal(run.button.focusCount, 1, outcome);
+    assert.equal(run.button.disabled, false, outcome);
+    // Once the logs may have changed, no report view keeps the cleared lines or a Copy for them.
+    for (const view of Object.values(run.views)) {
+      assert.deepEqual(
+        [view.preview.textContent, view.reportId, view.openButton.disabled, view.copyButton.disabled],
+        viewsReset ? ['', null, true, true] : ['error: e2e renderer failure', 3, false, false],
+        outcome
+      );
+    }
+  }
+});
+
+test('Open folder warns with a static text only when the folder did not open, after the button gets its focus back', async () => {
+  const failedToast = ['toast.error', 'toast.dataFolderOpenFailed', 'error'];
+  const outcomes = [
+    ['opened', async () => ({ opened: true }), []],
+    ['not opened', async () => ({ opened: false }), [failedToast]],
+    ['rejected', async () => {
+      throw new Error('C:\\Users\\someone\\AppData\\Roaming\\Juice Journal: Access is denied.');
+    }, [failedToast]]
+  ];
+
+  for (const [outcome, openDataFolder, expectedToasts] of outcomes) {
+    const run = loadDataHandlerContext('handleOpenDataFolder', 'openDataFolderBtn', { openDataFolder });
+
+    await run.context.handleOpenDataFolder();
+
+    assert.deepEqual(run.toasts, expectedToasts, outcome);
+    assert.deepEqual(run.events, ['busy:true', 'busy:false', 'focus', ...expectedToasts.map(() => 'toast')], outcome);
+    assert.equal(run.button.disabled, false, outcome);
+    assert.equal(run.counts.reloads, 0, outcome);
+  }
+});
+
+test('the Data tab buttons are wired to their handlers', () => {
+  const body = extractFunctionSource(fs.readFileSync(appJsPath, 'utf8'), 'setupEventListeners');
+
+  assert.ok(body.includes("elements.openDataFolderBtn.addEventListener('click', handleOpenDataFolder)"));
+  assert.ok(body.includes("elements.clearLogsBtn.addEventListener('click', handleClearLogs)"));
 });
 
 test('hotkey fields are the keycaps and explain how to capture', () => {

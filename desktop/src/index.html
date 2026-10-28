@@ -707,6 +707,10 @@
               <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#link"/></svg>
               <span data-i18n="settings.api">API Baglantisi</span>
             </button>
+            <button class="settings-nav-btn" data-settings-tab="data" role="tab" aria-selected="false">
+              <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#chest"/></svg>
+              <span data-i18n="settings.data">Data</span>
+            </button>
             <button class="settings-nav-btn" data-settings-tab="about" role="tab" aria-selected="false">
               <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#info"/></svg>
               <span data-i18n="settings.about">Hakkinda</span>
@@ -898,7 +902,7 @@
                     <option value="safe" data-i18n="settings.diagnosticsSafe">Guvenli</option>
                     <option value="sensitive" data-i18n="settings.diagnosticsSensitive">Hassas</option>
                   </select>
-                  <p class="settings-desc" data-i18n="settings.diagnosticsHint">Guvenli export yalnizca genel durum ozeti icerir. Hassas export oturum ve denetim ayrintilarini ekler.</p>
+                  <p class="settings-desc" data-i18n="settings.diagnosticsHint">Guvenli export yalnizca genel durum ozeti icerir. Hassas export oturum ve etkinlik gunlugu ayrintilarini ekler.</p>
                 </div>
                 <div class="settings-actions-row">
                   <button id="export-diagnostics" class="btn btn-secondary btn-small">
@@ -907,11 +911,35 @@
                   </button>
                 </div>
               </div>
+            </div>
+
+            <!-- Data Tab -->
+            <div class="settings-tab" id="settings-data" role="tabpanel">
+              <p class="settings-desc settings-tab-note" data-i18n="settings.dataAppliesNow">Buttons on this tab act right away; Save is not needed.</p>
               <div class="settings-group settings-group--wide">
-                <h3 data-i18n="settings.auditTrail">Yerel Islem Gecmisi</h3>
-                <p class="settings-desc" data-i18n="settings.auditTrailDesc">Son calisma ve diagnostik olaylari.</p>
+                <h3 data-i18n="settings.dataFolder">Where your data is</h3>
+                <p class="settings-desc" data-i18n="settings.dataFolderDesc">Settings, your journal, item icons, the OCR language data and the logs are kept in this folder, together with the browser cache of the app window.</p>
+                <code id="data-folder-path" class="data-folder-path"></code>
+                <p id="data-total-size" class="settings-desc"></p>
+                <div class="settings-actions-row">
+                  <button id="open-data-folder" class="btn btn-secondary btn-small" type="button">
+                    <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#folder"/></svg>
+                    <span class="btn-label" data-i18n="settings.openDataFolder">Open folder</span>
+                  </button>
+                </div>
+              </div>
+              <div class="settings-group settings-group--wide">
+                <h3 data-i18n="settings.auditTrail">Activity log</h3>
+                <p class="settings-desc" data-i18n="settings.auditTrailDesc">Recent runtime and diagnostics events.</p>
                 <div class="audit-trail-list" id="audit-trail-list">
-                  <p class="text-muted" data-i18n="settings.auditTrailEmpty">Henuz kayit yok</p>
+                  <p class="text-muted" data-i18n="settings.auditTrailEmpty">No activity yet</p>
+                </div>
+                <p class="settings-desc clear-logs-note" id="clear-logs-note" data-i18n="settings.clearLogsDesc">Deletes the activity log and the error log on this PC. Your sessions, loot, map results and settings stay. Diagnostics files you exported and reports you copied are not changed.</p>
+                <div class="settings-actions-row">
+                  <button id="clear-logs" class="btn btn-danger btn-small" type="button" aria-describedby="clear-logs-note">
+                    <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#trash"/></svg>
+                    <span class="btn-label" data-i18n="settings.clearLogs">Clear logs</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -969,7 +997,7 @@
                   </button>
                   <button id="copy-bug-report" class="btn btn-secondary btn-small" type="button" data-i18n="settings.copyBugReport">Copy report</button>
                 </div>
-                <p class="settings-desc bug-report-note" data-i18n="settings.errorLogNote">Recent app errors are kept only on this PC, with names, paths and tokens removed where possible (up to 128 KB).</p>
+                <p class="settings-desc bug-report-note" data-i18n="settings.errorLogNote">Recent app errors are kept only on this PC, with names, paths and tokens removed where possible (up to 128 KB). To delete them, use Clear logs in Settings &gt; Data.</p>
               </div>
             </div>
 
