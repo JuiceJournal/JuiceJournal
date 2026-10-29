@@ -242,6 +242,18 @@
     <main class="main">
       <!-- Dashboard Page -->
       <section id="dashboard-page" class="page active">
+        <div class="inline-notice error journal-notice hidden" id="dashboard-journal-notice" role="region" aria-labelledby="dashboard-journal-notice-title">
+          <span class="notice-mark" aria-hidden="true"><svg class="icon" width="14" height="14"><use href="assets/icons.svg#alert"/></svg></span>
+          <div class="journal-notice-body">
+            <p class="journal-notice-title" id="dashboard-journal-notice-title" data-i18n="journal.unreadableTitle">Your journal could not be read</p>
+            <p class="journal-notice-text" data-i18n="journal.unreadableBody">Your journal file is kept as it is; nothing was deleted. Starting a new journal keeps the broken file next to the new one in the data folder.</p>
+            <div class="journal-notice-actions">
+              <button type="button" class="btn btn-secondary btn-small" data-journal-action="start-new" data-i18n="journal.startNew">Start a new journal</button>
+              <button type="button" class="btn btn-ghost btn-small" data-journal-action="open-folder" data-i18n="journal.openDataFolder">Open data folder</button>
+              <button type="button" class="btn btn-link" data-journal-action="report" data-i18n="login.reportProblem">Report a problem</button>
+            </div>
+          </div>
+        </div>
         <div class="dashboard-grid">
           <!-- Character Summary -->
           <div class="card character-card" id="character-summary-card" role="region" data-i18n-aria="dashboard.characterSummary" data-character-state="empty">
@@ -537,6 +549,18 @@
               <option value="all">All farms</option>
             </select>
             <input id="session-search-filter" type="search" placeholder="Search map, farm, league..." aria-label="Search sessions">
+          </div>
+        </div>
+        <div class="inline-notice error journal-notice hidden" id="sessions-journal-notice" role="region" aria-labelledby="sessions-journal-notice-title">
+          <span class="notice-mark" aria-hidden="true"><svg class="icon" width="14" height="14"><use href="assets/icons.svg#alert"/></svg></span>
+          <div class="journal-notice-body">
+            <p class="journal-notice-title" id="sessions-journal-notice-title" data-i18n="journal.unreadableTitle">Your journal could not be read</p>
+            <p class="journal-notice-text" data-i18n="journal.unreadableBody">Your journal file is kept as it is; nothing was deleted. Starting a new journal keeps the broken file next to the new one in the data folder.</p>
+            <div class="journal-notice-actions">
+              <button type="button" class="btn btn-secondary btn-small" data-journal-action="start-new" data-i18n="journal.startNew">Start a new journal</button>
+              <button type="button" class="btn btn-ghost btn-small" data-journal-action="open-folder" data-i18n="journal.openDataFolder">Open data folder</button>
+              <button type="button" class="btn btn-link" data-journal-action="report" data-i18n="login.reportProblem">Report a problem</button>
+            </div>
           </div>
         </div>
         <div id="sessions-summary" class="sessions-summary" hidden></div>

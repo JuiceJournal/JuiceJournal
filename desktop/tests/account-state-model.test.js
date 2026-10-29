@@ -751,6 +751,7 @@ test('renderer logout clears normalized account state', async () => {
     updateActiveSessionUI: () => calls.push(['updateActiveSessionUI']),
     renderSessionsList: () => calls.push(['renderSessionsList']),
     renderRecentLoot: () => calls.push(['renderRecentLoot']),
+    setJournalUnreadable: (unreadable) => calls.push(['setJournalUnreadable', unreadable]),
     renderPoeLinkStatus: () => calls.push(['renderPoeLinkStatus']),
     showLoginModal: () => calls.push(['showLoginModal'])
   });
@@ -781,7 +782,10 @@ test('renderer logout clears normalized account state', async () => {
     'updateActiveSessionUI',
     'renderSessionsList',
     'renderRecentLoot',
+    'setJournalUnreadable',
     'renderPoeLinkStatus',
     'showLoginModal'
   ]);
+  // The journal notice goes with the profile, so the next sign-in reads it out again if its journal is unreadable too.
+  assert.deepEqual(calls.find(([name]) => name === 'setJournalUnreadable'), ['setJournalUnreadable', false]);
 });

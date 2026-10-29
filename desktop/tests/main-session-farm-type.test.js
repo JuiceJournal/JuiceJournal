@@ -400,6 +400,73 @@ test('main session start surfaces journal failures to the renderer', async () =>
   assert.deepEqual(notificationCalls, [['sessionStartFailed', 'notificationTryAgain']]);
 });
 
+// What readJournal throws for a journal.json it cannot read.
+function journalUnreadableError() {
+  return Object.assign(new Error('JOURNAL_UNREADABLE'), { code: 'JOURNAL_UNREADABLE' });
+}
+
+function loadJournalUnreadableSession(functionNames, overrides = {}) {
+  const notifications = [];
+  const context = loadFunctions(functionNames, {
+    localJournal,
+    readJournal() {
+      throw journalUnreadableError();
+    },
+    currentSession: null,
+    resolveLeagueContext: () => ({ activeVersion: 'poe1', league: 'Mirage' }),
+    getActiveFarmTypeId: () => null,
+    showNotification: (title, body) => notifications.push([title, body]),
+    t: (key) => key,
+    mainWindow: null,
+    ...overrides
+  });
+  return { context, notifications };
+}
+
+test('main map start and end name an unreadable journal in the notification and the error', async () => {
+  const started = loadJournalUnreadableSession(['normalizeStoredFarmTypeId', 'startNewSession']);
+  await assert.rejects(() => started.context.startNewSession({ mapName: 'Dunes Map' }), {
+    message: 'JOURNAL_UNREADABLE',
+    code: 'JOURNAL_UNREADABLE'
+  });
+  assert.deepEqual(started.notifications, [['sessionStartFailed', 'journalUnreadableBody']]);
+
+  const ended = loadJournalUnreadableSession(['normalizeErrorMessage', 'toRendererError', 'endCurrentSession'], {
+    currentSession: { id: 'session-1', status: 'active' }
+  });
+  await assert.rejects(() => ended.context.endCurrentSession(), { message: 'JOURNAL_UNREADABLE' });
+  assert.deepEqual(ended.notifications, [['sessionEndFailed', 'journalUnreadableBody']]);
+
+  // IPC replies keep only the message, which the renderer maps to its own copy.
+  assert.equal(
+    ended.context.toRendererError(journalUnreadableError(), 'Failed to load session details').message,
+    'JOURNAL_UNREADABLE'
+  );
+});
+
+test('main map start names an unreadable journal when ending the running map fails first', async () => {
+  const { context, notifications } = loadJournalUnreadableSession([
+    'normalizeErrorMessage',
+    'toRendererError',
+    'endCurrentSession',
+    'normalizeStoredFarmTypeId',
+    'startNewSession'
+  ], {
+    currentSession: { id: 'session-1', status: 'active' }
+  });
+
+  // endCurrentSession's toRendererError drops the code, so the message is what names the cause.
+  await assert.rejects(() => context.startNewSession({ mapName: 'Dunes Map' }), (error) => {
+    assert.equal(error.message, 'JOURNAL_UNREADABLE');
+    assert.equal(error.code, undefined);
+    return true;
+  });
+  assert.deepEqual(notifications, [
+    ['sessionEndFailed', 'journalUnreadableBody'],
+    ['sessionStartFailed', 'journalUnreadableBody']
+  ]);
+});
+
 test('main session end completes a PoE2 zero-profit session in the journal', async () => {
   const backend = createJournalBackend();
   const active = backend.start({
@@ -874,6 +941,21 @@ test('main OCR scan answers the Scan Loot button with the item count or the reas
   assert.equal(backend.journal.sessions[0].lootEntries.length, 1);
 });
 
+test('main OCR scan answers that the journal cannot be read when it cannot add the loot', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-scan-unreadable');
+  const notifications = [];
+  const context = loadOcrScan(backend, session, createFakePriceService(), {
+    readJournal() {
+      throw journalUnreadableError();
+    },
+    showNotification: (title, body) => notifications.push([title, body])
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(await context.captureAndScan())), { reason: 'journalUnreadable' });
+  assert.deepEqual(notifications, [['scanFailedTitle', 'journalUnreadableBody']]);
+});
+
 test('main sends OS notifications only while the main window is not in front', () => {
   const notify = (mainWindow, notificationsEnabled = true) => {
     const shown = [];
@@ -947,6 +1029,46 @@ test('the tray Add Loot and Start New Map report in the window they bring to the
   // The window is in front, where OS notifications are held back, so the renderer shows the outcome.
   assert.deepEqual(shownPages, ['dashboard', 'dashboard', 'dashboard']);
   assert.deepEqual(sent, [['tray-action', 'scanLoot'], ['tray-action', 'startMapFailed']]);
+});
+
+test('the tray Start New Map tells the window when the journal cannot be read', async () => {
+  let template = [];
+  let failure = null;
+  const sent = [];
+  const context = loadFunctions(['refreshTrayMenu'], {
+    tray: { setToolTip() {}, setContextMenu() {} },
+    mainWindow: { isVisible: () => false, webContents: { send: (channel, data) => sent.push([channel, data]) } },
+    Menu: {
+      buildFromTemplate(items) {
+        template = items;
+        return items;
+      }
+    },
+    t: (key) => key,
+    APP_NAME: 'Juice Journal',
+    getValidatedHotkeySettings: () => ({ scanHotkey: 'F9' }),
+    showMainWindow() {},
+    hideMainWindowToTray() {},
+    async startNewSession() {
+      throw failure;
+    },
+    app: {}
+  });
+
+  context.refreshTrayMenu();
+  const startMap = template.find((entry) => entry.label === 'trayNewSession');
+  // From readJournal, and from a running map whose end failed first (toRendererError keeps only the message).
+  for (const error of [journalUnreadableError(), new Error('JOURNAL_UNREADABLE'), new Error('journal write failed')]) {
+    failure = error;
+    startMap.click();
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  assert.deepEqual(sent, [
+    ['tray-action', 'startMapJournalUnreadable'],
+    ['tray-action', 'startMapJournalUnreadable'],
+    ['tray-action', 'startMapFailed']
+  ]);
 });
 
 test('main tells the main window when the session prices have loaded', async () => {
@@ -1171,6 +1293,53 @@ test('main keeps zero-loot PoE1 sessions open on map exit for stash diff complet
     }),
     true
   );
+});
+
+test('a map exit that cannot end the map in an unreadable journal leaves no unhandled rejection', async () => {
+  const handlers = {};
+  const endings = [];
+  let failure = null;
+  const context = loadFunctions(['setupLogParser'], {
+    store: { get: (key) => (key === 'poePath' ? 'C:/PoE/logs/Client.txt' : undefined), set() {} },
+    DEFAULT_POE_LOG_PATH: 'C:/PoE/logs/Client.txt',
+    require: () => ({ existsSync: () => true }),
+    refreshRedactionTargets() {},
+    normalizePoeVersion: () => 'poe1',
+    LogParser: class {
+      on(eventName, handler) {
+        handlers[eventName] = handler;
+      }
+
+      start() {}
+
+      bootstrapFromTail() {}
+    },
+    publishRuntimeSessionEvent: () => null,
+    currentSession: { id: 'session-1', status: 'active' },
+    shouldAutoEndSessionOnMapExit: () => true,
+    // Keeps the promise the handler's catch returns, so the test sees what it lets through.
+    endCurrentSession() {
+      const ending = Promise.reject(failure);
+      const handleWith = ending.catch.bind(ending);
+      ending.catch = (handler) => {
+        const handled = handleWith(handler);
+        endings.push(handled);
+        return handled;
+      };
+      return ending;
+    },
+    mainWindow: null
+  });
+
+  context.setupLogParser();
+  failure = new Error('JOURNAL_UNREADABLE');
+  handlers.mapExited({ timestamp: '2026-05-06T12:05:30.000Z' });
+  failure = new Error('journal write failed');
+  handlers.mapExited({ timestamp: '2026-05-06T12:06:30.000Z' });
+
+  assert.equal(endings.length, 2);
+  assert.equal(await endings[0], undefined);
+  await assert.rejects(endings[1], /journal write failed/);
 });
 
 test('map-enter handler publishes runtime state and leaves session start to the renderer prompt', async () => {

@@ -40,6 +40,8 @@ Juice Journal has no accounts and no servers of its own. Your data is stored und
 
 Settings → Data shows this folder and its total size. **Open folder** opens it in File Explorer. **Clear logs** deletes the activity log and the error log after you confirm; your sessions, loot, map results and settings stay. Diagnostics files you exported and reports you copied are not changed.
 
+If `journal.json` cannot be read (for example after it was edited by hand), the Dashboard and Sessions say so and nothing is deleted. **Start a new journal** renames it to `journal.broken-<date>-<time>.json` in the same folder after you confirm and starts an empty journal. The sessions and loot in the old file stay in it but do not show in the app; saved map results stay.
+
 The OCR scan's screenshot is processed on your PC and is not uploaded.
 
 **Report a bug** (Settings → About, or **Report a problem** under *Having trouble signing in?* on the sign-in screen) builds a short text report on your PC: app and system versions, a settings summary without paths or addresses, local data sizes, the newest 20 entries of the error log and the type and time of the newest 10 activity log entries. It never adds account or character names, file paths, tokens, the server address or anything from your journal, and it tries to remove names, paths and tokens from error messages, so check the text before you post it. Nothing is sent: you copy the report and paste it into a public GitHub issue yourself. Windows clipboard history or cloud clipboard sync may keep the copied text.

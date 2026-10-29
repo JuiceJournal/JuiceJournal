@@ -523,6 +523,7 @@ test('ending a PoE1 map session routes through stash diff completion instead of 
       calls.push('completePoe1SessionWithStashProfit');
       return false;
     },
+    loadJournalStatus: async () => calls.push('loadJournalStatus'),
     persistMapResultHistory: async (result) => {
       persisted.push(result);
       return [result];
@@ -542,7 +543,9 @@ test('ending a PoE1 map session routes through stash diff completion instead of 
     ['busy', true, 'stash.readingStash'],
     ['announce', 'stash.readingStash'],
     'completePoe1SessionWithStashProfit',
-    ['busy', false, null]
+    ['busy', false, null],
+    // The map did not end: a journal that broke while it ran gets its notice.
+    'loadJournalStatus'
   ]);
 });
 

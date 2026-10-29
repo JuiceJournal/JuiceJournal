@@ -786,9 +786,13 @@ test('tray actions run the Scan Loot handler and report a failed map start in th
   scanScreenBtn.disabled = true;
   listeners.trayAction('scanLoot');
   listeners.trayAction('startMapFailed');
+  listeners.trayAction('startMapJournalUnreadable');
 
   assert.deepEqual(scans, ['scan']);
-  assert.deepEqual(toasts, [['toast.mapStartFailed', 'toast.tryAgain', 'error']]);
+  assert.deepEqual(toasts, [
+    ['toast.mapStartFailed', 'toast.tryAgain', 'error'],
+    ['toast.mapStartFailed', 'errors.journalUnreadable', 'error']
+  ]);
 });
 
 test('an update that finished downloading raises one sticky toast with Restart now', () => {
@@ -920,22 +924,66 @@ test('poe1 end session completes without stash profit when stash tracking is una
   assert.deepEqual(calls, [['completeWithoutProfit', 'session-1', null]]);
 });
 
-test('poe1 end session without stash tracking says so when the map could not be ended', async () => {
-  const calls = [];
-  const context = loadFunctions(['completePoe1SessionWithStashProfit'], {
-    state: { currentSession: { id: 'session-1', mapName: 'Dunes Map', poeVersion: 'poe1' } },
-    window: { t: (key) => key },
-    isActiveSessionPoe1: () => true,
-    isStashTrackingEnabled: () => false,
-    completePoe1SessionWithoutStashProfit: async () => false,
-    showToast: (...args) => calls.push(args)
-  });
+test('poe1 end session says why the map could not be ended and checks the journal notice again', async () => {
+  const journalError = new Error("Error invoking remote method 'end-session': Error: JOURNAL_UNREADABLE");
+  const cases = [
+    // Stash tracking is off by default.
+    ['no stash tracking', { stashTracking: false, baseline: false }, journalError, 'errors.journalUnreadable'],
+    ['no stash tracking, another failure', { stashTracking: false, baseline: false }, new Error('boom'), 'toast.tryAgain'],
+    ['no before-stash baseline', { stashTracking: true, baseline: false }, journalError, 'errors.journalUnreadable'],
+    // The stash read failed and the end without stash profit failed too: the toast gives the end's reason.
+    ['stash read failed', { stashTracking: true, baseline: true }, journalError, 'errors.journalUnreadable']
+  ];
 
-  const result = await context.completePoe1SessionWithStashProfit();
+  for (const [name, { stashTracking, baseline }, endError, expectedBody] of cases) {
+    const toasts = [];
+    const calls = [];
+    const session = { id: 'session-1', mapName: 'Dunes Map', poeVersion: 'poe1' };
+    const state = { currentSession: session };
+    const context = loadFunctions([
+      'handleEndSession',
+      'completePoe1SessionWithStashProfit',
+      'completePoe1SessionWithoutStashProfit'
+    ], {
+      state,
+      elements: { endSessionBtn: {} },
+      window: {
+        t: (key) => key,
+        electronAPI: {
+          endSession: async () => {
+            throw endError;
+          }
+        }
+      },
+      requestEndSessionConfirmation: async () => true,
+      isActiveSessionPoe1: () => true,
+      isStashTrackingEnabled: () => stashTracking,
+      setButtonBusy: (button, busy) => calls.push(['busy', busy]),
+      announceStatus: () => {},
+      waitForPendingBeforeSnapshotForSession: async () => false,
+      hasActivePoe1StashBaseline: () => baseline,
+      hydratePoe1StashSnapshotsForSession: async () => null,
+      takeAfterSnapshotWithStashRefreshRetry: async () => {
+        throw Object.assign(new Error('stash read failed (429)'), { stashSnapshotFailed: true });
+      },
+      getLiveDuration: () => 240,
+      updateActiveSessionUI: () => assert.fail('the map card changed for a map that did not end'),
+      refreshTrackerData: async () => assert.fail('refreshed after a map that did not end'),
+      showToast: (...args) => toasts.push(args),
+      // The real mapping is covered in settings-ui.test.js; here the reply only has to reach the toast.
+      getUserFacingErrorMessage: (error, fallbackKey) => (/JOURNAL_UNREADABLE$/.test(error.message) ? 'errors.journalUnreadable' : fallbackKey),
+      loadJournalStatus: async () => calls.push('loadJournalStatus'),
+      console: { warn() {} }
+    });
 
-  assert.equal(result, false);
-  // Main's OS notice is only for a window in the background, so the failed end is said in the app.
-  assert.deepEqual(calls, [['toast.mapEndFailed', 'toast.tryAgain', 'error']]);
+    await context.handleEndSession();
+
+    // Main's OS notice is only for a window in the background, so the failed end is said in the app, once.
+    assert.deepEqual(toasts, [['toast.mapEndFailed', expectedBody, 'error']], name);
+    // A journal that broke while the map ran gets its notice, with Start a new journal, without a Dashboard visit.
+    assert.deepEqual(calls, [['busy', true], ['busy', false], 'loadJournalStatus'], name);
+    assert.equal(state.currentSession, session, name);
+  }
 });
 
 test('poe1 end session without stash profit lets the journal value the recorded loot', async () => {
@@ -1138,6 +1186,54 @@ test('starting a map session aborts cleanly when the branded modal is cancelled'
   await context.handleStartSession();
 
   assert.deepEqual(startSessionCalls, []);
+});
+
+test('a failed map start or end checks the journal notice again', async () => {
+  const toasts = [];
+  let journalChecks = 0;
+  const shared = {
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        startSession: async () => {
+          throw new Error("Error invoking remote method 'start-session': Error: JOURNAL_UNREADABLE");
+        },
+        endSession: async () => {
+          throw new Error("Error invoking remote method 'end-session': Error: JOURNAL_UNREADABLE");
+        }
+      }
+    },
+    updateActiveSessionUI: () => {},
+    refreshTrackerData: async () => assert.fail('refreshed after a failed map start or end'),
+    showToast: (...args) => toasts.push(args),
+    // The real mapping is covered in settings-ui.test.js; here the reply only has to reach the toast.
+    getUserFacingErrorMessage: (error, fallbackKey) => (/JOURNAL_UNREADABLE$/.test(error.message) ? 'errors.journalUnreadable' : fallbackKey),
+    loadJournalStatus: async () => {
+      journalChecks += 1;
+    }
+  };
+
+  const start = loadFunctions(['normalizeSessionMapName', 'getRuntimeSessionMapName', 'handleStartSession'], {
+    ...shared,
+    state: { runtimeSession: null, currentSession: null },
+    requestMapSessionDetails: async () => ({ mapName: 'Dunes Map', farmTypeId: null }),
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe1', league: 'Mirage', farmTypeId: null })
+  });
+  await start.handleStartSession();
+  assert.deepEqual(toasts, [['toast.mapStartFailed', 'errors.journalUnreadable', 'error']]);
+  // A journal that broke while the app ran shows its notice, with Start a new journal, without a Dashboard visit.
+  assert.equal(journalChecks, 1);
+
+  const end = loadFunctions(['handleEndSession'], {
+    ...shared,
+    state: { currentSession: { id: 'session-1', poeVersion: 'poe2' } },
+    requestEndSessionConfirmation: async () => true,
+    isActiveSessionPoe1: () => false,
+    persistCompletedSessionMapResult: async () => assert.fail('saved a result for a map that did not end')
+  });
+  await end.handleEndSession();
+  assert.deepEqual(toasts.at(-1), ['toast.mapEndFailed', 'errors.journalUnreadable', 'error']);
+  assert.equal(journalChecks, 2);
 });
 
 test('map-entered events prompt for a session with the detected map instead of silently auto-starting', async () => {
@@ -3046,24 +3142,40 @@ test('sessions rows carry a tier chip, a farm-colour edge and a status chip only
 
 test('sessions summary hides when the list fails to load', async () => {
   const summaryCalls = [];
+  let journalChecks = 0;
+  let failure = new Error('offline');
   const elements = { sessionFilter: { value: 'all' }, sessionsList: { innerHTML: '' } };
   const context = loadFunctions(['loadSessions'], {
     elements,
+    // As in app.js: the message main threw, without Electron's wrapper.
+    extractRawErrorMessage: (error) => error.message.replace(/^Error invoking remote method '[^']+': Error: /, ''),
     state: { currentUser: { id: 'user-1' }, sessions: [] },
     window: {
       t: (key) => key,
-      electronAPI: { getSessions: async () => { throw new Error('offline'); } }
+      electronAPI: { getSessions: async () => { throw failure; } }
     },
     getUserFacingErrorMessage: (error, key) => key,
     populateSessionFilterOptions() {},
     renderSessionsList() {},
-    renderSessionsSummary: (rows) => summaryCalls.push(rows.length)
+    renderSessionsSummary: (rows) => summaryCalls.push(rows.length),
+    loadJournalStatus: async () => {
+      journalChecks += 1;
+    }
   });
 
   await context.loadSessions();
 
   assert.equal(elements.sessionsList.innerHTML, '<p class="empty-state">sessions.loadError</p>');
   assert.deepEqual(summaryCalls, [0]);
+  // Opening Sessions loads only the list, so a journal that broke while the app ran gets its notice from here.
+  assert.equal(journalChecks, 1);
+
+  // The journal notice right above the list says why, so the list stays empty instead of saying it again.
+  failure = new Error("Error invoking remote method 'get-sessions': Error: JOURNAL_UNREADABLE");
+  await context.loadSessions();
+  assert.equal(elements.sessionsList.innerHTML, '');
+  assert.deepEqual(summaryCalls, [0, 0]);
+  assert.equal(journalChecks, 2);
 });
 
 function loadSessionsSummary({ sessions, versionFilter = 'all', leagueFilter = 'all', tracker = { poeVersion: 'poe1', league: 'Mirage' } }) {
@@ -3904,17 +4016,19 @@ test('loadRecentLoot dims the list instead of writing a loading line', async () 
   const list = busyElement({ innerHTML: 'previous' });
   let duringFetch = null;
   let renders = 0;
-  let failRead = false;
+  let failure = null;
   const context = loadFunctions(['loadRecentLoot'], {
     elements: { recentLootList: list },
+    // As in app.js: the message main threw, without Electron's wrapper.
+    extractRawErrorMessage: (error) => error.message.replace(/^Error invoking remote method '[^']+': Error: /, ''),
     state: { currentUser: { id: 'profile-1' }, recentLoot: [] },
     window: {
       t: (key) => key,
       electronAPI: {
         getRecentLoot: async () => {
           duringFetch = { busy: list.getAttribute('aria-busy'), html: list.innerHTML };
-          if (failRead) {
-            throw new Error('loot read failed');
+          if (failure) {
+            throw failure;
           }
           return { lootEntries: [{ itemName: 'Divine Orb' }] };
         }
@@ -3932,11 +4046,21 @@ test('loadRecentLoot dims the list instead of writing a loading line', async () 
   assert.equal(renders, 1);
   assert.equal(context.state.recentLoot.length, 1);
 
-  failRead = true;
+  failure = new Error('loot read failed');
   await context.loadRecentLoot();
   assert.deepEqual(duringFetch, { busy: 'true', html: 'previous' });
   assert.equal(list.getAttribute('aria-busy'), null);
   assert.equal(list.innerHTML, '<p class="empty-state">error:dashboard.noLoot</p>');
+  assert.equal(renders, 1);
+
+  // The journal notice at the top of the Dashboard says why, so the card shows its usual empty state, not the reason.
+  failure = new Error("Error invoking remote method 'get-recent-loot': Error: JOURNAL_UNREADABLE");
+  list.innerHTML = 'previous';
+  await context.loadRecentLoot();
+  assert.equal(renders, 2);
+  assert.equal(context.state.recentLoot.length, 0);
+  assert.equal(list.innerHTML, 'previous');
+  assert.equal(list.getAttribute('aria-busy'), null);
 });
 
 test('the run drawer leads with profit, counts loot by quantity and lists loot before the notes', () => {
