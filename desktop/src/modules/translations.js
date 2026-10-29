@@ -302,6 +302,12 @@ window.Translations = {
     'settings.reset': 'Varsayilanlara Sifirla',
     'settings.resetConfirm': 'Tum ayarlari varsayilan degerlere sifirlamak istiyor musunuz?',
 
+    // Journal notice
+    'journal.unreadableTitle': 'Gunlugun okunamadi',
+    'journal.unreadableBody': 'Gunluk dosyan oldugu gibi duruyor; hicbir sey silinmedi. Yeni bir gunluk baslatirsan bozuk dosya veri klasorunde yeni gunlugun yaninda kalir.',
+    'journal.startNew': 'Yeni gunluk baslat',
+    'journal.openDataFolder': 'Veri klasorunu ac',
+
     // Toasts
     'toast.lootAddedBody': '{count} item eklendi',
     'toast.lootAddedBodyOne': '1 item eklendi',
@@ -350,6 +356,9 @@ window.Translations = {
     'toast.logsClearFailed': 'Veri klasorunde bir dosyayi acik tutan programi kapatip tekrar dene.',
     'toast.dataActionBusy': 'Baska bir veri islemi hala suruyor',
     'toast.dataFolderOpenFailed': 'Veri klasoru acilamadi',
+    'toast.journalStarted': 'Yeni gunluk baslatildi',
+    'toast.journalStartFailed': 'Yeni gunluk baslatilamadi',
+    'toast.journalReadable': 'Gunlugun artik okunabiliyor',
 
     // Error messages
     'errors.invalidCredentials': 'Kullanici adi veya sifre hatali',
@@ -372,6 +381,7 @@ window.Translations = {
     'errors.sessionUpdate': 'Session detaylari guncellenemedi',
     'errors.sessionStart': 'Session baslatilamadi',
     'errors.sessionEnd': 'Session bitirilemedi',
+    'errors.journalUnreadable': 'Gunlugun okunamadi.',
     'errors.noActiveSession': 'Aktif session yok',
     'errors.lootAdd': 'Loot eklenemedi',
     'errors.lootRecent': 'Son loot verileri alinamadi',
@@ -457,6 +467,7 @@ window.Translations = {
     'auditLootQueued': '{count} loot senkron kuyruguna alindi',
     'auditPendingSyncFlushed': 'Bekleyen senkron islemleri denendi. Session: {sessions}, Loot: {loot}',
     'auditDiagnosticsExported': 'Diagnostik dosyasi disa aktarildi',
+    'auditJournalStarted': 'Yeni gunluk baslatildi; okunamayan dosya saklandi',
 
     // Game Detection
     'game.notRunning': 'Calismiyor',
@@ -1133,6 +1144,12 @@ window.Translations = {
     'settings.reset': 'Reset to Defaults',
     'settings.resetConfirm': 'Are you sure you want to reset all settings to defaults?',
 
+    // Journal notice
+    'journal.unreadableTitle': 'Your journal could not be read',
+    'journal.unreadableBody': 'Your journal file is kept as it is; nothing was deleted. Starting a new journal keeps the broken file next to the new one in the data folder.',
+    'journal.startNew': 'Start a new journal',
+    'journal.openDataFolder': 'Open data folder',
+
     // Toasts
     'toast.lootAddedBody': '{count} items added',
     'toast.lootAddedBodyOne': '1 item added',
@@ -1181,6 +1198,9 @@ window.Translations = {
     'toast.logsClearFailed': 'Close any program that has a file in the data folder open, then try again.',
     'toast.dataActionBusy': 'Another data action is still running',
     'toast.dataFolderOpenFailed': 'Could not open the data folder',
+    'toast.journalStarted': 'New journal started',
+    'toast.journalStartFailed': 'Could not start a new journal',
+    'toast.journalReadable': 'Your journal can be read now',
 
     // Error messages
     'errors.invalidCredentials': 'Invalid username or password',
@@ -1203,6 +1223,7 @@ window.Translations = {
     'errors.sessionUpdate': 'Failed to update session details',
     'errors.sessionStart': 'Failed to start the session',
     'errors.sessionEnd': 'Failed to end the session',
+    'errors.journalUnreadable': 'Your journal could not be read.',
     'errors.farmPublish': 'Failed to publish farm run',
     'errors.noActiveSession': 'No active session',
     'errors.lootAdd': 'Failed to add loot',
@@ -1289,6 +1310,7 @@ window.Translations = {
     'auditLootQueued': '{count} loot actions queued for sync',
     'auditPendingSyncFlushed': 'Pending sync processed. Sessions: {sessions}, Loot: {loot}',
     'auditDiagnosticsExported': 'Diagnostics file exported',
+    'auditJournalStarted': 'New journal started; the unreadable file was kept',
 
     // Stash Profit Tracker
     // Game Detection

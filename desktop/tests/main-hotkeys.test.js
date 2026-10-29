@@ -792,6 +792,7 @@ test('renderer scan button swaps only its label while scanning, so the icon surv
 });
 
 test('renderer Scan Loot shows the one outcome main reports for the scan', async () => {
+  let journalChecks = 0;
   const scanWith = async (scanScreen, currentSession = { id: 'session-1' }) => {
     const toasts = [];
     const scanScreenBtn = { disabled: false };
@@ -804,7 +805,10 @@ test('renderer Scan Loot shows the one outcome main reports for the scan', async
         electronAPI: { scanScreen }
       },
       showToast: (...args) => toasts.push(args),
-      getUserFacingErrorMessage: (error, fallbackKey) => fallbackKey
+      getUserFacingErrorMessage: (error, fallbackKey) => fallbackKey,
+      loadJournalStatus: async () => {
+        journalChecks += 1;
+      }
     });
     await context.handleScanScreen();
     assert.equal(scanScreenBtn.disabled, false);
@@ -822,6 +826,13 @@ test('renderer Scan Loot shows the one outcome main reports for the scan', async
     await scanWith(async () => ({ reason: 'noSession' })),
     [['dashboard.noActiveMap', 'toast.noSession', 'warning']]
   );
+  assert.equal(journalChecks, 0);
+  // The loot could not go into the journal; the notice with Start a new journal is checked again as well.
+  assert.deepEqual(
+    await scanWith(async () => ({ reason: 'journalUnreadable' })),
+    [['toast.scanFailed', 'errors.journalUnreadable', 'error']]
+  );
+  assert.equal(journalChecks, 1);
   assert.deepEqual(await scanWith(async () => undefined), [['toast.scanFailed', 'toast.tryAgain', 'error']]);
   assert.deepEqual(
     await scanWith(async () => ({ reason: 'captureFailed' })),
@@ -835,6 +846,7 @@ test('renderer Scan Loot shows the one outcome main reports for the scan', async
     await scanWith(async () => assert.fail('scanned without a map'), null),
     [['dashboard.noActiveMap', 'toast.noSession', 'warning']]
   );
+  assert.equal(journalChecks, 1);
 });
 
 test('dashboard scan button sits next to End Map with the real hotkey, a label slot and no fallback wording', () => {

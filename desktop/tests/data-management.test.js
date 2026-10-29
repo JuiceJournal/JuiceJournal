@@ -4,8 +4,10 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
+const Conf = require('conf');
 
 const bugReportModel = require('../src/modules/bugReportModel');
+const localJournal = require('../src/modules/localJournalModel');
 
 const mainJsPath = path.join(__dirname, '..', 'main.js');
 const mainSource = fs.readFileSync(mainJsPath, 'utf8');
@@ -222,7 +224,12 @@ const AUDIT_ENTRIES = [
   { id: 'a3', key: 'auditLogout', values: {}, level: 'info', createdAt: '2026-10-27T08:20:00.000Z' }
 ];
 
-function loadDataManagement(t, { userData = makeTempDir(t), language = 'en' } = {}) {
+function loadDataManagement(t, {
+  userData = makeTempDir(t),
+  language = 'en',
+  functions = DATA_FUNCTIONS,
+  overrides = {}
+} = {}) {
   const calls = { dialog: [], send: [], openPath: [], clipboard: [], console: [] };
   const state = {
     answer: async () => ({ response: 1, checkboxChecked: false }),
@@ -253,7 +260,7 @@ function loadDataManagement(t, { userData = makeTempDir(t), language = 'en' } = 
   const redactionTargets = errorLogState.redactionTargets;
   const spy = (method) => (...args) => calls.console.push([method, ...args]);
 
-  const context = loadFunctions(DATA_FUNCTIONS, {
+  const context = loadFunctions(functions, {
     fs,
     path,
     app: { getPath: () => userData },
@@ -295,7 +302,8 @@ function loadDataManagement(t, { userData = makeTempDir(t), language = 'en' } = 
       log: spy('log'),
       warn: spy('warn'),
       error: spy('error')
-    }
+    },
+    ...overrides
   });
 
   const logPath = path.join(userData, 'logs', 'errors.jsonl');
@@ -725,4 +733,400 @@ test('clearErrorLog leaves logging off when its caller had turned it off', async
   };
   assert.equal(await context.clearErrorLog(), false);
   assert.equal(errorLogState.disabled, false);
+});
+
+// conf without Electron: electron-store hands it the same options under these names.
+class JournalStore extends Conf {
+  constructor({ name, cwd }) {
+    super({ configName: name, cwd });
+  }
+}
+
+// The local time startNewJournal stamps on the broken file: 2026-10-28 19:05:09.
+class FixedDate extends Date {
+  constructor(...args) {
+    super(...(args.length ? args : [2026, 9, 28, 19, 5, 9]));
+  }
+}
+
+const JOURNAL_FUNCTIONS = ['getJournalStore', 'readJournal', 'writeJournal', 'getJournalStatus', 'startNewJournal'];
+const BROKEN_JOURNAL = '{"sessions": [ {"id": "a", "mapName": "Secret Map", ';
+const BROKEN_NAME = 'journal.broken-20261028-190509.json';
+const UNREADABLE = { message: 'JOURNAL_UNREADABLE', code: 'JOURNAL_UNREADABLE' };
+const UNREADABLE_WARNING = 'The journal of the signed-in profile cannot be read (invalid JSON); the file is left as it is';
+const CONFIRM = async () => ({ response: 0, checkboxChecked: false });
+
+// The journal functions over real files with conf, next to clearLogs for the shared one-action-at-a-time flag.
+function loadJournalRecovery(t) {
+  const profile = { current: { id: 'p1' } };
+  const journalCalls = { audit: [], overlay: 0 };
+  const loaded = loadDataManagement(t, {
+    functions: [...DATA_FUNCTIONS, ...JOURNAL_FUNCTIONS],
+    overrides: {
+      Store: JournalStore,
+      localJournal,
+      getActiveProfile: () => profile.current,
+      journalStore: null,
+      unreadableJournalProfileId: null,
+      currentSession: { id: 's1', status: 'active' },
+      appendAuditTrail: (key) => journalCalls.audit.push(key),
+      updateOverlayWindow: () => {
+        journalCalls.overlay += 1;
+      },
+      Date: FixedDate
+    }
+  });
+  const profileDir = path.join(loaded.userData, 'profiles', 'p1');
+  return {
+    ...loaded,
+    profile,
+    journalCalls,
+    profileDir,
+    journalPath: path.join(profileDir, 'journal.json'),
+    writeJournalFile: (text) => writeFiles(profileDir, { 'journal.json': text }),
+    warnings: () => loaded.calls.console.filter(([method]) => method === 'warn').map(([, ...args]) => args)
+  };
+}
+
+test('a journal that is not valid JSON is unreadable, logged once per finding without its text, and left as it is', (t) => {
+  const { context, calls, userData, journalPath, writeJournalFile, warnings } = loadJournalRecovery(t);
+  writeJournalFile(BROKEN_JOURNAL);
+
+  for (let read = 0; read < 3; read += 1) {
+    assert.throws(() => context.readJournal(), UNREADABLE);
+  }
+  assert.deepEqual(plain(context.getJournalStatus()), { unreadable: true });
+  assert.deepEqual(plain(context.getJournalStatus()), { unreadable: true });
+
+  // The parse error quotes the file, so neither its text nor the path goes into the error log.
+  assert.deepEqual(warnings(), [[UNREADABLE_WARNING]]);
+  const logged = JSON.stringify(calls.console);
+  for (const text of [userData, JSON.stringify(userData).slice(1, -1), 'Secret Map', 'SyntaxError']) {
+    assert.ok(!logged.includes(text), `the warning must not contain ${text}`);
+  }
+  assert.equal(fs.readFileSync(journalPath, 'utf8'), BROKEN_JOURNAL);
+
+  writeJournalFile('{"sessions":[]}');
+  assert.deepEqual(plain(context.getJournalStatus()), { unreadable: false });
+  assert.deepEqual(plain(context.readJournal()), { sessions: [] });
+
+  // Broken again later is a new finding.
+  writeJournalFile(BROKEN_JOURNAL);
+  assert.deepEqual(plain(context.getJournalStatus()), { unreadable: true });
+  assert.deepEqual(warnings(), [[UNREADABLE_WARNING], [UNREADABLE_WARNING]]);
+});
+
+test('a journal read once and broken afterwards is unreadable too', (t) => {
+  const { context, writeJournalFile, warnings } = loadJournalRecovery(t);
+  writeJournalFile('{"sessions":[{"id":"a","status":"completed"}]}');
+  assert.deepEqual(plain(context.readJournal()), { sessions: [{ id: 'a', status: 'completed' }] });
+  const cached = context.journalStore;
+
+  writeJournalFile(BROKEN_JOURNAL);
+  assert.throws(() => context.readJournal(), UNREADABLE);
+  assert.equal(context.journalStore, cached);
+  assert.deepEqual(plain(context.getJournalStatus()), { unreadable: true });
+  assert.deepEqual(warnings(), [[UNREADABLE_WARNING]]);
+});
+
+test('a journal whose sessions are not a list is unreadable, so no write replaces them', (t) => {
+  const { context, journalPath, writeJournalFile, warnings } = loadJournalRecovery(t);
+  const handEdited = '{"sessions":{"a":{"id":"a","mapName":"Secret Map"}}}';
+  writeJournalFile(handEdited);
+
+  assert.throws(() => context.readJournal(), UNREADABLE);
+  assert.deepEqual(plain(context.getJournalStatus()), { unreadable: true });
+  assert.deepEqual(warnings(), [[
+    'The journal of the signed-in profile cannot be read (its sessions are not a list); the file is left as it is'
+  ]]);
+  assert.equal(fs.readFileSync(journalPath, 'utf8'), handEdited);
+
+  // A journal without sessions yet is an empty one.
+  for (const empty of ['{}', '{"sessions":null}']) {
+    writeJournalFile(empty);
+    assert.deepEqual(plain(context.readJournal()), { sessions: [] });
+  }
+});
+
+test('a missing journal, no signed-in profile and other read errors are not an unreadable journal', (t) => {
+  const { context, profile, journalPath, warnings } = loadJournalRecovery(t);
+
+  assert.deepEqual(plain(context.getJournalStatus()), { unreadable: false });
+  assert.deepEqual(plain(context.readJournal()), { sessions: [] });
+  assert.equal(fs.existsSync(journalPath), false);
+
+  profile.current = null;
+  assert.deepEqual(plain(context.getJournalStatus()), { unreadable: false });
+  assert.throws(() => context.readJournal(), /Local desktop sign-in is required/);
+
+  profile.current = { id: 'p1' };
+  context.journalStore = null;
+  const denied = Object.assign(
+    new Error("EACCES: permission denied, open 'C:\\Users\\someone\\journal.json'"),
+    { code: 'EACCES' }
+  );
+  context.Store = class {
+    constructor() {
+      throw denied;
+    }
+  };
+  assert.throws(() => context.readJournal(), (error) => error === denied);
+  assert.deepEqual(plain(context.getJournalStatus()), { unreadable: false });
+  assert.deepEqual(warnings(), []);
+});
+
+test('Start a new journal asks first, keeps the broken file under a dated name and starts an empty journal', async (t) => {
+  const {
+    context, calls, state, mainWindow, userData, profileDir, journalPath, journalCalls, writeJournalFile
+  } = loadJournalRecovery(t);
+  writeJournalFile('{"sessions":[{"id":"s1","status":"active"}]}');
+  context.readJournal();
+  writeJournalFile(BROKEN_JOURNAL);
+  assert.deepEqual(plain(context.getJournalStatus()), { unreadable: true });
+  calls.console.length = 0;
+  state.answer = CONFIRM;
+
+  assert.deepEqual(plain(await context.startNewJournal()), { started: true });
+
+  assert.equal(calls.dialog.length, 1);
+  const [parent, options] = calls.dialog[0];
+  assert.equal(parent, mainWindow);
+  assert.deepEqual(plain(options), {
+    type: 'warning',
+    buttons: [MAIN_PROCESS_TRANSLATIONS.en.dataNewJournalConfirm, MAIN_PROCESS_TRANSLATIONS.en.promptCancel],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+    title: MAIN_PROCESS_TRANSLATIONS.en.dataNewJournalTitle,
+    message: MAIN_PROCESS_TRANSLATIONS.en.dataNewJournalMessage,
+    detail: MAIN_PROCESS_TRANSLATIONS.en.dataNewJournalDetail
+  });
+  for (const text of [userData, JSON.stringify(userData).slice(1, -1)]) {
+    assert.ok(!JSON.stringify(options).includes(text), 'the confirm must not name the data folder');
+  }
+  assert.deepEqual(fs.readdirSync(profileDir), [BROKEN_NAME]);
+  assert.equal(fs.readFileSync(path.join(profileDir, BROKEN_NAME), 'utf8'), BROKEN_JOURNAL);
+  assert.equal(context.journalStore, null);
+  assert.equal(context.unreadableJournalProfileId, null);
+  assert.equal(context.currentSession, null);
+  assert.deepEqual(journalCalls, { audit: ['auditJournalStarted'], overlay: 1 });
+  assert.equal(context.dataActionRunning, false);
+  assert.deepEqual(calls.console, []);
+
+  assert.deepEqual(plain(context.getJournalStatus()), { unreadable: false });
+  assert.deepEqual(plain(context.readJournal()), { sessions: [] });
+  context.writeJournal({ sessions: [{ id: 'n1' }] });
+  assert.deepEqual(JSON.parse(fs.readFileSync(journalPath, 'utf8')), { sessions: [{ id: 'n1' }] });
+  assert.equal(fs.readFileSync(path.join(profileDir, BROKEN_NAME), 'utf8'), BROKEN_JOURNAL);
+});
+
+test('Start a new journal never overwrites an earlier broken journal', async (t) => {
+  const { context, state, profileDir, writeJournalFile } = loadJournalRecovery(t);
+  const earlier = {
+    [BROKEN_NAME]: 'first broken',
+    'journal.broken-20261028-190509-2.json': 'second broken'
+  };
+  writeFiles(profileDir, earlier);
+  writeJournalFile(BROKEN_JOURNAL);
+  state.answer = CONFIRM;
+
+  assert.deepEqual(plain(await context.startNewJournal()), { started: true });
+
+  assert.deepEqual(
+    fs.readdirSync(profileDir).sort(),
+    [...Object.keys(earlier), 'journal.broken-20261028-190509-3.json'].sort()
+  );
+  assert.equal(fs.readFileSync(path.join(profileDir, 'journal.broken-20261028-190509-3.json'), 'utf8'), BROKEN_JOURNAL);
+  for (const [name, text] of Object.entries(earlier)) {
+    assert.equal(fs.readFileSync(path.join(profileDir, name), 'utf8'), text);
+  }
+});
+
+test('Start a new journal leaves a journal that can be read alone, also one repaired during the confirm', async (t) => {
+  const { context, calls, state, profileDir, journalPath, journalCalls, writeJournalFile } = loadJournalRecovery(t);
+  writeJournalFile('{"sessions":[]}');
+  assert.deepEqual(plain(await context.startNewJournal()), { started: false, reason: 'readable' });
+  assert.equal(calls.dialog.length, 0);
+
+  writeJournalFile(BROKEN_JOURNAL);
+  state.answer = async () => {
+    writeJournalFile('{"sessions":[{"id":"fixed"}]}');
+    return { response: 0, checkboxChecked: false };
+  };
+  assert.deepEqual(plain(await context.startNewJournal()), { started: false, reason: 'readable' });
+  assert.equal(calls.dialog.length, 1);
+  assert.deepEqual(fs.readdirSync(profileDir), ['journal.json']);
+  assert.equal(fs.readFileSync(journalPath, 'utf8'), '{"sessions":[{"id":"fixed"}]}');
+
+  fs.rmSync(journalPath);
+  assert.deepEqual(plain(await context.startNewJournal()), { started: false, reason: 'readable' });
+  assert.equal(calls.dialog.length, 1);
+  assert.deepEqual(journalCalls, { audit: [], overlay: 0 });
+  assert.deepEqual(plain(context.currentSession), { id: 's1', status: 'active' });
+  assert.equal(context.dataActionRunning, false);
+});
+
+test('Start a new journal fails, and does not call it readable, while another program holds the journal', async (t) => {
+  const { context, calls, state, profileDir, journalPath, journalCalls, writeJournalFile } = loadJournalRecovery(t);
+  writeJournalFile(BROKEN_JOURNAL);
+  // Node's readFileSync fails like this while another program holds the file without sharing it.
+  const busy = Object.assign(new Error(`EBUSY: resource busy or locked, open '${journalPath}'`), { code: 'EBUSY' });
+  context.Store = class {
+    constructor() {
+      throw busy;
+    }
+  };
+  state.answer = CONFIRM;
+
+  const result = plain(await context.startNewJournal());
+  assert.deepEqual(result, { started: false, reason: 'failed' });
+  for (const text of ['EBUSY', 'journal.json', 'profiles']) {
+    assert.ok(!JSON.stringify(result).includes(text), `the answer must not contain ${text}`);
+  }
+  assert.equal(calls.dialog.length, 0);
+  assert.equal(context.dataActionRunning, false);
+
+  // Locked while the confirm is open.
+  context.Store = JournalStore;
+  state.answer = async () => {
+    context.journalStore = {
+      profileId: 'p1',
+      store: {
+        get store() {
+          throw busy;
+        }
+      }
+    };
+    return { response: 0, checkboxChecked: false };
+  };
+  assert.deepEqual(plain(await context.startNewJournal()), { started: false, reason: 'failed' });
+  assert.equal(calls.dialog.length, 1);
+
+  assert.deepEqual(fs.readdirSync(profileDir), ['journal.json']);
+  assert.equal(fs.readFileSync(journalPath, 'utf8'), BROKEN_JOURNAL);
+  assert.deepEqual(journalCalls, { audit: [], overlay: 0 });
+  assert.deepEqual(plain(context.currentSession), { id: 's1', status: 'active' });
+  assert.equal(context.dataActionRunning, false);
+  // Only the finding before the confirm; the lock's text, which names the path, is not logged.
+  assert.deepEqual(calls.console, [['warn', UNREADABLE_WARNING]]);
+});
+
+test('Start a new journal does nothing when the signed-in profile changed during the confirm', async (t) => {
+  const { context, state, profile, profileDir, journalPath, journalCalls, writeJournalFile } = loadJournalRecovery(t);
+  writeJournalFile(BROKEN_JOURNAL);
+
+  for (const next of [{ id: 'p2' }, null]) {
+    profile.current = { id: 'p1' };
+    state.answer = async () => {
+      profile.current = next;
+      return { response: 0, checkboxChecked: false };
+    };
+    assert.deepEqual(plain(await context.startNewJournal()), { started: false, reason: 'canceled' });
+  }
+
+  assert.deepEqual(fs.readdirSync(profileDir), ['journal.json']);
+  assert.equal(fs.readFileSync(journalPath, 'utf8'), BROKEN_JOURNAL);
+  assert.deepEqual(journalCalls, { audit: [], overlay: 0 });
+});
+
+test('Cancel or a failed confirm keeps the journal, and one data action runs at a time', async (t) => {
+  const { context, calls, state, profileDir, journalPath, journalCalls, writeJournalFile, warnings } = loadJournalRecovery(t);
+  writeJournalFile(BROKEN_JOURNAL);
+
+  assert.deepEqual(plain(await context.startNewJournal()), { started: false, reason: 'canceled' });
+  state.answer = async () => {
+    throw new Error('showMessageBox failed for C:\\Users\\Alice');
+  };
+  assert.deepEqual(plain(await context.startNewJournal()), { started: false, reason: 'failed' });
+  assert.equal(calls.dialog.length, 2);
+
+  let answer;
+  state.answer = () => new Promise((resolve) => {
+    answer = resolve;
+  });
+  const starting = context.startNewJournal();
+  assert.equal(context.dataActionRunning, true);
+  assert.deepEqual(plain(await context.startNewJournal()), { started: false, reason: 'busy' });
+  assert.deepEqual(plain(await context.clearLogs()), { busy: true });
+  assert.equal(calls.dialog.length, 3);
+  answer({ response: 1, checkboxChecked: false });
+  assert.deepEqual(plain(await starting), { started: false, reason: 'canceled' });
+
+  const clearing = context.clearLogs();
+  assert.deepEqual(plain(await context.startNewJournal()), { started: false, reason: 'busy' });
+  assert.equal(calls.dialog.length, 4);
+  answer({ response: 1, checkboxChecked: false });
+  assert.deepEqual(plain(await clearing), { canceled: true });
+
+  assert.equal(context.dataActionRunning, false);
+  assert.deepEqual(fs.readdirSync(profileDir), ['journal.json']);
+  assert.equal(fs.readFileSync(journalPath, 'utf8'), BROKEN_JOURNAL);
+  assert.deepEqual(journalCalls, { audit: [], overlay: 0 });
+  assert.deepEqual(plain(context.currentSession), { id: 's1', status: 'active' });
+  // Only the finding itself; the failed confirm's text is not logged.
+  assert.deepEqual(calls.console, [['warn', UNREADABLE_WARNING]]);
+  assert.equal(warnings().length, 1);
+});
+
+test('a rename that fails changes nothing and answers without the path or the error text', async (t) => {
+  const { context, calls, state, profileDir, journalPath, journalCalls, writeJournalFile } = loadJournalRecovery(t);
+  writeJournalFile('{"sessions":[{"id":"s1","status":"active"}]}');
+  context.readJournal();
+  const cached = context.journalStore;
+  writeJournalFile(BROKEN_JOURNAL);
+  context.getJournalStatus();
+  calls.console.length = 0;
+  state.answer = CONFIRM;
+  context.fs = {
+    ...fs,
+    renameSync() {
+      throw Object.assign(new Error(`EBUSY: resource busy or locked, rename '${journalPath}'`), { code: 'EBUSY' });
+    }
+  };
+
+  const result = plain(await context.startNewJournal());
+  assert.deepEqual(result, { started: false, reason: 'failed' });
+  for (const text of ['EBUSY', 'journal.json', 'profiles']) {
+    assert.ok(!JSON.stringify(result).includes(text), `the answer must not contain ${text}`);
+  }
+  assert.deepEqual(fs.readdirSync(profileDir), ['journal.json']);
+  assert.equal(fs.readFileSync(journalPath, 'utf8'), BROKEN_JOURNAL);
+  assert.equal(context.journalStore, cached);
+  assert.equal(context.unreadableJournalProfileId, 'p1');
+  assert.deepEqual(plain(context.currentSession), { id: 's1', status: 'active' });
+  assert.deepEqual(journalCalls, { audit: [], overlay: 0 });
+  assert.equal(context.dataActionRunning, false);
+  assert.deepEqual(calls.console, []);
+});
+
+test('a journal set aside counts as started even when the activity log cannot be written', async (t) => {
+  const { context, calls, state, profileDir, writeJournalFile } = loadJournalRecovery(t);
+  writeJournalFile(BROKEN_JOURNAL);
+  state.answer = CONFIRM;
+  context.appendAuditTrail = () => {
+    throw new Error("EPERM: operation not permitted, open 'C:\\Users\\Alice\\AppData\\Roaming\\Juice Journal\\config.json'");
+  };
+
+  assert.deepEqual(plain(await context.startNewJournal()), { started: true });
+
+  assert.deepEqual(fs.readdirSync(profileDir), [BROKEN_NAME]);
+  assert.equal(context.journalStore, null);
+  assert.equal(context.currentSession, null);
+  assert.deepEqual(plain(context.getJournalStatus()), { unreadable: false });
+  assert.equal(context.dataActionRunning, false);
+  assert.deepEqual(calls.console, [['warn', UNREADABLE_WARNING]]);
+});
+
+test('after Clear logs, the next read of an unreadable journal is logged again', async (t) => {
+  const { context, state, writeJournalFile, warnings } = loadJournalRecovery(t);
+  writeJournalFile(BROKEN_JOURNAL);
+  context.getJournalStatus();
+  context.getJournalStatus();
+  assert.equal(warnings().length, 1);
+
+  state.answer = CONFIRM;
+  assert.deepEqual(plain(await context.clearLogs()), { cleared: true });
+  assert.equal(context.unreadableJournalProfileId, null);
+  context.getJournalStatus();
+  assert.deepEqual(warnings(), [[UNREADABLE_WARNING], [UNREADABLE_WARNING]]);
 });

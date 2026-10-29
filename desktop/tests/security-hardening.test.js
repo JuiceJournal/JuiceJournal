@@ -215,6 +215,44 @@ test('Settings > Data acts locally: no renderer input, main window only, opens o
   }
 });
 
+test('the journal notice reads a flag and only renames the journal, after a confirm in main', () => {
+  const preloadJs = fs.readFileSync(path.join(desktopRoot, 'preload.js'), 'utf8');
+  const setupBody = getFunctionBody(mainJs, 'setupIPC');
+  const scopesStart = mainJs.indexOf('const IPC_RENDERER_SCOPES');
+
+  for (const line of [
+    "ipcMain.handle('get-journal-status', () => getJournalStatus());",
+    "ipcMain.handle('start-new-journal', () => startNewJournal());"
+  ]) {
+    assert.ok(setupBody.includes(line), `setupIPC should register ${line}`);
+  }
+  // Left out of the scopes, so only the main window may call them.
+  assert.notEqual(scopesStart, -1);
+  assert.doesNotMatch(mainJs.slice(scopesStart, mainJs.indexOf('});', scopesStart)), /journal/);
+  for (const line of [
+    "getJournalStatus: () => ipcRenderer.invoke('get-journal-status'),",
+    "startNewJournal: () => ipcRenderer.invoke('start-new-journal'),"
+  ]) {
+    assert.ok(preloadJs.includes(line), `preload should expose ${line}`);
+  }
+
+  const startBody = getFunctionBody(mainJs, 'startNewJournal');
+  for (const part of [
+    'dialog.showMessageBox(mainWindow, {', 'defaultId: 1,', 'cancelId: 1,', 'noLink: true,', 'dataActionRunning',
+    'fs.existsSync(', 'fs.renameSync('
+  ]) {
+    assert.ok(startBody.includes(part), `startNewJournal should contain ${part}`);
+  }
+  // Renames only, and stays local.
+  assert.doesNotMatch(startBody, /rmSync|unlink|writeFile|copyFile|apiClient|axios|http|fetch\(/);
+  // A reason only: fs error texts name the full path, and the parse error quotes the journal.
+  assert.ok(!startBody.includes('.message'), 'startNewJournal must not pass on error text');
+  assert.ok(!startBody.includes('console.'), 'startNewJournal must not log');
+  for (const functionName of ['readJournal', 'getJournalStatus']) {
+    assert.ok(!getFunctionBody(mainJs, functionName).includes('.message'), `${functionName} must not pass on error text`);
+  }
+});
+
 test('the Data tab writes the path and the size as text', () => {
   const appJs = fs.readFileSync(path.join(desktopRoot, 'src', 'app.js'), 'utf8');
   const summaryBody = getFunctionBody(appJs, 'loadDataSummary');
@@ -222,10 +260,12 @@ test('the Data tab writes the path and the size as text', () => {
   assert.doesNotMatch(summaryBody, /innerHTML/);
   assert.match(summaryBody, /\.textContent\s*=/);
   // Toasts use static keys only: an error text could name the folder, and a toast can end up in a public issue.
-  for (const functionName of ['handleClearLogs', 'handleOpenDataFolder']) {
+  for (const functionName of ['handleClearLogs', 'handleOpenDataFolder', 'handleStartNewJournal']) {
     const body = getFunctionBody(appJs, functionName);
     assert.doesNotMatch(body, /innerHTML/, functionName);
     assert.ok(!body.includes('.message'), `${functionName} must not show error text`);
     assert.ok(!body.includes('getUserFacingErrorMessage'), `${functionName} must not show error text`);
   }
+  // The journal notice is static markup; only its hidden class and the announcer line change.
+  assert.doesNotMatch(getFunctionBody(appJs, 'setJournalUnreadable'), /innerHTML/);
 });

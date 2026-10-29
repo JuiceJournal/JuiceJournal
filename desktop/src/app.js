@@ -41,6 +41,8 @@ const state = {
   capabilities: null,
   selectedSession: null,
   auditTrail: [],
+  // True while main says the signed-in profile's journal cannot be read; Dashboard and Sessions show the notice.
+  journalUnreadable: false,
   mapSessionPromptActive: false,
   farmType: window.farmTypeModel
     ? window.farmTypeModel.createFarmTypeState()
@@ -59,6 +61,7 @@ const ERROR_MESSAGE_KEY_MAP = {
   SESSION_LIST_LOAD_FAILED: 'errors.sessionListLoad',
   SESSION_LOAD_FAILED: 'errors.sessionLoad',
   SESSION_UPDATE_FAILED: 'errors.sessionUpdate',
+  JOURNAL_UNREADABLE: 'errors.journalUnreadable',
   LOOT_NOT_FOUND: 'errors.lootAdd',
   LOOT_ADD_FAILED: 'errors.lootAdd',
   LOOT_BULK_ADD_FAILED: 'errors.lootAdd',
@@ -147,6 +150,9 @@ const elements = {
   // Navigation
   navButtons: document.querySelectorAll('.nav-btn'),
   pages: document.querySelectorAll('.page'),
+
+  // The journal notice, once on Dashboard and once on Sessions
+  journalNotices: document.querySelectorAll('.journal-notice'),
 
   // Dashboard
   characterSummaryCard: document.getElementById('character-summary-card'),
@@ -2294,6 +2300,12 @@ function setupEventListeners() {
   if (elements.clearLogsBtn) {
     elements.clearLogsBtn.addEventListener('click', handleClearLogs);
   }
+  // The journal notice on Dashboard and Sessions; Open data folder is the Data tab's handler.
+  elements.journalNotices.forEach((notice) => {
+    notice.querySelector('[data-journal-action="start-new"]').addEventListener('click', handleStartNewJournal);
+    notice.querySelector('[data-journal-action="open-folder"]').addEventListener('click', handleOpenDataFolder);
+    notice.querySelector('[data-journal-action="report"]').addEventListener('click', openAboutBugReport);
+  });
   if (elements.checkUpdatesBtn) {
     elements.checkUpdatesBtn.addEventListener('click', handleCheckForAppUpdate);
   }
@@ -2498,6 +2510,8 @@ function setupIPCListeners() {
         handleScanScreen();
       } else if (action === 'startMapFailed') {
         showToast(window.t('toast.mapStartFailed'), window.t('toast.tryAgain'), 'error');
+      } else if (action === 'startMapJournalUnreadable') {
+        showToast(window.t('toast.mapStartFailed'), window.t('errors.journalUnreadable'), 'error');
       }
     });
   }
@@ -2566,6 +2580,16 @@ function openOnlineSettings() {
   navigateTo('settings');
   showSettingsTab('api');
   elements.onlineEnabled?.focus();
+}
+
+// The journal notice's Report a problem opens the report in Settings > About, which builds it again with the cause.
+// Coming back to an About tab that is still selected builds it in navigateTo, so it is not built twice.
+function openAboutBugReport() {
+  navigateTo('settings');
+  if (!elements.settingsAboutTab?.classList.contains('active')) {
+    showSettingsTab('about');
+  }
+  elements.bugReportPreview?.focus();
 }
 
 /**
@@ -2893,6 +2917,8 @@ async function handleLogout() {
   updateActiveSessionUI();
   renderSessionsList();
   renderRecentLoot();
+  // The next sign-in checks its own journal and reads the notice out again.
+  setJournalUnreadable(false);
   renderPoeLinkStatus();
   showLoginModal();
 }
@@ -3955,6 +3981,27 @@ function handleMapResultHistoryClick(event) {
   void handleMapResultPublish(button.dataset.resultId);
 }
 
+// Shows or hides the journal notice on both pages. It is read out once when it appears, not on each refresh that finds
+// the journal still unreadable.
+function setJournalUnreadable(unreadable) {
+  const appeared = unreadable && !state.journalUnreadable;
+  state.journalUnreadable = unreadable;
+  elements.journalNotices.forEach((notice) => notice.classList.toggle('hidden', !unreadable));
+  if (appeared) {
+    announceStatus(`${window.t('journal.unreadableTitle')}. ${window.t('journal.unreadableBody')}`);
+  }
+}
+
+// Main answers only whether the signed-in profile's journal can be read.
+async function loadJournalStatus() {
+  try {
+    const status = await window.electronAPI.getJournalStatus();
+    setJournalUnreadable(status?.unreadable === true);
+  } catch {
+    // The history views report their own load failure; the notice keeps its last state.
+  }
+}
+
 let _refreshPending = null;
 let _refreshOptions = {};
 
@@ -3985,7 +4032,8 @@ async function refreshTrackerData({ includeSessions = false, includeCurrency = f
       loadCurrentSession(),
       loadDashboardStats(),
       loadRecentLoot(),
-      loadMapResultHistory()
+      loadMapResultHistory(),
+      loadJournalStatus()
     ];
 
     if (opts.includeSessions || isPageActive('sessions')) {
@@ -4321,6 +4369,8 @@ async function handleStartSession(options = {}) {
     }
   } catch (error) {
     showToast(window.t('toast.mapStartFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
+    // A journal that broke while the app ran gets its notice, with Start a new journal, here and not only on Dashboard.
+    void loadJournalStatus();
   }
 }
 
@@ -4340,10 +4390,14 @@ async function handleEndSession() {
     if (busyLabel) {
       announceStatus(busyLabel);
     }
+    let completed = false;
     try {
-      await completePoe1SessionWithStashProfit();
+      completed = await completePoe1SessionWithStashProfit();
     } finally {
       setButtonBusy(elements.endSessionBtn, false);
+    }
+    if (!completed) {
+      void loadJournalStatus();
     }
     return;
   }
@@ -4366,6 +4420,7 @@ async function handleEndSession() {
     await refreshTrackerData({ includeSessions: true });
   } catch (error) {
     showToast(window.t('toast.mapEndFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
+    void loadJournalStatus();
   }
 }
 
@@ -4531,6 +4586,9 @@ async function handleScanScreen() {
       showToast(window.t('toast.scanNothingFound'), window.t('toast.scanNothingFoundHint'), 'warning');
     } else if (result?.reason === 'noSession') {
       showToast(window.t('dashboard.noActiveMap'), window.t('toast.noSession'), 'warning');
+    } else if (result?.reason === 'journalUnreadable') {
+      showToast(window.t('toast.scanFailed'), window.t('errors.journalUnreadable'), 'error');
+      void loadJournalStatus();
     } else {
       showToast(window.t('toast.scanFailed'), window.t('toast.tryAgain'), 'error');
     }
@@ -4567,8 +4625,13 @@ async function loadSessions() {
     populateSessionFilterOptions(state.sessions);
     renderSessionsList();
   } catch (error) {
-    elements.sessionsList.innerHTML = `<p class="empty-state">${getUserFacingErrorMessage(error, 'sessions.loadError')}</p>`;
+    // The journal notice right above the list says why it is empty, so the list does not say it a second time.
+    elements.sessionsList.innerHTML = extractRawErrorMessage(error) === 'JOURNAL_UNREADABLE'
+      ? ''
+      : `<p class="empty-state">${getUserFacingErrorMessage(error, 'sessions.loadError')}</p>`;
     renderSessionsSummary([]);
+    // Opening Sessions loads only the list, so the notice is checked again here.
+    void loadJournalStatus();
   }
 }
 
@@ -4865,7 +4928,12 @@ async function loadRecentLoot() {
     renderRecentLoot();
   } catch (error) {
     state.recentLoot = [];
-    elements.recentLootList.innerHTML = `<p class="empty-state">${getUserFacingErrorMessage(error, 'dashboard.noLoot')}</p>`;
+    if (extractRawErrorMessage(error) === 'JOURNAL_UNREADABLE') {
+      // The journal notice at the top of the Dashboard says why; the card shows its usual empty state like the others.
+      renderRecentLoot();
+    } else {
+      elements.recentLootList.innerHTML = `<p class="empty-state">${getUserFacingErrorMessage(error, 'dashboard.noLoot')}</p>`;
+    }
   } finally {
     elements.recentLootList.removeAttribute('aria-busy');
   }
@@ -5862,7 +5930,8 @@ async function hydratePoe1StashSnapshotsForSession(session = state.currentSessio
 }
 
 // Without stash totals the journal values the session from the loot recorded in it (OCR scan or manual), and
-// the session-ended event records and shows that result.
+// the session-ended event records and shows that result. A failed end is said here with main's reason, because main's
+// OS notice is only for a window in the background.
 async function completePoe1SessionWithoutStashProfit(session = state.currentSession, error = null) {
   if (!session || !isActiveSessionPoe1(session)) {
     return false;
@@ -5890,6 +5959,7 @@ async function completePoe1SessionWithoutStashProfit(session = state.currentSess
     return true;
   } catch (completionError) {
     console.warn('Failed to complete PoE1 session without stash profit', completionError);
+    showToast(window.t('toast.mapEndFailed'), getUserFacingErrorMessage(completionError, 'toast.tryAgain'), 'error');
     return false;
   }
 }
@@ -5900,12 +5970,7 @@ async function completePoe1SessionWithStashProfit() {
   }
 
   if (!isStashTrackingEnabled()) {
-    // Main's OS notice is only for a window in the background, so a failed end is said here as well.
-    const completed = await completePoe1SessionWithoutStashProfit(state.currentSession);
-    if (!completed) {
-      showToast(window.t('toast.mapEndFailed'), window.t('toast.tryAgain'), 'error');
-    }
-    return completed;
+    return completePoe1SessionWithoutStashProfit(state.currentSession);
   }
 
   await waitForPendingBeforeSnapshotForSession(state.currentSession);
@@ -5915,17 +5980,7 @@ async function completePoe1SessionWithStashProfit() {
   }
 
   if (!hasActivePoe1StashBaseline()) {
-    const completedWithoutProfit = await completePoe1SessionWithoutStashProfit(
-      state.currentSession,
-      new Error('Missing before-stash baseline')
-    );
-
-    if (completedWithoutProfit) {
-      return true;
-    }
-
-    showToast(window.t('toast.mapEndFailed'), window.t('toast.tryAgain'), 'error');
-    return false;
+    return completePoe1SessionWithoutStashProfit(state.currentSession, new Error('Missing before-stash baseline'));
   }
 
   const previousSession = state.currentSession;
@@ -5982,11 +6037,9 @@ async function completePoe1SessionWithStashProfit() {
 
     return true;
   } catch (error) {
+    // A fallback end that fails says its own reason, not the stash's.
     if (error?.stashSnapshotFailed) {
-      const completedWithoutProfit = await completePoe1SessionWithoutStashProfit(previousSession, error);
-      if (completedWithoutProfit) {
-        return true;
-      }
+      return completePoe1SessionWithoutStashProfit(previousSession, error);
     }
 
     showToast(window.t('toast.mapEndFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
@@ -6140,8 +6193,10 @@ async function loadDataSummary() {
 }
 
 // Main opens the folder it owns and answers only whether it did, so no path or OS error text reaches a toast.
-async function handleOpenDataFolder() {
-  const button = elements.openDataFolderBtn;
+async function handleOpenDataFolder(event) {
+  // The Data tab and the journal notice share this. The clicked button is read before the first await, after which
+  // the event no longer names it.
+  const button = event?.currentTarget || elements.openDataFolderBtn;
   setButtonBusy(button, true);
   let opened = false;
   try {
@@ -6158,6 +6213,50 @@ async function handleOpenDataFolder() {
   if (!opened) {
     showToast(window.t('toast.dataFolderOpenFailed'), window.t('toast.tryAgain'), 'error');
   }
+}
+
+// The journal notice's Start a new journal. Main asks first (Cancel is the default) and only renames a journal it cannot
+// read; it answers with a reason, so every toast here is a static text.
+async function handleStartNewJournal(event) {
+  const button = event?.currentTarget || null;
+  setButtonBusy(button, true);
+  let result = null;
+  try {
+    result = await window.electronAPI.startNewJournal();
+  } catch {
+    result = { started: false, reason: 'failed' };
+  } finally {
+    setButtonBusy(button, false);
+    // The native confirm took focus away. It comes back before the toast, so moving it does not cut the toast off.
+    button?.focus();
+  }
+
+  if (result?.reason === 'canceled') return;
+  if (result?.reason === 'busy') {
+    showToast(window.t('toast.dataActionBusy'), '', 'warning');
+    return;
+  }
+  if (result?.started || result?.reason === 'readable') {
+    if (result.started) {
+      // Main dropped the map of the old journal; the Dashboard follows now, not only after the refresh.
+      state.currentSession = null;
+      updateActiveSessionUI();
+    }
+    // The notice and its buttons go, so focus moves on to the page's next control before the toast is read out. On the
+    // Dashboard that is Start map, or End map while a map still runs.
+    setJournalUnreadable(false);
+    const dashboardTarget = state.currentSession ? elements.endSessionBtn : elements.startSessionBtn;
+    (isPageActive('sessions') ? elements.sessionFilter : dashboardTarget)?.focus();
+    if (result.started) {
+      showToast(window.t('toast.journalStarted'), '', 'success');
+    } else {
+      showToast(window.t('toast.journalReadable'), '', 'info');
+    }
+  } else {
+    showToast(window.t('toast.journalStartFailed'), window.t('toast.logsClearFailed'), 'error');
+  }
+  // The views and the notice follow the journal as it is now, also when main failed after setting the file aside.
+  void refreshTrackerData({ includeSessions: true });
 }
 
 // Main asks first (Cancel is the default) and clears the activity log and the error log together. The list empties

@@ -135,6 +135,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     lootScanFailed: 'Ekran okunurken bir sorun oldu. Tekrar dene.',
     sessionStartFailed: 'Map baslatilamadi',
     sessionEndFailed: 'Map bitirilemedi',
+    journalUnreadableBody: 'Gunlugun okunamadi. Ne yapacagini gormek icin Juice Journal uygulamasini ac.',
     lootAddedBody: '{count} item eklendi. Toplam: {value}c',
     mapProfitBody: 'Kazanc {value}c',
     mapLossBody: 'Zarar {value}c',
@@ -167,7 +168,11 @@ const MAIN_PROCESS_TRANSLATIONS = {
     dataClearLogsTitle: 'Loglari temizle',
     dataClearLogsMessage: 'Etkinlik gunlugu ve hata logu temizlensin mi?',
     dataClearLogsDetail: 'Bu bilgisayarda silinirler ve geri alinamaz. Oturumlarin, lootun, map sonuclarin ve ayarlarin kalir. Disa aktardigin diagnostik dosyalari ve kopyaladigin raporlar degismez.',
-    dataClearLogsConfirm: 'Temizle'
+    dataClearLogsConfirm: 'Temizle',
+    dataNewJournalTitle: 'Yeni gunluk baslat',
+    dataNewJournalMessage: 'Yeni ve bos bir gunluk baslatilsin mi?',
+    dataNewJournalDetail: 'Gunluk dosyan okunamiyor. Veri klasorunde journal.broken-<tarih>-<saat>.json olarak saklanir; hicbir sey silinmez. Icindeki session ve lootlar uygulamada gorunmez; kayitli map sonuclarin kalir.',
+    dataNewJournalConfirm: 'Yeni gunluk baslat'
   },
   en: {
     trayStillRunning: 'The app is still running in the system tray.',
@@ -192,6 +197,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     lootScanFailed: 'Something went wrong while reading the screen. Try again.',
     sessionStartFailed: 'Could not start the map',
     sessionEndFailed: 'Could not end the map',
+    journalUnreadableBody: 'Your journal could not be read. Open Juice Journal for the next steps.',
     lootAddedBody: '{count} items added. Total: {value}c',
     mapProfitBody: 'Profit {value}c',
     mapLossBody: 'Loss {value}c',
@@ -224,7 +230,11 @@ const MAIN_PROCESS_TRANSLATIONS = {
     dataClearLogsTitle: 'Clear logs',
     dataClearLogsMessage: 'Clear the activity log and the error log?',
     dataClearLogsDetail: 'This deletes them on this PC and cannot be undone. Your sessions, loot, map results and settings stay. Diagnostics files you exported and reports you copied are not changed.',
-    dataClearLogsConfirm: 'Clear'
+    dataClearLogsConfirm: 'Clear',
+    dataNewJournalTitle: 'Start a new journal',
+    dataNewJournalMessage: 'Start a new, empty journal?',
+    dataNewJournalDetail: 'Your journal file cannot be read. It is kept in the data folder as journal.broken-<date>-<time>.json; nothing is deleted. The sessions and loot in it do not show in the app; saved map results stay.',
+    dataNewJournalConfirm: 'Start new journal'
   }
 };
 
@@ -359,6 +369,8 @@ let gameDetector = null;
 let currentSession = null;
 let sessionPrices = null;
 let journalStore = null;
+// The profile whose journal.json was last found unreadable; readJournal logs that once per finding, not on every read.
+let unreadableJournalProfileId = null;
 // The bug report the user last saw. Copy and the issue button use exactly this text, and only with its id.
 let bugReport = null;
 // Settings > Data runs one data action at a time; a second call is told it is busy instead of opening a second dialog.
@@ -951,8 +963,34 @@ function getJournalStore() {
   return journalStore.store;
 }
 
+// conf throws a SyntaxError for a journal.json that is not valid JSON, in the Store constructor and on every read. A
+// journal whose sessions are not a list counts the same, because the next write would replace them. The file stays as
+// it is, callers get JOURNAL_UNREADABLE, and the error log gets one line per finding without the parse error, whose
+// text quotes part of the file (map names, notes).
 function readJournal() {
-  return localJournal.normalizeJournal(getJournalStore().store);
+  let journal = null;
+  try {
+    journal = getJournalStore().store;
+  } catch (error) {
+    // By name: the tests run this in another realm than the one conf throws from.
+    if (error?.name !== 'SyntaxError') {
+      throw error;
+    }
+  }
+  const sessions = journal?.sessions;
+  if (journal && (sessions === undefined || sessions === null || Array.isArray(sessions))) {
+    unreadableJournalProfileId = null;
+    return localJournal.normalizeJournal(journal);
+  }
+
+  const profileId = getActiveProfile()?.id;
+  if (unreadableJournalProfileId !== profileId) {
+    unreadableJournalProfileId = profileId;
+    console.warn(journal
+      ? 'The journal of the signed-in profile cannot be read (its sessions are not a list); the file is left as it is'
+      : 'The journal of the signed-in profile cannot be read (invalid JSON); the file is left as it is');
+  }
+  throw Object.assign(new Error('JOURNAL_UNREADABLE'), { code: 'JOURNAL_UNREADABLE' });
 }
 
 function writeJournal(journal) {
@@ -963,6 +1001,16 @@ function writeJournal(journal) {
 function loadActiveSession() {
   currentSession = localJournal.getActiveSession(readJournal());
   return currentSession;
+}
+
+// The journal notice asks whether the signed-in profile's journal can be read: a flag only, no path, no error text.
+function getJournalStatus() {
+  try {
+    readJournal();
+    return { unreadable: false };
+  } catch (error) {
+    return { unreadable: error?.code === 'JOURNAL_UNREADABLE' };
+  }
 }
 
 // Loads poe.ninja prices for the session's game and league, again when they change or the price list no longer
@@ -1710,7 +1758,10 @@ function refreshTrayMenu() {
       label: t('trayNewSession'),
       click: () => {
         showMainWindow('dashboard');
-        startNewSession().catch(() => mainWindow?.webContents.send('tray-action', 'startMapFailed'));
+        startNewSession().catch((error) => mainWindow?.webContents.send(
+          'tray-action',
+          error?.message === 'JOURNAL_UNREADABLE' ? 'startMapJournalUnreadable' : 'startMapFailed'
+        ));
       }
     },
     {
@@ -2145,12 +2196,103 @@ async function clearLogs() {
     } catch {
       failed.push('activityLog');
     }
-    if (!(await clearErrorLog())) {
+    if (await clearErrorLog()) {
+      // The next read of an unreadable journal says so again, so a report built afterwards still names the cause.
+      unreadableJournalProfileId = null;
+    } else {
       failed.push('errorLog');
     }
     // The cached report lists both logs: Copy now reports stale and the view builds the report again.
     bugReport = null;
     return failed.length ? { cleared: false, failed } : { cleared: true };
+  } finally {
+    dataActionRunning = false;
+  }
+}
+
+// The journal notice's Start a new journal. One confirm in main (Cancel is the default), then journal.json is renamed
+// to journal.broken-<date>-<time>.json in the same profile folder, so the next read starts an empty journal. Never
+// deletes or overwrites a file and leaves a journal that can be read alone. Answers with a reason only, because fs
+// error texts name the full path.
+async function startNewJournal() {
+  if (dataActionRunning) {
+    return { started: false, reason: 'busy' };
+  }
+
+  dataActionRunning = true;
+  // Only a journal that readJournal finds unreadable is set aside. One it can read is left alone, and one it cannot open
+  // at all (another program holds it: EBUSY, EPERM) is a failure, not a journal that can be read now.
+  const keepReason = () => {
+    try {
+      readJournal();
+      return 'readable';
+    } catch (error) {
+      return error?.code === 'JOURNAL_UNREADABLE' ? null : 'failed';
+    }
+  };
+  try {
+    let reason = keepReason();
+    if (reason) {
+      return { started: false, reason };
+    }
+
+    // Unreadable means getJournalStore accepted this id.
+    const profileId = getActiveProfile().id;
+    let choice;
+    try {
+      choice = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        buttons: [t('dataNewJournalConfirm'), t('promptCancel')],
+        defaultId: 1,
+        cancelId: 1,
+        noLink: true,
+        title: t('dataNewJournalTitle'),
+        message: t('dataNewJournalMessage'),
+        detail: t('dataNewJournalDetail')
+      });
+    } catch {
+      return { started: false, reason: 'failed' };
+    }
+    if (choice.response !== 0) {
+      return { started: false, reason: 'canceled' };
+    }
+    // The confirm was about the journal of the profile signed in when it opened.
+    if (getActiveProfile()?.id !== profileId) {
+      return { started: false, reason: 'canceled' };
+    }
+    // The file may have been repaired, or locked, while the confirm was open.
+    reason = keepReason();
+    if (reason) {
+      return { started: false, reason };
+    }
+
+    const profileDir = path.join(app.getPath('userData'), 'profiles', profileId);
+    const now = new Date();
+    const pad = (value) => String(value).padStart(2, '0');
+    const date = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+    const time = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    // A rename replaces an existing file, so an earlier broken journal from the same second makes this one numbered.
+    let target = path.join(profileDir, `journal.broken-${date}-${time}.json`);
+    for (let copy = 2; fs.existsSync(target); copy += 1) {
+      target = path.join(profileDir, `journal.broken-${date}-${time}-${copy}.json`);
+    }
+    try {
+      fs.renameSync(path.join(profileDir, 'journal.json'), target);
+    } catch {
+      // EBUSY or EPERM while another program holds the file; nothing changed.
+      return { started: false, reason: 'failed' };
+    }
+
+    journalStore = null;
+    unreadableJournalProfileId = null;
+    currentSession = null;
+    try {
+      updateOverlayWindow();
+      appendAuditTrail('auditJournalStarted');
+    } catch {
+      // The broken file is set aside already, so a locked config.json must not turn this into a failure.
+    }
+    return { started: true };
   } finally {
     dataActionRunning = false;
   }
@@ -3199,6 +3341,10 @@ async function captureAndScan() {
 
     return { count: result.lootEntries.length };
   } catch (error) {
+    if (error?.message === 'JOURNAL_UNREADABLE') {
+      showNotification(t('scanFailedTitle'), t('journalUnreadableBody'));
+      return { reason: 'journalUnreadable' };
+    }
     showNotification(t('scanFailedTitle'), t('lootScanFailed'));
     return { reason: 'failed' };
   }
@@ -3253,7 +3399,9 @@ async function startNewSession(input = {}) {
 
     return session;
   } catch (error) {
-    showNotification(t('sessionStartFailed'), t('notificationTryAgain'));
+    // By message: an error from endCurrentSession above comes through toRendererError, which keeps only that.
+    const body = error?.message === 'JOURNAL_UNREADABLE' ? t('journalUnreadableBody') : t('notificationTryAgain');
+    showNotification(t('sessionStartFailed'), body);
     throw error;
   }
 }
@@ -3434,7 +3582,8 @@ async function endCurrentSession(options = {}) {
 
     return session;
   } catch (error) {
-    showNotification(t('sessionEndFailed'), t('notificationTryAgain'));
+    const body = error?.message === 'JOURNAL_UNREADABLE' ? t('journalUnreadableBody') : t('notificationTryAgain');
+    showNotification(t('sessionEndFailed'), body);
     throw toRendererError(error, t('sessionEndFailed'));
   }
 }
@@ -3584,6 +3733,12 @@ function setupLogParser() {
       endCurrentSession({
         endedAt: data.timestamp,
         durationSeconds: lastCompletedInstance?.durationSeconds
+      }).catch((error) => {
+        // endCurrentSession has shown the notification. readJournal has logged an unreadable journal already; any other
+        // failure still reaches the error log as an unhandled rejection.
+        if (error?.message !== 'JOURNAL_UNREADABLE') {
+          throw error;
+        }
       });
     }
   });
@@ -4129,6 +4284,10 @@ function setupIPC() {
   ipcMain.handle('get-local-data-summary', () => getLocalDataSummary());
   ipcMain.handle('open-data-folder', () => openDataFolder());
   ipcMain.handle('clear-logs', () => clearLogs());
+
+  // The journal notice. No renderer input: main finds the signed-in profile's journal, asks first and only renames it.
+  ipcMain.handle('get-journal-status', () => getJournalStatus());
+  ipcMain.handle('start-new-journal', () => startNewJournal());
 
   // Manuel loot ekle
   ipcMain.handle('add-loot', async (event, data) => {
@@ -4772,7 +4931,7 @@ app.whenReady().then(() => {
   try {
     loadActiveSession();
   } catch {
-    // Nobody is signed in yet.
+    // Nobody is signed in yet, or the journal cannot be read (readJournal logged that).
   }
 
 });

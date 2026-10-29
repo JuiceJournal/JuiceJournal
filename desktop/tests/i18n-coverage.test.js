@@ -322,6 +322,24 @@ test('desktop notice keys have their own ASCII Turkish strings', () => {
   assert.ok(translations.tr['toast.tryAgain'].includes(`${translations.tr['nav.settings']} > ${translations.tr['settings.about']}`));
 });
 
+test('desktop journal notice keys have their own ASCII Turkish strings', () => {
+  const translations = loadDesktopTranslations();
+  const newKeys = [
+    'journal.unreadableTitle', 'journal.unreadableBody', 'journal.startNew', 'journal.openDataFolder',
+    'toast.journalStarted', 'toast.journalStartFailed', 'toast.journalReadable', 'errors.journalUnreadable',
+    'auditJournalStarted'
+  ];
+
+  for (const key of newKeys) {
+    assert.ok(translations.en[key], `Missing en string for ${key}`);
+    assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
+    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
+    assert.doesNotMatch(translations.en[key], /!|successfully/i, `en string for ${key}`);
+  }
+  // The README quotes this label.
+  assert.equal(translations.en['journal.startNew'], 'Start a new journal');
+});
+
 test('retired toast keys are gone from every locale', () => {
   const translations = loadDesktopTranslations();
   const retiredKeys = [
@@ -367,7 +385,10 @@ test('main process dialogs use keys that exist in en and tr', () => {
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
     assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
   }
-  for (const key of ['dataClearLogsTitle', 'dataClearLogsMessage', 'dataClearLogsDetail', 'dataClearLogsConfirm', 'promptCancel']) {
+  for (const key of [
+    'dataClearLogsTitle', 'dataClearLogsMessage', 'dataClearLogsDetail', 'dataClearLogsConfirm', 'promptCancel',
+    'dataNewJournalTitle', 'dataNewJournalMessage', 'dataNewJournalDetail', 'dataNewJournalConfirm'
+  ]) {
     assert.ok(translations.en[key], `Missing en main process string for ${key}`);
     assert.ok(translations.tr[key], `Missing tr main process string for ${key}`);
   }
@@ -382,7 +403,7 @@ test('main process dialogs use keys that exist in en and tr', () => {
   for (const key of [
     'scanNoMapTitle', 'noActiveSession', 'scanFailedTitle', 'screenCaptureFailed', 'scanNothingTitle', 'scanNoItems',
     'lootScanFailed', 'sessionStartFailed', 'sessionEndFailed', 'notificationTryAgain', 'mapProfitBody', 'mapLossBody',
-    'mapDuration'
+    'mapDuration', 'journalUnreadableBody'
   ]) {
     assert.ok(translations.en[key], `Missing en main process string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);

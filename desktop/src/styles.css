@@ -3596,6 +3596,42 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   border-radius: var(--bevel-xs);
 }
 
+/* While the journal cannot be read, Dashboard and Sessions open with this notice: the inline notice's tile and loss
+   tone on a plate like the toast's, with its actions under the text. */
+.journal-notice {
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+  padding: 0.875rem 1rem;
+  background: linear-gradient(180deg, var(--plate-raised), var(--plate));
+  border: 1px solid var(--line);
+  border-radius: var(--bevel);
+}
+
+.journal-notice-body {
+  min-width: 0;
+  padding-top: 0.15rem;
+}
+
+.journal-notice-title {
+  color: var(--text-bright);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.journal-notice-text {
+  margin-top: 0.15rem;
+  max-width: 72ch;
+}
+
+.journal-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.625rem;
+}
+
 /* The title's first line sits on the tile's centre line; longer text runs below the tile. */
 .toast-body {
   min-width: 0;

@@ -1565,7 +1565,10 @@ function loadErrorHelpers() {
   const helpers = source.slice(helpersStart, source.indexOf(lastHelper) + lastHelper.length);
   assert.match(helpers, /const ERROR_PATTERN_MAP = \[/);
   const context = vm.createContext({ window: { t: (key) => key } });
-  vm.runInContext(`${keyMap}\n${helpers}\nthis.getUserFacingErrorMessage = getUserFacingErrorMessage;`, context);
+  vm.runInContext(
+    `${keyMap}\n${helpers}\nthis.getUserFacingErrorMessage = getUserFacingErrorMessage;\nthis.extractRawErrorMessage = extractRawErrorMessage;`,
+    context
+  );
   return context;
 }
 
@@ -2114,6 +2117,290 @@ test('the Data tab buttons are wired to their handlers', () => {
 
   assert.ok(body.includes("elements.openDataFolderBtn.addEventListener('click', handleOpenDataFolder)"));
   assert.ok(body.includes("elements.clearLogsBtn.addEventListener('click', handleClearLogs)"));
+});
+
+test('Dashboard and Sessions open with the journal notice, hidden until main says the journal cannot be read', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const css = fs.readFileSync(stylesCssPath, 'utf8');
+
+  assert.deepEqual(
+    [...html.matchAll(/<div class="inline-notice error journal-notice hidden" id="([a-z]+)-journal-notice" /g)].map(([, page]) => page),
+    ['dashboard', 'sessions']
+  );
+  assert.equal(html.split(' journal-notice ').length - 1, 2);
+  // First on the Dashboard; on Sessions under the page header, above the summary and the list.
+  assert.match(html, /<section id="dashboard-page" class="page active">\s*<div class="inline-notice error journal-notice hidden" id="dashboard-journal-notice"/);
+  assert.match(
+    html,
+    /<input id="session-search-filter"[^>]*>\s*<\/div>\s*<\/div>\s*<div class="inline-notice error journal-notice hidden" id="sessions-journal-notice"/
+  );
+
+  for (const [page, nextMarker] of [['dashboard', '<div class="dashboard-grid">'], ['sessions', '<div id="sessions-summary"']]) {
+    const start = html.indexOf(`id="${page}-journal-notice"`);
+    const notice = html.slice(start, html.indexOf(nextMarker, start));
+    for (const part of [
+      `role="region" aria-labelledby="${page}-journal-notice-title"`,
+      '<span class="notice-mark" aria-hidden="true"><svg class="icon" width="14" height="14"><use href="assets/icons.svg#alert"/></svg></span>',
+      `<p class="journal-notice-title" id="${page}-journal-notice-title" data-i18n="journal.unreadableTitle">`,
+      '<p class="journal-notice-text" data-i18n="journal.unreadableBody">',
+      '<button type="button" class="btn btn-secondary btn-small" data-journal-action="start-new" data-i18n="journal.startNew">',
+      '<button type="button" class="btn btn-ghost btn-small" data-journal-action="open-folder" data-i18n="journal.openDataFolder">',
+      '<button type="button" class="btn btn-link" data-journal-action="report" data-i18n="login.reportProblem">'
+    ]) {
+      assert.ok(notice.includes(part), `${page}: ${part}`);
+    }
+    assert.equal(notice.split('<button').length - 1, 3, page);
+  }
+
+  // A plate like the toast's, with no side stripe.
+  const plate = css.slice(css.indexOf('\n.journal-notice {'), css.indexOf('}', css.indexOf('\n.journal-notice {')));
+  assert.ok(plate.includes('background: linear-gradient(180deg, var(--plate-raised), var(--plate));'));
+  assert.ok(plate.includes('border: 1px solid var(--line);'));
+  assert.ok(plate.includes('border-radius: var(--bevel);'));
+  for (const rule of css.match(/\.journal-notice[^{]*\{[^}]*\}/g)) {
+    assert.doesNotMatch(rule, /border-left|box-shadow:\s*inset \d/, rule);
+  }
+});
+
+test('the journal notice shows on both pages and is read out once each time it appears', () => {
+  const notices = [createDatasetElement(['hidden']), createDatasetElement(['hidden'])];
+  const announced = [];
+  const state = { journalUnreadable: false };
+  const context = loadFunctions(['setJournalUnreadable'], {
+    state,
+    elements: { journalNotices: notices },
+    window: { t: (key) => key },
+    announceStatus: (text) => announced.push(text)
+  });
+  const shown = () => notices.map((notice) => !notice.classList.contains('hidden'));
+
+  context.setJournalUnreadable(true);
+  assert.deepEqual(shown(), [true, true]);
+  assert.equal(state.journalUnreadable, true);
+  assert.deepEqual(announced, ['journal.unreadableTitle. journal.unreadableBody']);
+  // A refresh that finds the journal still unreadable says nothing new.
+  context.setJournalUnreadable(true);
+  assert.equal(announced.length, 1);
+  context.setJournalUnreadable(false);
+  assert.deepEqual(shown(), [false, false]);
+  assert.equal(state.journalUnreadable, false);
+  context.setJournalUnreadable(true);
+  assert.equal(announced.length, 2);
+});
+
+test('the journal notice follows only main\'s flag and keeps its state when the check fails', async () => {
+  const notices = [createDatasetElement(['hidden']), createDatasetElement(['hidden'])];
+  const announced = [];
+  let reply = null;
+  const context = loadFunctions(['setJournalUnreadable', 'loadJournalStatus'], {
+    state: { journalUnreadable: false },
+    elements: { journalNotices: notices },
+    window: { t: (key) => `en:${key}`, electronAPI: { getJournalStatus: () => reply() } },
+    announceStatus: (text) => announced.push(text)
+  });
+  const shown = () => notices.map((notice) => !notice.classList.contains('hidden'));
+
+  reply = async () => ({ unreadable: true, path: 'C:\\Users\\someone\\journal.json' });
+  await context.loadJournalStatus();
+  assert.deepEqual(shown(), [true, true]);
+  assert.deepEqual(announced, ['en:journal.unreadableTitle. en:journal.unreadableBody']);
+
+  reply = async () => ({ unreadable: 'yes' });
+  await context.loadJournalStatus();
+  assert.deepEqual(shown(), [false, false]);
+
+  reply = async () => ({ unreadable: true });
+  await context.loadJournalStatus();
+  reply = async () => {
+    throw new Error("Error invoking remote method 'get-journal-status': Error: C:\\Users\\someone");
+  };
+  await assert.doesNotReject(() => context.loadJournalStatus());
+  assert.deepEqual(shown(), [true, true]);
+  assert.equal(announced.length, 2);
+  assert.ok(!JSON.stringify(announced).includes('someone'));
+});
+
+// Records the busy, session, focus, toast and refresh calls of Start a new journal in one list, so tests can check their
+// order.
+function loadStartNewJournalContext(startNewJournal, { sessionsActive = false, mapRunning = false } = {}) {
+  const events = [];
+  const toasts = [];
+  const notices = [createDatasetElement(), createDatasetElement()];
+  const state = { journalUnreadable: true, currentSession: mapRunning ? { id: 's1', status: 'active' } : null };
+  const focusable = (name) => ({ focus: () => events.push(`focus:${name}`) });
+  const button = { disabled: false, focus: () => events.push('focus:button') };
+  const context = loadFunctions(['setJournalUnreadable', 'handleStartNewJournal'], {
+    state,
+    elements: {
+      journalNotices: notices,
+      startSessionBtn: focusable('startSessionBtn'),
+      endSessionBtn: focusable('endSessionBtn'),
+      sessionFilter: focusable('sessionFilter')
+    },
+    window: { t: (key) => key, electronAPI: { startNewJournal } },
+    setButtonBusy: (target, busy) => {
+      assert.equal(target, button);
+      target.disabled = busy;
+      events.push(`busy:${busy}`);
+    },
+    // Start map shows while no map runs, End map while one does.
+    updateActiveSessionUI: () => events.push(`session:${state.currentSession ? 'active' : 'none'}`),
+    announceStatus: () => assert.fail('the notice was read out while it went away'),
+    isPageActive: (page) => sessionsActive && page === 'sessions',
+    showToast: (...args) => {
+      toasts.push(args);
+      events.push('toast');
+    },
+    refreshTrackerData: async (options) => {
+      events.push(`refresh:${JSON.stringify(options)}`);
+    }
+  });
+  const shown = () => notices.map((notice) => !notice.classList.contains('hidden'));
+  return { context, button, state, events, toasts, shown };
+}
+
+test('Start a new journal reports each outcome with a static text and moves focus before the toast', async () => {
+  const refresh = 'refresh:{"includeSessions":true}';
+  const failedToast = ['toast.journalStartFailed', 'toast.logsClearFailed', 'error'];
+  const startedToast = [['toast.journalStarted', '', 'success']];
+  const readableToast = [['toast.journalReadable', '', 'info']];
+  const outcomes = [
+    ['started', async () => ({ started: true }), {}, startedToast, ['session:none', 'focus:startSessionBtn'], true],
+    // Main dropped the old journal's map, so the Dashboard drops it too and Start map shows for the focus to land on.
+    ['started mid-map', async () => ({ started: true }), { mapRunning: true }, startedToast, ['session:none', 'focus:startSessionBtn'], true],
+    ['started on Sessions', async () => ({ started: true }), { sessionsActive: true }, startedToast, ['session:none', 'focus:sessionFilter'], true],
+    ['readable', async () => ({ started: false, reason: 'readable' }), {}, readableToast, ['focus:startSessionBtn'], true],
+    // The map still runs in main, so Start map is hidden and End map takes the focus.
+    ['readable mid-map', async () => ({ started: false, reason: 'readable' }), { mapRunning: true }, readableToast, ['focus:endSessionBtn'], true],
+    ['busy', async () => ({ started: false, reason: 'busy' }), {}, [['toast.dataActionBusy', '', 'warning']], [], false],
+    ['canceled', async () => ({ started: false, reason: 'canceled' }), { mapRunning: true }, [], [], false],
+    ['failed', async () => ({ started: false, reason: 'failed' }), { mapRunning: true }, [failedToast], [], true],
+    ['no reply', async () => undefined, {}, [failedToast], [], true],
+    ['rejected', async () => {
+      throw new Error("Error invoking remote method 'start-new-journal': Error: EPERM: rename 'C:\\Users\\someone\\journal.json'");
+    }, {}, [failedToast], [], true]
+  ];
+
+  for (const [outcome, startNewJournal, options, expectedToasts, noticeGone, refreshed] of outcomes) {
+    const run = loadStartNewJournalContext(startNewJournal, options);
+
+    await run.context.handleStartNewJournal({ currentTarget: run.button });
+
+    assert.deepEqual(run.toasts, expectedToasts, outcome);
+    assert.ok(!JSON.stringify(run.toasts).includes('someone'), outcome);
+    // The native confirm took focus; it comes back to the button, and moves on to a control the page shows before the
+    // toast when the notice goes away, so the toast is not cut off.
+    assert.deepEqual(run.events, [
+      'busy:true',
+      'busy:false',
+      'focus:button',
+      ...noticeGone,
+      ...expectedToasts.map(() => 'toast'),
+      ...(refreshed ? [refresh] : [])
+    ], outcome);
+    assert.equal(run.button.disabled, false, outcome);
+    // Only main's answer that the journal is set aside or readable hides the notice at once; after a failure the
+    // refresh asks main again.
+    assert.deepEqual(run.shown(), noticeGone.length ? [false, false] : [true, true], outcome);
+    assert.equal(run.state.journalUnreadable, !noticeGone.length, outcome);
+    const mapKept = options.mapRunning && !outcome.startsWith('started');
+    assert.deepEqual(run.state.currentSession, mapKept ? { id: 's1', status: 'active' } : null, outcome);
+  }
+});
+
+test('the journal notice\'s Open data folder busies and refocuses its own button', async () => {
+  const events = [];
+  const dataTabButton = { focus: () => events.push('focus:dataTab') };
+  const noticeButton = { focus: () => events.push('focus:notice') };
+  const event = { currentTarget: noticeButton };
+  const context = loadFunctions(['handleOpenDataFolder'], {
+    elements: { openDataFolderBtn: dataTabButton },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        openDataFolder: async () => {
+          // As in the browser: once the click has been handled, the event no longer names its button.
+          event.currentTarget = null;
+          return { opened: true };
+        }
+      }
+    },
+    setButtonBusy: (target, busy) => events.push(`${target === noticeButton ? 'notice' : 'dataTab'}:${busy}`),
+    showToast: () => assert.fail('a toast for a folder that opened')
+  });
+
+  await context.handleOpenDataFolder(event);
+
+  assert.deepEqual(events, ['notice:true', 'notice:false', 'focus:notice']);
+});
+
+test('the journal notice\'s Report a problem opens the report in Settings > About and builds it once', () => {
+  for (const aboutSelected of [false, true]) {
+    const calls = [];
+    const context = loadFunctions(['openAboutBugReport'], {
+      elements: {
+        settingsAboutTab: createDatasetElement(aboutSelected ? ['active'] : []),
+        bugReportPreview: { focus: () => calls.push('focus') }
+      },
+      navigateTo: (page) => calls.push(['navigateTo', page]),
+      showSettingsTab: (tab) => calls.push(['showSettingsTab', tab])
+    });
+
+    context.openAboutBugReport();
+
+    // navigateTo builds the report of an About tab that is still selected; otherwise selecting About builds it.
+    assert.deepEqual(calls, [
+      ['navigateTo', 'settings'],
+      ...(aboutSelected ? [] : [['showSettingsTab', 'about']]),
+      'focus'
+    ], `About selected: ${aboutSelected}`);
+  }
+});
+
+test('the journal notice buttons are wired, and every tracker refresh checks the journal again', () => {
+  const source = fs.readFileSync(appJsPath, 'utf8');
+  const listeners = extractFunctionSource(source, 'setupEventListeners');
+
+  for (const line of [
+    "notice.querySelector('[data-journal-action=\"start-new\"]').addEventListener('click', handleStartNewJournal);",
+    "notice.querySelector('[data-journal-action=\"open-folder\"]').addEventListener('click', handleOpenDataFolder);",
+    "notice.querySelector('[data-journal-action=\"report\"]').addEventListener('click', openAboutBugReport);"
+  ]) {
+    assert.ok(listeners.includes(line), line);
+  }
+  assert.ok(listeners.includes('elements.journalNotices.forEach((notice) => {'));
+  // Startup, sign-in, a profile change, Dashboard visits and the refresh after a new journal all run through here.
+  assert.ok(extractFunctionSource(source, 'refreshTrackerData').includes('loadJournalStatus()'));
+  assert.ok(source.includes("journalNotices: document.querySelectorAll('.journal-notice'),"));
+});
+
+test('a journal main cannot read reaches the map, run and list messages as its own reason', () => {
+  const context = loadErrorHelpers();
+
+  // Main's message is the code; Electron wraps it on the way.
+  for (const channel of ['start-session', 'end-session', 'get-session-details', 'update-session-details', 'get-sessions', 'get-recent-loot']) {
+    assert.equal(
+      context.getUserFacingErrorMessage(new Error(`Error invoking remote method '${channel}': Error: JOURNAL_UNREADABLE`), 'toast.tryAgain'),
+      'errors.journalUnreadable',
+      channel
+    );
+  }
+  // The Sessions list and the Recent loot card leave the reason to the notice by this exact message.
+  for (const channel of ['get-sessions', 'get-recent-loot']) {
+    assert.equal(
+      context.extractRawErrorMessage(new Error(`Error invoking remote method '${channel}': Error: JOURNAL_UNREADABLE`)),
+      'JOURNAL_UNREADABLE',
+      channel
+    );
+  }
+  // The parse error quotes the file, so its text never reaches a toast.
+  assert.equal(
+    context.getUserFacingErrorMessage(
+      new Error('Error invoking remote method \'get-sessions\': SyntaxError: Unexpected token \'S\', "{"sessions": [ {"id": "a", "mapName": "Secret Map", "... is not valid JSON'),
+      'toast.tryAgain'
+    ),
+    'toast.tryAgain'
+  );
 });
 
 test('hotkey fields are the keycaps and explain how to capture', () => {
