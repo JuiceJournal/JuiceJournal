@@ -362,6 +362,46 @@ test('main overlay window is created lazily only when overlay state is visible',
   ]);
 });
 
+test('main overlay window is not created again while the app quits', () => {
+  const calls = [];
+  const context = loadFunctions(['buildOverlayState', 'updateOverlayWindow'], {
+    overlayMapResultState: null,
+    overlayStartMapPromptState: null,
+    overlayCharacterPromptState: null,
+    overlayCharacterState: null,
+    overlayRuntimeState: null,
+    overlayWindow: null,
+    currentSession: null,
+    app: {
+      isQuiting: true,
+      isReady() {
+        return true;
+      }
+    },
+    isOverlayEnabled() {
+      return true;
+    },
+    deriveMapResultOverlayState() {
+      return { visible: false };
+    },
+    deriveOverlayState() {
+      return { visibility: 'visible', primaryLine: 'Tower', secondaryLine: 'Expedition', metaLine: '1m' };
+    },
+    getActiveSessionOverlayState() {
+      return null;
+    },
+    createOverlayWindow() {
+      calls.push(['createOverlayWindow']);
+    },
+    applyOverlayWindowVisibility() {
+      calls.push(['applyOverlayWindowVisibility']);
+    }
+  });
+
+  assert.equal(context.updateOverlayWindow().visibility, 'visible');
+  assert.deepEqual(calls, []);
+});
+
 function createOverlayWindowMock(calls, { visible = false, bounds = { x: 0, y: 0, width: 0, height: 0 } } = {}) {
   let currentBounds = bounds;
   let isVisible = visible;
@@ -1212,6 +1252,44 @@ test('main app shutdown cleans up main-process resources', () => {
   assert.equal(context.tray, null);
   assert.equal(context.overlayWindow, null);
   assert.equal(context.scanHotkeyGateInterval, null);
+});
+
+test('main quit destroys the overlay before Electron closes the windows', async () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+  const quitSource = source.slice(source.indexOf('let isFinalizingQuitSession'), source.indexOf("app.on('will-quit'"));
+  const calls = [];
+  const handlers = {};
+  const context = vm.createContext({
+    console,
+    overlayWindow: {
+      isDestroyed: () => false,
+      destroy() {
+        calls.push('destroyOverlay');
+      }
+    },
+    app: {
+      on(eventName, handler) {
+        handlers[eventName] = handler;
+      },
+      quit() {
+        calls.push('quit');
+      }
+    },
+    async finalizeActiveSessionOnShutdown() {
+      calls.push('finalize');
+    }
+  });
+
+  vm.runInContext(quitSource, context);
+  handlers['before-quit']({
+    preventDefault() {
+      calls.push('preventDefault');
+    }
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(calls, ['preventDefault', 'finalize', 'destroyOverlay', 'quit']);
+  assert.equal(context.overlayWindow, null);
 });
 
 test('language migration preserves an existing saved locale while marking the migration complete', () => {

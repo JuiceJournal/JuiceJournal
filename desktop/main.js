@@ -3145,7 +3145,7 @@ function updateOverlayWindow({ character, runtimeSession } = {}) {
 
   if (overlayState.visibility !== 'hidden' && (!overlayWindow || overlayWindow.isDestroyed())) {
     const appReady = typeof app?.isReady === 'function' ? app.isReady() : true;
-    if (appReady) {
+    if (appReady && !app?.isQuiting) {
       createOverlayWindow();
     }
   }
@@ -5026,6 +5026,11 @@ app.on('before-quit', (event) => {
     .finally(() => {
       didFinalizeQuitSession = true;
       isFinalizingQuitSession = false;
+      // The overlay is created with closable: false, and one window that cannot close cancels app.quit().
+      if (overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow.destroy();
+        overlayWindow = null;
+      }
       app.quit();
     });
 });
