@@ -253,6 +253,47 @@ test('the journal notice reads a flag and only renames the journal, after a conf
   }
 });
 
+test('Delete everything acts locally from the main window only, reads no journal and restarts after the delete', () => {
+  const preloadJs = fs.readFileSync(path.join(desktopRoot, 'preload.js'), 'utf8');
+  const setupBody = getFunctionBody(mainJs, 'setupIPC');
+  const scopesStart = mainJs.indexOf('const IPC_RENDERER_SCOPES');
+
+  assert.ok(setupBody.includes("ipcMain.handle('delete-all-local-data', () => deleteAllLocalData());"));
+  // Left out of the scopes, so only the main window may call it.
+  assert.notEqual(scopesStart, -1);
+  assert.doesNotMatch(mainJs.slice(scopesStart, mainJs.indexOf('});', scopesStart)), /delete-all/);
+  assert.ok(preloadJs.includes("deleteAllLocalData: () => ipcRenderer.invoke('delete-all-local-data'),"));
+
+  const body = getFunctionBody(mainJs, 'deleteAllLocalData');
+  // The only client calls drop the sign-in held in memory; nothing goes over the network.
+  const signOutCalls = ['poeApiClient?.clearTokens();', 'apiClient?.setToken(null);'];
+  for (const call of signOutCalls) {
+    assert.ok(body.includes(call), `deleteAllLocalData should contain ${call}`);
+  }
+  assert.doesNotMatch(
+    signOutCalls.reduce((text, call) => text.replaceAll(call, ''), body),
+    /apiClient|axios|http|fetch\(|healthCheck|buildDiagnosticsPayload/
+  );
+  // Step names only, no log line, no second confirm, and a journal that cannot be read is never opened. rm's own
+  // retries repeat at every folder level, so main tries each folder again itself.
+  for (const part of [
+    '.message', 'console.', 'dialog.', 'readJournal', 'getJournalStore', 'loadActiveSession', 'endCurrentSession',
+    'finalizeActiveSessionOnShutdown', 'assertDesktopUserAuthenticated', 'maxRetries'
+  ]) {
+    assert.ok(!body.includes(part), `deleteAllLocalData must not contain ${part}`);
+  }
+  for (const part of [
+    'dataActionRunning', 'errorLogState.disabled = true', 'handleLogout()', '{ recursive: true, force: true }',
+    'DELETE_ALL_FOLDER_ATTEMPTS', 'store.clear()', 'clearStorageData()'
+  ]) {
+    assert.ok(body.includes(part), `deleteAllLocalData should contain ${part}`);
+  }
+  // Signed out before the first wait, and the restart comes last.
+  assert.ok(body.indexOf('handleLogout()') < body.indexOf('await '));
+  assert.notEqual(body.indexOf('app.relaunch()'), -1);
+  assert.ok(body.indexOf('app.relaunch()') < body.indexOf('app.quit()'));
+});
+
 test('the Data tab writes the path and the size as text', () => {
   const appJs = fs.readFileSync(path.join(desktopRoot, 'src', 'app.js'), 'utf8');
   const summaryBody = getFunctionBody(appJs, 'loadDataSummary');

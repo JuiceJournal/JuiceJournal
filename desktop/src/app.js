@@ -146,6 +146,11 @@ const elements = {
   farmPublishInvestmentKnown: document.getElementById('farm-publish-investment-known'),
   farmPublishConfirmBtn: document.getElementById('farm-publish-confirm-btn'),
   farmPublishCancelBtn: document.getElementById('farm-publish-cancel-btn'),
+  deleteAllModal: document.getElementById('delete-all-modal'),
+  deleteAllTitle: document.getElementById('delete-all-title'),
+  deleteAllAck: document.getElementById('delete-all-ack'),
+  deleteAllCancelBtn: document.getElementById('delete-all-cancel'),
+  deleteAllConfirmBtn: document.getElementById('delete-all-confirm'),
 
   // Navigation
   navButtons: document.querySelectorAll('.nav-btn'),
@@ -271,6 +276,7 @@ const elements = {
   dataTotalSize: document.getElementById('data-total-size'),
   openDataFolderBtn: document.getElementById('open-data-folder'),
   clearLogsBtn: document.getElementById('clear-logs'),
+  deleteAllBtn: document.getElementById('delete-all-local-data'),
   bugReportPreview: document.getElementById('bug-report-preview'),
   openBugReportIssueBtn: document.getElementById('open-bug-report-issue'),
   copyBugReportBtn: document.getElementById('copy-bug-report'),
@@ -2300,6 +2306,9 @@ function setupEventListeners() {
   if (elements.clearLogsBtn) {
     elements.clearLogsBtn.addEventListener('click', handleClearLogs);
   }
+  if (elements.deleteAllBtn) {
+    elements.deleteAllBtn.addEventListener('click', handleDeleteAllLocalData);
+  }
   // The journal notice on Dashboard and Sessions; Open data folder is the Data tab's handler.
   elements.journalNotices.forEach((notice) => {
     notice.querySelector('[data-journal-action="start-new"]').addEventListener('click', handleStartNewJournal);
@@ -2881,6 +2890,12 @@ async function handleLogout() {
   clearActiveCharacterRefreshTimers();
   clearTimeout(characterReconcileTimer);
   await window.electronAPI.logout();
+  showSignedOutWindow();
+}
+
+// What the window keeps of the account that signed out goes, and sign-in shows. A failed Delete everything calls it
+// without the sign-out call: main signed out already, and a second sign-out would write the activity log it cleared.
+function showSignedOutWindow() {
   state.currentUser = null;
   state.deviceCharactersByGame = {};
   state.poeDeviceConnected = false;
@@ -6294,6 +6309,131 @@ async function handleClearLogs() {
     showToast(window.t('toast.logsClearFailedTitle'), window.t('toast.logsClearFailed'), 'error');
   }
   void loadDataSummary();
+}
+
+// The dialog gives focus back to the Data tab button, or to sign-in when a failed delete left the sign-in screen over it.
+function getDeleteAllReturnFocus() {
+  return elements.loginModal?.classList.contains('hidden') === false
+    ? document.getElementById('poe-oauth-login')
+    : elements.deleteAllBtn;
+}
+
+// Delete everything asks in the app's own dialog. Cancel has focus first and Delete everything stays disabled until the
+// checkbox is ticked, so Enter alone never deletes. Resolves true with the dialog still open for the busy state, false
+// once it closed and focus is back where the dialog was opened from.
+function requestDeleteAllConfirmation() {
+  const { deleteAllModal: modal, deleteAllAck: ack, deleteAllCancelBtn: cancel, deleteAllConfirmBtn: confirm } = elements;
+  ack.checked = false;
+  confirm.disabled = true;
+  modal.classList.remove('hidden');
+  cancel.focus();
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const handleAckChange = () => {
+      // Unticking disables it again.
+      confirm.disabled = !ack.checked;
+    };
+    const handleCancel = () => settle(false);
+    const handleConfirm = () => {
+      if (ack.checked) settle(true);
+    };
+    const handleBackdropClick = (event) => {
+      if (event.target === modal) settle(false);
+    };
+    const handleKeydown = (event) => {
+      if (event.key === 'Escape') {
+        settle(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      // Tab moves through the enabled controls only and wraps, so focus never reaches the page behind the dialog.
+      event.preventDefault();
+      const controls = [ack, cancel, confirm].filter((control) => !control.disabled);
+      const index = controls.indexOf(document.activeElement);
+      const step = event.shiftKey ? -1 : 1;
+      controls[index === -1 ? 0 : (index + step + controls.length) % controls.length].focus();
+    };
+    const settle = (confirmed) => {
+      if (settled) return;
+      settled = true;
+      ack.removeEventListener('change', handleAckChange);
+      cancel.removeEventListener('click', handleCancel);
+      confirm.removeEventListener('click', handleConfirm);
+      modal.removeEventListener('click', handleBackdropClick);
+      document.removeEventListener('keydown', handleKeydown);
+      if (!confirmed) {
+        modal.classList.add('hidden');
+        getDeleteAllReturnFocus()?.focus();
+      }
+      resolve(confirmed);
+    };
+
+    ack.addEventListener('change', handleAckChange);
+    cancel.addEventListener('click', handleCancel);
+    confirm.addEventListener('click', handleConfirm);
+    modal.addEventListener('click', handleBackdropClick);
+    document.addEventListener('keydown', handleKeydown);
+  });
+}
+
+// Main signs out, deletes and restarts the app at the sign-in screen; the dialog stays busy until then. Otherwise main
+// answers with a reason only, so every toast is a static text.
+async function handleDeleteAllLocalData() {
+  if (!(await requestDeleteAllConfirmation())) return;
+
+  const {
+    deleteAllModal: modal, deleteAllTitle: title, deleteAllAck: ack, deleteAllCancelBtn: cancel, deleteAllConfirmBtn: confirm
+  } = elements;
+  ack.disabled = true;
+  cancel.disabled = true;
+  setButtonBusy(confirm, true, window.t('settings.deleteAllRunning'));
+  // With every control disabled, the title keeps focus in the dialog and Tab cannot leave it.
+  const holdFocus = (event) => {
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      title.focus();
+    }
+  };
+  title.focus();
+  document.addEventListener('keydown', holdFocus);
+  announceStatus(window.t('settings.deleteAllRunning'));
+
+  let result = null;
+  try {
+    result = await window.electronAPI.deleteAllLocalData();
+  } catch {
+    result = { deleted: false, reason: 'failed' };
+  }
+  if (result?.deleted) return;
+
+  document.removeEventListener('keydown', holdFocus);
+  setButtonBusy(confirm, false);
+  ack.disabled = false;
+  cancel.disabled = false;
+  modal.classList.add('hidden');
+  if (result?.reason === 'busy') {
+    getDeleteAllReturnFocus()?.focus();
+    showToast(window.t('toast.dataActionBusy'), '', 'warning');
+    return;
+  }
+
+  // Main signed out before it deleted, so the window shows sign-in as after Sign out, but without a second sign-out
+  // call: that would write a new entry into the activity log main just cleared. Only a sign-out that main reports as
+  // failed, or a reply that never came, is tried again.
+  clearActiveCharacterRefreshTimers();
+  clearTimeout(characterReconcileTimer);
+  if (!Array.isArray(result?.failed) || result.failed.includes('signOut')) {
+    await window.electronAPI.logout().catch(() => { });
+  }
+  showSignedOutWindow();
+  // Main reset the settings; the form still shows the old ones, and the next Save would write them back.
+  await loadSettings();
+  document.getElementById('poe-oauth-login')?.focus();
+  // The Data tab is behind the sign-in screen now, so the toast tries again itself; the dialog opens over sign-in.
+  showToast(window.t('toast.deleteAllFailedTitle'), window.t('toast.deleteAllFailed'), 'error', {
+    action: { label: window.t('toast.deleteAllRetry'), onSelect: handleDeleteAllLocalData }
+  });
 }
 
 // Main keeps only the report it built last, and Copy and the issue button send exactly that text, so the user sends

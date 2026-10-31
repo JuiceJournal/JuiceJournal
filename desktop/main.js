@@ -66,6 +66,12 @@ const MAP_RESULT_OVERLAY_DURATION_MS = 10_000;
 // An OCR scan waits this long for poe.ninja prices; loot without a price counts as 0.
 const SESSION_PRICES_WAIT_MS = 5_000;
 const SESSION_PRICES_RETRY_MS = 5 * 60_000;
+// Settings > Data's Delete everything waits this long for each browser data clear; longer counts as a failed step.
+const BROWSER_DATA_CLEAR_TIMEOUT_MS = 15_000;
+// Delete everything tries each folder this often, this far apart. rm's own retries repeat at every folder level, so a
+// file held open deep down would keep the dialog busy for minutes.
+const DELETE_ALL_FOLDER_ATTEMPTS = 3;
+const DELETE_ALL_FOLDER_RETRY_MS = 250;
 const CHARACTER_PROMPT_OVERLAY_DURATION_MS = 8_000;
 // The renderer closes an unanswered start prompt itself; if it never does (it reloaded), main hides the prompt
 // this long after it should have closed, so "closes in 0s" cannot stay on screen.
@@ -2298,6 +2304,135 @@ async function startNewJournal() {
   }
 }
 
+// Settings > Data: Delete everything. The renderer's own dialog asked first (a checkbox, Cancel focused), so main does
+// not ask again. Signs out without ending the active run, removes every profile folder (journals that cannot be read
+// and journal.broken-* files too; none is read), the caches and the logs, resets every setting but the language and
+// clears the window's browser cache and storage, then restarts at the sign-in screen. Answers with step names only,
+// because fs error texts name the full path. If a step fails nothing restarts and the app goes on as before a sign-in.
+async function deleteAllLocalData() {
+  if (dataActionRunning) {
+    return { deleted: false, reason: 'busy' };
+  }
+
+  dataActionRunning = true;
+  let restarting = false;
+  try {
+    // Nothing may write the error log, a scan, a journal or the settings back meanwhile. The run is dropped before
+    // the first wait, so a quit or a new map from the tray cannot end it into the journal while the files go.
+    errorLogState.disabled = true;
+    globalShortcut.unregisterAll();
+    scanHotkeysActive = false;
+    clearInterval(scanHotkeyGateInterval);
+    scanHotkeyGateInterval = null;
+    if (logParser) {
+      logParser.stop();
+    }
+    if (gameDetector) {
+      gameDetector.stop();
+    }
+
+    const failed = [];
+    try {
+      handleLogout();
+    } catch {
+      // A config.json held by another program stops the sign-out at its first write; the run and the tokens in memory
+      // go anyway.
+      failed.push('signOut');
+      currentSession = null;
+      poeApiClient?.clearTokens();
+      apiClient?.setToken(null);
+    }
+    journalStore = null;
+    unreadableJournalProfileId = null;
+    bugReport = null;
+
+    try {
+      if (ocrScanner) {
+        await ocrScanner.terminate();
+      }
+    } catch {
+      // A worker that does not stop keeps its files; the ocr-cache step reports them.
+    }
+
+    const userData = app.getPath('userData');
+    // Generic folder names: at a drive root they could belong to other programs.
+    if (path.isAbsolute(userData) && path.dirname(userData) !== userData) {
+      // Partitions is left over from the Overwolf version.
+      for (const folder of ['profiles', 'icon-cache', 'ocr-cache', 'logs', 'Partitions']) {
+        let removed = false;
+        for (let attempt = 1; !removed && attempt <= DELETE_ALL_FOLDER_ATTEMPTS; attempt += 1) {
+          if (attempt > 1) {
+            await new Promise((resolve) => setTimeout(resolve, DELETE_ALL_FOLDER_RETRY_MS));
+          }
+          try {
+            await fs.promises.rm(path.join(userData, folder), { recursive: true, force: true });
+            removed = true;
+          } catch {
+            // A file another program holds open; the last attempt names the folder.
+          }
+        }
+        if (!removed) {
+          failed.push(folder);
+        }
+      }
+    } else {
+      failed.push('userData');
+    }
+    errorLogState.recent.clear();
+
+    // The raw value: getLanguage folds every language but Turkish to English.
+    try {
+      const language = store.get('language');
+      store.clear();
+      store.set('language', typeof language === 'string' ? language : 'en');
+    } catch {
+      failed.push('settings');
+    }
+
+    // The app uses the default session only.
+    try {
+      const { defaultSession } = require('electron').session;
+      await withTimeout(defaultSession.clearCache(), BROWSER_DATA_CLEAR_TIMEOUT_MS);
+      await withTimeout(defaultSession.clearStorageData(), BROWSER_DATA_CLEAR_TIMEOUT_MS);
+    } catch {
+      failed.push('browserData');
+    }
+
+    if (failed.length) {
+      // Signed out, as at startup before a sign-in; OCR starts again with the next scan. After a failed sign-out the
+      // profile may still be the active one, so nothing that writes a journal starts again.
+      if (!failed.includes('signOut')) {
+        try {
+          scanHotkeyGateInterval = setInterval(syncScanHotkeys, SCAN_HOTKEY_GATE_INTERVAL_MS);
+          if (gameDetector) {
+            gameDetector.start();
+          }
+          // A game check already under way can have started a parser after the stop.
+          if (!logParser?.isRunning) {
+            setupLogParser();
+          }
+        } catch {
+          // Client.txt can vanish between the parser's check and its start; the answer stays the failed steps.
+        }
+      }
+      return { deleted: false, reason: 'failed', failed };
+    }
+
+    // The normal quit path. dataActionRunning and the disabled error log stay set until the process exits, so a second
+    // call answers busy and cannot restart twice, and the warning the quit prints about the missing sign-in cannot
+    // create logs/ again.
+    restarting = true;
+    app.relaunch();
+    app.quit();
+    return { deleted: true };
+  } finally {
+    if (!restarting) {
+      errorLogState.disabled = false;
+      dataActionRunning = false;
+    }
+  }
+}
+
 async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expectedState, codeVerifier }) {
   await closePoeAuthServer();
 
@@ -3128,7 +3263,8 @@ function updateOverlayWindow({ character, runtimeSession } = {}) {
 
   if (overlayState.visibility !== 'hidden' && (!overlayWindow || overlayWindow.isDestroyed())) {
     const appReady = typeof app?.isReady === 'function' ? app.isReady() : true;
-    if (appReady) {
+    // A quit destroys the overlay before it closes the windows; one made after that would cancel the quit.
+    if (appReady && !app?.isQuiting) {
       createOverlayWindow();
     }
   }
@@ -4289,6 +4425,9 @@ function setupIPC() {
   ipcMain.handle('get-journal-status', () => getJournalStatus());
   ipcMain.handle('start-new-journal', () => startNewJournal());
 
+  // Settings > Data's Delete everything. No renderer input and no confirm in main: the renderer's own dialog asked.
+  ipcMain.handle('delete-all-local-data', () => deleteAllLocalData());
+
   // Manuel loot ekle
   ipcMain.handle('add-loot', async (event, data) => {
     if (!currentSession) {
@@ -4991,7 +5130,7 @@ function handleAppWillQuit() {
 let isFinalizingQuitSession = false;
 let didFinalizeQuitSession = false;
 
-app.on('before-quit', (event) => {
+function handleAppBeforeQuit(event) {
   app.isQuiting = true;
 
   if (didFinalizeQuitSession || isFinalizingQuitSession) {
@@ -5008,8 +5147,15 @@ app.on('before-quit', (event) => {
     .finally(() => {
       didFinalizeQuitSession = true;
       isFinalizingQuitSession = false;
+      // The overlay is made with closable: false, and on Windows closing such a window cancels the quit, so will-quit
+      // would never come. It goes before the quit closes the windows.
+      if (overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow.destroy();
+        overlayWindow = null;
+      }
       app.quit();
     });
-});
+}
 
+app.on('before-quit', handleAppBeforeQuit);
 app.on('will-quit', handleAppWillQuit);

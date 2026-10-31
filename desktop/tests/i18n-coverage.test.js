@@ -284,6 +284,38 @@ test('desktop Data tab keys have their own ASCII Turkish strings', () => {
   }
 });
 
+test('desktop Delete everything keys have their own ASCII Turkish strings', () => {
+  const translations = loadDesktopTranslations();
+  const newKeys = [
+    'settings.deleteAll',
+    'settings.deleteAllDesc',
+    'settings.deleteAllTitle',
+    'settings.deleteAllBody',
+    'settings.deleteAllKept',
+    'settings.deleteAllAck',
+    'settings.deleteAllCancel',
+    'settings.deleteAllRunning',
+    'toast.deleteAllFailedTitle',
+    'toast.deleteAllFailed',
+    'toast.deleteAllRetry',
+  ];
+
+  for (const key of newKeys) {
+    assert.ok(translations.en[key], `Missing en string for ${key}`);
+    assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
+    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
+  }
+  // The README quotes this label.
+  assert.equal(translations.en['settings.deleteAll'], 'Delete everything');
+  // The failure toast's own button tries again, so its text asks for that and not for a restart, which ends at sign-in.
+  assert.equal(translations.en['toast.deleteAllRetry'], 'Try again');
+  for (const language of ['en', 'tr']) {
+    assert.doesNotMatch(translations[language]['toast.deleteAllFailed'], /restart|yeniden baslat/i, language);
+  }
+  // Shared runs are "runlar" everywhere else in the Turkish UI.
+  assert.match(translations.tr['settings.deleteAllKept'], /paylastigin runlar/);
+});
+
 test('desktop notice keys have their own ASCII Turkish strings', () => {
   const translations = loadDesktopTranslations();
   const newKeys = [

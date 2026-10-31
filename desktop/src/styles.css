@@ -713,6 +713,25 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   accent-color: var(--gold);
 }
 
+.delete-all-content {
+  width: min(520px, calc(100vw - 2rem));
+}
+
+.delete-all-content .farm-publish-check,
+.delete-all-content .map-session-actions {
+  margin-top: 1.25rem;
+}
+
+/* Wide enough for the idle and the busy label, so the row does not shift under the pointer when the delete starts. */
+.delete-all-content .map-session-actions .btn-danger {
+  min-width: 12rem;
+}
+
+/* The title only holds focus while the delete runs; it is not a control. */
+.delete-all-content h2:focus {
+  outline: none;
+}
+
 @keyframes modalBgIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modalIn {
   from { opacity: 0; transform: translateY(6px); }
@@ -3059,6 +3078,11 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 
 .clear-logs-note {
   margin-top: 0.75rem;
+}
+
+/* Delete everything: a full red border tint marks the group. */
+.settings-group--danger {
+  border-color: rgb(var(--loss-rgb) / 0.35);
 }
 
 /* About Page */

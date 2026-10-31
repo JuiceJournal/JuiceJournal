@@ -40,6 +40,8 @@ Juice Journal has no accounts and no servers of its own. Your data is stored und
 
 Settings → Data shows this folder and its total size. **Open folder** opens it in File Explorer. **Clear logs** deletes the activity log and the error log after you confirm; your sessions, loot, map results and settings stay. Diagnostics files you exported and reports you copied are not changed.
 
+**Delete everything** asks you to tick a box and confirm, then removes `profiles/` (journals that cannot be read and `journal.broken-*` files included), `icon-cache/`, `ocr-cache/` and `logs/` for every account, resets `config.json` to the defaults except the language (map results, the activity log, the character list and the saved sign-ins go with it), clears the cache and storage in the Electron folders (the folders stay) and restarts the app at the sign-in screen. Runs you shared and stash snapshots on an online server stay there, the GGG and server sign-ins are removed from this PC but not revoked (you can revoke the GGG one on pathofexile.com), and diagnostics files you exported and reports you copied are not touched.
+
 If `journal.json` cannot be read (for example after it was edited by hand), the Dashboard and Sessions say so and nothing is deleted. **Start a new journal** renames it to `journal.broken-<date>-<time>.json` in the same folder after you confirm and starts an empty journal. The sessions and loot in the old file stay in it but do not show in the app; saved map results stay.
 
 The OCR scan's screenshot is processed on your PC and is not uploaded.

@@ -1730,6 +1730,7 @@ test('settings tabs use two columns, with full-width groups for long content', (
     'id="diagnostics-mode"',
     'id="data-folder-path"',
     'id="audit-trail-list"',
+    'id="delete-all-local-data"',
     'about-info',
     'id="bug-report-preview"',
     // The only group of its tab, or the last one of an odd count.
@@ -2117,6 +2118,431 @@ test('the Data tab buttons are wired to their handlers', () => {
 
   assert.ok(body.includes("elements.openDataFolderBtn.addEventListener('click', handleOpenDataFolder)"));
   assert.ok(body.includes("elements.clearLogsBtn.addEventListener('click', handleClearLogs)"));
+  assert.ok(body.includes("elements.deleteAllBtn.addEventListener('click', handleDeleteAllLocalData)"));
+});
+
+test('the Data tab ends with Delete everything, and its dialog asks with a checkbox and has no form', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const css = fs.readFileSync(stylesCssPath, 'utf8');
+  const cssRule = (selector) => {
+    const start = css.indexOf(`\n${selector} {`);
+    assert.notEqual(start, -1, `Missing ${selector} rule`);
+    return css.slice(start, css.indexOf('}', start));
+  };
+
+  const dataIndex = html.indexOf('id="settings-data"');
+  const panel = html.slice(dataIndex, html.indexOf('<!-- About Tab -->', dataIndex));
+  const groupStart = panel.indexOf('<div class="settings-group settings-group--wide settings-group--danger" id="delete-all-group">');
+  assert.notEqual(groupStart, -1);
+  // After Clear logs, and the last group of the tab.
+  assert.ok(panel.indexOf('id="clear-logs"') < groupStart);
+  assert.equal(panel.indexOf('<div class="settings-group', groupStart + 1), -1);
+  const group = panel.slice(groupStart);
+  for (const part of [
+    '<h3 data-i18n="settings.deleteAll">Delete everything</h3>',
+    '<p class="settings-desc" id="delete-all-note" data-i18n="settings.deleteAllDesc">',
+    '<button id="delete-all-local-data" class="btn btn-danger btn-small" type="button" aria-describedby="delete-all-note" aria-haspopup="dialog">',
+    '<use href="assets/icons.svg#trash"/>',
+    '<span class="btn-label" data-i18n="settings.deleteAll">Delete everything</span>'
+  ]) {
+    assert.ok(group.includes(part), part);
+  }
+
+  // After the farm publish modal: auth-poe-ui.test.js reads the sign-in panel up to the New Map Session comment.
+  const modalStart = html.indexOf('<!-- Delete Everything Modal -->');
+  const mainStart = html.indexOf('<!-- Main Content -->');
+  assert.ok(html.indexOf('id="farm-publish-modal"') < modalStart && modalStart < mainStart);
+  const modal = html.slice(modalStart, mainStart);
+  for (const part of [
+    '<div id="delete-all-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="delete-all-title" aria-describedby="delete-all-body delete-all-kept">',
+    // Holds focus while the delete runs.
+    '<h2 id="delete-all-title" tabindex="-1" data-i18n="settings.deleteAllTitle">Delete everything?</h2>',
+    '<p class="modal-subtitle" id="delete-all-body" data-i18n="settings.deleteAllBody">',
+    '<p class="modal-subtitle" id="delete-all-kept" data-i18n="settings.deleteAllKept">',
+    '<input id="delete-all-ack" type="checkbox">',
+    '<label for="delete-all-ack" data-i18n="settings.deleteAllAck">I understand this cannot be undone</label>',
+    '<button id="delete-all-cancel" type="button" class="btn btn-secondary" data-i18n="settings.deleteAllCancel">Cancel</button>',
+    '<button id="delete-all-confirm" type="button" class="btn btn-danger" disabled>',
+    '<span class="btn-label" data-i18n="settings.deleteAll">Delete everything</span>'
+  ]) {
+    assert.ok(modal.includes(part), part);
+  }
+  // Enter never submits: there is no form and no submit button. Cancel comes before Delete everything.
+  assert.ok(!modal.includes('<form'));
+  assert.ok(!modal.includes('type="submit"'));
+  assert.ok(modal.indexOf('id="delete-all-ack"') < modal.indexOf('id="delete-all-cancel"'));
+  assert.ok(modal.indexOf('id="delete-all-cancel"') < modal.indexOf('id="delete-all-confirm"'));
+  for (const id of [
+    'delete-all-group', 'delete-all-note', 'delete-all-local-data', 'delete-all-modal', 'delete-all-title',
+    'delete-all-body', 'delete-all-kept', 'delete-all-ack', 'delete-all-cancel', 'delete-all-confirm'
+  ]) {
+    assert.equal(html.split(`id="${id}"`).length - 1, 1, id);
+  }
+
+  assert.match(cssRule('.settings-group--danger'), /border-color: rgb\(var\(--loss-rgb\) \/ 0\.35\);/);
+  assert.match(cssRule('.delete-all-content'), /width: min\(520px, calc\(100vw - 2rem\)\);/);
+});
+
+// The Delete everything dialog with fake controls: focus() moves document.activeElement, and every listener is kept
+// by target and type, so tests can fire them and check that they are removed again. signInShown opens it over the
+// sign-in screen, as the Try again of a failed delete does.
+function createDeleteAllDialog({ signInShown = false } = {}) {
+  const listeners = new Map();
+  const doc = { activeElement: null };
+  const listenable = (name, target) => Object.assign(target, {
+    name,
+    focus() {
+      doc.activeElement = target;
+    },
+    addEventListener(type, handler) {
+      listeners.set(`${name}:${type}`, handler);
+    },
+    removeEventListener(type, handler) {
+      if (listeners.get(`${name}:${type}`) === handler) listeners.delete(`${name}:${type}`);
+    }
+  });
+  const ack = listenable('ack', { disabled: false, checked: true });
+  const cancel = listenable('cancel', { disabled: false });
+  const confirm = listenable('confirm', { disabled: false });
+  const panel = listenable('panel', {});
+  const modal = listenable('modal', createDatasetElement(['hidden']));
+  modal.contains = (target) => [modal, panel, ack, cancel, confirm].includes(target);
+  const deleteAllBtn = listenable('deleteAllBtn', {});
+  const signInBtn = listenable('signInBtn', {});
+  listenable('document', doc);
+  doc.getElementById = (id) => (id === 'poe-oauth-login' ? signInBtn : null);
+  const fire = (name, type, event = {}) => {
+    let prevented = false;
+    listeners.get(`${name}:${type}`)?.({ ...event, preventDefault: () => { prevented = true; } });
+    return prevented;
+  };
+  const context = loadFunctions(['getDeleteAllReturnFocus', 'requestDeleteAllConfirmation'], {
+    document: doc,
+    elements: {
+      loginModal: createDatasetElement(signInShown ? [] : ['hidden']),
+      deleteAllModal: modal,
+      deleteAllAck: ack,
+      deleteAllCancelBtn: cancel,
+      deleteAllConfirmBtn: confirm,
+      deleteAllBtn
+    }
+  });
+  const open = () => {
+    const outcome = { value: undefined };
+    context.requestDeleteAllConfirmation().then((value) => {
+      outcome.value = value;
+    });
+    return outcome;
+  };
+  return { ack, cancel, confirm, panel, modal, deleteAllBtn, signInBtn, doc, listeners, fire, open };
+}
+
+const settleMicrotasks = () => new Promise((resolve) => setImmediate(resolve));
+
+test('the Delete everything dialog opens on Cancel and enables Delete only while the box is ticked', async () => {
+  const dialog = createDeleteAllDialog();
+  const outcome = dialog.open();
+
+  assert.equal(dialog.modal.classList.contains('hidden'), false);
+  // A box ticked at the last visit starts unticked again.
+  assert.equal(dialog.ack.checked, false);
+  assert.equal(dialog.confirm.disabled, true);
+  assert.equal(dialog.doc.activeElement, dialog.cancel);
+  assert.deepEqual([...dialog.listeners.keys()].sort(), ['ack:change', 'cancel:click', 'confirm:click', 'document:keydown', 'modal:click']);
+
+  dialog.ack.checked = true;
+  dialog.fire('ack', 'change');
+  assert.equal(dialog.confirm.disabled, false);
+  dialog.ack.checked = false;
+  dialog.fire('ack', 'change');
+  assert.equal(dialog.confirm.disabled, true);
+
+  // Neither a click on Delete while the box is unticked nor Enter does anything.
+  dialog.fire('confirm', 'click');
+  assert.equal(dialog.fire('document', 'keydown', { key: 'Enter' }), false);
+  // A click inside the panel is not a backdrop click.
+  dialog.fire('modal', 'click', { target: dialog.panel });
+  await settleMicrotasks();
+  assert.equal(outcome.value, undefined);
+  assert.equal(dialog.modal.classList.contains('hidden'), false);
+  assert.equal(dialog.listeners.size, 5);
+});
+
+test('Escape, Cancel and a backdrop click close the Delete everything dialog and return focus to its button', async () => {
+  const ways = [
+    ['Escape', (dialog) => dialog.fire('document', 'keydown', { key: 'Escape' })],
+    ['Cancel', (dialog) => dialog.fire('cancel', 'click')],
+    ['backdrop', (dialog) => dialog.fire('modal', 'click', { target: dialog.modal })],
+    // Ticked first: closing still deletes nothing.
+    ['Cancel after ticking', (dialog) => {
+      dialog.ack.checked = true;
+      dialog.fire('ack', 'change');
+      dialog.fire('cancel', 'click');
+    }]
+  ];
+
+  for (const [way, close] of ways) {
+    const dialog = createDeleteAllDialog();
+    const outcome = dialog.open();
+
+    close(dialog);
+    await settleMicrotasks();
+
+    assert.equal(outcome.value, false, way);
+    assert.equal(dialog.modal.classList.contains('hidden'), true, way);
+    assert.equal(dialog.doc.activeElement, dialog.deleteAllBtn, way);
+    assert.equal(dialog.listeners.size, 0, way);
+  }
+});
+
+test('the Delete everything dialog opened over sign-in gives focus back to sign-in, not to the Data tab behind it', async () => {
+  for (const key of ['Escape', 'Cancel']) {
+    const dialog = createDeleteAllDialog({ signInShown: true });
+    const outcome = dialog.open();
+    assert.equal(dialog.doc.activeElement, dialog.cancel, key);
+
+    if (key === 'Escape') {
+      dialog.fire('document', 'keydown', { key });
+    } else {
+      dialog.fire('cancel', 'click');
+    }
+    await settleMicrotasks();
+
+    assert.equal(outcome.value, false, key);
+    assert.equal(dialog.doc.activeElement, dialog.signInBtn, key);
+  }
+});
+
+test('Tab keeps focus in the Delete everything dialog and skips Delete while it is disabled', () => {
+  const dialog = createDeleteAllDialog();
+  dialog.open();
+  const tab = (shiftKey = false) => dialog.fire('document', 'keydown', { key: 'Tab', shiftKey });
+
+  // Delete disabled: the box and Cancel only.
+  dialog.cancel.focus();
+  assert.equal(tab(), true);
+  assert.equal(dialog.doc.activeElement, dialog.ack);
+  assert.equal(tab(), true);
+  assert.equal(dialog.doc.activeElement, dialog.cancel);
+  assert.equal(tab(true), true);
+  assert.equal(dialog.doc.activeElement, dialog.ack);
+  assert.equal(tab(true), true);
+  assert.equal(dialog.doc.activeElement, dialog.cancel);
+
+  // Delete enabled: it is the last control.
+  dialog.ack.checked = true;
+  dialog.fire('ack', 'change');
+  assert.equal(tab(), true);
+  assert.equal(dialog.doc.activeElement, dialog.confirm);
+  assert.equal(tab(), true);
+  assert.equal(dialog.doc.activeElement, dialog.ack);
+  assert.equal(tab(true), true);
+  assert.equal(dialog.doc.activeElement, dialog.confirm);
+
+  // Focus outside the dialog comes back to its first control.
+  dialog.deleteAllBtn.focus();
+  assert.equal(tab(), true);
+  assert.equal(dialog.doc.activeElement, dialog.ack);
+});
+
+test('ticking the box and pressing Delete everything resolves true with the dialog still open', async () => {
+  const dialog = createDeleteAllDialog();
+  const outcome = dialog.open();
+
+  dialog.ack.checked = true;
+  dialog.fire('ack', 'change');
+  dialog.fire('confirm', 'click');
+  await settleMicrotasks();
+
+  assert.equal(outcome.value, true);
+  // The dialog stays for the busy state, and focus is not sent behind it.
+  assert.equal(dialog.modal.classList.contains('hidden'), false);
+  assert.notEqual(dialog.doc.activeElement, dialog.deleteAllBtn);
+  assert.equal(dialog.listeners.size, 0);
+});
+
+// handleDeleteAllLocalData with the dialog answered by a stub. Focus, busy, toast, sign-out and settings calls go into
+// one list, so tests can check their order. signInShown runs it from the sign-in screen, as Try again does.
+function loadDeleteAllContext(deleteAllLocalData, { confirmed = true, logoutFails = false, signInShown = false } = {}) {
+  const events = [];
+  const toasts = [];
+  const keydown = new Map();
+  const counts = { ipc: 0, logout: 0, signedOut: 0, loadSettings: 0 };
+  const focusable = (name, extra = {}) => ({ ...extra, focus: () => events.push(`focus:${name}`) });
+  const elements = {
+    loginModal: createDatasetElement(signInShown ? [] : ['hidden']),
+    deleteAllModal: createDatasetElement(),
+    deleteAllTitle: focusable('title'),
+    deleteAllAck: { disabled: false },
+    deleteAllCancelBtn: { disabled: false },
+    deleteAllConfirmBtn: { disabled: false },
+    deleteAllBtn: focusable('deleteAllBtn')
+  };
+  const signInButton = focusable('signIn');
+  const context = loadFunctions(['getDeleteAllReturnFocus', 'handleDeleteAllLocalData'], {
+    elements,
+    document: {
+      getElementById: (id) => (id === 'poe-oauth-login' ? signInButton : null),
+      addEventListener: (type, handler) => keydown.set(type, handler),
+      removeEventListener: (type, handler) => {
+        if (keydown.get(type) === handler) keydown.delete(type);
+      }
+    },
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        deleteAllLocalData: (...args) => {
+          counts.ipc += 1;
+          assert.equal(args.length, 0);
+          events.push('ipc');
+          return deleteAllLocalData();
+        },
+        logout: async () => {
+          counts.logout += 1;
+          events.push('logout');
+          if (logoutFails) throw new Error('EBUSY: C:\\Users\\someone\\AppData\\Roaming\\Juice Journal\\config.json');
+        }
+      }
+    },
+    requestDeleteAllConfirmation: async () => confirmed,
+    setButtonBusy: (target, busy, label) => {
+      assert.equal(target, elements.deleteAllConfirmBtn);
+      target.disabled = busy;
+      events.push(label ? `busy:${busy}:${label}` : `busy:${busy}`);
+    },
+    announceStatus: (text) => events.push(`announce:${text}`),
+    showToast: (...args) => {
+      toasts.push(args);
+      events.push('toast');
+    },
+    clearActiveCharacterRefreshTimers: () => events.push('stopCharacterTimers'),
+    characterReconcileTimer: 'reconcile',
+    clearTimeout: (id) => events.push(`clearTimeout:${id}`),
+    showSignedOutWindow: () => {
+      counts.signedOut += 1;
+      events.push('signedOut');
+    },
+    loadSettings: async () => {
+      counts.loadSettings += 1;
+      events.push('loadSettings');
+    }
+  });
+  return { context, elements, events, toasts, keydown, counts };
+}
+
+test('Delete everything sends nothing when the dialog is canceled, and stays busy once main restarts the app', async () => {
+  const canceled = loadDeleteAllContext(async () => assert.fail('deleted after Cancel'), { confirmed: false });
+  await canceled.context.handleDeleteAllLocalData();
+  assert.deepEqual(canceled.events, []);
+  assert.equal(canceled.counts.ipc, 0);
+
+  const deleted = loadDeleteAllContext(async () => ({ deleted: true }));
+  await deleted.context.handleDeleteAllLocalData();
+  assert.equal(deleted.counts.ipc, 1);
+  // Busy before the call, focus held on the title, and nothing undone: the app is restarting.
+  assert.deepEqual(deleted.events, [
+    'busy:true:settings.deleteAllRunning',
+    'focus:title',
+    'announce:settings.deleteAllRunning',
+    'ipc'
+  ]);
+  assert.deepEqual(deleted.toasts, []);
+  assert.equal(deleted.counts.logout, 0);
+  assert.equal(deleted.counts.signedOut, 0);
+  assert.equal(deleted.elements.deleteAllModal.classList.contains('hidden'), false);
+  assert.equal(deleted.elements.deleteAllAck.disabled, true);
+  assert.equal(deleted.elements.deleteAllCancelBtn.disabled, true);
+  assert.equal(deleted.elements.deleteAllConfirmBtn.disabled, true);
+  // Every control is disabled, so Tab stays on the title instead of reaching the page behind the dialog.
+  let prevented = false;
+  deleted.keydown.get('keydown')({ key: 'Tab', preventDefault: () => { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(deleted.events.at(-1), 'focus:title');
+});
+
+test('Delete everything answers busy with a warning and gives focus back to where the dialog was opened', async () => {
+  for (const [from, signInShown, focus] of [['Data tab', false, 'focus:deleteAllBtn'], ['sign-in', true, 'focus:signIn']]) {
+    const run = loadDeleteAllContext(async () => ({ deleted: false, reason: 'busy' }), { signInShown });
+
+    await run.context.handleDeleteAllLocalData();
+
+    assert.equal(run.counts.ipc, 1, from);
+    assert.equal(run.counts.logout, 0, from);
+    assert.equal(run.counts.signedOut, 0, from);
+    assert.deepEqual(run.toasts, [['toast.dataActionBusy', '', 'warning']], from);
+    assert.deepEqual(run.events.slice(-3), ['busy:false', focus, 'toast'], from);
+    assert.equal(run.elements.deleteAllModal.classList.contains('hidden'), true, from);
+    assert.equal(run.elements.deleteAllAck.disabled, false, from);
+    assert.equal(run.elements.deleteAllCancelBtn.disabled, false, from);
+    assert.equal(run.elements.deleteAllConfirmBtn.disabled, false, from);
+    assert.equal(run.keydown.size, 0, from);
+  }
+});
+
+test('a failed Delete everything shows sign-in with the settings main reset and one static error toast', async () => {
+  const outcomes = [
+    // Main signed out: the window resets without a second sign-out, which would write the cleared activity log.
+    ['failed', async () => ({ deleted: false, reason: 'failed', failed: ['icon-cache'] }), {}, false],
+    // Main did not answer, or its sign-out failed: the sign-out is tried again, and a failing one changes nothing.
+    ['no reply', async () => undefined, {}, true],
+    ['rejected', async () => {
+      throw new Error("Error invoking remote method 'delete-all-local-data': Error: EPERM: C:\\Users\\someone\\AppData\\Roaming\\Juice Journal");
+    }, {}, true],
+    ['sign-out failed', async () => ({ deleted: false, reason: 'failed', failed: ['signOut', 'settings'] }), { logoutFails: true }, true]
+  ];
+
+  for (const [outcome, deleteAllLocalData, options, signsOutAgain] of outcomes) {
+    const run = loadDeleteAllContext(deleteAllLocalData, options);
+
+    await run.context.handleDeleteAllLocalData();
+
+    assert.equal(run.counts.ipc, 1, outcome);
+    assert.equal(run.counts.logout, signsOutAgain ? 1 : 0, outcome);
+    assert.equal(run.counts.signedOut, 1, outcome);
+    // The form shows the settings main reset, so the next Save cannot write the deleted ones back.
+    assert.equal(run.counts.loadSettings, 1, outcome);
+    assert.equal(run.toasts.length, 1, outcome);
+    const [title, message, type, toastOptions] = run.toasts[0];
+    assert.deepEqual([title, message, type], ['toast.deleteAllFailedTitle', 'toast.deleteAllFailed', 'error'], outcome);
+    assert.equal(toastOptions.action.label, 'toast.deleteAllRetry', outcome);
+    assert.ok(!JSON.stringify(run.toasts).includes('someone'), outcome);
+    // The account's timers stop and the window resets before the settings load; focus goes to sign-in, which now
+    // covers the Data tab, before the toast.
+    const tail = [
+      'busy:false', 'stopCharacterTimers', 'clearTimeout:reconcile', ...(signsOutAgain ? ['logout'] : []), 'signedOut',
+      'loadSettings', 'focus:signIn', 'toast'
+    ];
+    assert.deepEqual(run.events.slice(-tail.length), tail, outcome);
+    assert.ok(!run.events.includes('focus:deleteAllBtn'), outcome);
+    assert.equal(run.elements.deleteAllModal.classList.contains('hidden'), true, outcome);
+    assert.equal(run.elements.deleteAllAck.disabled, false, outcome);
+    assert.equal(run.elements.deleteAllCancelBtn.disabled, false, outcome);
+    assert.equal(run.keydown.size, 0, outcome);
+  }
+});
+
+test('Try again on the failed Delete everything toast asks again over sign-in without a new sign-in', async () => {
+  const replies = [{ deleted: false, reason: 'failed', failed: ['profiles'] }, { deleted: true }];
+  const run = loadDeleteAllContext(async () => replies.shift());
+  await run.context.handleDeleteAllLocalData();
+  const { onSelect } = run.toasts[0][3].action;
+  assert.equal(onSelect, run.context.handleDeleteAllLocalData);
+
+  run.elements.loginModal.classList.remove('hidden');
+  await onSelect();
+
+  assert.equal(run.counts.ipc, 2);
+  assert.equal(run.counts.logout, 0);
+  assert.equal(run.toasts.length, 1);
+  // The second delete went through: the dialog stays busy until main restarts the app.
+  assert.equal(run.elements.deleteAllConfirmBtn.disabled, true);
+  assert.equal(run.elements.deleteAllCancelBtn.disabled, true);
+  assert.deepEqual(run.events.slice(-4), [
+    'busy:true:settings.deleteAllRunning',
+    'focus:title',
+    'announce:settings.deleteAllRunning',
+    'ipc'
+  ]);
 });
 
 test('Dashboard and Sessions open with the journal notice, hidden until main says the journal cannot be read', () => {

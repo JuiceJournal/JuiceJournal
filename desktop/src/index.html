@@ -238,6 +238,26 @@
       </div>
     </div>
 
+    <!-- Delete Everything Modal -->
+    <div id="delete-all-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="delete-all-title" aria-describedby="delete-all-body delete-all-kept">
+      <div class="modal-content delete-all-content">
+        <h2 id="delete-all-title" tabindex="-1" data-i18n="settings.deleteAllTitle">Delete everything?</h2>
+        <p class="modal-subtitle" id="delete-all-body" data-i18n="settings.deleteAllBody">Deleted for every account on this PC: sessions and loot (also from journals that cannot be read), map results, the activity log and the error log, item icons, the OCR language data, the browser cache and storage of the app window, the saved Path of Exile and server sign-ins and all settings except the language. Juice Journal then restarts at the sign-in screen.</p>
+        <p class="modal-subtitle" id="delete-all-kept" data-i18n="settings.deleteAllKept">Runs you shared and stash snapshots on an online server stay on that server. The sign-ins are removed from this PC but not revoked at GGG or on the server; you can revoke the Path of Exile sign-in on pathofexile.com. Diagnostics files you exported and reports you copied are not touched.</p>
+        <div class="farm-publish-check">
+          <input id="delete-all-ack" type="checkbox">
+          <label for="delete-all-ack" data-i18n="settings.deleteAllAck">I understand this cannot be undone</label>
+        </div>
+        <div class="map-session-actions">
+          <button id="delete-all-cancel" type="button" class="btn btn-secondary" data-i18n="settings.deleteAllCancel">Cancel</button>
+          <button id="delete-all-confirm" type="button" class="btn btn-danger" disabled>
+            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#trash"/></svg>
+            <span class="btn-label" data-i18n="settings.deleteAll">Delete everything</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Content -->
     <main class="main">
       <!-- Dashboard Page -->
@@ -967,6 +987,16 @@
                   <button id="clear-logs" class="btn btn-danger btn-small" type="button" aria-describedby="clear-logs-note">
                     <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#trash"/></svg>
                     <span class="btn-label" data-i18n="settings.clearLogs">Clear logs</span>
+                  </button>
+                </div>
+              </div>
+              <div class="settings-group settings-group--wide settings-group--danger" id="delete-all-group">
+                <h3 data-i18n="settings.deleteAll">Delete everything</h3>
+                <p class="settings-desc" id="delete-all-note" data-i18n="settings.deleteAllDesc">Deletes what Juice Journal keeps on this PC for every account: sessions and loot, map results, the logs, the caches, the saved sign-ins and your settings (the language stays). The app then restarts at the sign-in screen.</p>
+                <div class="settings-actions-row">
+                  <button id="delete-all-local-data" class="btn btn-danger btn-small" type="button" aria-describedby="delete-all-note" aria-haspopup="dialog">
+                    <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#trash"/></svg>
+                    <span class="btn-label" data-i18n="settings.deleteAll">Delete everything</span>
                   </button>
                 </div>
               </div>
