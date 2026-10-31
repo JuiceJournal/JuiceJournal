@@ -420,7 +420,9 @@ test('unreadable journal smoke: warns on Dashboard and Sessions and starts a new
 
     // Repaired by hand before the click: main leaves it alone, and focus lands on End map, which shows while the map runs.
     fs.writeFileSync(journalPath, runningJournal);
-    await startNewButton.click();
+    // The click lands before the next refresh finds the repair and hides the notice; any refresh (prices loading for
+    // the running map) may come first, so the click is dispatched without waiting for the button to stay visible.
+    await startNewButton.dispatchEvent('click');
     await expect(page.locator('#toast-container .toast', { hasText: 'Your journal can be read now' })).toBeVisible();
     await expect(dashboardNotice).toBeHidden();
     await expect(page.locator('#end-session-btn')).toBeFocused();
