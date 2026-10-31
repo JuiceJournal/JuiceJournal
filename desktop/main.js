@@ -355,6 +355,23 @@ function migrateLegacyDefaultLeagueSetting() {
 
 migrateLegacyDefaultLeagueSetting();
 
+// Older versions left the Settings game alone when another game was played. Once, it moves to the last game played,
+// so the app agrees before that game starts again; a Settings choice made later stays.
+function migrateSettingsGameToLastDetected() {
+  if (store.get('_settingsGameMigrated')) {
+    return;
+  }
+
+  const lastDetectedVersion = normalizePoeVersion(store.get('lastDetectedPoeVersion'));
+  if (lastDetectedVersion && lastDetectedVersion !== store.get('poeVersion')) {
+    store.set('poeVersion', lastDetectedVersion);
+  }
+
+  store.set('_settingsGameMigrated', true);
+}
+
+migrateSettingsGameToLastDetected();
+
 // Global state
 let mainWindow = null;
 let tray = null;
@@ -3815,8 +3832,9 @@ function handleGameClosed(version, at = new Date()) {
  */
 function applyGameVersion(version, options = {}) {
   const previousDetectedVersion = store.get('lastDetectedPoeVersion');
-  const selectedSettingsVersion = store.get('poeVersion');
   store.set('lastDetectedPoeVersion', version);
+  // The Settings game follows the game being played, so screens that fall back to it agree after the game closes.
+  store.set('poeVersion', version);
   const storedPoePath = store.get('poePath');
   const versionChanged = version !== previousDetectedVersion;
   const runtimePriceVersion = priceService?.poeVersion === 'poe2'
@@ -3831,7 +3849,7 @@ function applyGameVersion(version, options = {}) {
   });
 
   if (shouldRetargetPriceService) {
-    // Runtime services should follow the detected game without changing the user's saved selection.
+    // Runtime services follow the detected game.
     priceService.setPoeVersion(version);
     priceService.clearCache();
   }
@@ -3861,7 +3879,7 @@ function applyGameVersion(version, options = {}) {
   if (mainWindow) {
     mainWindow.webContents.send('game-version-changed', {
       version,
-      settingsVersion: selectedSettingsVersion,
+      settingsVersion: version,
       lastDetectedVersion: version,
       logPath: detectedLogPath || store.get('poePath'),
       ...(runtimeSession ? { runtimeSession } : {})
