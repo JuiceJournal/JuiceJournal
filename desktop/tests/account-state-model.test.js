@@ -733,7 +733,7 @@ test('renderer logout clears normalized account state', async () => {
     lastMapResult: { id: 'map-result-1' },
     pricesSynced: true
   };
-  const context = loadFunctions(['handleLogout'], {
+  const context = loadFunctions(['handleLogout', 'showSignedOutWindow'], {
     state,
     stashState,
     clearActiveCharacterRefreshTimers: () => calls.push(['clearActiveCharacterRefreshTimers']),

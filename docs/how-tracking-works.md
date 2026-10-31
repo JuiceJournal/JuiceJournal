@@ -30,7 +30,7 @@ Sessions and their loot entries are written to a journal file per signed-in prof
 %APPDATA%\Juice Journal\profiles\<profile-id>\journal.json
 ```
 
-Settings, map results (per profile) and the cached character list are kept in `%APPDATA%\Juice Journal\config.json`. Nothing in the journal is uploaded anywhere. Settings → Data shows the `%APPDATA%\Juice Journal\` folder and opens it in File Explorer.
+Settings, map results (per profile) and the cached character list are kept in `%APPDATA%\Juice Journal\config.json`. Nothing in the journal is uploaded anywhere. Settings → Data shows the `%APPDATA%\Juice Journal\` folder and opens it in File Explorer. **Delete everything** there removes every profile's journal, the map results, the settings except the language, the saved sign-ins, the logs and the caches from this PC and restarts the app; runs you shared to an online server stay there.
 
 ## Prices: poe.ninja
 

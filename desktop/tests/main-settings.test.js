@@ -360,6 +360,14 @@ test('main overlay window is created lazily only when overlay state is visible',
     ['applyOverlayWindowVisibility', 'visible'],
     ['send', 'overlay-render-state']
   ]);
+
+  // A quit destroyed the overlay; one made after that would cancel the quit.
+  calls.length = 0;
+  context.overlayWindow = null;
+  context.app.isQuiting = true;
+  context.updateOverlayWindow();
+  assert.deepEqual(calls, [['isReady']]);
+  assert.equal(context.overlayWindow, null);
 });
 
 test('main overlay window is not created again while the app quits', () => {
@@ -1252,6 +1260,73 @@ test('main app shutdown cleans up main-process resources', () => {
   assert.equal(context.tray, null);
   assert.equal(context.overlayWindow, null);
   assert.equal(context.scanHotkeyGateInterval, null);
+});
+
+// On Windows, closing a window made with closable: false cancels app.quit(), and will-quit never comes. Delete
+// everything's restart and the tray's Quit both go through before-quit.
+test('a quit ends the run first, then destroys the overlay before it closes the windows', async () => {
+  const mainSource = fs.readFileSync(mainJsPath, 'utf8');
+  assert.ok(mainSource.includes("app.on('before-quit', handleAppBeforeQuit);"));
+  const quitEvent = () => ({
+    prevented: false,
+    preventDefault() {
+      this.prevented = true;
+    }
+  });
+
+  for (const outcome of ['ended', 'failed']) {
+    const calls = [];
+    let finishRun;
+    const overlayWindow = {
+      isDestroyed: () => false,
+      destroy: () => calls.push('overlay.destroy')
+    };
+    const context = loadFunctions(['handleAppBeforeQuit'], {
+      app: { quit: () => calls.push('app.quit') },
+      overlayWindow,
+      isFinalizingQuitSession: false,
+      didFinalizeQuitSession: false,
+      finalizeActiveSessionOnShutdown: () => new Promise((resolve, reject) => {
+        calls.push('finalize');
+        finishRun = outcome === 'ended' ? resolve : reject;
+      }),
+      console: { warn: () => calls.push('warn') }
+    });
+
+    const first = quitEvent();
+    context.handleAppBeforeQuit(first);
+    assert.equal(first.prevented, true, outcome);
+    assert.equal(context.app.isQuiting, true, outcome);
+    // The overlay stays while the run ends.
+    assert.deepEqual(calls, ['finalize'], outcome);
+
+    finishRun(outcome === 'ended' ? null : new Error('journal write failed'));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(calls, ['finalize', ...(outcome === 'ended' ? [] : ['warn']), 'overlay.destroy', 'app.quit'], outcome);
+    assert.equal(context.overlayWindow, null, outcome);
+
+    // The second quit goes through: nothing waits, and the run is not ended twice.
+    const second = quitEvent();
+    context.handleAppBeforeQuit(second);
+    assert.equal(second.prevented, false, outcome);
+    assert.equal(calls.filter((call) => call === 'finalize').length, 1, outcome);
+    assert.equal(calls.filter((call) => call === 'app.quit').length, 1, outcome);
+  }
+
+  // Without an overlay, or with one already gone, the quit goes on all the same.
+  for (const overlayWindow of [null, { isDestroyed: () => true, destroy: () => assert.fail('destroyed twice') }]) {
+    const calls = [];
+    const context = loadFunctions(['handleAppBeforeQuit'], {
+      app: { quit: () => calls.push('app.quit') },
+      overlayWindow,
+      isFinalizingQuitSession: false,
+      didFinalizeQuitSession: false,
+      finalizeActiveSessionOnShutdown: async () => null
+    });
+    context.handleAppBeforeQuit(quitEvent());
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(calls, ['app.quit']);
+  }
 });
 
 test('main quit destroys the overlay before Electron closes the windows', async () => {

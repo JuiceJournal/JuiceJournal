@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearLogs: () => ipcRenderer.invoke('clear-logs'),
   getJournalStatus: () => ipcRenderer.invoke('get-journal-status'),
   startNewJournal: () => ipcRenderer.invoke('start-new-journal'),
+  deleteAllLocalData: () => ipcRenderer.invoke('delete-all-local-data'),
 
   // Stash & Prices
   syncPrices: (options) => ipcRenderer.invoke('sync-prices', options),

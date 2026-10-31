@@ -1130,3 +1130,541 @@ test('after Clear logs, the next read of an unreadable journal is logged again',
   context.getJournalStatus();
   assert.deepEqual(warnings(), [[UNREADABLE_WARNING], [UNREADABLE_WARNING]]);
 });
+
+const DELETED_FOLDERS = ['profiles', 'icon-cache', 'ocr-cache', 'logs', 'Partitions'];
+// No maxRetries: rm repeats those at every folder level, so main tries the whole folder again instead.
+const RM_OPTIONS = { recursive: true, force: true };
+// A few of main.js's store defaults, null ones included: conf's clear() writes back only the defaults that are not null.
+const SMALL_DEFAULTS = {
+  apiUrl: 'http://localhost:3001',
+  onlineEnabled: false,
+  authToken: null,
+  authTokenEncrypted: null,
+  language: 'en',
+  localProfiles: {},
+  activeProfileId: null,
+  auditTrail: [],
+  poeOAuthTokens: null
+};
+const CLEARED_SETTINGS = { apiUrl: 'http://localhost:3001', onlineEnabled: false, language: 'en', localProfiles: {}, auditTrail: [] };
+const NULL_DEFAULT_KEYS = ['authToken', 'authTokenEncrypted', 'activeProfileId', 'poeOAuthTokens'];
+const DELETE_ALL_EVENTS = [
+  'unregisterAll',
+  'clearInterval gate',
+  'logParser.stop',
+  'gameDetector.stop',
+  'handleLogout',
+  'ocr.terminate',
+  ...DELETED_FOLDERS.map((folder) => `rm ${folder}`),
+  'store.clear',
+  'store.set language',
+  'clearCache',
+  'clearStorageData',
+  'relaunch',
+  'quit'
+];
+// Delete everything never reads a journal and never ends the active run into one.
+const NOT_CALLED = [
+  'readJournal', 'getJournalStore', 'loadActiveSession', 'endCurrentSession', 'finalizeActiveSessionOnShutdown',
+  'writeJournal', 'saveMapResultHistory'
+];
+
+// Delete everything over a real conf store and real folders in a temp data folder. Every step lands in one list; the
+// stubs in NOT_CALLED note any call.
+function loadDeleteAll(t, { functions = [], settings = {}, overrides = {} } = {}) {
+  const events = [];
+  const forbidden = [];
+  const spies = { captureOffAtStop: [], rmOptions: [], setInterval: [], persistedPoeTokens: [] };
+  const userData = makeTempDir(t);
+  const state = {
+    userDataPath: userData,
+    rm: (target, options) => fs.promises.rm(target, options),
+    terminate: async () => { },
+    clearCache: async () => { },
+    clearStorageData: async () => { }
+  };
+  const conf = new Conf({ cwd: userData, configName: 'config', defaults: SMALL_DEFAULTS });
+  for (const [key, value] of Object.entries(settings)) {
+    conf.set(key, value);
+  }
+  const store = {
+    get: (key) => conf.get(key),
+    set(key, value) {
+      events.push(`store.set ${key}`);
+      conf.set(key, value);
+    },
+    delete: (key) => conf.delete(key),
+    clear() {
+      events.push('store.clear');
+      conf.clear();
+    }
+  };
+  const record = (name) => () => {
+    events.push(name);
+  };
+  const logParser = {
+    isRunning: true,
+    stop() {
+      events.push('logParser.stop');
+      this.isRunning = false;
+    }
+  };
+  const syncScanHotkeys = () => { };
+  let loaded = null;
+  loaded = loadDataManagement(t, {
+    userData,
+    functions: [...DATA_FUNCTIONS, 'withTimeout', 'deleteAllLocalData', ...functions],
+    overrides: {
+      fs: {
+        ...fs,
+        promises: {
+          ...fs.promises,
+          rm: async (target, options) => {
+            events.push(`rm ${path.basename(target)}`);
+            spies.rmOptions.push(options);
+            return state.rm(target, options);
+          }
+        }
+      },
+      app: {
+        getPath: () => state.userDataPath,
+        relaunch: record('relaunch'),
+        quit: record('quit')
+      },
+      store,
+      require: (name) => (name === 'electron'
+        ? {
+          session: {
+            defaultSession: {
+              clearCache: () => {
+                events.push('clearCache');
+                return state.clearCache();
+              },
+              clearStorageData: () => {
+                events.push('clearStorageData');
+                return state.clearStorageData();
+              }
+            }
+          }
+        }
+        : require(name)),
+      setTimeout,
+      clearTimeout,
+      BROWSER_DATA_CLEAR_TIMEOUT_MS: 1000,
+      DELETE_ALL_FOLDER_ATTEMPTS: 3,
+      DELETE_ALL_FOLDER_RETRY_MS: 1,
+      globalShortcut: {
+        unregisterAll: () => {
+          events.push('unregisterAll');
+          spies.captureOffAtStop.push(loaded.errorLogState.disabled);
+        }
+      },
+      scanHotkeysActive: true,
+      scanHotkeyGateInterval: 'gate',
+      SCAN_HOTKEY_GATE_INTERVAL_MS: 500,
+      syncScanHotkeys,
+      setInterval: (callback, ms) => {
+        events.push('setInterval');
+        spies.setInterval.push([callback, ms]);
+        return 'new gate';
+      },
+      clearInterval: (id) => {
+        events.push(`clearInterval ${id}`);
+      },
+      logParser,
+      gameDetector: { stop: record('gameDetector.stop'), start: record('gameDetector.start') },
+      ocrScanner: {
+        terminate: () => {
+          events.push('ocr.terminate');
+          return state.terminate();
+        }
+      },
+      setupLogParser: record('setupLogParser'),
+      handleLogout: record('handleLogout'),
+      poeApiClient: { clearTokens: record('poe.clearTokens') },
+      apiClient: {
+        setToken: (token) => {
+          events.push(`api.setToken ${token}`);
+        }
+      },
+      currentSession: { id: 's1', status: 'active' },
+      journalStore: { profileId: 'p1' },
+      unreadableJournalProfileId: 'p1',
+      // What the real handleLogout calls, for the cases that load it.
+      appendAuditTrail: record('appendAuditTrail'),
+      stashAnalyzer: { clearAll: record('stashAnalyzer.clearAll') },
+      overlayMapResultState: { result: true },
+      clearOverlayMapResultDismissTimer: record('clearOverlayMapResultDismissTimer'),
+      updateOverlayWindow: record('updateOverlayWindow'),
+      persistPoeClientTokens: (tokens) => spies.persistedPoeTokens.push(tokens),
+      ...Object.fromEntries(NOT_CALLED.map((name) => [name, () => forbidden.push(name)])),
+      ...overrides
+    }
+  });
+  return {
+    ...loaded,
+    events,
+    forbidden,
+    spies,
+    state,
+    conf,
+    store,
+    logParser,
+    syncScanHotkeys,
+    count: (name) => events.filter((event) => event === name).length,
+    readSettings: () => JSON.parse(fs.readFileSync(path.join(userData, 'config.json'), 'utf8'))
+  };
+}
+
+test('Delete everything runs as the one data action and answers busy meanwhile', async (t) => {
+  const { context, events, state } = loadDeleteAll(t);
+  context.dataActionRunning = true;
+  assert.deepEqual(plain(await context.deleteAllLocalData()), { deleted: false, reason: 'busy' });
+  assert.deepEqual(events, []);
+  context.dataActionRunning = false;
+
+  let rmStarted;
+  const started = new Promise((resolve) => {
+    rmStarted = resolve;
+  });
+  let releaseRm;
+  const released = new Promise((resolve) => {
+    releaseRm = resolve;
+  });
+  // profiles waits until the test lets it fail; every attempt fails.
+  state.rm = async (target, options) => {
+    if (path.basename(target) !== 'profiles') return fs.promises.rm(target, options);
+    rmStarted();
+    await released;
+    throw Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' });
+  };
+
+  const first = context.deleteAllLocalData();
+  await started;
+  assert.equal(context.dataActionRunning, true);
+  assert.deepEqual(plain(await context.deleteAllLocalData()), { deleted: false, reason: 'busy' });
+  assert.deepEqual(plain(await context.clearLogs()), { busy: true });
+  releaseRm();
+  assert.deepEqual(plain(await first), { deleted: false, reason: 'failed', failed: ['profiles'] });
+  assert.equal(context.dataActionRunning, false);
+
+  state.rm = (target, options) => fs.promises.rm(target, options);
+  assert.deepEqual(plain(await context.deleteAllLocalData()), { deleted: true });
+});
+
+test('Delete everything stops the writers and signs out before its first wait, then deletes, resets and restarts', async (t) => {
+  const { context, events, spies, state, calls, errorLogState } = loadDeleteAll(t);
+  errorLogState.recent.set('main|error|first failure', { at: Date.now(), repeats: 2 });
+  let finishTerminate;
+  state.terminate = () => new Promise((resolve) => {
+    finishTerminate = resolve;
+  });
+
+  const deleting = context.deleteAllLocalData();
+  // Nothing awaited yet: a quit or a tray action from here on finds no run to end.
+  assert.deepEqual(events, DELETE_ALL_EVENTS.slice(0, DELETE_ALL_EVENTS.indexOf('ocr.terminate') + 1));
+  finishTerminate();
+  assert.deepEqual(plain(await deleting), { deleted: true });
+
+  assert.deepEqual(events, DELETE_ALL_EVENTS);
+  // The error log was off before the first writer stopped.
+  assert.deepEqual(spies.captureOffAtStop, [true]);
+  assert.deepEqual(plain(spies.rmOptions), DELETED_FOLDERS.map(() => RM_OPTIONS));
+  assert.equal(context.scanHotkeysActive, false);
+  assert.equal(context.scanHotkeyGateInterval, null);
+  assert.equal(context.journalStore, null);
+  assert.equal(context.unreadableJournalProfileId, null);
+  assert.equal(context.bugReport, null);
+  assert.equal(errorLogState.recent.size, 0);
+  assert.deepEqual(calls.console, []);
+});
+
+test('Delete everything drops the active run without ending it and forgets the Path of Exile sign-in', async (t) => {
+  const { context, forbidden, spies, count } = loadDeleteAll(t, { functions: ['handleLogout'] });
+
+  assert.deepEqual(plain(await context.deleteAllLocalData()), { deleted: true });
+
+  assert.deepEqual(forbidden, []);
+  assert.equal(context.currentSession, null);
+  assert.equal(count('poe.clearTokens'), 1);
+  assert.deepEqual(spies.persistedPoeTokens, [null]);
+  assert.equal(count('api.setToken null'), 1);
+  assert.equal(context.overlayMapResultState, null);
+});
+
+test('Delete everything removes every profile folder, readable or not, the caches and the logs, and reads no journal', async (t) => {
+  const { context, forbidden, userData } = loadDeleteAll(t);
+  writeFiles(userData, {
+    'profiles/p1/journal.json': BROKEN_JOURNAL,
+    [`profiles/p1/${BROKEN_NAME}`]: BROKEN_JOURNAL,
+    'profiles/p2/journal.json': '{"sessions":[]}',
+    [`icon-cache/${'a'.repeat(64)}.png`]: Buffer.alloc(10),
+    'ocr-cache/eng.traineddata': Buffer.alloc(10),
+    'logs/errors.jsonl': TWO_ERROR_LINES,
+    'Partitions/x/Preferences': '{}',
+    'Cache/Cache_Data/f_000001': Buffer.alloc(10)
+  });
+
+  assert.deepEqual(plain(await context.deleteAllLocalData()), { deleted: true });
+
+  for (const folder of DELETED_FOLDERS) {
+    assert.equal(fs.existsSync(path.join(userData, folder)), false, `${folder} should be gone`);
+  }
+  // Chromium's own folders are not removed; the session calls clear them.
+  assert.ok(fs.existsSync(path.join(userData, 'Cache', 'Cache_Data', 'f_000001')));
+  assert.ok(fs.existsSync(path.join(userData, 'config.json')));
+  assert.deepEqual(forbidden, []);
+});
+
+test('a folder that cannot be removed fails by name only; the other steps still run and nothing restarts', async (t) => {
+  const {
+    context, events, spies, state, calls, userData, errorLogState, syncScanHotkeys, readSettings, count
+  } = loadDeleteAll(t, { settings: { language: 'tr', theme: 'x' } });
+  writeFiles(userData, Object.fromEntries(DELETED_FOLDERS.map((folder) => [`${folder}/file.bin`, Buffer.alloc(10)])));
+  state.rm = (target, options) => (path.basename(target) === 'icon-cache'
+    ? Promise.reject(Object.assign(new Error(`EBUSY: resource busy or locked, rmdir '${target}'`), { code: 'EBUSY' }))
+    : fs.promises.rm(target, options));
+
+  const reply = plain(await context.deleteAllLocalData());
+
+  assert.deepEqual(reply, { deleted: false, reason: 'failed', failed: ['icon-cache'] });
+  for (const text of [userData, JSON.stringify(userData).slice(1, -1), 'EBUSY', 'rmdir']) {
+    assert.ok(!JSON.stringify(reply).includes(text), `the answer must not contain ${text}`);
+  }
+  for (const folder of DELETED_FOLDERS.filter((name) => name !== 'icon-cache')) {
+    assert.equal(fs.existsSync(path.join(userData, folder)), false, `${folder} should be gone`);
+  }
+  assert.ok(fs.existsSync(path.join(userData, 'icon-cache', 'file.bin')));
+  assert.deepEqual(readSettings(), { ...CLEARED_SETTINGS, language: 'tr' });
+  assert.equal(count('clearCache'), 1);
+  assert.equal(count('clearStorageData'), 1);
+  assert.equal(count('relaunch'), 0);
+  assert.equal(count('quit'), 0);
+  // Signed out, as at startup before a sign-in.
+  assert.deepEqual(spies.setInterval, [[syncScanHotkeys, 500]]);
+  assert.equal(context.scanHotkeyGateInterval, 'new gate');
+  assert.equal(count('gameDetector.start'), 1);
+  assert.equal(count('setupLogParser'), 1);
+  assert.equal(errorLogState.disabled, false);
+  assert.equal(context.dataActionRunning, false);
+  assert.deepEqual(calls.console, []);
+  assert.ok(events.indexOf('rm Partitions') < events.indexOf('setInterval'));
+
+  state.rm = (target, options) => fs.promises.rm(target, options);
+  assert.deepEqual(plain(await context.deleteAllLocalData()), { deleted: true });
+});
+
+test('a folder is tried again as a whole, three times at most, so a file held open fails it in well under a second', async (t) => {
+  const waits = [];
+  const { context, events, spies, state, userData } = loadDeleteAll(t, {
+    overrides: {
+      DELETE_ALL_FOLDER_RETRY_MS: 5,
+      setTimeout: (callback, ms) => {
+        waits.push(ms);
+        return setTimeout(callback, ms);
+      }
+    }
+  });
+  writeFiles(userData, { 'logs/errors.jsonl': TWO_ERROR_LINES, 'icon-cache/a.png': Buffer.alloc(10) });
+  const busy = (code) => Promise.reject(Object.assign(new Error(`${code}: resource busy or locked`), { code }));
+  let logsTries = 0;
+  state.rm = (target, options) => {
+    const folder = path.basename(target);
+    if (folder === 'icon-cache') return busy('EPERM');
+    // The other program lets go of the log before the last try.
+    logsTries += folder === 'logs' ? 1 : 0;
+    if (folder === 'logs' && logsTries < 3) return busy('EBUSY');
+    return fs.promises.rm(target, options);
+  };
+
+  assert.deepEqual(plain(await context.deleteAllLocalData()), { deleted: false, reason: 'failed', failed: ['icon-cache'] });
+
+  assert.deepEqual(events.filter((event) => event.startsWith('rm ')), [
+    'rm profiles',
+    'rm icon-cache', 'rm icon-cache', 'rm icon-cache',
+    'rm ocr-cache',
+    'rm logs', 'rm logs', 'rm logs',
+    'rm Partitions'
+  ]);
+  assert.equal(fs.existsSync(path.join(userData, 'logs')), false);
+  assert.ok(fs.existsSync(path.join(userData, 'icon-cache', 'a.png')));
+  // rm itself never retries; main waits between its own tries, twice for each of the two folders.
+  assert.deepEqual(plain(spies.rmOptions), spies.rmOptions.map(() => RM_OPTIONS));
+  assert.deepEqual(waits.filter((ms) => ms === 5), [5, 5, 5, 5]);
+});
+
+test('settings or browser data that cannot be cleared fail by name, and the other steps still run', async (t) => {
+  const settingsLocked = loadDeleteAll(t);
+  settingsLocked.store.clear = () => {
+    throw new Error("EPERM: operation not permitted, open 'C:\\Users\\Alice\\AppData\\Roaming\\Juice Journal\\config.json'");
+  };
+  const reply = plain(await settingsLocked.context.deleteAllLocalData());
+  assert.deepEqual(reply, { deleted: false, reason: 'failed', failed: ['settings'] });
+  assert.ok(!JSON.stringify(reply).includes('Alice'));
+  assert.equal(settingsLocked.count('clearCache'), 1);
+  assert.equal(settingsLocked.count('clearStorageData'), 1);
+  assert.equal(settingsLocked.count('relaunch'), 0);
+
+  const storageFails = loadDeleteAll(t);
+  storageFails.state.clearStorageData = async () => {
+    throw new Error('clearStorageData failed');
+  };
+  assert.deepEqual(plain(await storageFails.context.deleteAllLocalData()), { deleted: false, reason: 'failed', failed: ['browserData'] });
+  assert.deepEqual(storageFails.readSettings(), CLEARED_SETTINGS);
+  assert.equal(storageFails.count('relaunch'), 0);
+
+  // A clear that never ends counts as failed instead of holding the dialog busy for good.
+  const cacheHangs = loadDeleteAll(t, { overrides: { BROWSER_DATA_CLEAR_TIMEOUT_MS: 10 } });
+  cacheHangs.state.clearCache = () => new Promise(() => { });
+  assert.deepEqual(plain(await cacheHangs.context.deleteAllLocalData()), { deleted: false, reason: 'failed', failed: ['browserData'] });
+  assert.equal(cacheHangs.count('relaunch'), 0);
+  assert.equal(cacheHangs.context.dataActionRunning, false);
+  assert.equal(cacheHangs.errorLogState.disabled, false);
+});
+
+test('Delete everything keeps the language as it was set and resets every other setting', async (t) => {
+  const { context, conf, readSettings } = loadDeleteAll(t, {
+    settings: {
+      language: 'de',
+      apiUrl: 'http://127.0.0.1:9',
+      onlineEnabled: true,
+      authTokenEncrypted: 'y',
+      localProfiles: { p1: { id: 'p1', accountName: 'Someone' } },
+      activeProfileId: 'p1',
+      'mapResults:p1': [{ id: 'r1' }],
+      'lastKnownAccountState:p1': { accountName: 'Someone' },
+      poeOAuthTokensEncrypted: 'x',
+      legacyUserMigratedTo: 'p1',
+      auditTrail: AUDIT_ENTRIES,
+      _langMigrated: true,
+      theme: 'x'
+    }
+  });
+
+  assert.deepEqual(plain(await context.deleteAllLocalData()), { deleted: true });
+
+  // conf writes back only the defaults that are not null; the next start supplies the null ones again.
+  assert.deepEqual(readSettings(), { ...CLEARED_SETTINGS, language: 'de' });
+  for (const key of NULL_DEFAULT_KEYS) {
+    assert.equal(conf.get(key), undefined, `${key} should be gone`);
+  }
+
+  const noLanguage = loadDeleteAll(t, { settings: { language: null } });
+  assert.deepEqual(plain(await noLanguage.context.deleteAllLocalData()), { deleted: true });
+  assert.deepEqual(noLanguage.readSettings(), CLEARED_SETTINGS);
+});
+
+test('a successful Delete everything restarts once and stays busy until the process exits', async (t) => {
+  const { context, events, errorLogState, count } = loadDeleteAll(t);
+
+  assert.deepEqual(plain(await context.deleteAllLocalData()), { deleted: true });
+  const eventCount = events.length;
+  assert.deepEqual(plain(await context.deleteAllLocalData()), { deleted: false, reason: 'busy' });
+  assert.deepEqual(plain(await context.clearLogs()), { busy: true });
+
+  assert.equal(events.length, eventCount);
+  assert.equal(count('relaunch'), 1);
+  assert.equal(count('quit'), 1);
+  assert.equal(context.dataActionRunning, true);
+  assert.equal(errorLogState.disabled, true);
+});
+
+test('the quit after Delete everything writes no journal, map result or error log back', async (t) => {
+  let loaded = null;
+  const toErrorLog = (level) => (...args) => loaded.context.recordError('main', level, args);
+  loaded = loadDeleteAll(t, {
+    functions: ['handleLogout', 'getActiveProfile', 'getJournalStore', 'readJournal', 'loadActiveSession', 'finalizeActiveSessionOnShutdown'],
+    settings: { localProfiles: { p1: { id: 'p1' } }, activeProfileId: 'p1' },
+    overrides: {
+      Store: JournalStore,
+      localJournal,
+      journalStore: null,
+      unreadableJournalProfileId: null,
+      currentSession: null,
+      resolveShutdownSessionCompletion: async () => null,
+      buildSessionShutdownMapResult: () => ({}),
+      console: { log() { }, warn: toErrorLog('warn'), error: toErrorLog('error') }
+    }
+  });
+  const { context, forbidden, userData } = loaded;
+  writeFiles(userData, {
+    'profiles/p1/journal.json': JSON.stringify({ sessions: [{ id: 's1', status: 'active', mapName: 'Dunes Map' }] })
+  });
+  assert.equal(context.loadActiveSession().id, 's1');
+
+  assert.deepEqual(plain(await context.deleteAllLocalData()), { deleted: true });
+  // What before-quit runs next.
+  assert.equal(await context.finalizeActiveSessionOnShutdown(), null);
+
+  assert.deepEqual(forbidden, []);
+  for (const folder of ['profiles', 'logs']) {
+    assert.equal(fs.existsSync(path.join(userData, folder)), false, `${folder} should not come back`);
+  }
+});
+
+test('Delete everything removes no folder when the data folder is a drive root or not an absolute path', async (t) => {
+  const { context, events, state, count } = loadDeleteAll(t);
+  // Never the real removal here, even if the guard broke.
+  state.rm = async () => { };
+
+  for (const userDataPath of [path.parse(os.tmpdir()).root, '', 'Juice Journal']) {
+    state.userDataPath = userDataPath;
+    events.length = 0;
+    assert.deepEqual(plain(await context.deleteAllLocalData()), { deleted: false, reason: 'failed', failed: ['userData'] });
+    assert.ok(!events.some((event) => event.startsWith('rm ')), `nothing may be removed under ${JSON.stringify(userDataPath)}`);
+    assert.equal(count('store.clear'), 1);
+    assert.equal(count('clearStorageData'), 1);
+    assert.equal(count('relaunch'), 0);
+  }
+});
+
+test('a sign-out that fails still drops the run and the sign-in in memory, and nothing that writes a journal starts again', async (t) => {
+  const { context, events, count } = loadDeleteAll(t, {
+    overrides: {
+      handleLogout: () => {
+        throw new Error("EPERM: operation not permitted, open 'C:\\Users\\Alice\\AppData\\Roaming\\Juice Journal\\config.json'");
+      }
+    }
+  });
+
+  const reply = plain(await context.deleteAllLocalData());
+
+  assert.deepEqual(reply, { deleted: false, reason: 'failed', failed: ['signOut'] });
+  assert.ok(!JSON.stringify(reply).includes('Alice'));
+  assert.equal(context.currentSession, null);
+  assert.equal(count('poe.clearTokens'), 1);
+  assert.equal(count('api.setToken null'), 1);
+  assert.equal(context.journalStore, null);
+  for (const name of ['setInterval', 'gameDetector.start', 'setupLogParser', 'relaunch']) {
+    assert.ok(!events.includes(name), `${name} must not run`);
+  }
+  assert.equal(context.scanHotkeyGateInterval, null);
+  assert.equal(context.dataActionRunning, false);
+});
+
+test('a failed delete answers with its steps when the log parser cannot start, and starts no second parser', async (t) => {
+  const failBrowserData = async () => {
+    throw new Error('clearStorageData failed');
+  };
+  const parserThrows = loadDeleteAll(t, {
+    overrides: {
+      setupLogParser: () => {
+        throw new Error('Log file not found');
+      }
+    }
+  });
+  parserThrows.state.clearStorageData = failBrowserData;
+  assert.deepEqual(plain(await parserThrows.context.deleteAllLocalData()), { deleted: false, reason: 'failed', failed: ['browserData'] });
+  assert.equal(parserThrows.errorLogState.disabled, false);
+  assert.equal(parserThrows.context.dataActionRunning, false);
+
+  const parserRunning = loadDeleteAll(t);
+  parserRunning.state.clearStorageData = failBrowserData;
+  // A game check that was already under way started a parser again after the stop.
+  parserRunning.state.terminate = async () => {
+    parserRunning.logParser.isRunning = true;
+  };
+  assert.deepEqual(plain(await parserRunning.context.deleteAllLocalData()), { deleted: false, reason: 'failed', failed: ['browserData'] });
+  assert.equal(parserRunning.count('gameDetector.start'), 1);
+  assert.equal(parserRunning.count('setupLogParser'), 0);
+});
