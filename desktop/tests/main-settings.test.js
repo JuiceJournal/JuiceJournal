@@ -806,7 +806,7 @@ test('main apiUrl validation allows expected localhost ports and rejects credent
   assert.equal(context.isValidApiUrl('http://[fd00::1]:3001'), false);
 });
 
-test('runtime game detection keeps the selected settings version while emitting runtime payload to the renderer', () => {
+test('runtime game detection makes the detected game the Settings game and tells the renderer', () => {
   const {
     createRuntimeSessionState,
     applyRuntimeEvent,
@@ -884,9 +884,10 @@ test('runtime game detection keeps the selected settings version while emitting 
 
   context.applyGameVersion('poe2');
 
-  assert.equal(storeState.poeVersion, 'poe1');
+  assert.equal(storeState.poeVersion, 'poe2');
   assert.deepEqual(writes, [
     ['lastDetectedPoeVersion', 'poe2'],
+    ['poeVersion', 'poe2'],
     ['poePath', 'C:/Games/Path of Exile 2/logs/Client.txt']
   ]);
   assert.deepEqual(priceServiceCalls, [
@@ -898,7 +899,7 @@ test('runtime game detection keeps the selected settings version while emitting 
   assert.equal(messages.length, 1);
   assert.equal(messages[0].channel, 'game-version-changed');
   assert.equal(messages[0].payload.version, 'poe2');
-  assert.equal(messages[0].payload.settingsVersion, 'poe1');
+  assert.equal(messages[0].payload.settingsVersion, 'poe2');
   assert.equal(messages[0].payload.lastDetectedVersion, 'poe2');
   assert.equal(messages[0].payload.logPath, 'C:/Games/Path of Exile 2/logs/Client.txt');
   assert.equal(messages[0].payload.runtimeSession.currentInstance, null);
@@ -907,7 +908,7 @@ test('runtime game detection keeps the selected settings version while emitting 
   assert.match(messages[0].payload.runtimeSession.summary.clearedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
-test('runtime game detection retargets pricing when the detected game matches the prior detection but not the saved settings version', () => {
+test('runtime game detection retargets pricing and the Settings game when the detected game matches the prior detection', () => {
   const {
     createRuntimeSessionState,
     clearRuntimeSessionState,
@@ -974,7 +975,7 @@ test('runtime game detection retargets pricing when the detected game matches th
 
   context.applyGameVersion('poe2');
 
-  assert.deepEqual(writes, [['lastDetectedPoeVersion', 'poe2']]);
+  assert.deepEqual(writes, [['lastDetectedPoeVersion', 'poe2'], ['poeVersion', 'poe2']]);
   assert.deepEqual(priceServiceCalls, [
     ['setPoeVersion', 'poe2'],
     ['clearCache']
@@ -1414,6 +1415,45 @@ test('language migration backfills english only when no saved locale exists', ()
     ['language', 'en'],
     ['_langMigrated', true]
   ]);
+});
+
+test('Settings game migration moves a store left by an older build to the last game played, once', () => {
+  const load = (storeState, writes) => loadFunctions(['normalizePoeVersion', 'migrateSettingsGameToLastDetected'], {
+    store: {
+      get(key) {
+        return storeState[key];
+      },
+      set(key, value) {
+        storeState[key] = value;
+        writes.push([key, value]);
+      }
+    }
+  });
+
+  // An older build kept the Settings game on PoE 2 while PoE 1 was played.
+  const stale = { poeVersion: 'poe2', lastDetectedPoeVersion: 'poe1' };
+  const staleWrites = [];
+  const staleContext = load(stale, staleWrites);
+  staleContext.migrateSettingsGameToLastDetected();
+  assert.equal(stale.poeVersion, 'poe1');
+  assert.deepEqual(staleWrites, [['poeVersion', 'poe1'], ['_settingsGameMigrated', true]]);
+
+  // A Settings choice made after the migration stays on later launches.
+  stale.poeVersion = 'poe2';
+  staleContext.migrateSettingsGameToLastDetected();
+  assert.equal(stale.poeVersion, 'poe2');
+  assert.equal(staleWrites.length, 2);
+
+  // No game seen yet, or a Settings game that already matches, leaves the Settings game alone.
+  for (const storeState of [{ poeVersion: 'poe2' }, { poeVersion: 'poe1', lastDetectedPoeVersion: 'poe1' }]) {
+    const writes = [];
+    const { poeVersion } = storeState;
+    load(storeState, writes).migrateSettingsGameToLastDetected();
+    assert.equal(storeState.poeVersion, poeVersion);
+    assert.deepEqual(writes, [['_settingsGameMigrated', true]]);
+  }
+
+  assert.match(fs.readFileSync(mainJsPath, 'utf8'), /^migrateSettingsGameToLastDetected\(\);$/m);
 });
 
 test('setupLogParser forwards game session events from Client.txt to the renderer', () => {

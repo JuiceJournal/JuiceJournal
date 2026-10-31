@@ -2454,11 +2454,11 @@ function setupIPCListeners() {
 
   // Game detection
   if (window.electronAPI.onGameVersionChanged) {
-    window.electronAPI.onGameVersionChanged(({ version, logPath, runtimeSession }) => {
+    window.electronAPI.onGameVersionChanged(({ version, settingsVersion, logPath, runtimeSession }) => {
       if (runtimeSession) {
         setRuntimeSessionState(runtimeSession);
       }
-      syncRendererGameContext(version, { logPath });
+      syncRendererGameContext(version, { settingsVersion, logPath });
       refreshAccountStateFromCurrentUser();
       renderCharacterSummaryCard();
 

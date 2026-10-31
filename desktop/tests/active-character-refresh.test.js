@@ -399,6 +399,66 @@ test('game-version change triggers active character refresh scheduling for poe2'
   ]);
 });
 
+test('game-version change hands the Settings game to the renderer', () => {
+  const synced = [];
+  const context = loadFunctions(['setupIPCListeners'], {
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        onMapEntered() {},
+        onMapExited() {},
+        onSessionStarted() {},
+        onSessionEnded() {},
+        onLootAdded() {},
+        onGameVersionChanged(handler) {
+          this._handler = handler;
+        },
+        onNavigate() {}
+      }
+    },
+    showToast() {},
+    formatDuration() { return '0m 0s'; },
+    refreshTrackerData() {},
+    updateActiveSessionUI() {},
+    ensureSessionClock() {},
+    stopSessionClock() {},
+    isPageActive() { return false; },
+    renderAuditTrail() {},
+    renderProfitReport() {},
+    setRuntimeSessionState() {},
+    syncRendererGameContext(version, options) {
+      synced.push({ version, options });
+    },
+    refreshAccountStateFromCurrentUser() {},
+    renderCharacterSummaryCard() {},
+    scheduleActiveCharacterRefresh() {},
+    stashState: { pricesSynced: false },
+    elements: { priceItemCount: { textContent: '' } },
+    currencyState: { poeVersion: 'poe1', type: '' },
+    document: { querySelectorAll: () => [] },
+    updateTypeFilterDropdown() {},
+    loadCurrencyLeagues() {},
+    loadCurrencyPrices() {},
+    clearActiveCharacterRefreshTimers() {},
+    navigateTo() {},
+    state: {}
+  });
+
+  context.setupIPCListeners();
+  context.window.electronAPI._handler({
+    version: 'poe1',
+    settingsVersion: 'poe1',
+    lastDetectedVersion: 'poe1',
+    logPath: 'C:/Games/Client.txt'
+  });
+
+  // Main makes the detected game the Settings game, so the renderer must not fall back to its stale copy.
+  assert.equal(synced.length, 1);
+  assert.equal(synced[0].version, 'poe1');
+  assert.equal(synced[0].options.settingsVersion, 'poe1');
+  assert.equal(synced[0].options.logPath, 'C:/Games/Client.txt');
+});
+
 test('a GGG answer that lands after sign-out is dropped', async () => {
   const state = { currentUser: { id: 'profile-1' }, poeDeviceConnected: true, deviceCharactersByGame: {}, settings: {} };
   const rendered = [];
