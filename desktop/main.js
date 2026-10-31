@@ -3263,7 +3263,6 @@ function updateOverlayWindow({ character, runtimeSession } = {}) {
 
   if (overlayState.visibility !== 'hidden' && (!overlayWindow || overlayWindow.isDestroyed())) {
     const appReady = typeof app?.isReady === 'function' ? app.isReady() : true;
-    // A quit destroys the overlay before it closes the windows; one made after that would cancel the quit.
     if (appReady && !app?.isQuiting) {
       createOverlayWindow();
     }
@@ -5147,8 +5146,7 @@ function handleAppBeforeQuit(event) {
     .finally(() => {
       didFinalizeQuitSession = true;
       isFinalizingQuitSession = false;
-      // The overlay is made with closable: false, and on Windows closing such a window cancels the quit, so will-quit
-      // would never come. It goes before the quit closes the windows.
+      // The overlay is created with closable: false, and one window that cannot close cancels app.quit().
       if (overlayWindow && !overlayWindow.isDestroyed()) {
         overlayWindow.destroy();
         overlayWindow = null;
