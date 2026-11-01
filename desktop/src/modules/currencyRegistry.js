@@ -37,7 +37,7 @@ const POE1_ITEM_TYPES = [
 
 const POE2_CURRENCY_TYPES = [
   'Currency', 'Fragments', 'UncutGems', 'SoulCores',
-  'Idol', 'Runes', 'Essences', 'Expedition', 'Ultimatum', 'Vaal'
+  'Idols', 'Runes', 'Essences', 'Expedition', 'Ultimatum', 'Vaal'
 ];
 const POE2_ITEM_TYPES = [];
 
@@ -48,7 +48,7 @@ const POE1_QUICK_SYNC = [
 ];
 const POE2_QUICK_SYNC = [
   'Currency', 'Fragments', 'Essences', 'Runes',
-  'UncutGems', 'SoulCores', 'Idol', 'Vaal',
+  'UncutGems', 'SoulCores', 'Idols', 'Vaal',
   'Expedition', 'Ultimatum'
 ];
 

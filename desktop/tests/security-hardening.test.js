@@ -123,8 +123,10 @@ test('desktop renderer avoids raw HTML for toast and currency table rows', () =>
   assert.match(toastBody, /\.textContent\s*=/);
   assert.doesNotMatch(currencyBody, /tbody\.innerHTML\s*=\s*sorted\.map/);
   assert.match(currencyBody, /document\.createDocumentFragment\(\)/);
-  assert.match(currencyBody, /normalizeSafeImageSrc\(item\.iconUrl\)/);
+  assert.match(currencyBody, /createCurrencyItemSlot\(item\)/);
   assert.match(currencyBody, /tbody\.replaceChildren\(fragment\)/);
+  // A row's own art goes through the same image check as every other remote image.
+  assert.match(getFunctionBody(appJs, 'resolveCurrencyRowArt'), /normalizeSafeImageSrc\(item\?\.iconUrl\)/);
 });
 
 test('main records crashes with the monitor only', () => {

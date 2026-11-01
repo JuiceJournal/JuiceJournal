@@ -3226,6 +3226,8 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 /* ==================== CURRENCY PAGE ==================== */
+/* Market ledger: the title with the list's status line, a rail of item categories with their art and price counts,
+   and a fixed four-column table whose column labels stay under the app header while a long list scrolls. */
 .currency-header {
   margin-bottom: 0.9rem;
 }
@@ -3235,22 +3237,39 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 0.6rem;
+}
+
+.currency-heading {
+  min-width: 0;
 }
 
 .currency-header-top h2 {
   font-family: var(--font-display);
   font-size: 1.5rem;
   font-weight: 700;
+  line-height: 1.2;
   color: var(--text-bright);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   white-space: nowrap;
 }
 
+/* The listed league, its price count and when it was synced; Syncing... while a sync runs. */
+.currency-status {
+  min-height: 1.1rem;
+  margin-top: 0.15rem;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .currency-header-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
@@ -3294,18 +3313,58 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   cursor: pointer;
 }
 
+/* The search glyph leads and the clear button trails inside the field. */
+.currency-search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.currency-search-glyph {
+  position: absolute;
+  left: 0.55rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
 .currency-search {
-  padding: 0.35rem 0.6rem;
+  width: 220px;
+  padding: 0.35rem 1.75rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--bevel-sm);
   color: var(--text);
   font-family: var(--font);
   font-size: 0.75rem;
-  width: 160px;
 }
 
 .currency-search::placeholder { color: var(--text-muted); }
+
+.currency-search-clear {
+  position: absolute;
+  right: 0.25rem;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  border-radius: var(--bevel-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.currency-search-clear:hover {
+  color: var(--text);
+  background: rgb(var(--ink-rgb) / 0.05);
+}
+
+.currency-search-clear[hidden] { display: none; }
+
+/* Wide enough for the busy label too, so a running sync never moves the controls next to it. */
+#currency-sync-btn { min-inline-size: 8.5rem; }
+:lang(tr) #currency-sync-btn { min-inline-size: 14.5rem; }
 
 .currency-market-layout {
   display: grid;
@@ -3314,9 +3373,10 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   align-items: start;
 }
 
+/* The rail stays in view below the app header while the table scrolls. */
 .currency-type-panel {
   position: sticky;
-  top: 0.75rem;
+  top: calc(var(--header-height) + 0.75rem);
   min-width: 0;
   padding-top: 0.15rem;
 }
@@ -3340,38 +3400,30 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 
 .currency-type-tabs {
   display: grid;
-  gap: 0.24rem;
-  max-height: calc(100vh - 12.5rem);
+  gap: 0.2rem;
+  max-height: calc(100vh - var(--header-height) - 3rem);
   overflow-y: auto;
-  padding-right: 0.25rem;
+  padding: 2px 0.25rem 2px 2px;
 }
 
-/* Version-exclusive category badges */
-.currency-type-btn.poe1-exclusive {
-  box-shadow: none;
-}
-.currency-type-btn.poe2-exclusive {
-  box-shadow: none;
-}
-
+/* A tab is a full-width row: the category art in a small slot, the label and the tab's price count. */
 .currency-type-btn {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 0.32rem;
+  gap: 0.45rem;
   width: 100%;
-  padding: 0.34rem 0.5rem;
+  padding: 0.22rem 0.45rem 0.22rem 0.25rem;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--bevel-xs);
   color: var(--text-muted);
   font-family: var(--font);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 700;
+  text-align: left;
   cursor: pointer;
   transition: var(--transition);
   white-space: nowrap;
-  box-shadow: none;
 }
 
 .currency-type-btn:hover {
@@ -3380,42 +3432,65 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   border-color: var(--border);
 }
 
+/* The selected tab is a raised plate in a brass ring: no side stripe, no underline. */
 .currency-type-btn.active {
-  background: var(--gold-glow);
-  color: var(--text-bright);
+  background: rgb(var(--plate-raised-rgb) / 0.9);
   border-color: transparent;
-  box-shadow: inset 2px 0 0 var(--ember-hot);
+  box-shadow: inset 0 0 0 1px rgb(var(--brass-rgb) / 0.45);
+  color: var(--text-bright);
 }
 
-.currency-tab-icon {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  vertical-align: middle;
-  flex-shrink: 0;
+.currency-tab-slot {
+  --slot-size: 20px;
 }
 
+.currency-type-btn.active .currency-tab-slot {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--brass-rgb) / 0.7),
+    inset 0 2px 6px rgb(var(--shadow-rgb) / 0.6);
+}
+
+.currency-tab-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.currency-tab-count {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.currency-type-btn.active .currency-tab-count { color: var(--gold-light); }
+
+/* A tab with no prices in this league steps back, but still opens its empty state. */
+.currency-type-btn--empty:not(.active) { opacity: 0.55; }
+
+/* overflow: clip keeps the bevel without making the wrap a scroll container, so the header sticks to the page. */
 .currency-table-wrap {
-  overflow-x: auto;
+  overflow: clip;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--bevel);
-  margin-top: 0;
 }
 
+/* Fixed columns: the item takes the rest, so widths never jump between still, empty and listed rows. */
 .currency-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.8rem;
 }
 
-.currency-table thead {
-  background: var(--bg-base);
-  border-bottom: 1px solid var(--border);
-}
+.currency-col-chaos { width: 120px; }
+.currency-col-divine { width: 110px; }
+.currency-col-change { width: 150px; }
 
 .currency-table th {
-  padding: 0.55rem 0.6rem;
+  padding: 0;
   text-align: left;
   font-size: 0.68rem;
   font-weight: 600;
@@ -3423,53 +3498,100 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   white-space: nowrap;
-  user-select: none;
 }
 
-.currency-table th.sortable {
+/* The column labels stay under the app header on an opaque plate while a long list scrolls. */
+.currency-table thead th {
+  position: sticky;
+  top: var(--header-height);
+  z-index: 1;
+  background: var(--bg-base);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+/* Sort headers are buttons, so sorting works from the keyboard; aria-sort on the th names the order. */
+.currency-sort {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
   cursor: pointer;
   transition: var(--transition);
 }
 
-.currency-table th.sortable:hover { color: var(--text); }
-.currency-table th.sortable.active { color: var(--gold-light); }
+.currency-sort:hover { color: var(--text); }
+.currency-table th.active .currency-sort { color: var(--gold-light); }
 
-.currency-table th.sortable.active::after {
-  content: ' \25BC';
+.currency-table th.active .currency-sort::after {
+  content: '\25BC';
   font-size: 0.6rem;
 }
 
-.currency-table th.sortable.active.asc::after {
-  content: ' \25B2';
+.currency-table th.active.asc .currency-sort::after {
+  content: '\25B2';
 }
 
+/* Values line up on their last digit, as in a ledger. */
+.currency-th-chaos .currency-sort,
+.currency-th-divine .currency-sort,
+.currency-th-change .currency-sort { justify-content: flex-end; }
+
 .currency-table td {
-  padding: 0.4rem 0.6rem;
+  padding: 0.2rem 0.6rem;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 
-.currency-table tbody tr { transition: var(--transition); }
-.currency-table tbody tr:hover { background: var(--bg-card-hover); }
-
-.currency-td-num {
-  color: var(--text-muted);
-  font-size: 0.72rem;
+.currency-row {
+  height: 36px;
+  cursor: pointer;
+  transition: var(--transition);
 }
 
-.currency-td-name {
+.currency-row:hover,
+.currency-row[aria-expanded="true"] { background: var(--bg-card-hover); }
+
+/* One cell for the item: its art slot, the name (full name on hover) and, in All, its type. */
+.currency-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.currency-td-item .item-slot {
+  --slot-size: 28px;
+}
+
+.currency-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.currency-item-name,
+.currency-item-meta {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.currency-item-name {
   font-weight: 600;
   color: var(--text-bright);
-  white-space: nowrap;
 }
 
-.currency-type-badge {
-  display: inline-block;
-  padding: 0.1rem 0.45rem;
-  background: rgb(var(--ink-rgb) / 0.04);
-  border-radius: var(--bevel-sm);
-  font-size: 0.68rem;
-  color: var(--text-secondary);
+.currency-item-meta {
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 .currency-td-chaos, .currency-td-divine {
@@ -3479,18 +3601,6 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   white-space: nowrap;
 }
 
-/* The narrow columns keep fixed widths, so the name column takes the rest. */
-.currency-th-num { width: 40px; }
-.currency-th-icon { width: 44px; }
-.currency-th-trend { width: 96px; }
-
-/* A 32px item slot fits the 44px icon column only with slim side padding. */
-.currency-table .currency-th-icon,
-.currency-table .currency-td-icon { padding-inline: 6px; }
-
-/* Values line up on their last digit, as in a ledger. */
-.currency-table .currency-th-chaos,
-.currency-table .currency-th-divine,
 .currency-table .currency-td-chaos,
 .currency-table .currency-td-divine { text-align: right; }
 
@@ -3500,6 +3610,96 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 
 /* Tier colour only: the list is sorted by value, so a glow would light up its top rows. */
 .currency-td-chaos[data-profit-tier] { text-shadow: none; }
+
+/* 7d: the signed change with an arrow, so the direction never rests on colour alone, then the week's line. */
+.currency-change {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.currency-change-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  min-width: 4.2rem;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.currency-change[data-trend="up"] .currency-change-value { color: var(--gain); }
+.currency-change[data-trend="down"] .currency-change-value { color: var(--loss); }
+
+.currency-spark {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.currency-spark-tick {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+
+/* A row's detail opens under it: bigger art, both values, the week in a larger line and the name to copy. */
+.currency-table .currency-detail-row > td {
+  padding: 0;
+  background: rgb(var(--plate-deep-rgb) / 0.55);
+}
+
+.currency-detail {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.currency-detail-slot {
+  --slot-size: 48px;
+}
+
+.currency-detail-info {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.currency-detail-name {
+  color: var(--text-bright);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.currency-detail-type {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.currency-detail-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  font-size: 0.8rem;
+}
+
+.currency-detail-trend {
+  display: grid;
+  justify-items: end;
+  gap: 0.2rem;
+}
+
+.currency-detail-label {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 
 .currency-empty {
   text-align: center;
@@ -3514,7 +3714,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   font-size: 0.72rem;
 }
 
-.currency-table tbody tr.currency-row--placeholder:hover { background: none; }
+.currency-row--placeholder { height: 36px; }
 
 .currency-bar {
   display: inline-block;
@@ -3533,6 +3733,23 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   padding: 0.5rem 0.75rem;
   font-size: 0.72rem;
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Keyboard focus on the page's own controls: a brass ring, drawn inside where a parent clips it. */
+.currency-select:focus-visible,
+.currency-search:focus-visible,
+.currency-search-clear:focus-visible {
+  outline: 2px solid var(--gold-light);
+  outline-offset: 2px;
+}
+
+.poe-toggle-btn:focus-visible,
+.currency-type-btn:focus-visible,
+.currency-sort:focus-visible,
+.currency-row:focus-visible {
+  outline: 2px solid var(--gold-light);
+  outline-offset: -2px;
 }
 
 @media (max-width: 980px) {

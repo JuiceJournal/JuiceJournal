@@ -60,6 +60,7 @@ const NINJA_ITEM_TYPES = {
   basetype: 'base_type',
   soulcores: 'soul_core',
   idol: 'idol',
+  idols: 'idol',
   expedition: 'expedition',
   ultimatum: 'ultimatum',
   vaal: 'vaal'
@@ -115,16 +116,28 @@ function getPoe1LineDivineValue(line = {}, divineToChaos = null) {
   return roundPriceValue(chaosValue / divineToChaos);
 }
 
+// The exchange API names the 7-day series `sparkline`; PoE1's stash overviews name it `sparkLine`.
+function getLineSparkline(line = {}) {
+  return line.sparkLine ?? line.sparkline;
+}
+
 function getSparklineData(line = {}) {
   if (Array.isArray(line.receiveSparkLine?.data)) {
     return line.receiveSparkLine.data;
   }
 
-  if (Array.isArray(line.sparkline?.data)) {
-    return line.sparkline.data;
+  const sparkline = getLineSparkline(line);
+  if (Array.isArray(sparkline?.data)) {
+    return sparkline.data;
   }
 
-  return Array.isArray(line.sparkline) ? line.sparkline : [];
+  return Array.isArray(sparkline) ? sparkline : [];
+}
+
+// poe.ninja's change in % over the last 7 days, or null when it gives none.
+function getSparklineChange(line = {}) {
+  const change = Number((line.receiveSparkLine ?? getLineSparkline(line))?.totalChange);
+  return Number.isFinite(change) ? change : null;
 }
 
 function normalizeLookupKey(value) {
@@ -155,6 +168,8 @@ class PriceService {
     // The league priceMap holds, and whether every type was synced for it.
     this.league = null;
     this.fullySynced = false;
+    // The Currency page item types whose poe.ninja overviews the last sync read, so an empty one reads as no listings.
+    this.syncedTypes = new Set();
     this.syncQueue = Promise.resolve();
     // Bumped by clearCache, so a sync that was running then drops what it fetched.
     this.cacheGeneration = 0;
@@ -261,6 +276,7 @@ class PriceService {
   async syncPrices(league, options = {}) {
     // Filled apart and swapped in at the end, so readers such as OCR pricing never see a half-filled list.
     const prices = new Map();
+    const syncedTypes = new Set();
     const generation = this.cacheGeneration;
 
     // Get types from registry (version-aware, dynamic)
@@ -274,6 +290,7 @@ class PriceService {
       try {
         const data = await this._fetchCurrencyOverview(league, type);
         this._indexCurrencyData(data, type, prices);
+        syncedTypes.add(NINJA_ITEM_TYPES[type.toLowerCase()] || 'other');
       } catch (err) {
         console.error(`Price sync failed for currency/${type}:`, err.message);
       }
@@ -285,6 +302,7 @@ class PriceService {
         try {
           const data = await this._fetchItemOverview(league, type);
           this._indexItemData(data, type, prices);
+          syncedTypes.add(NINJA_ITEM_TYPES[type.toLowerCase()] || 'other');
         } catch (err) {
           console.error(`Price sync failed for item/${type}:`, err.message);
         }
@@ -302,6 +320,7 @@ class PriceService {
     }
 
     this.priceMap = prices;
+    this.syncedTypes = syncedTypes;
     this.lastFullSync = Date.now();
     this.league = league;
     this.fullySynced = options.full !== false;
@@ -327,6 +346,7 @@ class PriceService {
           // Another game's or league's prices must not read as these while this sync runs. Only a re-sync of the
           // same league keeps the last complete list readable.
           this.priceMap = new Map();
+          this.syncedTypes = new Set();
           this.league = null;
           this.fullySynced = false;
         }
@@ -357,22 +377,36 @@ class PriceService {
   }
 
   /**
-   * The synced league's prices in the shape the Currency page reads, most valuable first.
+   * The synced league's prices in the shape the Currency page reads, most valuable first, plus what the page says
+   * around the list: `total` matches before the limit, `typeCounts` prices per item type over the whole list (search
+   * and type ignored), and `syncedTypes` the item types the last sync read.
    */
-  listPrices({ type = '', search = '', limit } = {}) {
+  queryPrices({ type = '', search = '', limit } = {}) {
     const query = normalizeLookupKey(search);
-    return [...this.priceMap.values()]
-      .map((entry) => ({
+    const typeCounts = {};
+    const matches = [];
+    for (const entry of this.priceMap.values()) {
+      const price = {
         itemName: entry.name,
         itemType: NINJA_ITEM_TYPES[entry.category] || 'other',
         chaosValue: entry.chaosValue,
         divineValue: entry.divineValue,
         iconUrl: entry.icon,
-        sparklineData: { data: entry.sparkline || [] }
-      }))
-      .filter((price) => (!type || price.itemType === type) && (!query || price.itemName.toLowerCase().includes(query)))
-      .sort((left, right) => right.chaosValue - left.chaosValue)
-      .slice(0, Number.parseInt(limit, 10) || 500);
+        sparklineData: { data: entry.sparkline || [] },
+        change: Number.isFinite(entry.change) ? entry.change : null
+      };
+      typeCounts[price.itemType] = (typeCounts[price.itemType] || 0) + 1;
+      if ((!type || price.itemType === type) && (!query || price.itemName.toLowerCase().includes(query))) {
+        matches.push(price);
+      }
+    }
+    matches.sort((left, right) => right.chaosValue - left.chaosValue);
+    return {
+      prices: matches.slice(0, Number.parseInt(limit, 10) || 500),
+      total: matches.length,
+      typeCounts,
+      syncedTypes: [...this.syncedTypes]
+    };
   }
 
   /**
@@ -416,10 +450,12 @@ class PriceService {
           const entry = {
             chaosValue,
             divineValue,
-            category: type.toLowerCase(),
+            // PoE1 lists catalysts inside its Currency overview, under their own item category.
+            category: itemInfo.category === 'Catalysts' ? 'catalyst' : type.toLowerCase(),
             icon: itemInfo.image ? `https://web.poecdn.com${itemInfo.image}` : null,
             tradeId: itemInfo.id || null,
-            sparkline: Array.isArray(line.sparkline?.data) ? line.sparkline.data : []
+            sparkline: getSparklineData(line),
+            change: getSparklineChange(line)
           };
           this._addPrice(itemInfo.name, entry, prices);
           registryBatch.push({ name: itemInfo.name, ...entry });
@@ -448,7 +484,8 @@ class PriceService {
             category: type.toLowerCase(),
             icon: line.icon || details?.icon || null,
             tradeId: details?.tradeId || null,
-            sparkline: getSparklineData(line)
+            sparkline: getSparklineData(line),
+            change: getSparklineChange(line)
           };
           this._addPrice(name, entry, prices);
           registryBatch.push({ name, ...entry });
@@ -472,7 +509,8 @@ class PriceService {
         divineValue: line.divineValue || 0,
         category: type.toLowerCase(),
         icon: line.icon || null,
-        sparkline: line.sparkline?.data || [],
+        sparkline: getSparklineData(line),
+        change: getSparklineChange(line),
         listingCount: line.listingCount || 0
       };
       this._addPrice(line.name, entry, prices);
@@ -594,6 +632,7 @@ class PriceService {
     this.cacheGeneration += 1;
     this.cache.clear();
     this.priceMap.clear();
+    this.syncedTypes = new Set();
     this.lastFullSync = null;
     this.league = null;
     this.fullySynced = false;

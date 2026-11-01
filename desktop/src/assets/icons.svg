@@ -220,6 +220,13 @@
     </g>
   </symbol>
 
+  <symbol id="search" viewBox="0 0 24 24">
+    <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter">
+      <path d="M8 3.5h5l3.5 3.5v5L13 15.5H8L4.5 12V7z"/>
+      <path d="M15.5 14.5l5 5"/>
+    </g>
+  </symbol>
+
   <symbol id="warn" viewBox="0 0 24 24">
     <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter">
       <path d="M12 3.5l9 17H3z"/>
