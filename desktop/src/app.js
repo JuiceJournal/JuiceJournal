@@ -1977,8 +1977,8 @@ async function applyCachedItemIcons(container) {
   });
 }
 
-function createCurrencyValueElement(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1') {
-  const formatted = formatCurrencyAmount(value, type);
+function createCurrencyValueElement(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1', options = {}) {
+  const formatted = formatCurrencyAmount(value, type, options);
   const span = document.createElement('span');
   span.className = 'value-chip';
   span.append(`${formatted} `);
@@ -7324,6 +7324,7 @@ const POE1_CATEGORY_TYPES = [
   { value: 'catalyst', labelKey: 'category.catalyst', label: 'Catalyst', icon: 'catalyst' },
   { value: 'omen', labelKey: 'category.omen', label: 'Omen', icon: 'omen' },
   { value: 'tattoo', labelKey: 'category.tattoo', label: 'Tattoo', icon: 'tattoo' },
+  { value: 'rune', labelKey: 'category.runegraft', label: 'Runegraft', icon: null, glyph: 'chest' },
   { value: 'base_type', labelKey: 'category.baseType', label: 'Base Type', icon: null, glyph: 'chest' },
   { value: 'other', labelKey: 'category.other', label: 'Other', icon: null, glyph: 'chest' },
 ];
@@ -7340,6 +7341,7 @@ const POE2_CATEGORY_TYPES = [
   { value: 'idol', labelKey: 'category.idol', label: 'Idol', icon: 'idol' },
   { value: 'expedition', labelKey: 'category.expedition', label: 'Expedition', icon: 'expedition' },
   { value: 'ultimatum', labelKey: 'category.ultimatum', label: 'Ultimatum', icon: null, glyph: 'chest' },
+  { value: 'vaal', labelKey: 'category.vaal', label: 'Vaal', icon: null, glyph: 'chest' },
   { value: 'other', labelKey: 'category.other', label: 'Other', icon: null, glyph: 'chest' },
 ];
 
@@ -7385,8 +7387,8 @@ function getCurrencyCategoryList(poeVersion = currencyState.poeVersion) {
   return poeVersion === 'poe2' ? POE2_CATEGORY_TYPES : POE1_CATEGORY_TYPES;
 }
 
-// A price's item type in words: the game's own tab label, else the other game's (PoE 1 runegrafts are PoE 2 runes),
-// else the type spelled out. Never the raw snake_case key.
+// A price's item type in words: the game's own tab label (one 'rune' type is Runegraft in PoE 1 and Rune in PoE 2), else
+// the other game's, else the type spelled out. Never the raw snake_case key.
 function getCurrencyTypeLabel(itemType, poeVersion = currencyState.poeVersion) {
   const otherVersion = poeVersion === 'poe2' ? 'poe1' : 'poe2';
   const category = [...getCurrencyCategoryList(poeVersion), ...getCurrencyCategoryList(otherVersion)]
@@ -7919,7 +7921,7 @@ function renderCurrencyTable() {
     const divineCell = document.createElement('td');
     divineCell.className = 'currency-td-divine';
     if (Number.isFinite(divine) && divine > 0) {
-      divineCell.appendChild(createCurrencyValueElement(divine, 'divine', 18, currencyState.poeVersion));
+      divineCell.appendChild(createCurrencyValueElement(divine, 'divine', 18, currencyState.poeVersion, { markTiny: true }));
     } else {
       const muted = document.createElement('span');
       muted.className = 'text-muted';
@@ -8004,7 +8006,7 @@ function buildCurrencyDetailRow(item) {
   values.appendChild(createCurrencyValueElement(parseFloat(item.chaosValue) || 0, 'chaos', 18, currencyState.poeVersion));
   const divine = parseFloat(item.divineValue);
   if (Number.isFinite(divine) && divine > 0) {
-    values.appendChild(createCurrencyValueElement(divine, 'divine', 18, currencyState.poeVersion));
+    values.appendChild(createCurrencyValueElement(divine, 'divine', 18, currencyState.poeVersion, { markTiny: true }));
   }
   info.append(name, type, values);
 

@@ -371,6 +371,39 @@ test('PoE1 catalysts from the Currency overview list as catalysts', () => {
   assert.equal(registry.getCategory('Chaos Orb'), 'currency');
 });
 
+test('PoE2 Vaal items from the Currency overview list as Vaal, and soul cores stay soul cores', () => {
+  const service = new PriceService();
+  service.setPoeVersion('poe2');
+  const overview = (id, name, category) => ({
+    core: { primary: 'chaos', rates: {} },
+    items: [{ id, name, category }],
+    lines: [{ id, primaryValue: 2 }]
+  });
+
+  service._indexCurrencyData(overview('infuser', 'Ancient Infuser', 'Vaal'), 'Currency');
+  service._indexCurrencyData(overview('exalted', 'Exalted Orb', 'Currency'), 'Currency');
+  service._indexCurrencyData(overview('core', 'Soul Core of Tacati', 'Vaal'), 'SoulCores');
+
+  assert.deepEqual(service.queryPrices({ type: 'vaal' }).prices.map((price) => price.itemName), ['Ancient Infuser']);
+  assert.deepEqual(service.queryPrices({ type: 'currency' }).prices.map((price) => price.itemName), ['Exalted Orb']);
+  assert.deepEqual(service.queryPrices({ type: 'soul_core' }).prices.map((price) => price.itemName), ['Soul Core of Tacati']);
+  // Stash items read their category from the registry, which has these as Vaal before a sync too.
+  assert.equal(registry.getCategory('Ancient Infuser'), 'vaal');
+});
+
+test('a PoE1 item tagged Vaal in the Currency overview stays currency', () => {
+  const service = new PriceService();
+  service.setPoeVersion('poe1');
+  service._indexCurrencyData({
+    core: { primary: 'chaos', rates: {} },
+    items: [{ id: 'vaal-orb', name: 'Vaal Orb', category: 'Vaal' }],
+    lines: [{ id: 'vaal-orb', primaryValue: 2 }]
+  }, 'Currency');
+
+  assert.deepEqual(service.queryPrices({ type: 'currency' }).prices.map((price) => price.itemName), ['Vaal Orb']);
+  assert.equal(service.queryPrices({ type: 'vaal' }).prices.length, 0);
+});
+
 test('a sync records the item types it read, and PoE2 idols come from the Idols overview', async () => {
   const service = new PriceService();
   service.setPoeVersion('poe2');

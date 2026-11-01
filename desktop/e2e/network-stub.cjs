@@ -52,7 +52,7 @@ function poeNinjaResponse(url, params = {}) {
   if (url.includes('/economy/exchange/') && (params.type === 'Currency' || names.length > 0)) {
     const sparkline = (change) => (change === undefined ? undefined : { totalChange: change, data: [0, change / 2, change] });
     return {
-      core: { primary: 'chaos', rates: {} },
+      core: { primary: 'chaos', rates: prices['Divine Orb'] ? { divine: 1 / priceOf('Divine Orb').chaos } : {} },
       items: names.map((name, index) => ({ id: `e2e-${index}`, name })),
       lines: names.map((name, index) => ({
         id: `e2e-${index}`,

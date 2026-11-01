@@ -29,7 +29,7 @@
         </div>
         <h1>Juice Journal</h1>
       </div>
-      <nav class="nav" role="navigation" aria-label="Ana navigasyon">
+      <nav class="nav" role="navigation" aria-label="Main navigation" data-i18n-aria="nav.mainAria">
         <button class="nav-btn active" data-page="dashboard">
           <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#dashboard"/></svg>
           <span data-i18n="nav.dashboard">Dashboard</span>
@@ -60,20 +60,20 @@
         </button>
       </div>
       <div class="window-controls">
-        <button class="win-ctrl" id="win-minimize" aria-label="Kucult">
+        <button class="win-ctrl" id="win-minimize" aria-label="Minimize" data-i18n-aria="window.minimize">
           <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5" width="12" height="1.5" rx="0.75" fill="currentColor"/></svg>
         </button>
-        <button class="win-ctrl" id="win-maximize" aria-label="Buyut">
+        <button class="win-ctrl" id="win-maximize" aria-label="Maximize" data-i18n-aria="window.maximize">
           <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
         </button>
-        <button class="win-ctrl win-close" id="win-close" aria-label="Kapat">
+        <button class="win-ctrl win-close" id="win-close" aria-label="Close" data-i18n-aria="window.close">
           <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </button>
       </div>
     </header>
 
     <!-- Login Modal -->
-    <div id="login-modal" class="modal" role="dialog" aria-label="Path of Exile login">
+    <div id="login-modal" class="modal" role="dialog" aria-label="Path of Exile login" data-i18n-aria="login.dialogAria">
       <div class="modal-content">
         <div class="modal-shell">
           <div class="modal-art">
@@ -569,18 +569,18 @@
               <option value="completed" data-i18n="sessions.completed">Tamamlanmis</option>
               <option value="abandoned" data-i18n="sessions.abandoned">Iptal Edilmis</option>
             </select>
-            <select id="session-version-filter" aria-label="Filter sessions by game">
+            <select id="session-version-filter" aria-label="Filter sessions by game" data-i18n-aria="sessions.filterGameAria">
               <option value="all" data-i18n="sessions.allGames">All games</option>
               <option value="poe1">PoE 1</option>
               <option value="poe2">PoE 2</option>
             </select>
-            <select id="session-league-filter" aria-label="Filter sessions by league">
+            <select id="session-league-filter" aria-label="Filter sessions by league" data-i18n-aria="sessions.filterLeagueAria">
               <option value="all" data-i18n="sessions.allLeagues">All leagues</option>
             </select>
-            <select id="session-farm-filter" aria-label="Filter sessions by farm type">
+            <select id="session-farm-filter" aria-label="Filter sessions by farm type" data-i18n-aria="sessions.filterFarmAria">
               <option value="all" data-i18n="dashboard.allFarms">All farms</option>
             </select>
-            <input id="session-search-filter" type="search" data-i18n-placeholder="sessions.searchPlaceholder" placeholder="Search map, farm, league..." aria-label="Search sessions">
+            <input id="session-search-filter" type="search" data-i18n-placeholder="sessions.searchPlaceholder" placeholder="Search map, farm, league..." aria-label="Search sessions" data-i18n-aria="sessions.searchAria">
           </div>
         </div>
         <div class="inline-notice error journal-notice hidden" id="sessions-journal-notice" role="region" aria-labelledby="sessions-journal-notice-title">
@@ -614,16 +614,16 @@
             <p class="page-subtitle" data-i18n="farmingHub.subtitle">Public runs shared by players from their local ledger.</p>
           </div>
           <div class="filters farming-hub-filters">
-            <select id="farming-hub-version-filter" aria-label="Filter hub runs by game">
+            <select id="farming-hub-version-filter" aria-label="Filter hub runs by game" data-i18n-aria="farmingHub.filterGameAria">
               <option value="all" data-i18n="sessions.allGames">All games</option>
               <option value="poe1">PoE 1</option>
               <option value="poe2">PoE 2</option>
             </select>
-            <input id="farming-hub-league-filter" type="search" data-i18n-placeholder="farmingHub.leaguePlaceholder" placeholder="League" aria-label="Filter hub runs by league">
-            <select id="farming-hub-farm-filter" aria-label="Filter hub runs by farm type">
+            <input id="farming-hub-league-filter" type="search" data-i18n-placeholder="farmingHub.leaguePlaceholder" placeholder="League" aria-label="Filter hub runs by league" data-i18n-aria="farmingHub.filterLeagueAria">
+            <select id="farming-hub-farm-filter" aria-label="Filter hub runs by farm type" data-i18n-aria="farmingHub.filterFarmAria">
               <option value="all" data-i18n="dashboard.allFarms">All farms</option>
             </select>
-            <input id="farming-hub-min-profit-filter" type="number" min="0" step="1" data-i18n-placeholder="farmingHub.minProfitPlaceholder" placeholder="Min chaos" aria-label="Minimum profit">
+            <input id="farming-hub-min-profit-filter" type="number" min="0" step="1" data-i18n-placeholder="farmingHub.minProfitPlaceholder" placeholder="Min chaos" aria-label="Minimum profit" data-i18n-aria="farmingHub.minProfitAria">
             <button id="farming-hub-refresh-btn" class="btn btn-secondary btn-small" type="button">
               <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sync"/></svg>
               <span class="btn-label" data-i18n="farmingHub.refresh">Refresh</span>
@@ -641,7 +641,7 @@
               <span class="session-drawer-kicker" data-i18n="sessions.detailKicker">Run Detail</span>
               <h3 id="session-drawer-title">Session</h3>
             </div>
-            <button id="session-drawer-close" class="session-drawer-close" type="button" aria-label="Close">
+            <button id="session-drawer-close" class="session-drawer-close" type="button" aria-label="Close" data-i18n-aria="sessions.drawerCloseAria">
               <svg class="icon" width="18" height="18" aria-hidden="true"><use href="assets/icons.svg#close"/></svg>
             </button>
           </div>
@@ -758,7 +758,7 @@
       <section id="settings-page" class="page">
         <div class="settings-layout">
           <!-- Settings Sidebar -->
-          <nav class="settings-nav" role="tablist" aria-label="Settings categories">
+          <nav class="settings-nav" role="tablist" aria-label="Settings categories" data-i18n-aria="settings.categoriesAria">
             <button class="settings-nav-btn active" data-settings-tab="general" role="tab" aria-selected="true">
               <svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#sliders"/></svg>
               <span data-i18n="settings.general">Genel</span>

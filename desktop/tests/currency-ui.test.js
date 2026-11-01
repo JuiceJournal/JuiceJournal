@@ -588,7 +588,8 @@ test('the sorted column header says its order with aria-sort and the others carr
 });
 
 function descendantsWithClass(root, className) {
-  return root.children.flatMap((child) => [
+  // A chip's number is a text child, with no children of its own.
+  return (root.children || []).flatMap((child) => [
     ...(String(child.className).split(/\s+/).includes(className) ? [child] : []),
     ...descendantsWithClass(child, className)
   ]);
@@ -1051,10 +1052,10 @@ test('every category tab shows its bundled art or our line icon in a slot, never
   };
   // All is our layers icon; the tabs that are no game category, or have no current art, get our chest.
   const expectedGlyph = {
-    poe1: { '': 'layers', incubator: 'chest', base_type: 'chest', other: 'chest' },
-    poe2: { '': 'layers', ultimatum: 'chest', other: 'chest' }
+    poe1: { '': 'layers', incubator: 'chest', rune: 'chest', base_type: 'chest', other: 'chest' },
+    poe2: { '': 'layers', ultimatum: 'chest', vaal: 'chest', other: 'chest' }
   };
-  for (const [poeVersion, tabCount] of [['poe1', 19], ['poe2', 11]]) {
+  for (const [poeVersion, tabCount] of [['poe1', 20], ['poe2', 12]]) {
     const tabs = renderCategoryRail(poeVersion).match(/<button [\s\S]*?<\/button>/g) || [];
     assert.equal(tabs.length, tabCount, poeVersion);
 
@@ -1107,6 +1108,81 @@ test('rail tabs count the listed prices of their type, and a tab with none is di
   assert.deepEqual(tabs.map((tab) => tab.classes.size), [0, 0, 0, 0]);
 });
 
+test('every type a game can price has a rail tab, so the tabs add up to All', () => {
+  const priceServiceJs = fs.readFileSync(path.join(desktopRoot, 'src', 'modules', 'priceService.js'), 'utf8');
+  const start = priceServiceJs.indexOf('const NINJA_ITEM_TYPES = ') + 'const NINJA_ITEM_TYPES = '.length;
+  const itemTypeOf = vm.runInNewContext(`(${priceServiceJs.slice(start, priceServiceJs.indexOf('};', start) + 1)})`);
+  const registry = require('../src/modules/currencyRegistry');
+
+  for (const poeVersion of ['poe1', 'poe2']) {
+    registry.setPoeVersion(poeVersion);
+    // queryPrices files a type it cannot map under other.
+    const priced = [...registry.getCurrencyTypes(), ...registry.getItemTypes()]
+      .map((type) => itemTypeOf[type.toLowerCase()] || 'other');
+    assert.ok(priced.includes(poeVersion === 'poe1' ? 'rune' : 'vaal'), poeVersion);
+
+    const context = loadCurrencyHelpers({ poeVersion });
+    const tabs = context.getCurrencyCategoryList(poeVersion).map((category) => {
+      const count = { textContent: '' };
+      return { dataset: { type: category.value }, querySelector: () => count, classList: { toggle() {} }, count };
+    });
+    context.document.getElementById = () => ({ querySelectorAll: () => tabs });
+    context.currencyState.typeCounts = {};
+    for (const itemType of priced) {
+      assert.ok(tabs.some((tab) => tab.dataset.type === itemType), `${poeVersion} ${itemType} has no tab`);
+      context.currencyState.typeCounts[itemType] = (context.currencyState.typeCounts[itemType] || 0) + 1;
+    }
+    context.updateCurrencyTypeCounts();
+
+    const [all, ...rest] = tabs;
+    assert.equal(all.dataset.type, '');
+    assert.equal(Number(all.count.textContent), priced.length, poeVersion);
+    assert.equal(rest.reduce((sum, tab) => sum + Number(tab.count.textContent), 0), priced.length, poeVersion);
+  }
+});
+
+test('the Divine column and row detail mark a price too small to show, and leave the rest alone', () => {
+  const prices = [
+    { itemName: 'Half a Chaos', itemType: 'currency', chaosValue: 0.5, divineValue: 0.5 / 150 },
+    { itemName: 'Rounds Up', itemType: 'currency', chaosValue: 0.9, divineValue: 0.006 },
+    { itemName: 'Whole', itemType: 'currency', chaosValue: 225, divineValue: 1.5 },
+    { itemName: 'Unpriced', itemType: 'currency', chaosValue: 0.001, divineValue: 0 },
+    { itemName: 'Missing', itemType: 'currency', chaosValue: 3, divineValue: null }
+  ];
+  const { context, tbody } = loadCurrencyTableRenderer({ currencyState: { prices, sortField: 'none' } });
+  // The real chip and detail in place of the table harness's stand-ins.
+  context.window.profitCurrencyModel = require('../src/modules/profitCurrencyModel');
+  Object.assign(context, {
+    CURRENCY_NAMES: {},
+    getCurrencyAssetPath: (type) => `${type}.png`,
+    normalizeSafeImageSrc: (src) => src
+  });
+  loadAppFunctions(context, ['getProfitCurrencyModel', 'formatCurrencyAmount', 'createCurrencyValueElement', 'buildCurrencyDetailRow']);
+  // A chip's first child is its number, as text.
+  const chipText = (chip) => chip.children[0].trim();
+  const rowNamed = (name) => tbody.children.find((row) => descendantsWithClass(row, 'currency-item-name')[0].textContent === name);
+  const divineOf = (name) => rowNamed(name).children[2].children[0];
+
+  context.renderCurrencyTable();
+  assert.equal(chipText(divineOf('Half a Chaos')), '<0.01');
+  assert.equal(chipText(divineOf('Rounds Up')), '0.01');
+  assert.equal(chipText(divineOf('Whole')), '1.50');
+  // No price stays the dash it was.
+  for (const name of ['Unpriced', 'Missing']) {
+    assert.equal(divineOf(name).className, 'text-muted', name);
+    assert.equal(divineOf(name).textContent, '-', name);
+  }
+  // The chaos column keeps its rounding.
+  assert.equal(chipText(rowNamed('Unpriced').children[1].children[0]), '0');
+
+  const detailValues = (item) => descendantsWithClass(context.buildCurrencyDetailRow(item), 'currency-detail-values')[0].children;
+  assert.deepEqual(detailValues(prices[0]).map(chipText), ['0.50', '<0.01']);
+  assert.deepEqual(detailValues(prices[2]).map(chipText), ['225', '1.50']);
+  // No price, no Divine chip.
+  assert.deepEqual(detailValues(prices[3]).map(chipText), ['0']);
+  assert.deepEqual(detailValues(prices[4]).map(chipText), ['3.0']);
+});
+
 test('price types read as their localized tab label, never as the raw snake_case key', () => {
   const priceServiceJs = fs.readFileSync(path.join(desktopRoot, 'src', 'modules', 'priceService.js'), 'utf8');
   const typesBlock = priceServiceJs.slice(priceServiceJs.indexOf('const NINJA_ITEM_TYPES'), priceServiceJs.indexOf('};', priceServiceJs.indexOf('const NINJA_ITEM_TYPES')));
@@ -1122,9 +1198,9 @@ test('price types read as their localized tab label, never as the raw snake_case
     assert.equal(context.getCurrencyTypeLabel('divination_card', poeVersion), 'category.divCard');
     assert.equal(context.getCurrencyTypeLabel('delirium_orb', poeVersion), 'category.deliriumOrb');
     assert.equal(context.getCurrencyTypeLabel('soul_core', poeVersion), 'category.soulCore');
-    // PoE 1 has no Rune tab, but PoE 2's names its runegrafts' type too.
-    assert.equal(context.getCurrencyTypeLabel('rune', poeVersion), 'category.rune');
-    assert.equal(context.getCurrencyTypeLabel('vaal', poeVersion), 'Vaal');
+    // One type in each game's own word: PoE 1 runegrafts, PoE 2 runes. PoE 1 has no Vaal tab, but PoE 2's names it.
+    assert.equal(context.getCurrencyTypeLabel('rune', poeVersion), poeVersion === 'poe1' ? 'category.runegraft' : 'category.rune');
+    assert.equal(context.getCurrencyTypeLabel('vaal', poeVersion), 'category.vaal');
     assert.equal(context.getCurrencyTypeLabel('lineage_support_gem', poeVersion), 'Lineage Support Gem');
   }
 });
@@ -1145,10 +1221,13 @@ test('a price row takes its own art, then its category art, then our chest icon'
   assert.deepEqual(art(poe1, { itemType: 'fragment' }), { remote: '', bundled: 'assets/currency/poe1/fragment.png' });
   assert.deepEqual(art(poe2, { itemType: 'fragment' }), { remote: '', bundled: 'assets/currency/poe2/fragment.png' });
   assert.deepEqual(art(poe2, { itemType: 'idol' }), { remote: '', bundled: 'assets/currency/poe2/idol.png' });
-  // A Chaos Orb would read as the item's own art, and the types without a tab have no category art.
+  // A Chaos Orb would read as the item's own art, and the categories without current art have none to give. PoE 2's rune
+  // is not a PoE 1 runegraft, and a Vaal Orb would be a stand-in for PoE 2's Vaal items.
   for (const itemType of ['currency', 'other', 'rune', 'vaal', 'base_type']) {
     assert.deepEqual(art(poe1, { itemType }), { remote: '', bundled: '' }, itemType);
   }
+  assert.deepEqual(art(poe2, { itemType: 'vaal' }), { remote: '', bundled: '' });
+  assert.deepEqual(art(poe2, { itemType: 'rune' }), { remote: '', bundled: 'assets/currency/poe2/rune.png' });
   assert.deepEqual(art(poe1, { itemType: 'gem', iconUrl: 'javascript:alert(1)' }), { remote: '', bundled: 'assets/currency/poe1/gem.png' });
 
   // Every category art file the rows can fall back to exists.
