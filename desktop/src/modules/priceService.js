@@ -450,8 +450,11 @@ class PriceService {
           const entry = {
             chaosValue,
             divineValue,
-            // PoE1 lists catalysts inside its Currency overview, under their own item category.
-            category: itemInfo.category === 'Catalysts' ? 'catalyst' : type.toLowerCase(),
+            // PoE1 lists catalysts and PoE2 its Vaal items inside their Currency overview, under their own item category.
+            // Only there: PoE2's soul cores also read Vaal, in their own overview.
+            category: itemInfo.category === 'Catalysts'
+              ? 'catalyst'
+              : (this.poeVersion === 'poe2' && type === 'Currency' && itemInfo.category === 'Vaal' ? 'vaal' : type.toLowerCase()),
             icon: itemInfo.image ? `https://web.poecdn.com${itemInfo.image}` : null,
             tradeId: itemInfo.id || null,
             sparkline: getSparklineData(line),

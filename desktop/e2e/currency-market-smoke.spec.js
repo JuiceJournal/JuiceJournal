@@ -23,7 +23,9 @@ const LONG_CARD_NAME = 'The Card Whose Name Runs Far Past The Width Of Its Colum
 const PRICES = {
   'Divine Orb': 150,
   'Chaos Orb': 1,
+  'E2E Tiny Orb': 0.5,
   'Message in a Bottle': { chaos: 12, type: 'Fragment', change: -4.25 },
+  'E2E Runegraft': { chaos: 8, type: 'Runegraft' },
   [LONG_CARD_NAME]: { chaos: 5000, type: 'DivinationCard', change: 12.4 },
   ...Object.fromEntries(Array.from({ length: CARD_COUNT - 1 }, (_, index) => [
     `E2E Card ${String(index + 1).padStart(2, '0')}`,
@@ -191,18 +193,24 @@ test('currency market smoke: bundled art for rows without art, a localized type,
     await page.locator('.nav-btn[data-page="currency"]').click();
     await expect(page.locator('#currency-page')).toHaveClass(/active/);
     const rows = page.locator('#currency-table-body tr.currency-row');
-    await expect(rows).toHaveCount(CARD_COUNT + 3);
+    await expect(rows).toHaveCount(CARD_COUNT + 5);
     const total = Object.keys(PRICES).length;
     await expect(page.locator('#currency-status')).toContainText(`Standard · ${total} prices · Synced`);
     await expect(page.locator('#currency-footer')).toHaveText(`Showing ${total} of ${total}`);
 
     // Every rail tab has art or our line icon in its slot; the rail counts the listed prices.
     const tab = (type) => page.locator(`.currency-type-btn[data-type="${type}"]`);
-    await expect(page.locator('.currency-type-btn')).toHaveCount(19);
+    await expect(page.locator('.currency-type-btn')).toHaveCount(20);
     await expect(page.locator('.currency-tab-slot:empty')).toHaveCount(0);
     await expect(tab('')).toHaveAttribute('aria-pressed', 'true');
     await expect(tab('divination_card').locator('img')).toHaveAttribute('src', 'assets/currency/poe1/divination-card.png');
     await expect(tab('divination_card').locator('.currency-tab-count')).toHaveText(String(CARD_COUNT));
+    // Every listed price sits under a tab, so the tabs add up to All.
+    await expect(tab('rune').locator('.currency-tab-label')).toHaveText('Runegraft');
+    await expect(tab('rune').locator('.currency-tab-count')).toHaveText('1');
+    await expect(tab('').locator('.currency-tab-count')).toHaveText(String(total));
+    const tabCounts = await page.locator('.currency-type-btn:not([data-type=""]) .currency-tab-count').allTextContents();
+    expect(tabCounts.reduce((sum, count) => sum + Number(count), 0)).toBe(total);
     // The quick sync reads no base types, so that tab is empty and steps back.
     await expect(tab('base_type')).toHaveClass(/currency-type-btn--empty/);
 
@@ -216,6 +224,8 @@ test('currency market smoke: bundled art for rows without art, a localized type,
     await expect(row('Message in a Bottle').locator('.item-slot img')).toHaveAttribute('src', 'assets/currency/poe1/fragment.png');
     await expect(row('Chaos Orb').locator('.item-slot use')).toHaveAttribute('href', 'assets/icons.svg#chest');
     await expect(page.locator('img[data-icon-url]')).toHaveCount(0);
+    // 0.5 chaos at 150c/div is a real price too small for two decimals, and the Divine column says so.
+    await expect(row('E2E Tiny Orb').locator('.currency-td-divine .value-chip')).toHaveText('<0.01');
     // The 7d column reads as signed text with an arrow, not colour alone.
     await expect(longCard.locator('.currency-change')).toHaveAttribute('data-trend', 'up');
     await expect(longCard.locator('.currency-change-value')).toHaveText('+12.4%');
@@ -265,6 +275,21 @@ test('currency market smoke: bundled art for rows without art, a localized type,
     await expect(rows.nth(2)).toHaveAttribute('tabindex', '0');
     await expect(page.locator('#currency-table-body tr.currency-row[tabindex="0"]')).toHaveCount(1);
     await page.locator('#currency-page').screenshot({ path: testInfo.outputPath('currency-detail.png') });
+
+    // The window controls and filters read in the app's language, not hard-coded Turkish.
+    await expect(page.locator('#win-minimize')).toHaveAttribute('aria-label', 'Minimize');
+    await expect(page.locator('.nav')).toHaveAttribute('aria-label', 'Main navigation');
+    const ariaInTurkish = await page.evaluate(() => {
+      const previous = window._appState.language;
+      window._appState.language = 'tr';
+      window.applyTranslations();
+      const labels = ['win-minimize', 'session-drawer-close', 'session-version-filter']
+        .map((id) => document.getElementById(id).getAttribute('aria-label'));
+      window._appState.language = previous;
+      window.applyTranslations();
+      return labels;
+    });
+    expect(ariaInTurkish).toEqual(['Kucult', 'Kapat', "Session'lari oyuna gore filtrele"]);
 
     // A search that matches nothing offers to clear it.
     await page.locator('#currency-search').fill('zzzz');

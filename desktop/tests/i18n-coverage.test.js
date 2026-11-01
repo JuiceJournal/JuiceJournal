@@ -45,7 +45,7 @@ function extractDesktopUsedKeys() {
   const appSource = read(path.join(desktopDir, 'src', 'app.js'));
   const mainSource = read(path.join(desktopDir, 'main.js'));
 
-  for (const [, key] of html.matchAll(/data-i18n(?:-placeholder|-aria)?="([^"]+)"/g)) {
+  for (const [, key] of html.matchAll(/data-i18n(?:-placeholder|-aria|-title)?="([^"]+)"/g)) {
     keys.add(key);
   }
 
@@ -441,6 +441,68 @@ test('desktop index.html options and placeholders are localized', () => {
     if (!fixedPlaceholders.has(placeholder)) {
       assert.match(tag, /data-i18n-placeholder="/, `placeholder "${placeholder}" has no data-i18n-placeholder`);
     }
+  }
+});
+
+test('desktop aria-labels and titles are bound to translations in en and tr', () => {
+  const translations = loadDesktopTranslations();
+  const html = read(path.join(desktopDir, 'src', 'index.html'));
+  const appSource = read(path.join(desktopDir, 'src', 'app.js'));
+  const assertBound = (tag, attribute, binding) => {
+    const key = tag.match(new RegExp(`\\s${binding}="([^"]+)"`))?.[1];
+    assert.ok(key, `${attribute} without ${binding}: ${tag}`);
+    assert.ok(translations.en[key], `Missing en string for ${key}`);
+    assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
+    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
+  };
+
+  const labelled = [...html.matchAll(/<[a-z][^>]*\saria-label="[^"]*"[^>]*>/g)].map(([tag]) => tag);
+  assert.ok(labelled.length >= 20, String(labelled.length));
+  labelled.forEach((tag) => assertBound(tag, 'aria-label', 'data-i18n-aria'));
+  for (const [tag] of html.matchAll(/<[a-z][^>]*\stitle="[^"]*"[^>]*>/g)) {
+    assertBound(tag, 'title', 'data-i18n-title');
+  }
+  // Built in app.js, an aria-label comes from t() as well.
+  assert.deepEqual(appSource.match(/aria-label="(?!\$\{window\.t\()[^"]*"/g), null);
+  assert.deepEqual(appSource.match(/setAttribute\('aria-label',(?!\s*window\.t\()[^)]*\)/g), null);
+});
+
+test('applyTranslations gives the index.html aria-labels the current language', () => {
+  const html = read(path.join(desktopDir, 'src', 'index.html'));
+  const labelled = [...html.matchAll(/<[a-z][^>]*\saria-label="[^"]*"[^>]*>/g)].map(([tag]) => {
+    const attributes = { id: tag.match(/\sid="([^"]*)"/)?.[1], 'data-i18n-aria': tag.match(/\sdata-i18n-aria="([^"]*)"/)?.[1] };
+    return { attributes, getAttribute: (name) => attributes[name], setAttribute: (name, value) => { attributes[name] = value; } };
+  });
+  const labelOf = (id) => labelled.find((element) => element.attributes.id === id).attributes['aria-label'];
+
+  for (const [language, minimize, maximize, close, drawerClose, sessionGame] of [
+    ['en', 'Minimize', 'Maximize', 'Close', 'Close', 'Filter sessions by game'],
+    ['tr', 'Kucult', 'Buyut', 'Kapat', 'Kapat', "Session'lari oyuna gore filtrele"]
+  ]) {
+    const context = vm.createContext({
+      window: { _appState: { language } },
+      document: { querySelectorAll: (selector) => (selector === '[data-i18n-aria]' ? labelled : []), documentElement: {} },
+      console,
+    });
+    vm.runInContext(read(path.join(desktopDir, 'src', 'modules', 'translations.js')), context);
+
+    context.window.applyTranslations();
+
+    assert.equal(labelOf('win-minimize'), minimize);
+    assert.equal(labelOf('win-maximize'), maximize);
+    assert.equal(labelOf('win-close'), close);
+    assert.equal(labelOf('session-drawer-close'), drawerClose);
+    assert.equal(labelOf('session-version-filter'), sessionGame);
+  }
+  // The markup's own text is what shows before the first pass, and it is not Turkish.
+  assert.doesNotMatch(html, /aria-label="(?:Ana navigasyon|Kucult|Buyut|Kapat)"/);
+});
+
+test('the Vaal and Runegraft rail tabs have their strings in en and tr', () => {
+  const translations = loadDesktopTranslations();
+  for (const language of ['en', 'tr']) {
+    assert.equal(translations[language]['category.vaal'], 'Vaal');
+    assert.equal(translations[language]['category.runegraft'], 'Runegraft');
   }
 });
 

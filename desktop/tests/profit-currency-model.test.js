@@ -96,3 +96,18 @@ test('currency amounts group thousands and drop decimals the size of the number 
   assert.equal(formatCurrencyAmount(-0.001, 'chaos'), '0');
   assert.equal(formatCurrencyAmount(0.001, 'chaos', { signed: true }), '0');
 });
+
+test('only a caller that asks for it sees a tiny price as <0.01', () => {
+  const { formatCurrencyAmount } = loadModel();
+
+  // 0.5 chaos at 150c/div. The overlay and the other callers keep their rounding.
+  assert.equal(formatCurrencyAmount(0.5 / 150, 'divine'), '0');
+  assert.equal(formatCurrencyAmount(0.5 / 150, 'divine', { signed: true }), '0');
+  assert.equal(formatCurrencyAmount(0.5 / 150, 'divine', { markTiny: true }), '<0.01');
+  // A value that still rounds to something shows that; zero, garbage and a negative are no tiny prices.
+  assert.equal(formatCurrencyAmount(0.006, 'divine', { markTiny: true }), '0.01');
+  assert.equal(formatCurrencyAmount(1.5, 'divine', { markTiny: true }), '1.50');
+  assert.equal(formatCurrencyAmount(0, 'divine', { markTiny: true }), '0');
+  assert.equal(formatCurrencyAmount('not a number', 'divine', { markTiny: true }), '0');
+  assert.equal(formatCurrencyAmount(-0.001, 'divine', { markTiny: true }), '0');
+});

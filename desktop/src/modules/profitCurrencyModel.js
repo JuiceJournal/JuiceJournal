@@ -73,7 +73,8 @@
 
   // The number next to a currency icon: chaos drops decimals once it is large, divine and mirror keep two below 10,
   // thousands are grouped. It rounds first, so a value that rounds into the next band takes that band's precision.
-  function formatCurrencyAmount(value, type = 'chaos', { signed = false } = {}) {
+  // `markTiny` shows a real price too small for two decimals as '<0.01', so it never reads as worth nothing.
+  function formatCurrencyAmount(value, type = 'chaos', { signed = false, markTiny = false } = {}) {
     const num = parseFloat(value);
     if (!Number.isFinite(num) || num === 0) {
       return '0';
@@ -85,7 +86,7 @@
     const digits = digitsFor(Math.abs(Number(num.toFixed(digitsFor(Math.abs(num))))));
     const rounded = Number(num.toFixed(digits));
     if (rounded === 0) {
-      return '0';
+      return markTiny && num > 0 ? '<0.01' : '0';
     }
 
     const formatted = rounded.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
