@@ -54,7 +54,7 @@
       <div class="user-info">
         <span id="username">Misafir</span>
         <div class="user-avatar" id="user-avatar">?</div>
-        <button id="logout-btn" class="btn btn-ghost btn-small">
+        <button id="logout-btn" class="btn btn-ghost btn-small" data-i18n-title="user.logout" title="Cikis">
           <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sign-out"/></svg>
           <span class="btn-label" data-i18n="user.logout">Cikis</span>
         </button>
@@ -174,7 +174,7 @@
             <svg class="icon" width="26" height="26" aria-hidden="true"><use href="assets/icons.svg#map"/></svg>
           </div>
           <div class="map-session-copy">
-            <p class="modal-kicker">Atlas Ledger</p>
+            <p class="modal-kicker" data-i18n="mapSession.kicker">Atlas Ledger</p>
             <h2 id="map-session-title">Start New Map</h2>
             <p class="modal-subtitle compact">Name this run before tracking starts. Use the in-game area name when it is available.</p>
           </div>
@@ -182,11 +182,11 @@
             <span id="map-session-context">PoE Session</span>
             <strong id="map-session-default-name">Unknown Map</strong>
           </div>
-          <label class="map-session-label" for="map-session-name-input">Map name</label>
+          <label class="map-session-label" for="map-session-name-input" data-i18n="mapSession.mapName">Map name</label>
           <input id="map-session-name-input" type="text" autocomplete="off" spellcheck="false" placeholder="Dunes Map, City Square Map">
-          <label class="map-session-label" for="map-session-farm-type-select">Farm type</label>
+          <label class="map-session-label" for="map-session-farm-type-select" data-i18n="dashboard.farmType">Farm type</label>
           <select id="map-session-farm-type-select" class="map-session-select">
-            <option value="">No farm type</option>
+            <option value="" data-i18n="dashboard.noFarmType">No farm type</option>
           </select>
           <div class="map-session-actions">
             <button id="map-session-cancel-btn" type="button" class="btn btn-secondary">Cancel</button>
@@ -207,34 +207,46 @@
             <svg class="icon" width="26" height="26" aria-hidden="true"><use href="assets/icons.svg#publish"/></svg>
           </div>
           <div class="map-session-copy">
-            <p class="modal-kicker">Farming Hub</p>
-            <h2 id="farm-publish-title">Share Farm Result</h2>
-            <p class="modal-subtitle compact">Publish the selected local run with only safe summary data. Add setup notes for scarabs, tablets, atlas tree, or missing costs.</p>
+            <p class="modal-kicker" data-i18n="farmingHub.title">Farming Hub</p>
+            <h2 id="farm-publish-title" data-i18n="farmPublish.title">Share Farm Result</h2>
+            <p class="modal-subtitle compact" data-i18n="farmPublish.subtitle">Publish the selected local run with only safe summary data. Add setup notes for scarabs, tablets, atlas tree, or missing costs.</p>
           </div>
           <div class="map-session-context">
-            <span>Selected run</span>
+            <span data-i18n="farmPublish.selectedRun">Selected run</span>
             <strong id="farm-publish-summary">Unknown farm</strong>
           </div>
-          <label class="map-session-label" for="farm-publish-visibility">Visibility</label>
+          <label class="map-session-label" for="farm-publish-visibility" data-i18n="farmPublish.visibility">Visibility</label>
           <select id="farm-publish-visibility" class="map-session-select">
-            <option value="public">Public</option>
-            <option value="unlisted">Unlisted</option>
-            <option value="private">Private draft</option>
+            <option value="public" data-i18n="farmPublish.public">Public</option>
+            <option value="unlisted" data-i18n="farmPublish.unlisted">Unlisted</option>
+            <option value="private" data-i18n="farmPublish.private">Private draft</option>
           </select>
-          <label class="map-session-label" for="farm-publish-description">Setup notes</label>
-          <textarea id="farm-publish-description" maxlength="1200" placeholder="Optional: scarabs, tablets, atlas tree, investment notes, or anything GGG does not expose."></textarea>
+          <label class="map-session-label" for="farm-publish-description" data-i18n="farmPublish.setupNotes">Setup notes</label>
+          <textarea id="farm-publish-description" maxlength="1200" data-i18n-placeholder="farmPublish.setupNotesPlaceholder" placeholder="Optional: scarabs, tablets, atlas tree, investment notes, or anything GGG does not expose."></textarea>
           <div class="farm-publish-check">
             <input id="farm-publish-investment-known" type="checkbox">
-            <label for="farm-publish-investment-known">Investment is fully known</label>
+            <label for="farm-publish-investment-known" data-i18n="farmPublish.investmentKnown">Investment is fully known</label>
           </div>
           <div class="map-session-actions">
-            <button id="farm-publish-cancel-btn" type="button" class="btn btn-secondary">Cancel</button>
+            <button id="farm-publish-cancel-btn" type="button" class="btn btn-secondary" data-i18n="farmPublish.cancel">Cancel</button>
             <button id="farm-publish-confirm-btn" type="submit" class="btn btn-primary">
               <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#publish"/></svg>
-              <span>Publish</span>
+              <span data-i18n="farmPublish.publish">Publish</span>
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Reset Settings Modal -->
+    <div id="reset-settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="reset-settings-title" aria-describedby="reset-settings-body">
+      <div class="modal-content reset-settings-content">
+        <h2 id="reset-settings-title" data-i18n="settings.resetTitle">Reset settings?</h2>
+        <p class="modal-subtitle" id="reset-settings-body" data-i18n="settings.resetConfirm">Are you sure you want to reset all settings to defaults?</p>
+        <div class="map-session-actions">
+          <button id="reset-settings-cancel" type="button" class="btn btn-secondary" data-i18n="settings.resetCancel">Cancel</button>
+          <button id="reset-settings-confirm" type="button" class="btn btn-primary" data-i18n="settings.reset">Reset to Defaults</button>
+        </div>
       </div>
     </div>
 
@@ -323,12 +335,12 @@
                 </div>
               </div>
               <div class="form-group session-farm-field">
-                <label for="session-farm-type-select">Farm Type</label>
+                <label for="session-farm-type-select" data-i18n="dashboard.farmType">Farm type</label>
                 <div class="input-with-btn">
                   <select id="session-farm-type-select">
-                    <option value="">No farm type</option>
+                    <option value="" data-i18n="dashboard.noFarmType">No farm type</option>
                   </select>
-                  <button id="clear-farm-type-btn" class="btn btn-secondary btn-small" type="button">Clear</button>
+                  <button id="clear-farm-type-btn" class="btn btn-secondary btn-small" type="button" data-i18n="dashboard.clearFarmType">Clear</button>
                 </div>
               </div>
               <div id="active-session">
@@ -362,7 +374,7 @@
             <!-- Last Map Result -->
             <div class="card last-map-result-card" id="last-map-result-card" data-result-state="empty">
               <div class="card-header">
-                <h3>Last Map Result</h3>
+                <h3 data-i18n="dashboard.lastMapResult">Last Map Result</h3>
               </div>
               <div class="map-result-summary">
                 <strong id="last-map-result-farm-type">No completed map yet</strong>
@@ -376,9 +388,9 @@
 
             <div class="card map-result-history-card" id="map-result-history-card" hidden>
               <div class="card-header">
-                <h3>Map Result History</h3>
-                <select id="map-result-filter" aria-label="Filter map result history by farm type">
-                  <option value="">All farms</option>
+                <h3 data-i18n="dashboard.mapResultHistory">Map Result History</h3>
+                <select id="map-result-filter" aria-label="Filter map result history by farm type" data-i18n-aria="dashboard.mapResultFilterAria">
+                  <option value="" data-i18n="dashboard.allFarms">All farms</option>
                 </select>
               </div>
               <div id="map-result-history" class="map-result-history-list">
@@ -558,17 +570,17 @@
               <option value="abandoned" data-i18n="sessions.abandoned">Iptal Edilmis</option>
             </select>
             <select id="session-version-filter" aria-label="Filter sessions by game">
-              <option value="all">All games</option>
+              <option value="all" data-i18n="sessions.allGames">All games</option>
               <option value="poe1">PoE 1</option>
               <option value="poe2">PoE 2</option>
             </select>
             <select id="session-league-filter" aria-label="Filter sessions by league">
-              <option value="all">All leagues</option>
+              <option value="all" data-i18n="sessions.allLeagues">All leagues</option>
             </select>
             <select id="session-farm-filter" aria-label="Filter sessions by farm type">
-              <option value="all">All farms</option>
+              <option value="all" data-i18n="dashboard.allFarms">All farms</option>
             </select>
-            <input id="session-search-filter" type="search" placeholder="Search map, farm, league..." aria-label="Search sessions">
+            <input id="session-search-filter" type="search" data-i18n-placeholder="sessions.searchPlaceholder" placeholder="Search map, farm, league..." aria-label="Search sessions">
           </div>
         </div>
         <div class="inline-notice error journal-notice hidden" id="sessions-journal-notice" role="region" aria-labelledby="sessions-journal-notice-title">
@@ -603,15 +615,15 @@
           </div>
           <div class="filters farming-hub-filters">
             <select id="farming-hub-version-filter" aria-label="Filter hub runs by game">
-              <option value="all">All games</option>
+              <option value="all" data-i18n="sessions.allGames">All games</option>
               <option value="poe1">PoE 1</option>
               <option value="poe2">PoE 2</option>
             </select>
-            <input id="farming-hub-league-filter" type="search" placeholder="League" aria-label="Filter hub runs by league">
+            <input id="farming-hub-league-filter" type="search" data-i18n-placeholder="farmingHub.leaguePlaceholder" placeholder="League" aria-label="Filter hub runs by league">
             <select id="farming-hub-farm-filter" aria-label="Filter hub runs by farm type">
-              <option value="all">All farms</option>
+              <option value="all" data-i18n="dashboard.allFarms">All farms</option>
             </select>
-            <input id="farming-hub-min-profit-filter" type="number" min="0" step="1" placeholder="Min chaos" aria-label="Minimum profit">
+            <input id="farming-hub-min-profit-filter" type="number" min="0" step="1" data-i18n-placeholder="farmingHub.minProfitPlaceholder" placeholder="Min chaos" aria-label="Minimum profit">
             <button id="farming-hub-refresh-btn" class="btn btn-secondary btn-small" type="button">
               <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sync"/></svg>
               <span class="btn-label" data-i18n="farmingHub.refresh">Refresh</span>

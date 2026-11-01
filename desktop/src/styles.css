@@ -121,11 +121,18 @@ body {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
   margin-left: auto;
   -webkit-app-region: no-drag;
 }
 
+/* The account name gives way first, so the window controls always fit at the minimum window width. */
 .user-info > span {
+  min-width: 0;
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.8rem;
   font-weight: 500;
   color: var(--text-secondary);
@@ -155,8 +162,26 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
   margin-left: 0.75rem;
   -webkit-app-region: no-drag;
+}
+
+/* Narrow windows: tighter nav buttons, and Logout keeps only its icon (the label stays for screen readers). */
+@media (max-width: 1360px) {
+  .nav-btn {
+    padding: 0 0.6rem;
+  }
+
+  #logout-btn .btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
 }
 
 .win-ctrl {
@@ -719,6 +744,14 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 
 .delete-all-content .farm-publish-check,
 .delete-all-content .map-session-actions {
+  margin-top: 1.25rem;
+}
+
+.reset-settings-content {
+  width: min(520px, calc(100vw - 2rem));
+}
+
+.reset-settings-content .map-session-actions {
   margin-top: 1.25rem;
 }
 
@@ -2191,7 +2224,6 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--bevel-sm);
-  box-shadow: inset 3px 0 0 var(--farm-color, var(--line));
   padding: 0.85rem 1.25rem;
   width: 100%;
   display: grid;
@@ -2252,6 +2284,14 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   font-size: 0.8rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The farm is a small chip in its colour, as on the Last Map Result card. */
+.session-meta [data-farm-type] {
+  padding: 0 0.4rem;
+  border-radius: var(--bevel-xs);
+  background: color-mix(in srgb, var(--farm-color) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--farm-color) 40%, transparent);
 }
 
 .session-stat {
@@ -2760,9 +2800,10 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   background: rgb(var(--ink-rgb) / 0.04);
 }
 
+/* The active tab is a lit plate, like the active version button, with an ember glyph. */
 .settings-nav-btn.active {
-  color: var(--text-bright);
-  box-shadow: inset 2px 0 0 var(--ember-hot);
+  color: var(--gold-light);
+  box-shadow: inset 0 0 0 1px var(--gold-dim);
   background: var(--gold-glow);
 }
 
@@ -2773,7 +2814,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 
 .settings-nav-btn.active svg {
   opacity: 1;
-  stroke: var(--gold-light);
+  stroke: var(--ember-hot);
 }
 
 /* Settings Content / Tabs */

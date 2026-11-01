@@ -41,3 +41,21 @@ test('the title bar offers only the window controls while any modal is open', ()
     /body:has\(\.modal:not\(\.hidden\)\)\s*:is\(\.nav,\s*#logout-btn\)\s*\{\s*visibility:\s*hidden;\s*\}/
   );
 });
+
+test('the title bar fits at the minimum window width', () => {
+  // The account name shrinks with an ellipsis, so a long name or locale never pushes the close button off.
+  assert.match(getTopLevelRule('.user-info'), /min-width:\s*0;/);
+  const username = getTopLevelRule('.user-info > span');
+  assert.match(username, /min-width:\s*0;/);
+  assert.match(username, /text-overflow:\s*ellipsis;/);
+  assert.match(username, /white-space:\s*nowrap;/);
+  assert.match(getTopLevelRule('.window-controls'), /flex-shrink:\s*0;/);
+});
+
+test('the icon-only Logout button keeps a translated tooltip', () => {
+  // Below 1360 px only the sign-out glyph shows, so sighted users get the label as a tooltip.
+  const html = fs.readFileSync(path.join(srcDir, 'index.html'), 'utf8');
+  const translationsJs = fs.readFileSync(path.join(srcDir, 'modules', 'translations.js'), 'utf8');
+  assert.match(html, /id="logout-btn"[^>]*data-i18n-title="user\.logout"/);
+  assert.ok(translationsJs.includes("querySelectorAll('[data-i18n-title]')"));
+});

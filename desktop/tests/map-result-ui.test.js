@@ -150,8 +150,10 @@ function extractFunctionSource(source, functionName) {
 
 function loadFunctions(functionNames, contextOverrides = {}) {
   const source = fs.readFileSync(appJsPath, 'utf8');
+  // Renderers translate through window.t; a test that brings its own window adds t itself.
   const context = vm.createContext({
     console,
+    window: { t: (key) => key },
     ...contextOverrides
   });
 
@@ -2085,9 +2087,52 @@ test('renderer shows an empty last map result state when no completed result exi
   context.renderLatestMapResult();
 
   assert.equal(elements.lastMapResultCard.dataset.resultState, 'empty');
-  assert.equal(elements.lastMapResultFarmType.textContent, 'No completed map yet');
+  assert.equal(elements.lastMapResultFarmType.textContent, 'dashboard.noCompletedMap');
   assert.equal(elements.lastMapResultDuration.textContent, '—');
   assert.equal(elements.lastMapResultProfit.innerHTML, '—');
+});
+
+test('renderer says the map results failed to load instead of showing the no-map-yet line', () => {
+  const elements = {
+    lastMapResultCard: { dataset: {} },
+    lastMapResultFarmType: { textContent: '' },
+    lastMapResultDuration: { textContent: '' },
+    lastMapResultProfit: { innerHTML: '' }
+  };
+  const state = { mapResults: [], mapResultsLoadFailed: true };
+  const context = loadFunctions(['formatMapResultProfitHTML', 'renderLatestMapResult'], { elements, state });
+
+  context.renderLatestMapResult();
+  assert.equal(elements.lastMapResultCard.dataset.resultState, 'empty');
+  assert.equal(elements.lastMapResultFarmType.textContent, 'dashboard.mapResultsLoadError');
+
+  state.mapResultsLoadFailed = false;
+  context.renderLatestMapResult();
+  assert.equal(elements.lastMapResultFarmType.textContent, 'dashboard.noCompletedMap');
+});
+
+test('timeAgo writes its relative times through translation keys', () => {
+  const calls = [];
+  const context = loadFunctions(['timeAgo'], {
+    window: {
+      t: (key, values) => {
+        calls.push([key, values?.count]);
+        return key;
+      }
+    }
+  });
+  const minutesAgo = (minutes) => new Date(Date.now() - minutes * 60000).toISOString();
+
+  for (const minutes of [0, 5, 125, 60 * 24 * 3 + 10]) {
+    context.timeAgo(minutesAgo(minutes));
+  }
+
+  assert.deepEqual(calls, [
+    ['time.justNow', undefined],
+    ['time.minutesAgo', 5],
+    ['time.hoursAgo', 2],
+    ['time.daysAgo', 3]
+  ]);
 });
 
 test('renderer keeps the last map result card empty when the latest result has no completed duration', () => {
@@ -2130,7 +2175,7 @@ test('renderer keeps the last map result card empty when the latest result has n
   context.renderLatestMapResult();
 
   assert.equal(elements.lastMapResultCard.dataset.resultState, 'empty');
-  assert.equal(elements.lastMapResultFarmType.textContent, 'No completed map yet');
+  assert.equal(elements.lastMapResultFarmType.textContent, 'dashboard.noCompletedMap');
   assert.equal(elements.lastMapResultDuration.textContent, '—');
   assert.equal(elements.lastMapResultProfit.innerHTML, '—');
 });
@@ -2305,7 +2350,7 @@ test('renderer shows unavailable profit results as not calculated', () => {
 
   assert.equal(elements.lastMapResultCard.dataset.resultState, 'ready');
   assert.equal(elements.lastMapResultFarmType.textContent, 'Breach');
-  assert.equal(elements.lastMapResultProfit.innerHTML, '<span class="profit-unavailable">Not calculated</span>');
+  assert.equal(elements.lastMapResultProfit.innerHTML, '<span class="profit-unavailable">mapResult.notCalculated</span>');
 });
 
 test('renderer tags the latest map result with its loot-filter profit tier', () => {
@@ -2328,7 +2373,7 @@ test('renderer tags the latest map result with its loot-filter profit tier', () 
   ], {
     elements,
     state,
-    window: { profitTierModel: require('../src/modules/profitTierModel') },
+    window: { t: (key) => key, profitTierModel: require('../src/modules/profitTierModel') },
     normalizeProfitPoeVersion: (value) => value,
     getProfitCurrencyRates: () => ({ divineChaos: 150 }),
     profitCurrencyHTML: (value) => `profit:${value}`,
@@ -2363,7 +2408,7 @@ test('renderer colours farm names by their league content', () => {
   ], {
     elements,
     state,
-    window: { farmTypeModel: require('../src/modules/farmTypeModel') },
+    window: { t: (key) => key, farmTypeModel: require('../src/modules/farmTypeModel') },
     normalizeProfitPoeVersion: (value) => value,
     getProfitCurrencyRates: () => ({ divineChaos: 150 }),
     profitCurrencyHTML: (value) => `profit:${value}`,
@@ -2466,11 +2511,11 @@ test('renderer map result history keeps persisted ordering and populates farm-ty
     resultIds: ['result-3', 'result-2', 'result-1'],
     filters: { farmType: '' }
   }]);
-  assert.match(elements.mapResultFilter.innerHTML, /All farms/);
+  assert.match(elements.mapResultFilter.innerHTML, /<option value="">dashboard\.allFarms<\/option>/);
   assert.match(elements.mapResultFilter.innerHTML, /value="Ritual"/);
   assert.match(elements.mapResultFilter.innerHTML, /value="Breach"/);
   assert.match(elements.mapResultHistory.innerHTML, /map-result-publish-btn/);
-  assert.match(elements.mapResultHistory.innerHTML, />\s*Share\s*</);
+  assert.match(elements.mapResultHistory.innerHTML, />\s*mapResult\.share\s*</);
   assert.ok(
     elements.mapResultHistory.innerHTML.indexOf('result-3') < elements.mapResultHistory.innerHTML.indexOf('result-2'),
     'expected newest persisted result to render before older entries'
@@ -2697,8 +2742,8 @@ test('renderer map result history marks published results as shared', () => {
 
   context.renderMapResultHistory();
 
-  assert.match(elements.mapResultHistory.innerHTML, />Published</);
-  assert.match(elements.mapResultHistory.innerHTML, />\s*Shared\s*</);
+  assert.match(elements.mapResultHistory.innerHTML, />mapResult\.published</);
+  assert.match(elements.mapResultHistory.innerHTML, />\s*mapResult\.shared\s*</);
   assert.match(elements.mapResultHistory.innerHTML, /disabled/);
 });
 
@@ -3076,7 +3121,7 @@ test('sessions list counts loot from list rows and shows live duration for the a
   assert.match(elements.sessionsList.innerHTML, /class="sessions-list-head" aria-hidden="true"/);
 });
 
-test('sessions rows carry a tier chip, a farm-colour edge and a status chip only when it means something', () => {
+test('sessions rows carry a tier chip, a farm chip and a status chip only when it means something', () => {
   const elements = { sessionsList: { innerHTML: '' } };
   const summaryCalls = [];
   const sessions = [
@@ -3111,14 +3156,18 @@ test('sessions rows carry a tier chip, a farm-colour edge and a status chip only
   const [head, ...rows] = html.split('<button ');
   assert.match(head, /class="sessions-list-head"[\s\S]*sessions\.headMap[\s\S]*sessions\.duration[\s\S]*sessions\.headItems[\s\S]*sessions\.headProfit/);
   assert.equal(rows.length, 3);
-  assert.match(rows[0], /^class="session-item is-active"[^>]*style="--farm-color: var\(--farm-ritual\)"/);
+  assert.match(rows[0], /^class="session-item is-active"/);
+  assert.match(rows[0], /class="session-meta">[^<]*<span data-farm-type="ritual">ritual<\/span>/);
   assert.match(rows[0], /<span class="session-tier-chip">T16<\/span><span class="session-name" lang="en">Crimson Temple<\/span>/);
   assert.match(rows[0], /class="session-status active">sessions\.active</);
-  assert.match(rows[1], /^class="session-item"[^>]*style="--farm-color: var\(--farm-breach\)"/);
+  assert.match(rows[1], /^class="session-item"/);
+  assert.match(rows[1], /class="session-meta">[^<]*<span data-farm-type="breach">breach<\/span>/);
   assert.doesNotMatch(rows[1], /session-status/);
-  assert.doesNotMatch(rows[2], /session-tier-chip|style=/);
+  assert.doesNotMatch(rows[2], /session-tier-chip|data-farm-type/);
   assert.match(rows[2], /class="session-status abandoned">sessions\.abandoned</);
   for (const row of rows) {
+    // The farm colour is a chip in the meta line now, not a coloured edge on the row.
+    assert.doesNotMatch(row, /style=/);
     // data-farm-type on the row would tint all of its text; only the farm word in the meta line keeps it.
     assert.doesNotMatch(row.slice(0, row.indexOf('>')), /data-farm-type/);
     assert.doesNotMatch(row, /session-meta">T\d/);
@@ -4050,7 +4099,8 @@ test('loadRecentLoot dims the list instead of writing a loading line', async () 
   await context.loadRecentLoot();
   assert.deepEqual(duringFetch, { busy: 'true', html: 'previous' });
   assert.equal(list.getAttribute('aria-busy'), null);
-  assert.equal(list.innerHTML, '<p class="empty-state">error:dashboard.noLoot</p>');
+  // An unknown error says the load failed, not that there is no loot yet.
+  assert.equal(list.innerHTML, '<p class="empty-state">error:errors.lootRecent</p>');
   assert.equal(renders, 1);
 
   // The journal notice at the top of the Dashboard says why, so the card shows its usual empty state, not the reason.

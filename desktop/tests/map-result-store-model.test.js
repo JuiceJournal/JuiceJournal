@@ -572,6 +572,38 @@ test('renderer history loader keeps startup alive when map-result history is una
   assert.equal(state.mapResults.length, 0);
 });
 
+test('renderer history loader flags a failed load and clears the flag once map results load again', async () => {
+  const state = { currentUser: { id: 'profile-1' }, mapResults: [{ id: 'stale-1' }] };
+  let failure = new Error('store unreadable');
+  const context = loadFunctions(['loadMapResultHistory'], {
+    state,
+    window: {
+      electronAPI: {
+        async getMapResults() {
+          if (failure) throw failure;
+          return [{ id: 'run-1' }];
+        }
+      }
+    }
+  });
+
+  await context.loadMapResultHistory();
+  // The Last Map Result card then says the load failed instead of showing its no-map-yet line.
+  assert.equal(state.mapResults.length, 0);
+  assert.equal(state.mapResultsLoadFailed, true);
+
+  failure = null;
+  await context.loadMapResultHistory();
+  assert.equal(state.mapResults.length, 1);
+  assert.equal(state.mapResultsLoadFailed, false);
+
+  // Signing out is not a failure either.
+  state.mapResultsLoadFailed = true;
+  state.currentUser = null;
+  await context.loadMapResultHistory();
+  assert.equal(state.mapResultsLoadFailed, false);
+});
+
 test('profit rendering is not blocked when map-result persistence fails', async () => {
   const calls = [];
   const context = loadFunctions(['handleCalculateProfit'], {

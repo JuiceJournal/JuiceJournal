@@ -151,6 +151,9 @@ const elements = {
   deleteAllAck: document.getElementById('delete-all-ack'),
   deleteAllCancelBtn: document.getElementById('delete-all-cancel'),
   deleteAllConfirmBtn: document.getElementById('delete-all-confirm'),
+  resetSettingsModal: document.getElementById('reset-settings-modal'),
+  resetSettingsCancelBtn: document.getElementById('reset-settings-cancel'),
+  resetSettingsConfirmBtn: document.getElementById('reset-settings-confirm'),
 
   // Navigation
   navButtons: document.querySelectorAll('.nav-btn'),
@@ -1370,28 +1373,28 @@ function renderCharacterSummaryCard() {
     }
   }
   if (elements.characterName) {
-    elements.characterName.textContent = isReady ? summary.name : 'No character selected';
+    elements.characterName.textContent = isReady ? summary.name : window.t('dashboard.noCharacterSelected');
   }
   if (elements.characterClass) {
     // Ascended characters keep their base class in the chip: 'Deadeye · Ranger'.
     const classChip = visual.classLabel && visual.baseClassLabel && visual.classLabel !== visual.baseClassLabel
       ? `${visual.classLabel} · ${visual.baseClassLabel}`
       : visual.classLabel;
-    elements.characterClass.textContent = isReady ? classChip : 'Unknown Class';
+    elements.characterClass.textContent = isReady ? classChip : window.t('dashboard.unknownClass');
   }
   if (elements.characterLevel) {
     elements.characterLevel.textContent = isReady && summary.level ? String(summary.level) : '—';
   }
   if (elements.characterLeague) {
-    elements.characterLeague.textContent = isReady ? (summary.league || 'Unknown League') : '—';
+    elements.characterLeague.textContent = isReady ? (summary.league || window.t('dashboard.unknownLeague')) : '—';
   }
   if (elements.characterStatus) {
     const session = state.characterSession?.poeVersion === account?.activePoeVersion ? state.characterSession : null;
     elements.characterStatus.textContent = !isReady
-      ? 'Character sync needed'
+      ? window.t('dashboard.characterSyncNeeded')
       : session
         ? window.t(session.confirmed ? 'dashboard.characterConfirmed' : 'dashboard.characterUnconfirmed')
-        : 'Synced from Path of Exile';
+        : window.t('dashboard.characterSynced');
   }
   if (elements.characterPicker && elements.characterPickerField) {
     const characters = isReady ? account.charactersByGame?.[account.activePoeVersion] || [] : [];
@@ -1438,7 +1441,7 @@ function renderFarmTypeSelector() {
   const hasActiveSession = Boolean(state.currentSession);
 
   elements.sessionFarmTypeSelect.innerHTML = [
-    '<option value="">No farm type</option>',
+    `<option value="" data-i18n="dashboard.noFarmType">${escapeHTML(window.t('dashboard.noFarmType'))}</option>`,
     ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType.id) : ''}>${escapeHTML(farmType.label)}</option>`)
   ].join('');
   elements.sessionFarmTypeSelect.value = selectedFarmTypeId;
@@ -2903,6 +2906,7 @@ function showSignedOutWindow() {
   state.currentSession = null;
   state.sessions = [];
   state.mapResults = [];
+  state.mapResultsLoadFailed = false;
   state.recentLoot = [];
   state.account = null;
   state.runtimeSession = null;
@@ -2975,6 +2979,16 @@ function applyLocalizedChrome() {
   // So is Recent Loot's empty state; it redraws from state, with no IPC.
   if (typeof renderRecentLoot === 'function') {
     renderRecentLoot();
+  }
+  // The character card and the map result cards write their fallback lines from JS too.
+  if (typeof renderCharacterSummaryCard === 'function') {
+    renderCharacterSummaryCard();
+  }
+  if (typeof renderLatestMapResult === 'function') {
+    renderLatestMapResult();
+  }
+  if (typeof renderMapResultHistory === 'function') {
+    renderMapResultHistory();
   }
   // The activity log is drawn by JS as well, and now sits on the Data tab next to translated headings.
   if (typeof renderAuditTrail === 'function') {
@@ -3558,6 +3572,7 @@ function buildSessionCompletionPayloadFromMapResult(mapResult = {}) {
 async function loadMapResultHistory() {
   if (!state.currentUser) {
     state.mapResults = [];
+    state.mapResultsLoadFailed = false;
     if (typeof renderLatestMapResult === 'function') {
       renderLatestMapResult();
     }
@@ -3570,8 +3585,11 @@ async function loadMapResultHistory() {
   try {
     const results = await window.electronAPI.getMapResults();
     state.mapResults = Array.isArray(results) ? results : [];
+    state.mapResultsLoadFailed = false;
   } catch {
     state.mapResults = [];
+    // The card then says the load failed, not that no map was played yet.
+    state.mapResultsLoadFailed = true;
   }
 
   if (typeof renderLatestMapResult === 'function') {
@@ -3634,7 +3652,7 @@ function formatHoursMinutes(seconds) {
 
 function formatMapResultProfitHTML(result = {}, iconSize = 16, options = {}) {
   if (result?.profitUnavailable) {
-    return '<span class="profit-unavailable">Not calculated</span>';
+    return `<span class="profit-unavailable">${window.t('mapResult.notCalculated')}</span>`;
   }
 
   const formatProfit = typeof profitCurrencyHTML === 'function'
@@ -3681,7 +3699,9 @@ function renderLatestMapResult() {
 
   if (!hasCompletedResult) {
     elements.lastMapResultCard.dataset.resultState = 'empty';
-    elements.lastMapResultFarmType.textContent = 'No completed map yet';
+    elements.lastMapResultFarmType.textContent = window.t(
+      state.mapResultsLoadFailed ? 'dashboard.mapResultsLoadError' : 'dashboard.noCompletedMap'
+    );
     if (typeof applyFarmType === 'function') {
       applyFarmType(elements.lastMapResultFarmType, '');
     }
@@ -3698,7 +3718,8 @@ function renderLatestMapResult() {
   }
 
   elements.lastMapResultCard.dataset.resultState = 'ready';
-  elements.lastMapResultFarmType.textContent = latest.farmType || 'Unknown farm type';
+  // Map results store the English 'No farm type' fallback, so it is translated when shown.
+  elements.lastMapResultFarmType.textContent = !latest.farmType ? window.t('dashboard.unknownFarmType') : latest.farmType === 'No farm type' ? window.t('dashboard.noFarmType') : latest.farmType;
   if (typeof applyFarmType === 'function') {
     applyFarmType(elements.lastMapResultFarmType, latest.farmType);
   }
@@ -3770,14 +3791,14 @@ function isDisplayableMapResult(result = {}) {
 
 function getMapResultPublishLabel(result = {}) {
   if (result.publishState === 'published') {
-    return 'Published';
+    return window.t('mapResult.published');
   }
 
   if (result.publishState === 'draft') {
-    return 'Draft';
+    return window.t('mapResult.draft');
   }
 
-  return 'Local';
+  return window.t('mapResult.local');
 }
 
 function canPublishMapResult(result = {}) {
@@ -3820,7 +3841,7 @@ function renderMapResultHistory() {
     : '';
 
   elements.mapResultFilter.innerHTML = [
-    '<option value="">All farms</option>',
+    `<option value="">${escapeHTML(window.t('dashboard.allFarms'))}</option>`,
     ...availableFarmTypes.map((farmType) => `<option value="${escapeHTML(farmType)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType) : ''}>${escapeHTML(farmType)}</option>`)
   ].join('');
   elements.mapResultFilter.value = selectedFarmType;
@@ -3828,7 +3849,7 @@ function renderMapResultHistory() {
   const filteredResults = getMapResultStoreModel().filterMapResults(results, { farmType: selectedFarmType });
 
   if (!filteredResults.length) {
-    elements.mapResultHistory.innerHTML = '<p class="empty-state">No map results recorded yet.</p>';
+    elements.mapResultHistory.innerHTML = `<p class="empty-state">${escapeHTML(window.t('dashboard.noMapResults'))}</p>`;
     return;
   }
 
@@ -3844,16 +3865,16 @@ function renderMapResultHistory() {
     return `
       <article class="map-result-history-item" data-result-id="${escapeHTML(result?.id || '')}">
         <div class="map-result-history-main">
-          <strong${typeof farmTypeAttr === 'function' ? farmTypeAttr(result?.farmType) : ''}>${escapeHTML(result?.farmType || 'Unknown farm type')}</strong>
+          <strong${typeof farmTypeAttr === 'function' ? farmTypeAttr(result?.farmType) : ''}>${escapeHTML(result?.farmType || window.t('dashboard.unknownFarmType'))}</strong>
           <span>${formatDuration(Number(result?.durationSeconds || 0))}</span>
           <span class="map-result-publish-state" data-publish-state="${escapeHTML(result?.publishState || 'local')}">${escapeHTML(publishLabel)}</span>
           ${typeof profitMemeHTML === 'function' ? profitMemeHTML(profitTier) : ''}
         </div>
         <div class="map-result-history-meta">
           <span class="map-result-history-profit"${profitTier ? ` data-profit-tier="${profitTier}"` : ''}>${formatMapResultProfitHTML(result, 14)}</span>
-          <span>${escapeHTML(result?.createdAt ? timeAgo(result.createdAt) : 'Just now')}</span>
+          <span>${escapeHTML(result?.createdAt ? timeAgo(result.createdAt) : window.t('time.justNow'))}</span>
           <button type="button" class="map-result-publish-btn" data-result-id="${escapeHTML(result?.id || result?.localRunId || '')}" ${publishable ? '' : 'disabled'}>
-            ${escapeHTML(result?.publishState === 'published' ? 'Shared' : 'Share')}
+            ${escapeHTML(window.t(result?.publishState === 'published' ? 'mapResult.shared' : 'mapResult.share'))}
           </button>
         </div>
       </article>
@@ -3886,8 +3907,8 @@ function requestFarmPublishDetails(result = {}) {
     });
   }
 
-  const farmType = result.farmType || 'Unknown farm';
-  const mapName = result.mapName || 'Unknown Map';
+  const farmType = !result.farmType ? window.t('dashboard.unknownFarmType') : result.farmType === 'No farm type' ? window.t('dashboard.noFarmType') : result.farmType;
+  const mapName = result.mapName || window.t('misc.unknownMap');
   if (elements.farmPublishSummary) {
     elements.farmPublishSummary.textContent = `${farmType} · ${mapName}`;
   }
@@ -4034,6 +4055,7 @@ async function refreshTrackerData({ includeSessions = false, includeCurrency = f
 
     if (!state.currentUser) {
       state.mapResults = [];
+      state.mapResultsLoadFailed = false;
       resetDashboardSummary();
       renderLatestMapResult();
       renderMapResultHistory();
@@ -4089,7 +4111,7 @@ function getRuntimeSessionMapName() {
   );
 }
 
-function setMapSessionConfirmButton(label = 'Start Map') {
+function setMapSessionConfirmButton(label) {
   if (!elements.mapSessionConfirmBtn) {
     return;
   }
@@ -4116,7 +4138,7 @@ function populateMapSessionFarmTypes(selectedFarmTypeId = '', options = {}) {
     : '';
 
   elements.mapSessionFarmTypeSelect.innerHTML = [
-    '<option value="">No farm type</option>',
+    `<option value="" data-i18n="dashboard.noFarmType">${escapeHTML(window.t('dashboard.noFarmType'))}</option>`,
     ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType.id) : ''}>${escapeHTML(farmType.label)}</option>`)
   ].join('');
   elements.mapSessionFarmTypeSelect.value = normalizedSelection;
@@ -4140,16 +4162,16 @@ function requestMapSessionDetails({ defaultName, trackerContext } = {}) {
   const label = elements.mapSessionModal.querySelector('.map-session-label');
   const farmTypeLabel = elements.mapSessionFarmTypeSelect?.previousElementSibling;
 
-  if (title) title.textContent = 'Start New Map';
-  if (subtitle) subtitle.textContent = 'Confirm the detected map and choose the farm type before tracking starts.';
+  if (title) title.textContent = window.t('dashboard.newMap');
+  if (subtitle) subtitle.textContent = window.t('mapSession.startSubtitle');
   if (label) label.hidden = false;
   if (farmTypeLabel) farmTypeLabel.hidden = false;
   if (elements.mapSessionFarmTypeSelect) elements.mapSessionFarmTypeSelect.hidden = false;
-  setMapSessionConfirmButton('Start Map');
+  setMapSessionConfirmButton(window.t('mapSession.startMap'));
 
   elements.mapSessionDefaultName.textContent = fallbackName;
   if (elements.mapSessionContext) {
-    elements.mapSessionContext.textContent = trackerContext?.label || 'PoE Session';
+    elements.mapSessionContext.textContent = trackerContext?.label || window.t('mapSession.defaultContext');
   }
   elements.mapSessionNameInput.value = fallbackName;
   elements.mapSessionNameInput.hidden = false;
@@ -4157,7 +4179,7 @@ function requestMapSessionDetails({ defaultName, trackerContext } = {}) {
   populateMapSessionFarmTypes(trackerContext?.farmTypeId || '', {
     poeVersion: trackerContext?.poeVersion
   });
-  if (elements.mapSessionCancelBtn) elements.mapSessionCancelBtn.textContent = 'Cancel';
+  if (elements.mapSessionCancelBtn) elements.mapSessionCancelBtn.textContent = window.t('mapSession.cancel');
   elements.mapSessionModal.dataset.modalPurpose = 'new-map-session';
   elements.mapSessionModal.classList.remove('hidden');
 
@@ -4247,16 +4269,16 @@ function requestEndSessionConfirmation(session = state.currentSession) {
     cancelText: elements.mapSessionCancelBtn?.textContent || ''
   };
 
-  if (title) title.textContent = 'End Map Session';
-  if (subtitle) subtitle.textContent = 'Finish this run and save the completed map result.';
-  if (elements.mapSessionContext) elements.mapSessionContext.textContent = 'Active run';
-  if (elements.mapSessionDefaultName) elements.mapSessionDefaultName.textContent = session?.mapName || 'Unknown Map';
+  if (title) title.textContent = window.t('mapSession.endTitle');
+  if (subtitle) subtitle.textContent = window.t('mapSession.endSubtitle');
+  if (elements.mapSessionContext) elements.mapSessionContext.textContent = window.t('mapSession.activeRun');
+  if (elements.mapSessionDefaultName) elements.mapSessionDefaultName.textContent = session?.mapName || window.t('misc.unknownMap');
   if (elements.mapSessionNameInput) elements.mapSessionNameInput.hidden = true;
   if (label) label.hidden = true;
   if (farmTypeLabel) farmTypeLabel.hidden = true;
   if (elements.mapSessionFarmTypeSelect) elements.mapSessionFarmTypeSelect.hidden = true;
-  if (elements.mapSessionConfirmBtn) elements.mapSessionConfirmBtn.textContent = 'End Map';
-  if (elements.mapSessionCancelBtn) elements.mapSessionCancelBtn.textContent = 'Keep Tracking';
+  if (elements.mapSessionConfirmBtn) elements.mapSessionConfirmBtn.textContent = window.t('dashboard.endMap');
+  if (elements.mapSessionCancelBtn) elements.mapSessionCancelBtn.textContent = window.t('mapSession.keepTracking');
   elements.mapSessionModal.dataset.modalPurpose = 'end-map-session';
   elements.mapSessionModal.classList.remove('hidden');
 
@@ -4534,7 +4556,7 @@ function updateActiveSessionUI() {
     <div class="session-live">
       <div class="session-live-title">
         <span class="session-live-dot" aria-hidden="true"></span>
-        <strong class="session-live-map">${escapeHTML(session.mapName || 'Unknown Map')}</strong>
+        <strong class="session-live-map">${escapeHTML(session.mapName || window.t('misc.unknownMap'))}</strong>
         ${session.mapTier ? `<span class="session-live-chip">T${escapeHTML(session.mapTier)}</span>` : ''}
         ${farmTypeId ? `<span class="session-live-farm"${farmTypeAttr(farmTypeId)}>${escapeHTML(getSessionFarmTypeLabel(session))}</span>` : ''}
       </div>
@@ -4669,7 +4691,7 @@ function getSessionPoeVersion(session = {}) {
 function getSessionFarmTypeLabel(session = {}) {
   const farmTypeId = getSessionFarmTypeId(session);
   if (!farmTypeId) {
-    return 'No farm type';
+    return window.t('dashboard.noFarmType');
   }
 
   const poeVersion = getSessionPoeVersion(session);
@@ -4698,14 +4720,14 @@ function populateSessionFilterOptions(sessions = []) {
     elements.sessionLeagueFilter,
     sessions.map((session) => session.league || 'Standard'),
     'all',
-    'All leagues'
+    window.t('sessions.allLeagues')
   );
 
   populateSelectOptions(
     elements.sessionFarmFilter,
     sessions.map(getSessionFarmTypeLabel),
     'all',
-    'All farms'
+    window.t('dashboard.allFarms')
   );
 }
 
@@ -4751,7 +4773,7 @@ function populateFarmingHubFarmOptions() {
   const runFarmTypes = state.farmingHubRuns.map((run) => run.farmType).filter(Boolean);
   const optionLabels = [...new Set([...farmTypes.map((farmType) => farmType.label), ...runFarmTypes])];
 
-  populateSelectOptions(select, optionLabels, 'all', 'All farms');
+  populateSelectOptions(select, optionLabels, 'all', window.t('dashboard.allFarms'));
   select.value = optionLabels.includes(previousValue) ? previousValue : 'all';
 }
 
@@ -4841,19 +4863,19 @@ function renderFarmingHubRuns() {
     const poeVersion = normalizePoeVersion(run.poeVersion) || 'poe1';
     const profit = Number(run.profitChaos || 0);
     const duration = run.durationSeconds ? formatDuration(run.durationSeconds) : '-';
-    const author = run.publisherDisplayName || run.author?.username || 'Unknown exile';
+    const author = run.publisherDisplayName || run.author?.username || window.t('farmingHub.unknownAuthor');
     const profitTier = profitTierFor(profit, poeVersion);
 
     return `
       <article class="farming-hub-run">
         <div class="farming-hub-run-main">
           <div class="farming-hub-run-kicker">${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(run.league || 'Standard')} / ${escapeHTML(author)}</div>
-          <h3${typeof farmTypeAttr === 'function' ? farmTypeAttr(run.farmType) : ''}>${escapeHTML(run.farmType || 'Unknown farm')}</h3>
-          <p>${escapeHTML(run.setupDescription || 'No setup notes shared.')}</p>
+          <h3${typeof farmTypeAttr === 'function' ? farmTypeAttr(run.farmType) : ''}>${escapeHTML(run.farmType || window.t('dashboard.unknownFarmType'))}</h3>
+          <p>${escapeHTML(run.setupDescription || window.t('farmingHub.noSetupNotes'))}</p>
         </div>
         <div class="farming-hub-run-metrics">
-          <span><strong>${escapeHTML(String(run.runCount || 1))}</strong> maps</span>
-          <span><strong>${duration}</strong> duration</span>
+          <span><strong>${escapeHTML(String(run.runCount || 1))}</strong> ${escapeHTML(window.t('farmingHub.maps'))}</span>
+          <span><strong>${duration}</strong> ${escapeHTML(window.t('farmingHub.duration'))}</span>
           <span data-profit-tier="${profitTier}">${formatProfit(profit, 16, poeVersion)}</span>
           ${memeFor(profitTier)}
           ${reactionsFor(run.reactions, poeVersion)}
@@ -4947,7 +4969,7 @@ async function loadRecentLoot() {
       // The journal notice at the top of the Dashboard says why; the card shows its usual empty state like the others.
       renderRecentLoot();
     } else {
-      elements.recentLootList.innerHTML = `<p class="empty-state">${getUserFacingErrorMessage(error, 'dashboard.noLoot')}</p>`;
+      elements.recentLootList.innerHTML = `<p class="empty-state">${getUserFacingErrorMessage(error, 'errors.lootRecent')}</p>`;
     }
   } finally {
     elements.recentLootList.removeAttribute('aria-busy');
@@ -5005,9 +5027,6 @@ function renderSessionsList() {
     const poeVersion = getSessionPoeVersion(session);
     const farmTypeId = getSessionFarmTypeId(session);
     const contextLabel = `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(session.league || 'Standard')} / <span${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmTypeId) : ''}>${escapeHTML(getSessionFarmTypeLabel(session))}</span>`;
-    // The farm colour reaches only the row's edge; data-farm-type on the row would tint all of its text.
-    const farmEdgeId = typeof getFarmTypeIdFor === 'function' ? getFarmTypeIdFor(farmTypeId) : null;
-    const farmEdgeStyle = farmEdgeId ? ` style="--farm-color: var(--farm-${farmEdgeId})"` : '';
     const isActive = session.status === 'active';
     const duration = isActive
       ? formatDuration(getLiveDuration(session))
@@ -5021,9 +5040,9 @@ function renderSessionsList() {
       : '';
 
     return `
-      <button class="session-item${isActive ? ' is-active' : ''}" type="button" data-session-id="${escapeHTML(session.id)}"${farmEdgeStyle}>
+      <button class="session-item${isActive ? ' is-active' : ''}" type="button" data-session-id="${escapeHTML(session.id)}">
         <div class="session-primary">
-          <div class="session-title">${tierChip}<span class="session-name" lang="en">${escapeHTML(session.mapName || 'Unknown Map')}</span></div>
+          <div class="session-title">${tierChip}<span class="session-name" lang="en">${escapeHTML(session.mapName || window.t('misc.unknownMap'))}</span></div>
           <div class="session-meta">${contextLabel} / ${startedAt}</div>
         </div>
         <span class="session-stat"><span class="visually-hidden">${window.t('sessions.duration')} </span>${duration}</span>
@@ -5091,7 +5110,7 @@ function renderSessionsSummary(sessions = []) {
     const below = profit < 0 || (profit === 0 && baseline === 0);
     const peak = profit < 0 ? maxLoss : maxGain;
     const size = peak ? (magnitude(profit) / peak) * (below ? 100 - baseline : baseline) : 0;
-    const title = `${session.mapName || 'Unknown Map'} ${formatAdaptiveProfitText(profit, poeVersion, { league, signed: true })}`;
+    const title = `${session.mapName || window.t('misc.unknownMap')} ${formatAdaptiveProfitText(profit, poeVersion, { league, signed: true })}`;
     return `<span class="sessions-summary-run${below ? ' is-below' : ''}" data-profit-tier="${tierFor(profit)}" title="${escapeHTML(title).replace(/"/g, '&quot;')}" style="--run-size: ${size.toFixed(1)}%"></span>`;
   }).join('');
 
@@ -5112,7 +5131,7 @@ function renderSessionsSummary(sessions = []) {
       </div>
       <div class="sessions-summary-stat">
         <span class="sessions-summary-label">${window.t('sessions.summaryBest')}</span>
-        <span class="sessions-summary-best"><span class="sessions-summary-best-name" lang="en">${escapeHTML(best.mapName || 'Unknown Map')}</span>${valueHTML(profitOf(best), tierFor(profitOf(best)))}${profitMemeHTML(tierFor(profitOf(best)))}</span>
+        <span class="sessions-summary-best"><span class="sessions-summary-best-name" lang="en">${escapeHTML(best.mapName || window.t('misc.unknownMap'))}</span>${valueHTML(profitOf(best), tierFor(profitOf(best)))}${profitMemeHTML(tierFor(profitOf(best)))}</span>
       </div>
     </div>
     <div class="sessions-summary-runs" role="img" aria-label="${window.t('sessions.summaryBarsLabel', { count: bars.length })}" style="--baseline: ${baseline.toFixed(1)}%">${barsHTML}</div>
@@ -5146,8 +5165,8 @@ function renderRecentLoot() {
       <article class="recent-loot-item">
         ${itemSlotHTML(loot.itemName, poeVersion, { quantity })}
         <div class="recent-loot-main">
-          <span class="recent-loot-name">${escapeHTML(loot.itemName || 'Unknown Item')}</span>
-          <div class="recent-loot-meta">${escapeHTML(session.mapName || 'Unknown Map')} · ${timeAgo(loot.createdAt)}</div>
+          <span class="recent-loot-name">${escapeHTML(loot.itemName || window.t('misc.unknownItem'))}</span>
+          <div class="recent-loot-meta">${escapeHTML(session.mapName || window.t('misc.unknownMap'))} · ${timeAgo(loot.createdAt)}</div>
         </div>
         <div class="recent-loot-value" data-profit-tier="${lootTierFor(totalValue, poeVersion, rateOptions)}">${formatLootValue(totalValue, 14, poeVersion, rateOptions)}</div>
       </article>
@@ -5218,11 +5237,57 @@ async function handleSaveSettings() {
   }
 }
 
+// Reset to Defaults asks in the app's own dialog, like Delete everything. Cancel has focus first, so Enter alone never
+// resets. Resolves once the dialog closed and focus is back on the Reset button.
+function requestResetSettingsConfirmation() {
+  const { resetSettingsModal: modal, resetSettingsCancelBtn: cancel, resetSettingsConfirmBtn: confirm } = elements;
+  modal.classList.remove('hidden');
+  cancel.focus();
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const handleCancel = () => settle(false);
+    const handleConfirm = () => settle(true);
+    const handleBackdropClick = (event) => {
+      if (event.target === modal) settle(false);
+    };
+    const handleKeydown = (event) => {
+      if (event.key === 'Escape') {
+        settle(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      // Tab wraps between the two buttons, so focus never reaches the page behind the dialog.
+      event.preventDefault();
+      const controls = [cancel, confirm];
+      const index = controls.indexOf(document.activeElement);
+      const step = event.shiftKey ? -1 : 1;
+      controls[index === -1 ? 0 : (index + step + controls.length) % controls.length].focus();
+    };
+    const settle = (confirmed) => {
+      if (settled) return;
+      settled = true;
+      cancel.removeEventListener('click', handleCancel);
+      confirm.removeEventListener('click', handleConfirm);
+      modal.removeEventListener('click', handleBackdropClick);
+      document.removeEventListener('keydown', handleKeydown);
+      modal.classList.add('hidden');
+      elements.resetSettingsBtn?.focus();
+      resolve(confirmed);
+    };
+
+    cancel.addEventListener('click', handleCancel);
+    confirm.addEventListener('click', handleConfirm);
+    modal.addEventListener('click', handleBackdropClick);
+    document.addEventListener('keydown', handleKeydown);
+  });
+}
+
 /**
  * Ayarlari sifirla
  */
 async function handleResetSettings() {
-  if (!confirm(window.t('settings.resetConfirm'))) return;
+  if (!(await requestResetSettingsConfirmation())) return;
 
   const { buildResetSettingsDraft } = getSettingsModel();
   const previousContext = getSelectedTrackerContext();
@@ -6673,7 +6738,7 @@ async function handleTakeSnapshot(type) {
     }
 
     if (infoEl) {
-      infoEl.textContent = `${result.itemCount} items · ${Math.round(result.totalChaos)}c`;
+      infoEl.textContent = `${window.t(result.itemCount === 1 ? 'dashboard.itemCountOne' : 'dashboard.itemCount', { count: result.itemCount })} · ${Math.round(result.totalChaos)}c`;
       infoEl.classList.add('has-data');
     }
 
@@ -6917,7 +6982,7 @@ function updateGameStatusIndicator(version) {
     indicator.innerHTML = `<span class="game-status-dot running"></span> ${label}`;
     indicator.classList.add('active');
   } else {
-    indicator.innerHTML = `<span class="game-status-dot"></span> ${window.t('game.notRunning')}`;
+    indicator.innerHTML = `<span class="game-status-dot"></span> <span data-i18n="game.notRunning">${escapeHTML(window.t('game.notRunning'))}</span>`;
     indicator.classList.remove('active');
   }
 }
@@ -7029,7 +7094,7 @@ function renderSessionDrawer({ keepForm = false } = {}) {
   const rateOptions = { league: session.league };
   const fact = (labelKey, value) => `<div><dt>${window.t(labelKey)}</dt><dd>${value}</dd></div>`;
 
-  elements.sessionDrawerTitle.textContent = session.mapName || 'Session';
+  elements.sessionDrawerTitle.textContent = session.mapName || window.t('misc.unknownMap');
   elements.sessionDrawerLootCount.textContent = String(lootQuantity);
   // Profit leads the run; the rest is a compact fact list, so the loot stays above the fold.
   elements.sessionDrawerSummary.innerHTML = `
@@ -7110,7 +7175,7 @@ function renderSessionDrawer({ keepForm = false } = {}) {
         <article class="session-drawer-loot-item">
           ${itemSlotHTML(loot.itemName, poeVersion, { small: true, quantity, fallback: 'empty' })}
           <div class="session-drawer-loot-main">
-            <span class="session-drawer-loot-name">${escapeHTML(loot.itemName || 'Unknown Item')}</span>
+            <span class="session-drawer-loot-name">${escapeHTML(loot.itemName || window.t('misc.unknownItem'))}</span>
             <div class="session-drawer-loot-meta">${typeLabel} · ${loot.createdAt ? timeAgo(loot.createdAt) : '-'}</div>
           </div>
           <div class="session-drawer-loot-value" data-profit-tier="${lootTier}">${formatProfit(totalValue, 14, poeVersion, rateOptions)}</div>
@@ -7668,11 +7733,11 @@ function escapeHTML(str) {
 function timeAgo(date) {
   const diff = Date.now() - new Date(date).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return window.t('time.justNow');
+  if (mins < 60) return window.t('time.minutesAgo', { count: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return window.t('time.hoursAgo', { count: hours });
+  return window.t('time.daysAgo', { count: Math.floor(hours / 24) });
 }
 
 async function handleCurrencySync() {

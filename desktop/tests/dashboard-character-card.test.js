@@ -288,6 +288,7 @@ test('renderer fills hero banner artwork and chips from normalized account state
       settings: { poeVersion: 'poe1' }
     },
     window: {
+      t: (key) => key,
       location: {
         href: 'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/index.html'
       }
@@ -381,6 +382,7 @@ test('renderer keeps the last detected game character badge when no game is acti
       }
     },
     window: {
+      t: (key) => key,
       location: {
         href: 'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/index.html'
       }
@@ -449,6 +451,7 @@ test('renderer keeps hero text current when character art is unavailable', () =>
       settings: { poeVersion: 'poe2' }
     },
     window: {
+      t: (key) => key,
       location: {
         href: 'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/index.html'
       }
@@ -484,7 +487,7 @@ test('renderer keeps hero text current when character art is unavailable', () =>
   assert.equal(elements.characterLeague.textContent, 'Standard');
 });
 
-test('renderer empty state shows em dashes and Unknown Class', () => {
+test('renderer empty state shows em dashes and the unknown class line', () => {
   const elements = {
     characterSummaryCard: { dataset: {} },
     characterLevel: { textContent: '' },
@@ -494,6 +497,7 @@ test('renderer empty state shows em dashes and Unknown Class', () => {
   const context = loadFunctions(['renderCharacterSummaryCard'], {
     elements,
     state: { account: null },
+    window: { t: (key) => key },
     getCharacterVisualModel: () => ({
       deriveCharacterVisual: () => ({ badgeText: '?', classLabel: 'Unknown Class' })
     })
@@ -503,7 +507,7 @@ test('renderer empty state shows em dashes and Unknown Class', () => {
 
   assert.equal(elements.characterLevel.textContent, '—');
   assert.equal(elements.characterLeague.textContent, '—');
-  assert.equal(elements.characterClass.textContent, 'Unknown Class');
+  assert.equal(elements.characterClass.textContent, 'dashboard.unknownClass');
   assert.equal(elements.characterSummaryCard.dataset.characterState, 'empty');
 });
 

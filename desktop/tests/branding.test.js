@@ -113,6 +113,8 @@ test('desktop build defines an afterPack hook that patches the packaged exe icon
   assert.match(script, /icon\.ico/);
   assert.match(script, /productFilename/);
   assert.match(script, /\.exe/);
+  // Task Manager lists a process by its FileDescription.
+  assert.match(script, /FileDescription:\s*'Juice Journal'/);
 });
 
 test('desktop package exposes a packaged dev runner for taskbar icon validation', () => {

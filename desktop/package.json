@@ -1,7 +1,7 @@
 {
   "name": "juice-journal-desktop",
   "version": "1.0.0",
-  "description": "Juice Journal Desktop App",
+  "description": "Juice Journal",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

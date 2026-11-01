@@ -27,7 +27,7 @@ async function afterPack(context) {
     'product-version': version,
     'requested-execution-level': 'asInvoker',
     'version-string': {
-      FileDescription: 'Juice Journal Desktop App',
+      FileDescription: 'Juice Journal',
       ProductName: 'Juice Journal',
       InternalFilename: `${productFilename}.exe`,
       OriginalFilename: `${productFilename}.exe`

@@ -372,6 +372,95 @@ test('desktop journal notice keys have their own ASCII Turkish strings', () => {
   assert.equal(translations.en['journal.startNew'], 'Start a new journal');
 });
 
+test('desktop dashboard card, time and reset dialog keys have their own ASCII Turkish strings', () => {
+  const translations = loadDesktopTranslations();
+  const newKeys = [
+    'dashboard.noCharacterSelected', 'dashboard.unknownClass', 'dashboard.unknownLeague',
+    'dashboard.characterSyncNeeded', 'dashboard.characterSynced',
+    'dashboard.lastMapResult', 'dashboard.noCompletedMap', 'dashboard.mapResultsLoadError', 'dashboard.unknownFarmType',
+    'dashboard.mapResultHistory', 'dashboard.mapResultFilterAria', 'dashboard.allFarms', 'dashboard.noMapResults',
+    'mapResult.published', 'mapResult.draft', 'mapResult.local', 'mapResult.share', 'mapResult.shared',
+    'time.justNow', 'time.minutesAgo', 'time.hoursAgo', 'time.daysAgo',
+    'settings.resetTitle', 'settings.resetCancel'
+  ];
+
+  for (const key of newKeys) {
+    assert.ok(translations.en[key], `Missing en string for ${key}`);
+    assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
+    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
+  }
+  for (const key of ['time.minutesAgo', 'time.hoursAgo', 'time.daysAgo']) {
+    assert.match(translations.en[key], /\{count\}/, key);
+    assert.match(translations.tr[key], /\{count\}/, key);
+  }
+});
+
+test('desktop dashboard, sessions, hub and modal labels have their own ASCII Turkish strings', () => {
+  const translations = loadDesktopTranslations();
+  const newKeys = [
+    'game.notRunning', 'dashboard.farmType', 'dashboard.noFarmType', 'dashboard.clearFarmType', 'mapResult.notCalculated',
+    'sessions.allGames', 'sessions.allLeagues', 'sessions.searchPlaceholder',
+    'farmingHub.leaguePlaceholder', 'farmingHub.minProfitPlaceholder', 'farmingHub.unknownAuthor', 'farmingHub.noSetupNotes',
+    'farmingHub.maps', 'farmingHub.duration',
+    'mapSession.kicker', 'mapSession.mapName', 'mapSession.startSubtitle', 'mapSession.startMap', 'mapSession.defaultContext',
+    'mapSession.cancel', 'mapSession.endTitle', 'mapSession.endSubtitle', 'mapSession.activeRun', 'mapSession.keepTracking',
+    'farmPublish.title', 'farmPublish.subtitle', 'farmPublish.selectedRun', 'farmPublish.visibility', 'farmPublish.public',
+    'farmPublish.unlisted', 'farmPublish.private', 'farmPublish.setupNotes', 'farmPublish.setupNotesPlaceholder',
+    'farmPublish.investmentKnown', 'farmPublish.cancel', 'farmPublish.publish', 'misc.unknownItem'
+  ];
+
+  for (const key of newKeys) {
+    assert.ok(translations.en[key], `Missing en string for ${key}`);
+    assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
+    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
+  }
+});
+
+test('every Turkish desktop string is ASCII', () => {
+  const translations = loadDesktopTranslations();
+  for (const [key, value] of Object.entries(translations.tr)) {
+    if (value !== translations.en[key]) {
+      assert.match(value, /^[\x20-\x7e]*$/, `tr string for ${key} is not ASCII`);
+    }
+  }
+});
+
+test('desktop index.html options and placeholders are localized', () => {
+  // Option labels and placeholders that stay the same in every language: game names, language names and sample input.
+  const fixedOptionLabels = new Set(['PoE 1', 'PoE 2', 'Turkce', 'English', 'Standard']);
+  const fixedPlaceholders = new Set(['Dunes Map, City Square Map', 'Standard', 'C:/Path of Exile/logs/Client.txt']);
+  const html = read(path.join(desktopDir, 'src', 'index.html'));
+
+  for (const [, attrs, label] of html.matchAll(/<option([^>]*)>([^<]*)<\/option>/g)) {
+    if (/[A-Za-z]/.test(label) && !fixedOptionLabels.has(label.trim())) {
+      assert.match(attrs, /data-i18n="/, `option "${label.trim()}" has no data-i18n`);
+    }
+  }
+  for (const [tag] of html.matchAll(/<(?:input|textarea)[^>]*\splaceholder="[^"]*"[^>]*>/g)) {
+    const placeholder = tag.match(/\splaceholder="([^"]*)"/)[1];
+    if (!fixedPlaceholders.has(placeholder)) {
+      assert.match(tag, /data-i18n-placeholder="/, `placeholder "${placeholder}" has no data-i18n-placeholder`);
+    }
+  }
+});
+
+test('the Turkish UI does not get Turkish case mapping on its ASCII-folded uppercase labels', () => {
+  // Chromium uppercases i to a dotted capital I under lang=tr; the tr copy has no dotless i, so it renders as en.
+  for (const [language, expected] of [['tr', 'en'], ['en', 'en'], ['de', 'de']]) {
+    const documentElement = { lang: '' };
+    const context = vm.createContext({
+      window: { _appState: { language } },
+      document: { querySelectorAll: () => [], documentElement },
+      console,
+    });
+    vm.runInContext(read(path.join(desktopDir, 'src', 'modules', 'translations.js')), context);
+
+    context.window.applyTranslations();
+
+    assert.equal(documentElement.lang, expected, language);
+  }
+});
+
 test('retired toast keys are gone from every locale', () => {
   const translations = loadDesktopTranslations();
   const retiredKeys = [
