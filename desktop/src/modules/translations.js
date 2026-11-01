@@ -421,7 +421,7 @@ window.Translations = {
 
     // Currency
     'nav.currency': 'Currency',
-    'currency.title': 'Currency Fiyatlari',
+    'currency.title': 'Market',
     'currency.allTypes': 'Tumu',
     'currency.searchPlaceholder': 'Item ara...',
     'currency.sync': 'Senkronize Et',
@@ -434,13 +434,25 @@ window.Translations = {
     'currency.categories': 'Kategoriler',
     'currency.categoriesDesc': 'Fiyat tablosunu kalabaliklastirmadan trade grubuna gore filtreleyin.',
     'currency.categoriesAria': 'Currency kategorileri',
-    'currency.name': 'Ad',
-    'currency.type': 'Tip',
-    'currency.trend': 'Trend',
+    'currency.item': 'Item',
+    'currency.change7d': '7g',
     'currency.noData': 'Fiyat verisi yok. Senkronize butonuna basin.',
     'currency.noMatch': 'Bu aramaya uyan item yok.',
+    'currency.emptyCategory': 'Bu ligde bu kategoride ilan yok.',
+    'currency.notSyncedCategory': 'Bu kategori henuz senkronize edilmedi.',
+    'currency.clearSearch': 'Aramayi temizle',
+    'currency.retry': 'Tekrar dene',
     'currency.waitingForSync': 'Fiyatlar poe.ninja uzerinden senkronize ediliyor...',
     'currency.loadError': 'Fiyatlar yuklenirken hata olustu',
+    'currency.leagueAria': 'Lig',
+    'currency.searchAria': 'Item ara',
+    'currency.priceCount': '{count} fiyat',
+    'currency.syncedAgo': 'Senkronize: {time}',
+    'currency.neverSynced': 'Henuz senkronize edilmedi',
+    'currency.listedCount': '{total} fiyattan {shown} tanesi gosteriliyor',
+    'currency.copyName': 'Adi kopyala',
+    'currency.copied': 'Kopyalandi',
+    'currency.copyFailed': 'Ad kopyalanamadi',
 
     // Currency category filters
     'category.all': 'Tumu',
@@ -530,6 +542,10 @@ window.Translations = {
     'misc.durationMin': 'dk',
     'misc.durationSec': 'sn',
     'misc.unknownMap': 'Bilinmeyen Map',
+    'misc.justNow': 'az once',
+    'misc.minutesAgo': '{count} dk once',
+    'misc.hoursAgo': '{count} sa once',
+    'misc.daysAgo': '{count} gun once',
   },
 
   de: {
@@ -1275,7 +1291,7 @@ window.Translations = {
 
     // Currency
     'nav.currency': 'Currency',
-    'currency.title': 'Currency Prices',
+    'currency.title': 'Market',
     'currency.allTypes': 'All',
     'currency.searchPlaceholder': 'Search items...',
     'currency.sync': 'Sync',
@@ -1288,13 +1304,25 @@ window.Translations = {
     'currency.categories': 'Categories',
     'currency.categoriesDesc': 'Filter by trade group without crowding the price table.',
     'currency.categoriesAria': 'Currency categories',
-    'currency.name': 'Name',
-    'currency.type': 'Type',
-    'currency.trend': 'Trend',
+    'currency.item': 'Item',
+    'currency.change7d': '7d',
     'currency.noData': 'No price data. Click Sync to fetch.',
     'currency.noMatch': 'No items match this search.',
+    'currency.emptyCategory': 'No listings in this category for this league.',
+    'currency.notSyncedCategory': 'This category is not synced yet.',
+    'currency.clearSearch': 'Clear search',
+    'currency.retry': 'Retry',
     'currency.waitingForSync': 'Syncing prices from poe.ninja...',
     'currency.loadError': 'Failed to load prices',
+    'currency.leagueAria': 'League',
+    'currency.searchAria': 'Search items',
+    'currency.priceCount': '{count} prices',
+    'currency.syncedAgo': 'Synced {time}',
+    'currency.neverSynced': 'Not synced yet',
+    'currency.listedCount': 'Showing {shown} of {total}',
+    'currency.copyName': 'Copy name',
+    'currency.copied': 'Copied',
+    'currency.copyFailed': 'Could not copy the name',
 
     // Currency category filters
     'category.all': 'All',
@@ -1384,6 +1412,10 @@ window.Translations = {
     'misc.durationMin': 'm',
     'misc.durationSec': 's',
     'misc.unknownMap': 'Unknown Map',
+    'misc.justNow': 'just now',
+    'misc.minutesAgo': '{count}m ago',
+    'misc.hoursAgo': '{count}h ago',
+    'misc.daysAgo': '{count}d ago',
   }
 };
 

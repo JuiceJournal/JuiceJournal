@@ -53,10 +53,33 @@ test('category tabs only name bundled art of their own game, each once', () => {
     }
   }
 
-  // PoE 2 has no bundled art for these categories, so they show no orb in its place.
-  for (const value of ['idol', 'ultimatum', 'other']) {
-    assert.match(categoryBlock('POE2_CATEGORY_TYPES'), new RegExp(`value: '${value}',[^\\n]*icon: null`), value);
+  // Tabs that are no game category, or have no current art, show one of our line icons in place of an orb.
+  for (const [name, values] of [
+    ['POE1_CATEGORY_TYPES', ['', 'incubator', 'base_type', 'other']],
+    ['POE2_CATEGORY_TYPES', ['', 'ultimatum', 'other']]
+  ]) {
+    for (const value of values) {
+      assert.match(categoryBlock(name), new RegExp(`value: '${value}',[^\\n]*icon: null, glyph: '(layers|chest)'`), `${name} ${value || 'all'}`);
+    }
   }
+});
+
+test('every PoE 1 category but Incubator and Base Type has bundled art, and so do PoE 2 idols', () => {
+  const vm = require('node:vm');
+  const images = vm.runInNewContext(`${getBlock(appJs, 'const CURRENCY_IMAGE_VARIANTS')}\n({ CURRENCY_IMAGE_VARIANTS })`);
+  const poe1Art = [
+    'fragment', 'scarab', 'essence', 'fossil', 'map', 'divination-card', 'gem', 'unique', 'oil', 'beast', 'delirium-orb',
+    'catalyst', 'omen', 'tattoo'
+  ];
+  for (const key of poe1Art) {
+    assert.equal(images.CURRENCY_IMAGE_VARIANTS.poe1[key], `assets/currency/poe1/${key}.png`, key);
+  }
+  assert.equal(images.CURRENCY_IMAGE_VARIANTS.poe2.idol, 'assets/currency/poe2/idol.png');
+
+  // The notice names the new art and where it came from.
+  const notice = fs.readFileSync(path.join(srcDir, 'assets', 'currency', 'NOTICE.md'), 'utf8');
+  assert.match(notice, /PoE 1 category images/);
+  assert.match(notice, /poe2\/idol\.png/);
 });
 
 test('game art ships with a notice and the About page credits Grinding Gear Games', () => {

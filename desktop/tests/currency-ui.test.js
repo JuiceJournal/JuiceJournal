@@ -142,12 +142,24 @@ test('currency page uses an integrated left market category list', () => {
   assert.doesNotMatch(getCssRule('.currency-type-panel'), /background:/);
 });
 
-test('currency category buttons avoid version accent side rails', () => {
-  assert.doesNotMatch(getCssRule('.currency-type-btn.poe1-exclusive'), /border-left/);
-  assert.doesNotMatch(getCssRule('.currency-type-btn.poe2-exclusive'), /border-left/);
-});
-
 const appJs = fs.readFileSync(appJsPath, 'utf8');
+
+test('currency category tabs carry no side stripe in any state, and the selected tab is a bevel plate', () => {
+  // A 2px inset side shadow under the bevel left a half-height ember stub next to the selected tab.
+  const tabRules = stylesCss.match(/[^{}]*\.currency-type-btn[^{}]*\{[^}]*\}/g) || [];
+  assert.ok(tabRules.length >= 4);
+  for (const rule of tabRules) {
+    assert.doesNotMatch(rule, /border-left|inset\s+[1-9]\d*px\s+0\s+0/, rule.trim());
+  }
+  const active = getCssRule('.currency-type-btn.active');
+  assert.match(active, /background:\s*rgb\(var\(--plate-raised-rgb\) \/ 0\.9\);/);
+  assert.match(active, /box-shadow:\s*inset 0 0 0 1px rgb\(var\(--brass-rgb\) \/ 0\.45\);/);
+  assert.match(active, /color:\s*var\(--text-bright\);/);
+  assert.match(stylesCss, /\.currency-type-btn\.active \.currency-tab-count\s*\{\s*color:\s*var\(--gold-light\);\s*\}/);
+  // The version-exclusive classes did nothing any more, so they are gone.
+  assert.doesNotMatch(stylesCss, /poe[12]-exclusive/);
+  assert.doesNotMatch(appJs, /poe[12]-exclusive|poe[12]Only/);
+});
 
 function loadAppFunctions(context, functionNames) {
   vm.runInContext(
@@ -156,10 +168,29 @@ function loadAppFunctions(context, functionNames) {
   );
 }
 
+// A top-level `const NAME = [...]` or `= {...}` block of app.js, as source.
+function constSource(name) {
+  const start = appJs.indexOf(`const ${name} = `);
+  assert.notEqual(start, -1, `${name} should exist`);
+  const opener = appJs[start + `const ${name} = `.length];
+  const end = opener === '[' || opener === '{'
+    ? appJs.indexOf(opener === '[' ? '\n];' : '\n};', start) + 3
+    : appJs.indexOf(';', start) + 1;
+  return appJs.slice(start, end).replace(/^const /, 'var ');
+}
+
+// The t() stand-in names the key and, when given, its values, so tests can read both.
+const fakeT = (key, values) => (values ? `${key} ${JSON.stringify(values)}` : key);
+const listed = (shown, total) => fakeT('currency.listedCount', { shown, total });
+
 // Runs app.js loadCurrencyPrices against a main process that answers each request when the test says so. Its
 // timers run only when the test calls runTimers.
 function loadCurrencyPricesRenderer(currencyState = {}) {
-  const elements = { 'currency-table-body': { innerHTML: '' }, 'currency-footer': { textContent: '' } };
+  const elements = {
+    'currency-table-body': { innerHTML: '' },
+    'currency-footer': { textContent: '' },
+    'currency-status': { textContent: '' }
+  };
   const rendered = [];
   const emptyRows = [];
   const requests = [];
@@ -169,7 +200,7 @@ function loadCurrencyPricesRenderer(currencyState = {}) {
   const context = vm.createContext({
     document: { getElementById: (id) => elements[id] || null },
     window: {
-      t: (key) => key,
+      t: fakeT,
       electronAPI: {
         getCurrencyPrices: (params) => {
           requests.push({ ...params });
@@ -184,18 +215,20 @@ function loadCurrencyPricesRenderer(currencyState = {}) {
     clearTimeout: (id) => timers.delete(id),
     currencyState: {
       poeVersion: 'poe1', league: 'Mirage', type: '', search: '', prices: [], pricesRequest: 0, listedKey: null, rates: {},
+      total: 0, typeCounts: null, syncedTypes: [], updatedAt: null, loadError: null, syncing: false,
       ...currencyState
     },
     renderCurrencyTable: () => rendered.push(context.currencyState.prices.map((price) => price.league)),
-    renderCurrencyEmptyRow: (tbody, message) => emptyRows.push(message),
-    getUserFacingErrorMessage: (error, key) => key,
-    timeAgo: () => 'now'
+    renderCurrencyEmptyRow: (tbody, message, options = {}) => emptyRows.push(options.action ? `${message} [${options.action}]` : message),
+    updateCurrencyTypeCounts() {},
+    getUserFacingErrorMessage: (error, key) => key
   });
-  loadAppFunctions(context, ['currencyLoadingRowsHTML', 'loadCurrencyPrices']);
+  loadAppFunctions(context, ['currencyLoadingRowsHTML', 'loadCurrencyPrices', 'renderCurrencyStatus', 'formatSyncedAgo']);
   return {
     context,
     tbody: elements['currency-table-body'],
     footer: elements['currency-footer'],
+    status: elements['currency-status'],
     rendered,
     emptyRows,
     requests,
@@ -215,12 +248,14 @@ test('currency table says it waits for the poe.ninja sync until the main process
   const { context, tbody, rendered, answer } = loadCurrencyPricesRenderer();
 
   const load = context.loadCurrencyPrices();
-  assert.match(tbody.innerHTML, /<tr class="currency-loading-row"><td colspan="7" class="currency-loading-label">currency\.waitingForSync<\/td><\/tr>/);
+  assert.match(tbody.innerHTML, /<tr class="currency-loading-row"><td colspan="4" class="currency-loading-label">currency\.waitingForSync<\/td><\/tr>/);
   // A live region inserted together with its text is not announced, so the label is plain text.
   assert.doesNotMatch(tbody.innerHTML, /role="status"|aria-live/);
   const placeholders = tbody.innerHTML.match(/<tr class="currency-row--placeholder" aria-hidden="true">[\s\S]*?<\/tr>/g) || [];
   assert.equal(placeholders.length, 8);
   for (const row of placeholders) {
+    // The still rows have the listed rows' four columns, so nothing moves when the prices arrive.
+    assert.equal((row.match(/<td /g) || []).length, 4);
     assert.match(row, /<span class="item-slot"><\/span>/);
     assert.equal((row.match(/<span class="currency-bar[ "]/g) || []).length, 2);
   }
@@ -246,7 +281,7 @@ test('currency table ignores an earlier request that answers after a later one',
 
   assert.deepEqual(rendered, [['Mirage']]);
   assert.deepEqual(context.currencyState.prices.map((price) => price.league), ['Mirage']);
-  assert.equal(footer.textContent, '1 items');
+  assert.equal(footer.textContent, listed('1', '1'));
 });
 
 test('currency table keeps the listed rows while main answers a filter of the same game and league', async () => {
@@ -285,7 +320,7 @@ test('kept currency rows give way to still rows when main waits for a sync befor
   answer(0, { prices: [{ itemName: 'Chaos Orb', league: 'Mirage' }], count: 1, league: 'Mirage' });
   await load;
   assert.deepEqual(rendered, [['Mirage']]);
-  assert.equal(footer.textContent, '1 items');
+  assert.equal(footer.textContent, listed('1', '1'));
 });
 
 test('a slow currency request that a later one replaced does not draw still rows', async () => {
@@ -305,15 +340,21 @@ test('a slow currency request that a later one replaced does not draw still rows
   await slow;
 });
 
-test('currency table shows still rows and clears the footer when another game or league loads', () => {
+test('currency table shows still rows and clears the footer and rail counts when another game or league loads', () => {
   for (const currencyState of [{ league: 'Standard' }, { poeVersion: 'poe2' }]) {
-    const { context, tbody, footer } = loadCurrencyPricesRenderer({ listedKey: 'poe1:Mirage', ...currencyState });
+    const { context, tbody, footer } = loadCurrencyPricesRenderer({
+      listedKey: 'poe1:Mirage',
+      typeCounts: { currency: 3 },
+      ...currencyState
+    });
     tbody.innerHTML = '<tr><td>Divine Orb</td></tr>';
     footer.textContent = '1 items';
 
     context.loadCurrencyPrices();
     assert.equal((tbody.innerHTML.match(/class="currency-row--placeholder"/g) || []).length, 8, JSON.stringify(currencyState));
     assert.equal(footer.textContent, '');
+    // The counts belonged to the listed game and league.
+    assert.equal(context.currencyState.typeCounts, null);
   }
 });
 
@@ -331,6 +372,47 @@ test('currency table keeps the rates and listed league of the latest request onl
 
   assert.deepEqual(context.currencyState.rates, { divineChaos: 150, mirrorChaos: 90000 });
   assert.equal(context.currencyState.listedKey, 'poe1:Mirage');
+});
+
+test('the status line names the league, its price count and sync age, and the footer how many matches show', async () => {
+  const { context, status, footer, answer } = loadCurrencyPricesRenderer();
+
+  const load = context.loadCurrencyPrices();
+  answer(0, {
+    prices: Array.from({ length: 500 }, (_, index) => ({ itemName: `Item ${index}` })),
+    count: 500,
+    total: 4210,
+    typeCounts: { currency: 4000, divination_card: 210 },
+    syncedTypes: ['currency', 'divination_card'],
+    updatedAt: new Date(Date.now() - 4 * 60000).toISOString(),
+    league: 'Mirage'
+  });
+  await load;
+
+  assert.equal(
+    status.textContent,
+    `Mirage · ${fakeT('currency.priceCount', { count: '4,210' })} · ${fakeT('currency.syncedAgo', { time: fakeT('misc.minutesAgo', { count: 4 }) })}`
+  );
+  assert.equal(footer.textContent, listed('500', '4,210'));
+  assert.deepEqual(JSON.parse(JSON.stringify(context.currencyState.syncedTypes)), ['currency', 'divination_card']);
+
+  // While a sync runs the line says so; before the first sync it says that instead of an age.
+  context.currencyState.syncing = true;
+  context.renderCurrencyStatus();
+  assert.equal(status.textContent, 'Mirage · currency.syncing');
+  context.currencyState.syncing = false;
+  context.currencyState.updatedAt = null;
+  context.renderCurrencyStatus();
+  assert.equal(status.textContent, 'Mirage · currency.neverSynced');
+});
+
+test('the sync age reads in the page language at each step', () => {
+  const { context } = loadCurrencyPricesRenderer();
+  const ago = (minutes) => context.formatSyncedAgo(new Date(Date.now() - minutes * 60000).toISOString());
+  assert.equal(ago(0), 'misc.justNow');
+  assert.equal(ago(59), fakeT('misc.minutesAgo', { count: 59 }));
+  assert.equal(ago(125), fakeT('misc.hoursAgo', { count: 2 }));
+  assert.equal(ago(3 * 1440), fakeT('misc.daysAgo', { count: 3 }));
 });
 
 test('a cache-only currency reload keeps the rows when main no longer holds the listed league', async () => {
@@ -359,7 +441,12 @@ test('a cache-only currency reload keeps the rows when main no longer holds the 
 });
 
 test('a failed cache-only currency reload leaves the listed rows as they are', async () => {
-  const { context, tbody, footer, emptyRows, fail } = loadCurrencyPricesRenderer({ listedKey: 'poe1:Standard' });
+  const { context, tbody, footer, status, emptyRows, fail } = loadCurrencyPricesRenderer({
+    listedKey: 'poe1:Standard',
+    prices: [{ itemName: 'Divine Orb' }],
+    typeCounts: { currency: 1 },
+    updatedAt: new Date().toISOString()
+  });
   tbody.innerHTML = '<tr><td>Divine Orb</td></tr>';
   footer.textContent = '1 items';
 
@@ -372,12 +459,18 @@ test('a failed cache-only currency reload leaves the listed rows as they are', a
   assert.equal(footer.textContent, '1 items');
   assert.equal(context.currencyState.listedKey, 'poe1:Standard');
 
-  // A failed normal load does show the error and forgets the listed league.
+  // A failed normal load shows the error with Retry, forgets the listed league and clears the stale footer, rail
+  // counts and sync time. It keeps the error, so a redraw writes the message in the language of that moment.
+  const error = new Error('main went away');
   const load = context.loadCurrencyPrices();
-  fail(1, new Error('main went away'));
+  fail(1, error);
   await load;
-  assert.deepEqual(emptyRows, ['currency.loadError']);
+  assert.deepEqual(emptyRows, ['currency.loadError [retry]']);
   assert.equal(context.currencyState.listedKey, null);
+  assert.equal(context.currencyState.loadError, error);
+  assert.equal(context.currencyState.typeCounts, null);
+  assert.equal(footer.textContent, '');
+  assert.equal(status.textContent, 'Mirage');
 });
 
 test('a cache-only currency reload does not drop a league load that waits for a sync', async () => {
@@ -396,20 +489,37 @@ test('a cache-only currency reload does not drop a league load that waits for a 
   assert.equal(context.currencyState.listedKey, 'poe1:Mirage');
 });
 
-test('currency table columns keep fixed widths and line values up on the right', () => {
-  assert.match(stylesCss, /\.currency-th-num\s*\{\s*width:\s*40px;\s*\}/);
-  assert.match(stylesCss, /\.currency-th-icon\s*\{\s*width:\s*44px;\s*\}/);
-  assert.match(stylesCss, /\.currency-th-trend\s*\{\s*width:\s*96px;\s*\}/);
-  assert.doesNotMatch(getCssRule('.currency-td-num'), /width:/);
-  // `.currency-table th` and `td` set padding and text-align, so the overrides need the table prefix to win.
-  assert.match(stylesCss, /\.currency-table \.currency-th-icon,\s*\.currency-table \.currency-td-icon\s*\{\s*padding-inline:\s*6px;\s*\}/);
+test('currency table has four fixed columns, so widths never jump between still, empty and listed rows', () => {
+  const table = indexHtml.match(/<table class="currency-table">[\s\S]*?<\/table>/)[0];
   assert.match(
-    stylesCss,
-    /\.currency-table \.currency-th-chaos,\s*\.currency-table \.currency-th-divine,\s*\.currency-table \.currency-td-chaos,\s*\.currency-table \.currency-td-divine\s*\{\s*text-align:\s*right;\s*\}/
+    table,
+    /<colgroup>\s*<col>\s*<col class="currency-col-chaos">\s*<col class="currency-col-divine">\s*<col class="currency-col-change">\s*<\/colgroup>/
   );
+  assert.equal((table.match(/<th\b/g) || []).length, 4);
+  assert.match(table, /<td colspan="4" class="currency-empty"/);
+  assert.match(getCssRule('.currency-table'), /table-layout:\s*fixed;/);
+  assert.match(stylesCss, /\.currency-col-chaos\s*\{\s*width:\s*120px;\s*\}/);
+  assert.match(stylesCss, /\.currency-col-divine\s*\{\s*width:\s*110px;\s*\}/);
+  assert.match(stylesCss, /\.currency-col-change\s*\{\s*width:\s*150px;\s*\}/);
+  // A long name ends in an ellipsis instead of widening its column.
+  assert.match(getCssRule('.currency-item-meta'), /text-overflow:\s*ellipsis;/);
+  // `.currency-table td` sets text-align, so the overrides need the table prefix to win.
+  assert.match(stylesCss, /\.currency-table \.currency-td-chaos,\s*\.currency-table \.currency-td-divine\s*\{\s*text-align:\s*right;\s*\}/);
   assert.match(stylesCss, /\.currency-td-chaos \.value-chip,\s*\.currency-td-divine \.value-chip\s*\{\s*justify-content:\s*flex-end;\s*\}/);
   // A list sorted by value would glow down its top rows, so the table keeps the tier colour only.
   assert.match(stylesCss, /\.currency-td-chaos\[data-profit-tier\]\s*\{\s*text-shadow:\s*none;\s*\}/);
+});
+
+test('the column labels and the rail stay in view under the app header', () => {
+  const head = getCssRule('.currency-table thead th');
+  assert.match(head, /position:\s*sticky;/);
+  assert.match(head, /top:\s*var\(--header-height\);/);
+  assert.match(head, /background:\s*var\(--bg-base\);/);
+  // A scrolling wrap would hold the sticky header inside itself, so the wrap only clips to its bevel.
+  const wrap = getCssRule('.currency-table-wrap');
+  assert.match(wrap, /overflow:\s*clip;/);
+  assert.doesNotMatch(wrap, /overflow-[xy]/);
+  assert.match(getCssRule('.currency-type-panel'), /top:\s*calc\(var\(--header-height\) \+ 0\.75rem\);/);
 });
 
 test('currency still rows are quiet bars that never move', () => {
@@ -424,11 +534,57 @@ test('currency still rows are quiet bars that never move', () => {
   }
 });
 
-test('the header Sync button carries the sync icon and keeps its text in a label span', () => {
+test('the header Sync button carries the sync icon, keeps its text in a label span and never resizes when busy', () => {
   const button = indexHtml.match(/<button id="currency-sync-btn"[^>]*>[\s\S]*?<\/button>/)[0];
   assert.match(button, /class="btn btn-primary btn-small"/);
   assert.match(button, /<use href="assets\/icons\.svg#sync"\/>/);
   assert.match(button, /<span class="btn-label" data-i18n="currency\.sync">Sync<\/span>/);
+  assert.match(stylesCss, /#currency-sync-btn\s*\{\s*min-inline-size:\s*[\d.]+rem;\s*\}/);
+  assert.match(stylesCss, /:lang\(tr\) #currency-sync-btn\s*\{\s*min-inline-size:\s*[\d.]+rem;\s*\}/);
+});
+
+test('the Currency controls have names, sort headers are buttons, and every control shows keyboard focus', () => {
+  assert.match(indexHtml, /<select id="currency-league"[^>]*data-i18n-aria="currency\.leagueAria"/);
+  assert.match(indexHtml, /<input [^>]*id="currency-search"[^>]*data-i18n-aria="currency\.searchAria"/);
+  assert.match(indexHtml, /<button type="button" id="currency-search-clear"[^>]*data-i18n-aria="currency\.clearSearch"[^>]*hidden>/);
+
+  const headers = indexHtml.match(/<th class="currency-th-[a-z]+[^"]*" data-sort="[^"]+"[^>]*><button type="button" class="currency-sort"[^>]*>[^<]*<\/button><\/th>/g) || [];
+  assert.equal(headers.length, 4);
+  assert.match(indexHtml, /<th class="currency-th-chaos active" data-sort="chaosValue" aria-sort="descending">/);
+
+  for (const selector of ['.currency-type-btn', '.poe-toggle-btn', '.currency-search', '.currency-select', '.currency-sort', '.currency-row']) {
+    const escaped = selector.replace('.', '\\.');
+    assert.match(stylesCss, new RegExp(`${escaped}:focus-visible[^{]*\\{\\s*outline:\\s*2px solid var\\(--gold-light\\);`), selector);
+  }
+});
+
+test('the sorted column header says its order with aria-sort and the others carry none', () => {
+  const headers = ['itemName', 'chaosValue', 'divineValue', 'change'].map((sort) => {
+    const attributes = {};
+    const classes = new Set();
+    return {
+      dataset: { sort },
+      classList: { toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)) },
+      setAttribute: (name, value) => { attributes[name] = value; },
+      removeAttribute: (name) => { delete attributes[name]; },
+      attributes,
+      classes
+    };
+  });
+  const context = vm.createContext({
+    document: { querySelectorAll: () => headers },
+    currencyState: { sortField: 'change', sortDir: 'asc' }
+  });
+  loadAppFunctions(context, ['updateCurrencySortHeaders']);
+
+  context.updateCurrencySortHeaders();
+  assert.deepEqual(headers.map((th) => th.attributes['aria-sort'] || null), [null, null, null, 'ascending']);
+  assert.deepEqual([...headers[3].classes].sort(), ['active', 'asc']);
+  context.currencyState.sortField = 'chaosValue';
+  context.currencyState.sortDir = 'desc';
+  context.updateCurrencySortHeaders();
+  assert.deepEqual(headers.map((th) => th.attributes['aria-sort'] || null), [null, 'descending', null, null]);
+  assert.deepEqual([...headers[1].classes], ['active']);
 });
 
 function descendantsWithClass(root, className) {
@@ -438,9 +594,9 @@ function descendantsWithClass(root, className) {
   ]);
 }
 
-// renderCurrencyTable, its empty row and handleCurrencySync in a small fake DOM. Elements keep their children,
-// classes, attributes and listeners, so rows and buttons can be read back and clicked.
-function loadCurrencyTableRenderer({ currencyState = {}, canSync = true, syncCurrencyPrices, loadCurrencyPrices } = {}) {
+// A small fake DOM. Elements keep their children, classes, attributes and listeners, so rows and buttons can be read
+// back and clicked.
+function createFakeDocument() {
   const document = {};
   const createElement = (tagName) => {
     const attributes = {};
@@ -450,6 +606,7 @@ function loadCurrencyTableRenderer({ currencyState = {}, canSync = true, syncCur
       className: '',
       textContent: '',
       dataset: {},
+      style: {},
       children: [],
       markup: '',
       setAttribute: (name, value) => { attributes[name] = String(value); },
@@ -461,20 +618,34 @@ function loadCurrencyTableRenderer({ currencyState = {}, canSync = true, syncCur
         return node;
       },
       replaceChildren: (...nodes) => {
+        element.markup = '';
         element.children = nodes.flatMap((node) => (node.tagName === '#FRAGMENT' ? node.children : [node]));
       },
       insertAdjacentHTML: (position, html) => { element.markup = html; },
       addEventListener: (type, handler) => { (handlers[type] ||= []).push(handler); },
-      click: () => (handlers.click || []).forEach((handler) => handler({ type: 'click' })),
+      dispatch: (type, event = {}) => (handlers[type] || []).forEach((handler) => handler({ type, ...event })),
+      click: () => element.dispatch('click'),
       focus: () => { document.activeElement = element; },
       querySelector: (selector) => descendantsWithClass(element, selector.slice(1))[0] || null
     };
     return element;
   };
+  Object.assign(document, {
+    createElement,
+    createElementNS: (namespace, tagName) => createElement(tagName),
+    createDocumentFragment: () => createElement('#fragment')
+  });
+  document.body = createElement('body');
+  document.activeElement = document.body;
+  return document;
+}
 
-  const tbody = createElement('tbody');
-  const header = createElement('button');
-  const headerLabel = createElement('span');
+// renderCurrencyTable, its empty row and handleCurrencySync in the fake DOM.
+function loadCurrencyTableRenderer({ currencyState = {}, canSync = true, syncCurrencyPrices, loadCurrencyPrices } = {}) {
+  const document = createFakeDocument();
+  const tbody = document.createElement('tbody');
+  const header = document.createElement('button');
+  const headerLabel = document.createElement('span');
   headerLabel.className = 'btn-label';
   headerLabel.setAttribute('data-i18n', 'currency.sync');
   headerLabel.textContent = 'currency.sync';
@@ -482,20 +653,17 @@ function loadCurrencyTableRenderer({ currencyState = {}, canSync = true, syncCur
   const byId = { 'currency-table-body': tbody, 'currency-sync-btn': header };
 
   Object.assign(document, {
-    body: createElement('body'),
-    createElement,
-    createDocumentFragment: () => createElement('#fragment'),
     getElementById: (id) => byId[id] || null,
     querySelectorAll(selector) {
       if (selector === '.poe-toggle-btn') return [];
-      assert.equal(selector, '.currency-empty-action .btn');
-      return descendantsWithClass(tbody, 'currency-empty-action').flatMap((action) => descendantsWithClass(action, 'btn'));
+      assert.equal(selector, '.currency-empty-sync');
+      return descendantsWithClass(tbody, 'currency-empty-sync');
     },
     querySelector: (selector) => document.querySelectorAll(selector)[0] || null
   });
-  document.activeElement = document.body;
 
   const syncCalls = [];
+  const searchClears = [];
   const context = vm.createContext({
     document,
     window: {
@@ -510,21 +678,41 @@ function loadCurrencyTableRenderer({ currencyState = {}, canSync = true, syncCur
     },
     currencyState: {
       poeVersion: 'poe1', league: 'Mirage', type: '', search: '', sortField: 'chaosValue', sortDir: 'desc',
-      prices: [], rates: {}, syncing: false,
+      prices: [], rates: {}, syncedTypes: [], loadError: null, expandedKey: null, syncing: false,
       ...currencyState
     },
     canCurrentUserSyncPrices: () => canSync,
     state: { settings: { poeVersion: 'poe1' } },
     setToggleButtonPressed() {},
     updateTypeFilterDropdown() {},
-    normalizeSafeImageSrc: () => '',
+    updateCurrencySortHeaders() {},
+    renderCurrencyStatus() {},
+    clearCurrencySearch: () => searchClears.push('clear'),
+    getCurrencyTypeLabel: (type) => `label:${type}`,
+    createCurrencyItemSlot: () => {
+      const slot = document.createElement('span');
+      slot.className = 'item-slot';
+      return slot;
+    },
+    createPriceChangeElement: (change) => {
+      const box = document.createElement('div');
+      box.className = 'currency-change';
+      box.textContent = String(change);
+      return box;
+    },
+    toggleCurrencyRowDetail() {},
+    buildCurrencyDetailRow: (item) => {
+      const row = document.createElement('tr');
+      row.className = 'currency-detail-row';
+      row.textContent = item.itemName;
+      return row;
+    },
     createCurrencyValueElement: (value) => {
-      const chip = createElement('span');
+      const chip = document.createElement('span');
       chip.className = 'value-chip';
       chip.textContent = String(value);
       return chip;
     },
-    createSparklineElement: () => null,
     applyCachedItemIcons() {},
     showToast() {},
     getUserFacingErrorMessage: (error, key) => key,
@@ -533,41 +721,161 @@ function loadCurrencyTableRenderer({ currencyState = {}, canSync = true, syncCur
     loadCurrencyPrices: loadCurrencyPrices || (async () => {})
   });
   loadAppFunctions(context, [
-    'getProfitTierFor', 'applyProfitTier', 'setButtonBusy', 'renderCurrencyEmptyRow', 'renderCurrencyTable', 'handleCurrencySync',
-    'loadCurrencyPage'
+    'getProfitTierFor', 'applyProfitTier', 'setButtonBusy', 'selectCurrencyEmptyState', 'renderCurrencyEmptyRow',
+    'renderCurrencyTable', 'handleCurrencySync', 'loadCurrencyPage'
   ]);
-  return { context, document, tbody, header, syncCalls };
+  return { context, document, tbody, header, syncCalls, searchClears };
 }
 
-test('an empty currency list offers Sync now to accounts that can sync, but not for a search that matches nothing', () => {
-  const syncs = [];
-  const { context, tbody } = loadCurrencyTableRenderer();
-  context.handleCurrencySync = () => syncs.push('sync');
+test('each empty currency table names why and offers the one action that can fill it', () => {
+  const render = (currencyState, canSync = true) => {
+    const harness = loadCurrencyTableRenderer({ currencyState, canSync });
+    // The button takes handleCurrencySync when it is drawn, so the stand-in goes in first.
+    const syncs = [];
+    harness.context.handleCurrencySync = () => syncs.push('sync');
+    harness.context.renderCurrencyTable();
+    const cell = harness.tbody.children[0].children[0];
+    const [button] = descendantsWithClass(cell, 'btn');
+    return { ...harness, syncs, cell, button, label: button?.querySelector('.btn-label') };
+  };
+
+  // A league with no prices at all, or a tab the quick sync skipped: Sync now, for accounts that can sync.
+  for (const [currencyState, message] of [
+    [{}, 'currency.noData'],
+    [{ type: 'gem', syncedTypes: ['currency'] }, 'currency.notSyncedCategory']
+  ]) {
+    const { syncs, cell, button, label } = render(currencyState);
+    assert.equal(cell.textContent, message);
+    assert.equal(cell.colSpan, 4);
+    assert.equal(button.className, 'btn btn-secondary btn-small currency-empty-sync');
+    assert.equal(button.type, 'button');
+    assert.match(button.markup, /^<svg class="icon icon-sm"[^>]*aria-hidden="true"><use href="assets\/icons\.svg#sync"\/><\/svg>$/);
+    assert.equal(label.getAttribute('data-i18n'), 'currency.syncNow');
+    assert.equal(label.textContent, 'currency.syncNow');
+    button.click();
+    assert.deepEqual(syncs, ['sync'], message);
+
+    const restricted = render(currencyState, false);
+    assert.equal(restricted.cell.textContent, message);
+    assert.equal(restricted.button, undefined);
+  }
+
+  // The sync read this tab's type and poe.ninja lists none of it this league, so a sync cannot help.
+  const empty = render({ type: 'incubator', syncedTypes: ['currency', 'incubator'] });
+  assert.equal(empty.cell.textContent, 'currency.emptyCategory');
+  assert.equal(empty.button, undefined);
+
+  // A search that matches nothing offers to clear it.
+  const search = render({ search: 'mirrorr', type: 'gem', syncedTypes: [] });
+  assert.equal(search.cell.textContent, 'currency.noMatch');
+  assert.equal(search.button.className, 'btn btn-secondary btn-small');
+  assert.equal(search.label.getAttribute('data-i18n'), 'currency.clearSearch');
+  search.button.click();
+  assert.deepEqual(search.searchClears, ['clear']);
+
+  // A failed load keeps its message on every redraw and offers Retry.
+  const reloads = [];
+  const failed = loadCurrencyTableRenderer({
+    currencyState: { loadError: new Error('main went away'), prices: [{ itemName: 'Divine Orb', chaosValue: 150 }] },
+    loadCurrencyPrices: async () => reloads.push('load')
+  });
+  failed.context.renderCurrencyTable();
+  const failedCell = failed.tbody.children[0].children[0];
+  assert.equal(failedCell.textContent, 'currency.loadError');
+  const [retry] = descendantsWithClass(failedCell, 'btn');
+  assert.equal(retry.querySelector('.btn-label').getAttribute('data-i18n'), 'currency.retry');
+  retry.click();
+  assert.deepEqual(reloads, ['load']);
+});
+
+test('selectCurrencyEmptyState tells a skipped category from one with no listings', () => {
+  const context = vm.createContext({});
+  loadAppFunctions(context, ['selectCurrencyEmptyState']);
+  const select = (state) => context.selectCurrencyEmptyState(state);
+
+  assert.equal(select({ search: 'x', type: 'gem', syncedTypes: ['gem'] }), 'noMatch');
+  assert.equal(select({ type: '' }), 'noData');
+  assert.equal(select({ type: 'gem', syncedTypes: ['gem'] }), 'zeroListings');
+  assert.equal(select({ type: 'gem', syncedTypes: ['currency'] }), 'notSynced');
+  assert.equal(select({ type: 'gem', syncedTypes: null }), 'notSynced');
+});
+
+test('currency rows merge art, name and type into one Item cell, with the type only in the All view', () => {
+  const prices = [
+    { itemName: 'House of Mirrors', itemType: 'divination_card', chaosValue: 9000, divineValue: 60, change: -3.2 },
+    { itemName: 'Chaos Orb', itemType: 'currency', chaosValue: 1, divineValue: 0.006, change: null }
+  ];
+  const { context, tbody } = loadCurrencyTableRenderer({ currencyState: { prices } });
   context.renderCurrencyTable();
 
-  const cell = tbody.children[0].children[0];
-  assert.equal(cell.textContent, 'currency.noData');
-  const [button] = descendantsWithClass(cell, 'btn');
-  assert.equal(button.className, 'btn btn-secondary btn-small');
-  assert.equal(button.type, 'button');
-  assert.equal(button.disabled, undefined);
-  assert.match(button.markup, /^<svg class="icon icon-sm"[^>]*aria-hidden="true"><use href="assets\/icons\.svg#sync"\/><\/svg>$/);
-  const label = button.querySelector('.btn-label');
-  assert.equal(label.getAttribute('data-i18n'), 'currency.syncNow');
-  assert.equal(label.textContent, 'currency.syncNow');
+  assert.equal(tbody.children.length, 2);
+  const [row] = tbody.children;
+  assert.equal(row.className, 'currency-row');
+  // The rows are one Tab stop: the first row, or the open one.
+  assert.deepEqual(tbody.children.map((child) => child.tabIndex), [0, -1]);
+  assert.equal(row.getAttribute('aria-expanded'), 'false');
+  assert.deepEqual(row.children.map((cell) => cell.className), ['currency-td-item', 'currency-td-chaos', 'currency-td-divine', 'currency-td-change']);
+  const name = descendantsWithClass(row, 'currency-item-name')[0];
+  assert.equal(name.textContent, 'House of Mirrors');
+  assert.equal(name.title, 'House of Mirrors');
+  assert.equal(descendantsWithClass(row, 'currency-item-meta')[0].textContent, 'label:divination_card');
+  assert.equal(descendantsWithClass(row, 'item-slot').length, 1);
+  assert.equal(descendantsWithClass(row, 'currency-change')[0].textContent, '-3.2');
 
-  button.click();
-  assert.deepEqual(syncs, ['sync']);
+  // A tab already names the type.
+  const filtered = loadCurrencyTableRenderer({ currencyState: { prices: [prices[0]], type: 'divination_card' } });
+  filtered.context.renderCurrencyTable();
+  assert.deepEqual(descendantsWithClass(filtered.tbody, 'currency-item-meta'), []);
 
-  const restricted = loadCurrencyTableRenderer({ canSync: false });
-  restricted.context.renderCurrencyTable();
-  assert.equal(restricted.tbody.children[0].children[0].textContent, 'currency.noData');
-  assert.deepEqual(descendantsWithClass(restricted.tbody, 'btn'), []);
+  // The open detail stays open when the table redraws.
+  const open = loadCurrencyTableRenderer({ currencyState: { prices, expandedKey: 'chaos orb' } });
+  open.context.renderCurrencyTable();
+  assert.deepEqual(open.tbody.children.map((child) => child.className), ['currency-row', 'currency-row', 'currency-detail-row']);
+  assert.equal(open.tbody.children[1].getAttribute('aria-expanded'), 'true');
+  assert.equal(open.tbody.children[2].textContent, 'Chaos Orb');
+  assert.deepEqual(open.tbody.children.slice(0, 2).map((child) => child.tabIndex), [-1, 0]);
+});
 
-  const search = loadCurrencyTableRenderer({ currencyState: { search: 'mirrorr' } });
-  search.context.renderCurrencyTable();
-  assert.equal(search.tbody.children[0].children[0].textContent, 'currency.noMatch');
-  assert.deepEqual(descendantsWithClass(search.tbody, 'btn'), []);
+test('sorting by the 7d change puts rows without a change last in both orders', () => {
+  const prices = [
+    { itemName: 'Flat', change: 0 },
+    { itemName: 'Unknown', change: null },
+    { itemName: 'Gainer', change: 12.4 },
+    { itemName: 'Missing' },
+    { itemName: 'Loser', change: -81.5 }
+  ];
+  const order = (sortDir) => {
+    const { context, tbody } = loadCurrencyTableRenderer({ currencyState: { prices, sortField: 'change', sortDir } });
+    context.renderCurrencyTable();
+    return tbody.children.map((row) => descendantsWithClass(row, 'currency-item-name')[0].textContent);
+  };
+  assert.deepEqual(order('desc'), ['Gainer', 'Flat', 'Loser', 'Unknown', 'Missing']);
+  assert.deepEqual(order('asc'), ['Loser', 'Flat', 'Gainer', 'Unknown', 'Missing']);
+});
+
+test('arrow keys, Home and End move focus between price rows and carry the one Tab stop', () => {
+  const focused = [];
+  const tbody = {};
+  const rows = ['a', 'b', 'c'].map((name, index) => ({ name, tabIndex: index ? -1 : 0, parentElement: tbody, focus: () => focused.push(name) }));
+  tbody.querySelectorAll = (selector) => {
+    assert.equal(selector, '.currency-row');
+    return rows;
+  };
+  const context = vm.createContext({});
+  loadAppFunctions(context, ['moveCurrencyRowFocus']);
+  const tabIndexes = () => rows.map((row) => row.tabIndex);
+
+  assert.equal(context.moveCurrencyRowFocus(rows[0], 'ArrowDown'), true);
+  assert.deepEqual(tabIndexes(), [-1, 0, -1]);
+  assert.equal(context.moveCurrencyRowFocus(rows[1], 'End'), true);
+  assert.deepEqual(tabIndexes(), [-1, -1, 0]);
+  // Past the last row nothing moves, and the key is left to the page.
+  assert.equal(context.moveCurrencyRowFocus(rows[2], 'ArrowDown'), false);
+  assert.equal(context.moveCurrencyRowFocus(rows[2], 'ArrowUp'), true);
+  assert.equal(context.moveCurrencyRowFocus(rows[1], 'Home'), true);
+  assert.equal(context.moveCurrencyRowFocus(rows[0], 'Tab'), false);
+  assert.deepEqual(tabIndexes(), [0, -1, -1]);
+  assert.deepEqual(focused, ['b', 'c', 'b', 'a']);
 });
 
 test('currency rows colour the chaos value by loot-filter tier against the list\'s own Divine and Mirror prices', () => {
@@ -654,10 +962,10 @@ test('coming back to the Currency page while a sync runs keeps the header Sync b
 
 test('a keyboard user who started a currency sync gets focus back on a Sync control', async () => {
   // loadCurrencyPrices draws the table again, which drops focus from a Sync now it replaces.
-  const run = async ({ listed, focusMovesTo }) => {
+  const run = async ({ listed: rows, focusMovesTo }) => {
     const harness = loadCurrencyTableRenderer({
       loadCurrencyPrices: async () => {
-        harness.context.currencyState.prices = listed;
+        harness.context.currencyState.prices = rows;
         harness.context.renderCurrencyTable();
         harness.document.activeElement = focusMovesTo || harness.document.body;
       }
@@ -679,29 +987,39 @@ test('a keyboard user who started a currency sync gets focus back on a Sync cont
   assert.equal(elsewhere.document.activeElement, search);
 });
 
+// app.js's category lists, art tables and the Currency helpers that read them, for one game at a time.
+function loadCurrencyHelpers({ poeVersion = 'poe1', document = createFakeDocument() } = {}) {
+  const context = vm.createContext({
+    document,
+    URL,
+    window: { t: (key) => key, location: { href: 'file:///app/index.html' } },
+    state: { settings: { poeVersion } },
+    currencyState: { poeVersion, type: '' },
+    setToggleButtonPressed() {},
+    loadCurrencyPrices() {}
+  });
+  vm.runInContext(
+    [
+      'POE1_CATEGORY_TYPES', 'POE2_CATEGORY_TYPES', 'CURRENCY_TAB_GLYPH_SVG', 'CURRENCY_ROW_CHEST_SVG', 'PRICE_CHANGE_ARROW_SVG',
+      'CURRENCY_IMAGE_VARIANTS', 'CURRENCY_IMAGES'
+    ].map(constSource).join('\n'),
+    context
+  );
+  loadAppFunctions(context, [
+    'getCurrencyAssetPath', 'normalizeSafeImageSrc', 'normalizeLootCategory', 'formatLootCategoryLabel',
+    'getCurrencyCategoryList', 'getCurrencyTypeLabel', 'getCurrencyCategoryArt', 'resolveCurrencyRowArt',
+    'createCurrencyItemSlot', 'updateTypeFilterDropdown', 'updateCurrencyTypeCounts', 'formatPriceChange',
+    'createPriceChangeElement', 'createSparklineElement'
+  ]);
+  return context;
+}
+
 // Draws the category rail from app.js's own category lists, as updateTypeFilterDropdown does for one game.
 function renderCategoryRail(poeVersion) {
   const container = { innerHTML: '', querySelectorAll: () => [] };
-  const context = vm.createContext({
-    document: { getElementById: (id) => (id === 'currency-type-filter' ? container : null) },
-    window: { t: (key) => key },
-    currencyState: { poeVersion, type: '' },
-    getCurrencyAssetPath: (type, version) => `assets/currency/${version}/${type}.png`
-  });
-  const listSource = (name) => {
-    const start = appJs.indexOf(`const ${name} = [`);
-    assert.notEqual(start, -1, `${name} should exist`);
-    return appJs.slice(start, appJs.indexOf('\n];', start) + 3);
-  };
-  vm.runInContext(
-    [
-      listSource('POE1_CATEGORY_TYPES'),
-      listSource('POE2_CATEGORY_TYPES'),
-      extractFunctionSource(appJs, 'updateTypeFilterDropdown'),
-      'updateTypeFilterDropdown();'
-    ].join('\n'),
-    context
-  );
+  const context = loadCurrencyHelpers({ poeVersion });
+  context.document.getElementById = (id) => (id === 'currency-type-filter' ? container : null);
+  context.updateTypeFilterDropdown();
   return container.innerHTML;
 }
 
@@ -719,39 +1037,194 @@ test('the currency rail has no version pill and its art is decorative next to th
   assert.doesNotMatch(appJs, /currency-version-badge/);
 });
 
-test('category tabs show their own bundled art or an empty slot, never a stand-in orb', () => {
-  // The Currency tab keeps the real Chaos Orb; only PoE 2 bundles art for its other categories.
+test('every category tab shows its bundled art or our line icon in a slot, never an empty box or a stand-in orb', () => {
   const expectedArt = {
-    poe1: { currency: 'chaos' },
+    poe1: {
+      currency: 'chaos', fragment: 'fragment', scarab: 'scarab', essence: 'essence', fossil: 'fossil', map: 'map',
+      divination_card: 'divination-card', gem: 'gem', unique: 'unique', oil: 'oil', beast: 'beast',
+      delirium_orb: 'delirium-orb', catalyst: 'catalyst', omen: 'omen', tattoo: 'tattoo'
+    },
     poe2: {
       currency: 'chaos', fragment: 'fragment', essence: 'essence', rune: 'rune', gem: 'uncut-gem',
-      soul_core: 'soul-core', expedition: 'expedition'
+      soul_core: 'soul-core', idol: 'idol', expedition: 'expedition'
     }
+  };
+  // All is our layers icon; the tabs that are no game category, or have no current art, get our chest.
+  const expectedGlyph = {
+    poe1: { '': 'layers', incubator: 'chest', base_type: 'chest', other: 'chest' },
+    poe2: { '': 'layers', ultimatum: 'chest', other: 'chest' }
   };
   for (const [poeVersion, tabCount] of [['poe1', 19], ['poe2', 11]]) {
     const tabs = renderCategoryRail(poeVersion).match(/<button [\s\S]*?<\/button>/g) || [];
     assert.equal(tabs.length, tabCount, poeVersion);
 
-    const withArt = [];
     for (const tab of tabs) {
       const type = tab.match(/data-type="([^"]*)"/)[1];
+      const where = `${poeVersion} ${type || 'all'}`;
       const art = expectedArt[poeVersion][type];
+      const glyph = expectedGlyph[poeVersion][type];
+      assert.ok(Boolean(art) !== Boolean(glyph), where);
+      assert.match(tab, /^<button type="button" class="currency-type-btn[^"]*"/, where);
+      assert.match(tab, new RegExp(`aria-pressed="${type === ''}"`), where);
       if (art) {
-        withArt.push(type);
-        assert.match(tab, new RegExp(`<img src="assets/currency/${poeVersion}/${art}\\.png"`), `${poeVersion} ${type}`);
-        assert.doesNotMatch(tab, /<span class="currency-tab-icon"/, `${poeVersion} ${type}`);
+        const file = poeVersion === 'poe2' && art === 'divine' ? 'divine.webp' : `${art}.png`;
+        assert.match(tab, new RegExp(`<span class="item-slot currency-tab-slot"><img src="assets/currency/${poeVersion}/${file}" alt=""`), where);
+        assert.ok(fs.existsSync(path.join(desktopRoot, 'src', 'assets', 'currency', poeVersion, file)), where);
       } else {
-        assert.doesNotMatch(tab, /<img/, `${poeVersion} ${type || 'all'}`);
-        assert.match(tab, /<span class="currency-tab-icon" aria-hidden="true"><\/span>/, `${poeVersion} ${type || 'all'}`);
+        assert.match(tab, new RegExp(`<span class="item-slot currency-tab-slot"><svg class="icon"[^>]*aria-hidden="true"><use href="assets/icons\\.svg#${glyph}"/></svg></span>`), where);
       }
-      assert.match(tab, /<span>category\.\w+<\/span><\/button>$/, `${poeVersion} ${type || 'all'}`);
+      assert.match(tab, /<span class="currency-tab-label">category\.\w+<\/span><span class="currency-tab-count"><\/span><\/button>$/, where);
     }
-    assert.deepEqual(withArt, Object.keys(expectedArt[poeVersion]), poeVersion);
+  }
+  assert.match(getCssRule('.currency-tab-slot'), /--slot-size:\s*20px;/);
+});
+
+test('rail tabs count the listed prices of their type, and a tab with none is dimmed', () => {
+  const makeTab = (type) => {
+    const count = { textContent: '' };
+    const classes = new Set();
+    return {
+      dataset: { type },
+      querySelector: () => count,
+      classList: { toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)) },
+      count,
+      classes
+    };
+  };
+  const tabs = ['', 'currency', 'fragment', 'scarab'].map(makeTab);
+  const context = loadCurrencyHelpers();
+  context.document.getElementById = () => ({ querySelectorAll: () => tabs });
+
+  context.currencyState.typeCounts = { currency: 1200, fragment: 0, divination_card: 34 };
+  context.updateCurrencyTypeCounts();
+  assert.deepEqual(tabs.map((tab) => tab.count.textContent), ['1,234', '1,200', '0', '0']);
+  assert.deepEqual(tabs.map((tab) => tab.classes.has('currency-type-btn--empty')), [false, false, true, true]);
+
+  // Before a list loads there is nothing to count, so nothing is dimmed.
+  context.currencyState.typeCounts = null;
+  context.updateCurrencyTypeCounts();
+  assert.deepEqual(tabs.map((tab) => tab.count.textContent), ['', '', '', '']);
+  assert.deepEqual(tabs.map((tab) => tab.classes.size), [0, 0, 0, 0]);
+});
+
+test('price types read as their localized tab label, never as the raw snake_case key', () => {
+  const priceServiceJs = fs.readFileSync(path.join(desktopRoot, 'src', 'modules', 'priceService.js'), 'utf8');
+  const typesBlock = priceServiceJs.slice(priceServiceJs.indexOf('const NINJA_ITEM_TYPES'), priceServiceJs.indexOf('};', priceServiceJs.indexOf('const NINJA_ITEM_TYPES')));
+  const itemTypes = [...new Set([...typesBlock.matchAll(/:\s*'([a-z_]+)'/g)].map((match) => match[1]).concat('other'))];
+  assert.ok(itemTypes.includes('divination_card'));
+
+  for (const poeVersion of ['poe1', 'poe2']) {
+    const context = loadCurrencyHelpers({ poeVersion });
+    for (const itemType of itemTypes) {
+      const label = context.getCurrencyTypeLabel(itemType, poeVersion);
+      assert.ok(label && !label.includes('_'), `${poeVersion} ${itemType}: ${label}`);
+    }
+    assert.equal(context.getCurrencyTypeLabel('divination_card', poeVersion), 'category.divCard');
+    assert.equal(context.getCurrencyTypeLabel('delirium_orb', poeVersion), 'category.deliriumOrb');
+    assert.equal(context.getCurrencyTypeLabel('soul_core', poeVersion), 'category.soulCore');
+    // PoE 1 has no Rune tab, but PoE 2's names its runegrafts' type too.
+    assert.equal(context.getCurrencyTypeLabel('rune', poeVersion), 'category.rune');
+    assert.equal(context.getCurrencyTypeLabel('vaal', poeVersion), 'Vaal');
+    assert.equal(context.getCurrencyTypeLabel('lineage_support_gem', poeVersion), 'Lineage Support Gem');
   }
 });
 
-test('a rail tab without art keeps a 14px icon slot so the labels line up', () => {
-  const icon = getCssRule('.currency-tab-icon');
-  assert.match(icon, /width:\s*14px;/);
-  assert.match(icon, /height:\s*14px;/);
+test('a price row takes its own art, then its category art, then our chest icon', () => {
+  const poe1 = loadCurrencyHelpers({ poeVersion: 'poe1' });
+  const poe2 = loadCurrencyHelpers({ poeVersion: 'poe2' });
+  const art = (context, item) => JSON.parse(JSON.stringify(context.resolveCurrencyRowArt(item)));
+  const cdn = 'https://web.poecdn.com/gen/image/abc/Doctor.png';
+
+  // poe.ninja's exchange lists divination cards without art, and every card shares one inventory icon.
+  assert.deepEqual(art(poe1, { itemType: 'divination_card', iconUrl: null }), {
+    remote: '', bundled: 'assets/currency/poe1/divination-card.png'
+  });
+  assert.deepEqual(art(poe1, { itemType: 'divination_card', iconUrl: cdn }), {
+    remote: cdn, bundled: 'assets/currency/poe1/divination-card.png'
+  });
+  assert.deepEqual(art(poe1, { itemType: 'fragment' }), { remote: '', bundled: 'assets/currency/poe1/fragment.png' });
+  assert.deepEqual(art(poe2, { itemType: 'fragment' }), { remote: '', bundled: 'assets/currency/poe2/fragment.png' });
+  assert.deepEqual(art(poe2, { itemType: 'idol' }), { remote: '', bundled: 'assets/currency/poe2/idol.png' });
+  // A Chaos Orb would read as the item's own art, and the types without a tab have no category art.
+  for (const itemType of ['currency', 'other', 'rune', 'vaal', 'base_type']) {
+    assert.deepEqual(art(poe1, { itemType }), { remote: '', bundled: '' }, itemType);
+  }
+  assert.deepEqual(art(poe1, { itemType: 'gem', iconUrl: 'javascript:alert(1)' }), { remote: '', bundled: 'assets/currency/poe1/gem.png' });
+
+  // Every category art file the rows can fall back to exists.
+  for (const context of [poe1, poe2]) {
+    const version = context.currencyState.poeVersion;
+    for (const category of context.getCurrencyCategoryList(version)) {
+      const bundled = context.getCurrencyCategoryArt(category.value, version);
+      if (bundled) assert.ok(fs.existsSync(path.join(desktopRoot, 'src', bundled)), bundled);
+    }
+  }
+});
+
+test('a price slot falls back along the art chain when an image fails to load', () => {
+  const context = loadCurrencyHelpers({ poeVersion: 'poe1' });
+  const cdn = 'https://web.poecdn.com/gen/image/abc/Doctor.png';
+
+  const slot = context.createCurrencyItemSlot({ itemType: 'divination_card', iconUrl: cdn });
+  assert.equal(slot.className, 'item-slot');
+  let [img] = slot.children;
+  assert.equal(img.tagName, 'IMG');
+  // Decorative: the name sits next to the slot, and an English alt would not follow the language.
+  assert.equal(img.alt, '');
+  assert.equal(img.dataset.iconUrl, cdn);
+  img.dispatch('error');
+  assert.equal(img.src, 'assets/currency/poe1/divination-card.png');
+  img.dispatch('error');
+  assert.deepEqual(slot.children, []);
+  assert.match(slot.markup, /<use href="assets\/icons\.svg#chest"\/>/);
+
+  const bundledOnly = context.createCurrencyItemSlot({ itemType: 'scarab' }, 'poe1', 'currency-detail-slot');
+  assert.equal(bundledOnly.className, 'item-slot currency-detail-slot');
+  [img] = bundledOnly.children;
+  assert.equal(img.src, 'assets/currency/poe1/scarab.png');
+  assert.equal(img.dataset.iconUrl, undefined);
+  img.dispatch('error');
+  assert.match(bundledOnly.markup, /#chest/);
+
+  const none = context.createCurrencyItemSlot({ itemType: 'currency', iconUrl: null });
+  assert.deepEqual(none.children, []);
+  assert.match(none.markup, /<svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets\/icons\.svg#chest"\/><\/svg>/);
+});
+
+test('the 7d change reads as signed text with an arrow, and the sparkline skips missing days', () => {
+  const context = loadCurrencyHelpers();
+  assert.equal(context.formatPriceChange(12.44), '+12.4%');
+  assert.equal(context.formatPriceChange(-81.46), '-81.5%');
+  assert.equal(context.formatPriceChange(0.04), '0.0%');
+  assert.equal(context.formatPriceChange(1234.56), '+1,234.6%');
+  assert.equal(context.formatPriceChange(null), '');
+  assert.equal(context.formatPriceChange(undefined), '');
+  assert.equal(context.formatPriceChange('x'), '');
+
+  const down = context.createPriceChangeElement(-25.47, { data: [null, 0, null, -9.18, -25.47] });
+  assert.equal(down.dataset.trend, 'down');
+  const [value, spark] = down.children;
+  assert.match(value.markup, /#arrow-down/);
+  assert.equal(value.children[0].textContent, '-25.5%');
+  // Three real days of five; the missing ones are skipped instead of drawn as 0%.
+  const line = spark.children.find((child) => child.tagName === 'POLYLINE');
+  assert.equal(line.getAttribute('points').split(' ').length, 3);
+  assert.equal(line.style.stroke, 'var(--loss)');
+
+  // The colour follows the week's change, not the first and last points: [-10, -5] is still 5% down.
+  const stillDown = context.createSparklineElement({ data: [-10, -5] }, { change: -5 });
+  assert.equal(stillDown.children.find((child) => child.tagName === 'POLYLINE').style.stroke, 'var(--loss)');
+  const up = context.createPriceChangeElement(3, { data: [1, 2] });
+  assert.equal(up.dataset.trend, 'up');
+  assert.match(up.children[0].markup, /#arrow-up/);
+
+  const none = context.createPriceChangeElement(null, { data: [] });
+  assert.equal(none.dataset.trend, 'none');
+  assert.equal(none.children.length, 1);
+  assert.equal(none.children[0].children[0].textContent, '-');
+
+  // The detail's larger line marks each day under it.
+  const detail = context.createSparklineElement({ data: [1, 2, 3, 4, 5, 6, 7] }, { width: 240, height: 48, change: 1, ticks: true });
+  assert.equal(detail.getAttribute('width'), '240');
+  assert.equal(detail.children.filter((child) => child.getAttribute('class') === 'currency-spark-tick').length, 7);
 });

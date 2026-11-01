@@ -806,8 +806,13 @@ function loadCurrencyPricesWithRunningSync() {
     getPriceInfo(name) {
       return { 'Divine Orb': { chaosValue: 150 } }[name] || null;
     },
-    listPrices(params) {
-      return [{ itemName: 'Divine Orb', league: this.league, type: params.type }];
+    queryPrices(params) {
+      return {
+        prices: [{ itemName: 'Divine Orb', league: this.league, type: params.type }],
+        total: 3,
+        typeCounts: { currency: 2, fragment: 1 },
+        syncedTypes: ['currency', 'fragment']
+      };
     }
   };
   const context = loadFunctions(['getCurrencyPrices', 'readLocalChaosPrice', 'normalizePositiveRate'], {
@@ -829,6 +834,9 @@ test('main lists the loaded league prices for the Currency page without waiting 
   assert.deepEqual(JSON.parse(JSON.stringify(result)), {
     prices: [{ itemName: 'Divine Orb', league: 'Mirage', type: 'currency' }],
     count: 1,
+    total: 3,
+    typeCounts: { currency: 2, fragment: 1 },
+    syncedTypes: ['currency', 'fragment'],
     league: 'Mirage',
     poeVersion: 'poe1',
     updatedAt: '2026-10-24T10:00:00.000Z',
@@ -863,6 +871,9 @@ test('main cache-only Currency reload never starts a sync and answers no prices 
   assert.deepEqual(JSON.parse(JSON.stringify(result)), {
     prices: null,
     count: 0,
+    total: 0,
+    typeCounts: {},
+    syncedTypes: [],
     league: 'Standard',
     poeVersion: 'poe1',
     updatedAt: null,

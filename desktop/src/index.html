@@ -682,16 +682,25 @@
       <section id="currency-page" class="page">
         <div class="currency-header">
           <div class="currency-header-top">
-            <h2 data-i18n="currency.title">Currency Prices</h2>
+            <div class="currency-heading">
+              <h2 data-i18n="currency.title">Market</h2>
+              <p id="currency-status" class="currency-status"></p>
+            </div>
             <div class="currency-header-actions">
               <div class="poe-toggle">
                 <button class="poe-toggle-btn active" data-poe="poe1" aria-pressed="true">PoE 1</button>
                 <button class="poe-toggle-btn" data-poe="poe2" aria-pressed="false">PoE 2</button>
               </div>
-              <select id="currency-league" class="currency-select">
+              <select id="currency-league" class="currency-select" aria-label="League" data-i18n-aria="currency.leagueAria">
                 <option value="">Standard</option>
               </select>
-              <input type="text" id="currency-search" class="currency-search" data-i18n-placeholder="currency.searchPlaceholder" placeholder="Search items...">
+              <div class="currency-search-field">
+                <svg class="icon icon-sm currency-search-glyph" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#search"/></svg>
+                <input type="text" id="currency-search" class="currency-search" data-i18n-placeholder="currency.searchPlaceholder" placeholder="Search items..." aria-label="Search items" data-i18n-aria="currency.searchAria">
+                <button type="button" id="currency-search-clear" class="currency-search-clear" aria-label="Clear search" data-i18n-aria="currency.clearSearch" hidden>
+                  <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#close"/></svg>
+                </button>
+              </div>
               <button id="currency-sync-btn" class="btn btn-primary btn-small" type="button">
                 <svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sync"/></svg>
                 <span class="btn-label" data-i18n="currency.sync">Sync</span>
@@ -709,19 +718,22 @@
           <div class="currency-market-main">
             <div class="currency-table-wrap">
               <table class="currency-table">
+                <colgroup>
+                  <col>
+                  <col class="currency-col-chaos">
+                  <col class="currency-col-divine">
+                  <col class="currency-col-change">
+                </colgroup>
                 <thead>
                   <tr>
-                    <th class="currency-th-num">#</th>
-                    <th class="currency-th-icon"></th>
-                    <th class="currency-th-name sortable" data-sort="itemName" data-i18n="currency.name">Name</th>
-                    <th class="currency-th-type" data-i18n="currency.type">Type</th>
-                    <th class="currency-th-chaos sortable active" data-sort="chaosValue">Chaos</th>
-                    <th class="currency-th-divine sortable" data-sort="divineValue">Divine</th>
-                    <th class="currency-th-trend" data-i18n="currency.trend">Trend</th>
+                    <th class="currency-th-item" data-sort="itemName"><button type="button" class="currency-sort" data-i18n="currency.item">Item</button></th>
+                    <th class="currency-th-chaos active" data-sort="chaosValue" aria-sort="descending"><button type="button" class="currency-sort">Chaos</button></th>
+                    <th class="currency-th-divine" data-sort="divineValue"><button type="button" class="currency-sort">Divine</button></th>
+                    <th class="currency-th-change" data-sort="change"><button type="button" class="currency-sort" data-i18n="currency.change7d">7d</button></th>
                   </tr>
                 </thead>
                 <tbody id="currency-table-body">
-                  <tr><td colspan="7" class="currency-empty" data-i18n="currency.noData">No price data. Click Sync to fetch.</td></tr>
+                  <tr><td colspan="4" class="currency-empty" data-i18n="currency.noData">No price data. Click Sync to fetch.</td></tr>
                 </tbody>
               </table>
             </div>
