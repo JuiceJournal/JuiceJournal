@@ -293,24 +293,106 @@ test('a sync running when the detected game changes does not swap in the old gam
   assert.equal(service.getChaosValue('Divine Orb'), 0);
 });
 
-test('listPrices returns the Currency page shape filtered by item type and name', () => {
+test('queryPrices returns the Currency page shape filtered by item type and name', () => {
   const service = new PriceService();
   service._addPrice('Divine Orb', { chaosValue: 150, divineValue: 1, category: 'currency', icon: 'divine.png', sparkline: [1, 2] });
   service._addPrice('Chaos Orb', { chaosValue: 1, divineValue: 0.006, category: 'currency', icon: null, sparkline: [] });
   service._addPrice('Mageblood', { chaosValue: 30000, divineValue: 200, category: 'uniqueaccessory', icon: 'mb.png' });
   service._addPrice('Strange Thing', { chaosValue: 3, category: 'wombgift' });
 
-  assert.deepEqual(service.listPrices({ type: 'currency' }).map((price) => price.itemName), ['Divine Orb', 'Chaos Orb']);
-  assert.deepEqual(service.listPrices({ search: 'MAGE' }), [{
+  assert.deepEqual(service.queryPrices({ type: 'currency' }).prices.map((price) => price.itemName), ['Divine Orb', 'Chaos Orb']);
+  assert.deepEqual(service.queryPrices({ search: 'MAGE' }).prices, [{
     itemName: 'Mageblood',
     itemType: 'unique',
     chaosValue: 30000,
     divineValue: 200,
     iconUrl: 'mb.png',
-    sparklineData: { data: [] }
+    sparklineData: { data: [] },
+    change: null
   }]);
-  assert.equal(service.listPrices({ type: 'other' })[0].itemName, 'Strange Thing');
-  assert.deepEqual(service.listPrices({ limit: '2' }).map((price) => price.itemName), ['Mageblood', 'Divine Orb']);
+  assert.equal(service.queryPrices({ type: 'other' }).prices[0].itemName, 'Strange Thing');
+  assert.deepEqual(service.queryPrices({ limit: '2' }).prices.map((price) => price.itemName), ['Mageblood', 'Divine Orb']);
+});
+
+test('queryPrices counts matches before the limit and prices per item type over the whole list', () => {
+  const service = new PriceService();
+  service._addPrice('Divine Orb', { chaosValue: 150, category: 'currency' });
+  service._addPrice('Chaos Orb', { chaosValue: 1, category: 'currency' });
+  service._addPrice('The Doctor', { chaosValue: 900, category: 'divinationcard' });
+  service._addPrice('Mageblood', { chaosValue: 30000, category: 'uniqueaccessory' });
+  service.syncedTypes = new Set(['currency', 'divination_card', 'unique']);
+
+  const result = service.queryPrices({ type: 'currency', search: 'orb', limit: '1' });
+  assert.deepEqual(result.prices.map((price) => price.itemName), ['Divine Orb']);
+  assert.equal(result.total, 2);
+  // The rail counts every listed price, whatever the type filter and search.
+  assert.deepEqual({ ...result.typeCounts }, { currency: 2, divination_card: 1, unique: 1 });
+  assert.deepEqual([...result.syncedTypes], ['currency', 'divination_card', 'unique']);
+});
+
+test('the 7-day change and series come from both poe.ninja spellings and keep missing days', () => {
+  const service = new PriceService();
+  service.setPoeVersion('poe1');
+
+  // PoE1 stash item overviews name the series sparkLine; missing days stay null instead of reading as 0%.
+  service._indexItemData({
+    lines: [{ name: 'Headhunter', chaosValue: 9000, sparkLine: { totalChange: -25.47, data: [null, 0, null, -9.18, -25.47] } }]
+  }, 'UniqueAccessory');
+  service._indexCurrencyData({
+    core: { primary: 'chaos', rates: {} },
+    items: [{ id: 'mirror', name: 'Mirror of Kalandra' }],
+    lines: [{ id: 'mirror', primaryValue: 90000, sparkline: { totalChange: 12.4, data: [0, 5, 12.4] } }]
+  }, 'Currency');
+
+  assert.deepEqual(service.getPriceInfo('Headhunter').sparkline, [null, 0, null, -9.18, -25.47]);
+  assert.equal(service.getPriceInfo('Headhunter').change, -25.47);
+  assert.equal(service.getPriceInfo('Mirror of Kalandra').change, 12.4);
+  assert.equal(service.queryPrices({ search: 'mirror' }).prices[0].change, 12.4);
+});
+
+test('PoE1 catalysts from the Currency overview list as catalysts', () => {
+  const service = new PriceService();
+  service.setPoeVersion('poe1');
+
+  service._indexCurrencyData({
+    core: { primary: 'chaos', rates: {} },
+    items: [
+      { id: 'prismatic', name: 'Prismatic Catalyst', category: 'Catalysts' },
+      { id: 'chaos', name: 'Chaos Orb', category: 'Currency' }
+    ],
+    lines: [{ id: 'prismatic', primaryValue: 2 }, { id: 'chaos', primaryValue: 1 }]
+  }, 'Currency');
+
+  assert.deepEqual(service.queryPrices({ type: 'catalyst' }).prices.map((price) => price.itemName), ['Prismatic Catalyst']);
+  assert.deepEqual(service.queryPrices({ type: 'currency' }).prices.map((price) => price.itemName), ['Chaos Orb']);
+  // Stash items read their category from the registry, so a synced catalyst groups as the name-based guess does.
+  assert.equal(registry.getCategory('Prismatic Catalyst'), 'catalyst');
+  assert.equal(registry.getCategory('Unregistered Test Catalyst'), 'catalyst');
+  assert.equal(registry.getCategory('Chaos Orb'), 'currency');
+});
+
+test('a sync records the item types it read, and PoE2 idols come from the Idols overview', async () => {
+  const service = new PriceService();
+  service.setPoeVersion('poe2');
+  const types = [];
+  service._fetchCurrencyOverview = async (league, type) => {
+    types.push(type);
+    if (type === 'Ultimatum') throw new Error('poe.ninja is down');
+    return type === 'Idols'
+      ? { core: { primary: 'chaos', rates: {} }, items: [{ id: 'cat', name: 'Cat Idol' }], lines: [{ id: 'cat', primaryValue: 3 }] }
+      : { lines: [], items: [] };
+  };
+
+  await service.syncPrices('Standard', { full: false });
+
+  assert.ok(types.includes('Idols'));
+  assert.ok(!types.includes('Idol'));
+  assert.deepEqual(service.queryPrices({ type: 'idol' }).prices.map((price) => price.itemName), ['Cat Idol']);
+  const synced = service.queryPrices().syncedTypes;
+  assert.ok(synced.includes('idol'));
+  assert.ok(synced.includes('expedition'));
+  // A type whose overview failed was not read, so its empty tab can still be synced.
+  assert.ok(!synced.includes('ultimatum'));
 });
 
 test('getLeagues reads poe.ninja index state for each game', async () => {

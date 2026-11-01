@@ -1886,13 +1886,17 @@ async function getCurrencyPrices(params = {}) {
     && priceService.league === league
     && priceService.getStatus().itemCount > 0;
   if (!loaded && params.cacheOnly) {
-    return { prices: null, count: 0, league, poeVersion, updatedAt: null, rates: {} };
+    return { prices: null, count: 0, total: 0, typeCounts: {}, syncedTypes: [], league, poeVersion, updatedAt: null, rates: {} };
   }
   const status = loaded ? priceService.getStatus() : await priceService.ensureSynced(league, poeVersion);
-  const prices = priceService.listPrices(params);
+  const { prices, total, typeCounts, syncedTypes } = priceService.queryPrices(params);
   return {
     prices,
     count: prices.length,
+    // Matches before the page's limit, prices per item type, and the types the sync read (an empty one has no listings).
+    total,
+    typeCounts,
+    syncedTypes,
     league,
     poeVersion,
     updatedAt: status.lastSync ? new Date(status.lastSync).toISOString() : null,

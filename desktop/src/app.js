@@ -1735,6 +1735,21 @@ const CURRENCY_IMAGE_VARIANTS = {
   poe1: {
     chaos: 'assets/currency/poe1/chaos.png',
     divine: 'assets/currency/poe1/divine.png',
+    // Category art for the Currency page: one item of each category, and the icon every divination card shares.
+    fragment: 'assets/currency/poe1/fragment.png',
+    scarab: 'assets/currency/poe1/scarab.png',
+    essence: 'assets/currency/poe1/essence.png',
+    fossil: 'assets/currency/poe1/fossil.png',
+    map: 'assets/currency/poe1/map.png',
+    'divination-card': 'assets/currency/poe1/divination-card.png',
+    gem: 'assets/currency/poe1/gem.png',
+    unique: 'assets/currency/poe1/unique.png',
+    oil: 'assets/currency/poe1/oil.png',
+    beast: 'assets/currency/poe1/beast.png',
+    'delirium-orb': 'assets/currency/poe1/delirium-orb.png',
+    catalyst: 'assets/currency/poe1/catalyst.png',
+    omen: 'assets/currency/poe1/omen.png',
+    tattoo: 'assets/currency/poe1/tattoo.png',
   },
   poe2: {
     chaos: 'assets/currency/poe2/chaos.png',
@@ -1749,6 +1764,7 @@ const CURRENCY_IMAGE_VARIANTS = {
     'uncut-gem': 'assets/currency/poe2/uncut-gem.png',
     'soul-core': 'assets/currency/poe2/soul-core.png',
     expedition: 'assets/currency/poe2/expedition.png',
+    idol: 'assets/currency/poe2/idol.png',
   }
 };
 
@@ -2979,6 +2995,12 @@ function applyLocalizedChrome() {
   // The activity log is drawn by JS as well, and now sits on the Data tab next to translated headings.
   if (typeof renderAuditTrail === 'function') {
     renderAuditTrail();
+  }
+  // An open Currency page draws its rail, rows and status line in JS, so they follow the new language from state.
+  if (typeof isPageActive === 'function' && isPageActive('currency')) {
+    updateTypeFilterDropdown();
+    renderCurrencyTable();
+    renderCurrencyStatus();
   }
   // The Data tab's size line has no data-i18n either. Reset to Defaults can change the language on that tab, so an
   // open Data tab measures again and writes the line in the new language.
@@ -7214,46 +7236,58 @@ function formatLootCategoryLabel(itemType) {
 
 // ==================== CURRENCY PAGE ====================
 
-// Category art is game content, so in both games a tab without its own bundled category art shows no icon,
-// never a stand-in orb. Currency keeps the real Chaos Orb.
+// Category art is game content: a tab shows its own bundled category art (one item of the category; every divination
+// card shares one inventory icon), never a stand-in orb. Tabs that are no game category, or whose category has no
+// current art, show one of our line icons instead (`glyph`). Currency keeps the real Chaos Orb.
 
 // PoE 1 item category types — includes PoE1-exclusive mechanics
 const POE1_CATEGORY_TYPES = [
-  { value: '', labelKey: 'category.all', label: 'All', icon: null },
+  { value: '', labelKey: 'category.all', label: 'All', icon: null, glyph: 'layers' },
   { value: 'currency', labelKey: 'category.currency', label: 'Currency', icon: 'chaos' },
-  { value: 'fragment', labelKey: 'category.fragment', label: 'Fragment', icon: null },
-  { value: 'scarab', labelKey: 'category.scarab', label: 'Scarab', icon: null },
-  { value: 'essence', labelKey: 'category.essence', label: 'Essence', icon: null },
-  { value: 'fossil', labelKey: 'category.fossil', label: 'Fossil', icon: null, poe1Only: true },
-  { value: 'map', labelKey: 'category.map', label: 'Map', icon: null },
-  { value: 'divination_card', labelKey: 'category.divCard', label: 'Div Card', icon: null },
-  { value: 'gem', labelKey: 'category.gem', label: 'Gem', icon: null },
-  { value: 'unique', labelKey: 'category.unique', label: 'Unique', icon: null },
-  { value: 'oil', labelKey: 'category.oil', label: 'Oil', icon: null, poe1Only: true },
-  { value: 'beast', labelKey: 'category.beast', label: 'Beast', icon: null, poe1Only: true },
-  { value: 'incubator', labelKey: 'category.incubator', label: 'Incubator', icon: null, poe1Only: true },
-  { value: 'delirium_orb', labelKey: 'category.deliriumOrb', label: 'Delirium Orb', icon: null, poe1Only: true },
-  { value: 'catalyst', labelKey: 'category.catalyst', label: 'Catalyst', icon: null },
-  { value: 'omen', labelKey: 'category.omen', label: 'Omen', icon: null, poe1Only: true },
-  { value: 'tattoo', labelKey: 'category.tattoo', label: 'Tattoo', icon: null, poe1Only: true },
-  { value: 'base_type', labelKey: 'category.baseType', label: 'Base Type', icon: null, poe1Only: true },
-  { value: 'other', labelKey: 'category.other', label: 'Other', icon: null },
+  { value: 'fragment', labelKey: 'category.fragment', label: 'Fragment', icon: 'fragment' },
+  { value: 'scarab', labelKey: 'category.scarab', label: 'Scarab', icon: 'scarab' },
+  { value: 'essence', labelKey: 'category.essence', label: 'Essence', icon: 'essence' },
+  { value: 'fossil', labelKey: 'category.fossil', label: 'Fossil', icon: 'fossil' },
+  { value: 'map', labelKey: 'category.map', label: 'Map', icon: 'map' },
+  { value: 'divination_card', labelKey: 'category.divCard', label: 'Div Card', icon: 'divination-card' },
+  { value: 'gem', labelKey: 'category.gem', label: 'Gem', icon: 'gem' },
+  { value: 'unique', labelKey: 'category.unique', label: 'Unique', icon: 'unique' },
+  { value: 'oil', labelKey: 'category.oil', label: 'Oil', icon: 'oil' },
+  { value: 'beast', labelKey: 'category.beast', label: 'Beast', icon: 'beast' },
+  { value: 'incubator', labelKey: 'category.incubator', label: 'Incubator', icon: null, glyph: 'chest' },
+  { value: 'delirium_orb', labelKey: 'category.deliriumOrb', label: 'Delirium Orb', icon: 'delirium-orb' },
+  { value: 'catalyst', labelKey: 'category.catalyst', label: 'Catalyst', icon: 'catalyst' },
+  { value: 'omen', labelKey: 'category.omen', label: 'Omen', icon: 'omen' },
+  { value: 'tattoo', labelKey: 'category.tattoo', label: 'Tattoo', icon: 'tattoo' },
+  { value: 'base_type', labelKey: 'category.baseType', label: 'Base Type', icon: null, glyph: 'chest' },
+  { value: 'other', labelKey: 'category.other', label: 'Other', icon: null, glyph: 'chest' },
 ];
 
 // PoE 2 item category types — exchange API categories
 const POE2_CATEGORY_TYPES = [
-  { value: '', labelKey: 'category.all', label: 'All', icon: null },
+  { value: '', labelKey: 'category.all', label: 'All', icon: null, glyph: 'layers' },
   { value: 'currency', labelKey: 'category.currency', label: 'Currency', icon: 'chaos' },
-  { value: 'fragment', labelKey: 'category.fragment', label: 'Fragment', icon: 'fragment', poe2Only: true },
+  { value: 'fragment', labelKey: 'category.fragment', label: 'Fragment', icon: 'fragment' },
   { value: 'essence', labelKey: 'category.essence', label: 'Essence', icon: 'essence' },
-  { value: 'rune', labelKey: 'category.rune', label: 'Rune', icon: 'rune', poe2Only: true },
+  { value: 'rune', labelKey: 'category.rune', label: 'Rune', icon: 'rune' },
   { value: 'gem', labelKey: 'category.gem', label: 'Gem', icon: 'uncut-gem' },
-  { value: 'soul_core', labelKey: 'category.soulCore', label: 'Soul Core', icon: 'soul-core', poe2Only: true },
-  { value: 'idol', labelKey: 'category.idol', label: 'Idol', icon: null, poe2Only: true },
-  { value: 'expedition', labelKey: 'category.expedition', label: 'Expedition', icon: 'expedition', poe2Only: true },
-  { value: 'ultimatum', labelKey: 'category.ultimatum', label: 'Ultimatum', icon: null, poe2Only: true },
-  { value: 'other', labelKey: 'category.other', label: 'Other', icon: null },
+  { value: 'soul_core', labelKey: 'category.soulCore', label: 'Soul Core', icon: 'soul-core' },
+  { value: 'idol', labelKey: 'category.idol', label: 'Idol', icon: 'idol' },
+  { value: 'expedition', labelKey: 'category.expedition', label: 'Expedition', icon: 'expedition' },
+  { value: 'ultimatum', labelKey: 'category.ultimatum', label: 'Ultimatum', icon: null, glyph: 'chest' },
+  { value: 'other', labelKey: 'category.other', label: 'Other', icon: null, glyph: 'chest' },
 ];
+
+// Our line icons for tabs without game art, and for a price row with no art at all.
+const CURRENCY_TAB_GLYPH_SVG = {
+  layers: '<svg class="icon" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#layers"/></svg>',
+  chest: '<svg class="icon" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#chest"/></svg>'
+};
+const CURRENCY_ROW_CHEST_SVG = '<svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#chest"/></svg>';
+const PRICE_CHANGE_ARROW_SVG = {
+  up: '<svg class="icon" width="10" height="10" aria-hidden="true"><use href="assets/icons.svg#arrow-up"/></svg>',
+  down: '<svg class="icon" width="10" height="10" aria-hidden="true"><use href="assets/icons.svg#arrow-down"/></svg>'
+};
 
 const currencyState = {
   poeVersion: 'poe1',
@@ -7267,15 +7301,94 @@ const currencyState = {
   // The 'game:league' the table lists now, and that list's Divine and Mirror prices.
   listedKey: null,
   rates: {},
+  // What main says around the list: matches before the 500 limit, prices per item type (null until a list loads),
+  // the item types its last sync read, and when that sync ran.
+  total: 0,
+  typeCounts: null,
+  syncedTypes: [],
+  updatedAt: null,
+  // The error of a failed load, which the table shows with Retry until a load works. Kept as the error, so its
+  // message follows a language switch.
+  loadError: null,
+  // The lowercased name of the row whose detail is open.
+  expandedKey: null,
   syncing: false,
   searchTimer: null
 };
 
+function getCurrencyCategoryList(poeVersion = currencyState.poeVersion) {
+  return poeVersion === 'poe2' ? POE2_CATEGORY_TYPES : POE1_CATEGORY_TYPES;
+}
+
+// A price's item type in words: the game's own tab label, else the other game's (PoE 1 runegrafts are PoE 2 runes),
+// else the type spelled out. Never the raw snake_case key.
+function getCurrencyTypeLabel(itemType, poeVersion = currencyState.poeVersion) {
+  const otherVersion = poeVersion === 'poe2' ? 'poe1' : 'poe2';
+  const category = [...getCurrencyCategoryList(poeVersion), ...getCurrencyCategoryList(otherVersion)]
+    .find((entry) => entry.value && entry.value === itemType);
+  if (category) {
+    return window.t(category.labelKey) || category.label;
+  }
+  return formatLootCategoryLabel(itemType);
+}
+
+// The bundled art of a price's category, for a price without its own. Currency gives none: its Chaos Orb would read as
+// the item's own art next to a chaos value.
+function getCurrencyCategoryArt(itemType, poeVersion = currencyState.poeVersion) {
+  const category = getCurrencyCategoryList(poeVersion).find((entry) => entry.value && entry.value === itemType);
+  return category?.icon && category.value !== 'currency' ? getCurrencyAssetPath(category.icon, poeVersion) : '';
+}
+
+// A price row's art, in order: the item's own (poe.ninja's CDN art, through the icon cache), its category's bundled
+// art, then our chest icon.
+function resolveCurrencyRowArt(item, poeVersion = currencyState.poeVersion) {
+  return {
+    remote: normalizeSafeImageSrc(item?.iconUrl),
+    bundled: getCurrencyCategoryArt(item?.itemType, poeVersion)
+  };
+}
+
+// An item slot for a price. Art that fails to load gives way to the next art in line. The name sits next to the slot,
+// so the art is decorative.
+function createCurrencyItemSlot(item, poeVersion = currencyState.poeVersion, extraClass = '') {
+  const slot = document.createElement('span');
+  slot.className = extraClass ? `item-slot ${extraClass}` : 'item-slot';
+  const { remote, bundled } = resolveCurrencyRowArt(item, poeVersion);
+  const showChest = () => {
+    slot.replaceChildren();
+    slot.insertAdjacentHTML('afterbegin', CURRENCY_ROW_CHEST_SVG);
+  };
+  if (!remote && !bundled) {
+    showChest();
+    return slot;
+  }
+
+  const img = document.createElement('img');
+  img.alt = '';
+  img.draggable = false;
+  img.loading = 'lazy';
+  if (remote) {
+    // applyCachedItemIcons points it at the icon-cache copy or the remote art.
+    img.dataset.iconUrl = remote;
+  } else {
+    img.src = bundled;
+  }
+  img.addEventListener('error', () => {
+    if (remote && bundled && !img.dataset.fallback) {
+      img.dataset.fallback = 'bundled';
+      img.src = bundled;
+    } else {
+      showChest();
+    }
+  });
+  slot.appendChild(img);
+  return slot;
+}
+
 function updateTypeFilterDropdown() {
   const container = document.getElementById('currency-type-filter');
   if (!container) return;
-  const isPoe2 = currencyState.poeVersion === 'poe2';
-  const types = isPoe2 ? POE2_CATEGORY_TYPES : POE1_CATEGORY_TYPES;
+  const types = getCurrencyCategoryList(currencyState.poeVersion);
 
   // If current type doesn't exist in new version, reset
   if (!types.find(t => t.value === currencyState.type)) {
@@ -7283,25 +7396,67 @@ function updateTypeFilterDropdown() {
   }
 
   container.innerHTML = types.map(t => {
-    const active = currencyState.type === t.value ? ' active' : '';
+    const active = currencyState.type === t.value;
     const label = window.t ? (window.t(t.labelKey) || t.label) : t.label;
-    const exclusiveClass = t.poe1Only ? ' poe1-exclusive' : (t.poe2Only ? ' poe2-exclusive' : '');
-    // The art sits next to its label, so it is decorative; a tab without art keeps an empty slot so labels line up.
-    const iconHTML = t.icon
-      ? `<img src="${getCurrencyAssetPath(t.icon, currencyState.poeVersion)}" class="currency-tab-icon" width="14" height="14" alt="" draggable="false">`
-      : '<span class="currency-tab-icon" aria-hidden="true"></span>';
-    return `<button class="currency-type-btn${active}${exclusiveClass}" data-type="${t.value}" title="${label}">${iconHTML}<span>${label}</span></button>`;
+    // The art sits next to its label, so it is decorative.
+    const art = t.icon
+      ? `<img src="${getCurrencyAssetPath(t.icon, currencyState.poeVersion)}" alt="" draggable="false">`
+      : CURRENCY_TAB_GLYPH_SVG[t.glyph] || '';
+    return `<button type="button" class="currency-type-btn${active ? ' active' : ''}" data-type="${t.value}" aria-pressed="${active}" title="${label}">`
+      + `<span class="item-slot currency-tab-slot">${art}</span>`
+      + `<span class="currency-tab-label">${label}</span><span class="currency-tab-count"></span></button>`;
   }).join('');
 
   // Bind click events
   container.querySelectorAll('.currency-type-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      container.querySelectorAll('.currency-type-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
+      container.querySelectorAll('.currency-type-btn').forEach(b => setToggleButtonPressed(b, b === btn));
       currencyState.type = btn.dataset.type;
       loadCurrencyPrices();
     });
   });
+  updateCurrencyTypeCounts();
+}
+
+// Each tab counts its prices in the listed league. A tab with none is dimmed but still opens its empty state.
+function updateCurrencyTypeCounts() {
+  const container = document.getElementById('currency-type-filter');
+  if (!container) return;
+  const counts = currencyState.typeCounts;
+  const total = counts ? Object.values(counts).reduce((sum, count) => sum + (Number(count) || 0), 0) : 0;
+  container.querySelectorAll('.currency-type-btn').forEach((btn) => {
+    const count = btn.dataset.type ? (Number(counts?.[btn.dataset.type]) || 0) : total;
+    const countElement = btn.querySelector('.currency-tab-count');
+    if (countElement) countElement.textContent = counts ? count.toLocaleString('en-US') : '';
+    btn.classList.toggle('currency-type-btn--empty', Boolean(counts) && count === 0);
+  });
+}
+
+// The sorted header says so with aria-sort; the others carry none.
+function updateCurrencySortHeaders() {
+  document.querySelectorAll('.currency-table th[data-sort]').forEach((th) => {
+    const active = th.dataset.sort === currencyState.sortField;
+    th.classList.toggle('active', active);
+    th.classList.toggle('asc', active && currencyState.sortDir === 'asc');
+    if (active) {
+      th.setAttribute('aria-sort', currencyState.sortDir === 'asc' ? 'ascending' : 'descending');
+    } else {
+      th.removeAttribute('aria-sort');
+    }
+  });
+}
+
+function clearCurrencySearch() {
+  const searchInput = document.getElementById('currency-search');
+  clearTimeout(currencyState.searchTimer);
+  if (searchInput) {
+    searchInput.value = '';
+    searchInput.focus();
+  }
+  const clearButton = document.getElementById('currency-search-clear');
+  if (clearButton) clearButton.hidden = true;
+  currencyState.search = '';
+  loadCurrencyPrices();
 }
 
 function setupCurrencyListeners() {
@@ -7327,16 +7482,21 @@ function setupCurrencyListeners() {
     });
   }
 
-  // Search
+  // Search, with a clear button while it holds text
   const searchInput = document.getElementById('currency-search');
+  const clearButton = document.getElementById('currency-search-clear');
   if (searchInput) {
     searchInput.addEventListener('input', () => {
+      if (clearButton) clearButton.hidden = !searchInput.value;
       clearTimeout(currencyState.searchTimer);
       currencyState.searchTimer = setTimeout(() => {
         currencyState.search = searchInput.value;
         loadCurrencyPrices();
       }, 300);
     });
+  }
+  if (clearButton) {
+    clearButton.addEventListener('click', clearCurrencySearch);
   }
 
   // Sync button
@@ -7346,8 +7506,8 @@ function setupCurrencyListeners() {
   }
 
   // Sort headers
-  document.querySelectorAll('.currency-table th.sortable').forEach(th => {
-    th.addEventListener('click', () => {
+  document.querySelectorAll('.currency-table th[data-sort]').forEach(th => {
+    th.querySelector('.currency-sort')?.addEventListener('click', () => {
       const field = th.dataset.sort;
       if (currencyState.sortField === field) {
         currencyState.sortDir = currencyState.sortDir === 'asc' ? 'desc' : 'asc';
@@ -7355,9 +7515,7 @@ function setupCurrencyListeners() {
         currencyState.sortField = field;
         currencyState.sortDir = 'desc';
       }
-      document.querySelectorAll('.currency-table th.sortable').forEach(h => h.classList.remove('active', 'asc'));
-      th.classList.add('active');
-      if (currencyState.sortDir === 'asc') th.classList.add('asc');
+      updateCurrencySortHeaders();
       renderCurrencyTable();
     });
   });
@@ -7369,6 +7527,7 @@ async function loadCurrencyPage() {
     setToggleButtonPressed(btn, btn.dataset.poe === currencyState.poeVersion);
   });
   updateTypeFilterDropdown();
+  updateCurrencySortHeaders();
   await loadCurrencyLeagues();
   await loadCurrencyPrices();
 
@@ -7378,6 +7537,7 @@ async function loadCurrencyPage() {
     syncBtn.disabled = currencyState.syncing || !canCurrentUserSyncPrices();
     syncBtn.title = canCurrentUserSyncPrices() ? '' : window.t('currency.syncRestricted');
   }
+  renderCurrencyStatus();
 }
 
 // Fallback PoE leagues (used when API is unreachable)
@@ -7432,15 +7592,12 @@ async function loadCurrencyLeagues() {
 // Still rows in the table's shape while main waits for a poe.ninja sync, with nothing animated.
 function currencyLoadingRowsHTML() {
   const placeholderRow = '<tr class="currency-row--placeholder" aria-hidden="true">'
-    + '<td class="currency-td-num"></td>'
-    + '<td class="currency-td-icon"><span class="item-slot"></span></td>'
-    + '<td class="currency-td-name"><span class="currency-bar"></span></td>'
-    + '<td class="currency-td-type"></td>'
+    + '<td class="currency-td-item"><span class="currency-item"><span class="item-slot"></span><span class="currency-bar"></span></span></td>'
     + '<td class="currency-td-chaos"><span class="currency-bar currency-bar--value"></span></td>'
     + '<td class="currency-td-divine"></td>'
-    + '<td class="currency-td-trend"></td>'
+    + '<td class="currency-td-change"></td>'
     + '</tr>';
-  return `<tr class="currency-loading-row"><td colspan="7" class="currency-loading-label">${window.t('currency.waitingForSync')}</td></tr>`
+  return `<tr class="currency-loading-row"><td colspan="4" class="currency-loading-label">${window.t('currency.waitingForSync')}</td></tr>`
     + placeholderRow.repeat(8);
 }
 
@@ -7466,6 +7623,9 @@ async function loadCurrencyPrices({ cacheOnly = false } = {}) {
   let slowAnswer = null;
   if (!cacheOnly) {
     if (currencyState.listedKey !== `${poeVersion}:${currencyState.league}`) {
+      // The rail's counts belong to the listed game and league.
+      currencyState.typeCounts = null;
+      updateCurrencyTypeCounts();
       showLoadingRows();
     } else {
       slowAnswer = setTimeout(() => {
@@ -7481,54 +7641,123 @@ async function loadCurrencyPrices({ cacheOnly = false } = {}) {
     if (currencyState.search) params.search = currencyState.search;
     if (cacheOnly) params.cacheOnly = true;
 
-    // json = { prices: [...], count, league, updatedAt, rates } from the local poe.ninja cache
+    // json = { prices, count, total, typeCounts, syncedTypes, league, updatedAt, rates } from the local poe.ninja cache
     const json = await window.electronAPI.getCurrencyPrices(params);
     if (request !== currencyState.pricesRequest) return;
     if (cacheOnly && json?.prices === null) return;
     currencyState.prices = json?.prices || json?.data?.prices || [];
     currencyState.rates = json?.rates || {};
+    currencyState.total = Number(json?.total) || currencyState.prices.length;
+    currencyState.typeCounts = json?.typeCounts || null;
+    currencyState.syncedTypes = Array.isArray(json?.syncedTypes) ? json.syncedTypes : [];
+    currencyState.updatedAt = json?.updatedAt || json?.data?.updatedAt || null;
+    currencyState.loadError = null;
     currencyState.listedKey = `${poeVersion}:${json?.league || currencyState.league}`;
     renderCurrencyTable();
-
-    const footer = document.getElementById('currency-footer');
-    if (footer) {
-      const count = json?.count || json?.data?.count || 0;
-      const updated = json?.updatedAt || json?.data?.updatedAt;
-      footer.textContent = `${count} items` + (updated ? ` · Last synced: ${timeAgo(updated)}` : '');
-    }
+    updateCurrencyTypeCounts();
+    renderCurrencyStatus();
   } catch (error) {
     // A failed cache-only reload leaves the listed rows as they are.
     if (request !== currencyState.pricesRequest || cacheOnly) return;
     currencyState.listedKey = null;
-    renderCurrencyEmptyRow(tbody, getUserFacingErrorMessage(error, 'currency.loadError'));
+    currencyState.loadError = error || new Error();
+    // Nothing is listed, so the rail and status line drop the last list's counts and sync time.
+    currencyState.typeCounts = null;
+    currencyState.updatedAt = null;
+    renderCurrencyEmptyRow(tbody, getUserFacingErrorMessage(currencyState.loadError, 'currency.loadError'), { action: 'retry' });
+    updateCurrencyTypeCounts();
+    renderCurrencyStatus();
   } finally {
     clearTimeout(slowAnswer);
   }
 }
 
-function renderCurrencyEmptyRow(tbody, message, { syncAction = false } = {}) {
+// How long ago the listed prices were synced, in the page's language.
+function formatSyncedAgo(date) {
+  const mins = Math.floor((Date.now() - new Date(date).getTime()) / 60000);
+  if (!Number.isFinite(mins) || mins < 1) return window.t('misc.justNow');
+  if (mins < 60) return window.t('misc.minutesAgo', { count: mins });
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return window.t('misc.hoursAgo', { count: hours });
+  return window.t('misc.daysAgo', { count: Math.floor(hours / 24) });
+}
+
+// The line under the title names the listed league, its price count and when it was synced (or that a sync runs;
+// after a failed load only the league); the footer says how many of the matches the table shows.
+function renderCurrencyStatus() {
+  const status = document.getElementById('currency-status');
+  if (status) {
+    const parts = [currencyState.league];
+    if (currencyState.syncing) {
+      parts.push(window.t('currency.syncing'));
+    } else if (currencyState.updatedAt) {
+      const count = Object.values(currencyState.typeCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+      parts.push(window.t('currency.priceCount', { count: count.toLocaleString('en-US') }));
+      parts.push(window.t('currency.syncedAgo', { time: formatSyncedAgo(currencyState.updatedAt) }));
+    } else if (!currencyState.loadError) {
+      parts.push(window.t('currency.neverSynced'));
+    }
+    status.textContent = parts.filter(Boolean).join(' · ');
+  }
+
+  const footer = document.getElementById('currency-footer');
+  if (footer) {
+    const shown = currencyState.loadError ? 0 : currencyState.prices.length;
+    footer.textContent = shown > 0
+      ? window.t('currency.listedCount', {
+        shown: shown.toLocaleString('en-US'),
+        total: Math.max(Number(currencyState.total) || 0, shown).toLocaleString('en-US')
+      })
+      : '';
+  }
+}
+
+// Which message an empty table shows: a search that matches nothing, a tab whose type the last sync read and found no
+// listings for, a tab the quick sync skipped, or a league with no prices at all.
+function selectCurrencyEmptyState({ search = '', type = '', syncedTypes = [] } = {}) {
+  if (search) return 'noMatch';
+  if (!type) return 'noData';
+  return (syncedTypes || []).includes(type) ? 'zeroListings' : 'notSynced';
+}
+
+// The table's one message row, with at most one way out: Sync now, Clear search or Retry.
+function renderCurrencyEmptyRow(tbody, message, { action = '' } = {}) {
   const row = document.createElement('tr');
   const cell = document.createElement('td');
-  cell.colSpan = 7;
+  cell.colSpan = 4;
   cell.className = 'currency-empty';
   cell.textContent = message == null ? '' : String(message);
-  if (syncAction) {
-    const action = document.createElement('div');
-    action.className = 'currency-empty-action';
+  if (action) {
+    const wrap = document.createElement('div');
+    wrap.className = 'currency-empty-action';
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'btn btn-secondary btn-small';
-    button.insertAdjacentHTML('afterbegin', '<svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sync"/></svg>');
     const label = document.createElement('span');
     label.className = 'btn-label';
-    label.setAttribute('data-i18n', 'currency.syncNow');
-    label.textContent = window.t('currency.syncNow');
+    if (action === 'sync') {
+      button.className = 'btn btn-secondary btn-small currency-empty-sync';
+      button.insertAdjacentHTML('afterbegin', '<svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sync"/></svg>');
+      label.setAttribute('data-i18n', 'currency.syncNow');
+      label.textContent = window.t('currency.syncNow');
+      button.addEventListener('click', handleCurrencySync);
+    } else if (action === 'clearSearch') {
+      button.className = 'btn btn-secondary btn-small';
+      button.insertAdjacentHTML('afterbegin', '<svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#close"/></svg>');
+      label.setAttribute('data-i18n', 'currency.clearSearch');
+      label.textContent = window.t('currency.clearSearch');
+      button.addEventListener('click', clearCurrencySearch);
+    } else {
+      button.className = 'btn btn-secondary btn-small';
+      button.insertAdjacentHTML('afterbegin', '<svg class="icon icon-sm" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#sync"/></svg>');
+      label.setAttribute('data-i18n', 'currency.retry');
+      label.textContent = window.t('currency.retry');
+      button.addEventListener('click', () => loadCurrencyPrices());
+    }
     button.appendChild(label);
-    button.addEventListener('click', handleCurrencySync);
-    action.appendChild(button);
-    cell.appendChild(action);
-    // A row drawn while a sync runs shows that sync.
-    if (currencyState.syncing) setButtonBusy(button, true, window.t('currency.syncing'));
+    wrap.appendChild(button);
+    cell.appendChild(wrap);
+    // A Sync now drawn while a sync runs shows that sync.
+    if (action === 'sync' && currencyState.syncing) setButtonBusy(button, true, window.t('currency.syncing'));
   }
   row.appendChild(cell);
   tbody.replaceChildren(row);
@@ -7538,11 +7767,25 @@ function renderCurrencyTable() {
   const tbody = document.getElementById('currency-table-body');
   if (!tbody) return;
 
+  if (currencyState.loadError) {
+    renderCurrencyEmptyRow(tbody, getUserFacingErrorMessage(currencyState.loadError, 'currency.loadError'), { action: 'retry' });
+    return;
+  }
+
   const sorted = [...currencyState.prices].sort((a, b) => {
     if (currencyState.sortField === 'itemName') {
       const av = (a.itemName || '').toLowerCase();
       const bv = (b.itemName || '').toLowerCase();
       return currencyState.sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    }
+    if (currencyState.sortField === 'change') {
+      // A row without a 7-day change goes last in both orders, not between the gains and the losses.
+      const toChange = (item) => (item.change === null || item.change === undefined || item.change === '' ? NaN : Number(item.change));
+      const av = toChange(a), bv = toChange(b);
+      if (!Number.isFinite(av) || !Number.isFinite(bv)) {
+        return Number.isFinite(av) ? -1 : (Number.isFinite(bv) ? 1 : 0);
+      }
+      return currencyState.sortDir === 'asc' ? av - bv : bv - av;
     }
     const av = parseFloat(a[currencyState.sortField]) || 0;
     const bv = parseFloat(b[currencyState.sortField]) || 0;
@@ -7550,50 +7793,57 @@ function renderCurrencyTable() {
   });
 
   if (sorted.length === 0) {
-    // Sync can fill a league or category the quick sync skipped, but not a search that matches nothing.
-    if (currencyState.search) {
-      renderCurrencyEmptyRow(tbody, window.t('currency.noMatch'));
+    // Sync can fill a league or a category the quick sync skipped, but not a search that matches nothing or a category
+    // the league has no listings for.
+    const emptyState = selectCurrencyEmptyState(currencyState);
+    const syncAction = canCurrentUserSyncPrices() ? 'sync' : '';
+    if (emptyState === 'noMatch') {
+      renderCurrencyEmptyRow(tbody, window.t('currency.noMatch'), { action: 'clearSearch' });
+    } else if (emptyState === 'zeroListings') {
+      renderCurrencyEmptyRow(tbody, window.t('currency.emptyCategory'));
+    } else if (emptyState === 'notSynced') {
+      renderCurrencyEmptyRow(tbody, window.t('currency.notSyncedCategory'), { action: syncAction });
     } else {
-      renderCurrencyEmptyRow(tbody, window.t('currency.noData'), { syncAction: canCurrentUserSyncPrices() });
+      renderCurrencyEmptyRow(tbody, window.t('currency.noData'), { action: syncAction });
     }
     return;
   }
 
+  // A tab already names the type, so only All shows it under each name.
+  const showType = !currencyState.type;
+  const isExpanded = (item) => Boolean(item.itemName) && String(item.itemName).toLowerCase() === currencyState.expandedKey;
+  // The rows are one Tab stop (the open row, else the first), so Tab gets past up to 500 of them in one press.
+  const tabStop = Math.max(sorted.findIndex(isExpanded), 0);
   const fragment = document.createDocumentFragment();
-  sorted.forEach((item, i) => {
+  sorted.forEach((item, index) => {
     const chaos = parseFloat(item.chaosValue) || 0;
     const divine = parseFloat(item.divineValue);
 
     const row = document.createElement('tr');
+    row.className = 'currency-row';
+    row.tabIndex = index === tabStop ? 0 : -1;
+    row.setAttribute('aria-expanded', 'false');
 
-    const numberCell = document.createElement('td');
-    numberCell.className = 'currency-td-num';
-    numberCell.textContent = String(i + 1);
-
-    const iconCell = document.createElement('td');
-    iconCell.className = 'currency-td-icon';
-    const safeIconUrl = normalizeSafeImageSrc(item.iconUrl);
-    const slot = document.createElement('span');
-    slot.className = 'item-slot';
-    if (safeIconUrl) {
-      const icon = document.createElement('img');
-      icon.dataset.iconUrl = safeIconUrl;
-      icon.loading = 'lazy';
-      icon.alt = item.itemName ? `${item.itemName} icon` : 'Currency icon';
-      slot.appendChild(icon);
+    const itemCell = document.createElement('td');
+    itemCell.className = 'currency-td-item';
+    const itemBox = document.createElement('div');
+    itemBox.className = 'currency-item';
+    const text = document.createElement('span');
+    text.className = 'currency-item-text';
+    const name = document.createElement('span');
+    name.className = 'currency-item-name';
+    name.textContent = item.itemName || '';
+    // A long name ends in an ellipsis, so its full text is one hover away.
+    name.title = item.itemName || '';
+    text.appendChild(name);
+    if (showType) {
+      const meta = document.createElement('span');
+      meta.className = 'currency-item-meta';
+      meta.textContent = getCurrencyTypeLabel(item.itemType);
+      text.appendChild(meta);
     }
-    iconCell.appendChild(slot);
-
-    const nameCell = document.createElement('td');
-    nameCell.className = 'currency-td-name';
-    nameCell.textContent = item.itemName || '';
-
-    const typeCell = document.createElement('td');
-    typeCell.className = 'currency-td-type';
-    const typeBadge = document.createElement('span');
-    typeBadge.className = 'currency-type-badge';
-    typeBadge.textContent = item.itemType || '-';
-    typeCell.appendChild(typeBadge);
+    itemBox.append(createCurrencyItemSlot(item), text);
+    itemCell.appendChild(itemBox);
 
     const chaosCell = document.createElement('td');
     chaosCell.className = 'currency-td-chaos';
@@ -7612,42 +7862,204 @@ function renderCurrencyTable() {
       divineCell.appendChild(muted);
     }
 
-    const trendCell = document.createElement('td');
-    trendCell.className = 'currency-td-trend';
-    const spark = createSparklineElement(item.sparklineData);
-    if (spark) {
-      trendCell.appendChild(spark);
-    }
+    const changeCell = document.createElement('td');
+    changeCell.className = 'currency-td-change';
+    changeCell.appendChild(createPriceChangeElement(item.change, item.sparklineData));
 
-    row.append(numberCell, iconCell, nameCell, typeCell, chaosCell, divineCell, trendCell);
+    row.append(itemCell, chaosCell, divineCell, changeCell);
+    row.addEventListener('click', () => toggleCurrencyRowDetail(row, item));
+    row.addEventListener('keydown', (event) => {
+      if (event.target !== row) return;
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggleCurrencyRowDetail(row, item);
+      } else if (moveCurrencyRowFocus(row, event.key)) {
+        event.preventDefault();
+      }
+    });
     fragment.appendChild(row);
+    if (isExpanded(item)) {
+      row.setAttribute('aria-expanded', 'true');
+      fragment.appendChild(buildCurrencyDetailRow(item));
+    }
   });
 
   tbody.replaceChildren(fragment);
   applyCachedItemIcons(tbody);
 }
 
-function createSparklineElement(sparkData) {
-  if (!sparkData || !Array.isArray(sparkData.data) || sparkData.data.length < 2) return null;
-  const values = sparkData.data.map((value) => Number(value)).filter(Number.isFinite);
-  if (values.length < 2) return null;
+// Arrow keys, Home and End move between the price rows, and the Tab stop moves with them. Says whether the key moved.
+function moveCurrencyRowFocus(row, key) {
+  const rows = [...(row.parentElement?.querySelectorAll('.currency-row') || [])];
+  const index = rows.indexOf(row);
+  const next = { ArrowDown: rows[index + 1], ArrowUp: rows[index - 1], Home: rows[0], End: rows[rows.length - 1] }[key];
+  if (!next) return false;
+  rows.forEach((other) => { other.tabIndex = other === next ? 0 : -1; });
+  next.focus();
+  return true;
+}
 
-  const w = 70, h = 20, pad = 2;
+// Opens one price row's detail at a time. The open row stays open while the table redraws (sort, sync, language).
+function toggleCurrencyRowDetail(row, item) {
+  const tbody = row.parentElement;
+  const opening = row.getAttribute('aria-expanded') !== 'true';
+  tbody?.querySelectorAll('.currency-detail-row').forEach((detail) => detail.remove());
+  tbody?.querySelectorAll('.currency-row[aria-expanded="true"]').forEach((open) => open.setAttribute('aria-expanded', 'false'));
+  // The row used last is the Tab stop, as a redraw makes the open row.
+  tbody?.querySelectorAll('.currency-row').forEach((other) => { other.tabIndex = other === row ? 0 : -1; });
+  currencyState.expandedKey = opening ? String(item.itemName || '').toLowerCase() : null;
+  if (opening) {
+    const detail = buildCurrencyDetailRow(item);
+    row.after(detail);
+    row.setAttribute('aria-expanded', 'true');
+    applyCachedItemIcons(detail);
+  }
+}
+
+// The detail under a price row: bigger art, the full name and type, both values, the week's change with a larger line,
+// and the name to copy for a trade search. It reads the loaded row only.
+function buildCurrencyDetailRow(item) {
+  const row = document.createElement('tr');
+  row.className = 'currency-detail-row';
+  const cell = document.createElement('td');
+  cell.colSpan = 4;
+  const panel = document.createElement('div');
+  panel.className = 'currency-detail';
+
+  const info = document.createElement('div');
+  info.className = 'currency-detail-info';
+  const name = document.createElement('strong');
+  name.className = 'currency-detail-name';
+  name.textContent = item.itemName || '';
+  const type = document.createElement('span');
+  type.className = 'currency-detail-type';
+  type.textContent = getCurrencyTypeLabel(item.itemType);
+  const values = document.createElement('div');
+  values.className = 'currency-detail-values';
+  values.appendChild(createCurrencyValueElement(parseFloat(item.chaosValue) || 0, 'chaos', 18, currencyState.poeVersion));
+  const divine = parseFloat(item.divineValue);
+  if (Number.isFinite(divine) && divine > 0) {
+    values.appendChild(createCurrencyValueElement(divine, 'divine', 18, currencyState.poeVersion));
+  }
+  info.append(name, type, values);
+
+  const trend = document.createElement('div');
+  trend.className = 'currency-detail-trend';
+  const trendLabel = document.createElement('span');
+  trendLabel.className = 'currency-detail-label';
+  trendLabel.textContent = window.t('currency.change7d');
+  trend.append(trendLabel, createPriceChangeElement(item.change, item.sparklineData, { width: 240, height: 48, ticks: true }));
+
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'btn btn-ghost btn-small currency-copy-name';
+  const copyLabel = document.createElement('span');
+  copyLabel.className = 'btn-label';
+  copyLabel.setAttribute('data-i18n', 'currency.copyName');
+  copyLabel.textContent = window.t('currency.copyName');
+  copy.appendChild(copyLabel);
+  copy.addEventListener('click', () => copyCurrencyItemName(copy, item.itemName || ''));
+
+  panel.append(createCurrencyItemSlot(item, currencyState.poeVersion, 'currency-detail-slot'), info, trend, copy);
+  cell.appendChild(panel);
+  row.appendChild(cell);
+  return row;
+}
+
+// Copies an item name for a trade search. The button says so for 2 s and the announcer reads it out.
+async function copyCurrencyItemName(button, name) {
+  try {
+    await navigator.clipboard.writeText(name);
+  } catch (error) {
+    showToast(window.t('currency.copyFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
+    return;
+  }
+  const label = button.querySelector('.btn-label');
+  announceStatus(window.t('currency.copied'));
+  label.textContent = window.t('currency.copied');
+  setTimeout(() => {
+    label.textContent = window.t('currency.copyName');
+  }, SAVED_STATE_MS);
+}
+
+// poe.ninja's 7-day change as signed text, '+12.4%' or '-81.5%', or '' when it gives none.
+function formatPriceChange(change) {
+  if (change === null || change === undefined || change === '' || !Number.isFinite(Number(change))) return '';
+  const rounded = Math.round(Number(change) * 10) / 10;
+  const sign = rounded > 0 ? '+' : (rounded < 0 ? '-' : '');
+  return `${sign}${Math.abs(rounded).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
+// The 7d cell: the signed change with an up or down arrow in the gain or loss colour, so the direction never rests on
+// colour alone, then the week's sparkline in the same colour.
+function createPriceChangeElement(change, sparkData, { width = 64, height = 18, ticks = false } = {}) {
+  const box = document.createElement('div');
+  box.className = 'currency-change';
+  const text = formatPriceChange(change);
+  const trend = text.startsWith('+') ? 'up' : (text.startsWith('-') ? 'down' : (text ? 'flat' : 'none'));
+  box.dataset.trend = trend;
+
+  const value = document.createElement('span');
+  value.className = 'currency-change-value';
+  if (PRICE_CHANGE_ARROW_SVG[trend]) {
+    value.insertAdjacentHTML('afterbegin', PRICE_CHANGE_ARROW_SVG[trend]);
+  }
+  const number = document.createElement('span');
+  number.textContent = text || '-';
+  value.appendChild(number);
+  box.appendChild(value);
+
+  const spark = createSparklineElement(sparkData, { width, height, change, ticks });
+  if (spark) box.appendChild(spark);
+  return box;
+}
+
+// A sparkline of poe.ninja's 7-day series that skips the days it has no data for, coloured by the week's change (or
+// by its own first and last points when poe.ninja gives none). `ticks` marks each day under the line.
+function createSparklineElement(sparkData, { width = 64, height = 18, change = null, ticks = false } = {}) {
+  const raw = Array.isArray(sparkData?.data) ? sparkData.data : [];
+  const points = raw
+    .map((value, index) => ({ index, value: value === null || value === undefined || value === '' ? NaN : Number(value) }))
+    .filter((point) => Number.isFinite(point.value));
+  if (points.length < 2) return null;
+
+  const pad = 2;
+  const bottom = ticks ? height - 6 : height - pad;
+  const values = points.map((point) => point.value);
   const min = Math.min(...values), max = Math.max(...values);
   const range = max - min || 1;
-  const points = values.map((v, i) => {
-    const x = pad + (i / (values.length - 1)) * (w - pad * 2);
-    const y = pad + (h - pad * 2) - ((v - min) / range) * (h - pad * 2);
+  const step = (width - pad * 2) / (raw.length - 1);
+  const coordinates = points.map((point) => {
+    const x = pad + point.index * step;
+    const y = bottom - ((point.value - min) / range) * (bottom - pad);
     return `${x},${y}`;
   }).join(' ');
 
-  const color = values[values.length - 1] >= values[0] ? 'var(--green)' : 'var(--red)';
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', String(w));
-  svg.setAttribute('height', String(h));
+  const weekChange = formatPriceChange(change) ? Number(change) : values[values.length - 1] - values[0];
+  const direction = Math.round(weekChange * 10) / 10;
+  const color = direction > 0 ? 'var(--gain)' : (direction < 0 ? 'var(--loss)' : 'var(--text-muted)');
+  const svgNamespace = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNamespace, 'svg');
+  svg.setAttribute('class', 'currency-spark');
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
+  svg.setAttribute('aria-hidden', 'true');
 
-  const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-  polyline.setAttribute('points', points);
+  if (ticks) {
+    for (let index = 0; index < raw.length; index += 1) {
+      const tick = document.createElementNS(svgNamespace, 'line');
+      const x = String(pad + index * step);
+      tick.setAttribute('class', 'currency-spark-tick');
+      tick.setAttribute('x1', x);
+      tick.setAttribute('x2', x);
+      tick.setAttribute('y1', String(height - 3));
+      tick.setAttribute('y2', String(height));
+      svg.appendChild(tick);
+    }
+  }
+
+  const polyline = document.createElementNS(svgNamespace, 'polyline');
+  polyline.setAttribute('points', coordinates);
   polyline.setAttribute('fill', 'none');
   polyline.style.stroke = color;
   polyline.setAttribute('stroke-width', '1.5');
@@ -7684,9 +8096,10 @@ async function handleCurrencySync() {
   }
 
   currencyState.syncing = true;
-  const syncButtons = () => [document.getElementById('currency-sync-btn'), ...document.querySelectorAll('.currency-empty-action .btn')];
+  const syncButtons = () => [document.getElementById('currency-sync-btn'), ...document.querySelectorAll('.currency-empty-sync')];
   const startedFromSyncButton = syncButtons().includes(document.activeElement);
   syncButtons().forEach((button) => setButtonBusy(button, true, window.t('currency.syncing')));
+  renderCurrencyStatus();
 
   try {
     // The table refreshing with the new prices says the sync worked.
@@ -7701,13 +8114,14 @@ async function handleCurrencySync() {
     showToast(window.t('currency.syncFailed'), getUserFacingErrorMessage(e, 'toast.tryAgain'), 'error');
   } finally {
     currencyState.syncing = false;
+    renderCurrencyStatus();
     // Asked again, so a Sync now drawn during the sync goes idle too.
     syncButtons().forEach((button) => setButtonBusy(button, false));
     // The busy buttons were disabled and the table drawn again, so a keyboard user's focus may have dropped to the
     // page. It goes back to a Sync control, unless the user moved it somewhere else meanwhile.
     const focused = document.activeElement;
     if (startedFromSyncButton && (!focused || focused === document.body || syncButtons().includes(focused))) {
-      (document.querySelector('.currency-empty-action .btn') || document.getElementById('currency-sync-btn'))?.focus();
+      (document.querySelector('.currency-empty-sync') || document.getElementById('currency-sync-btn'))?.focus();
     }
   }
 }

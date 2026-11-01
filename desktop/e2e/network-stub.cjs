@@ -41,16 +41,24 @@ shell.openPath = async (target) => {
   return '';
 };
 
+// A price is a chaos value, listed under Currency, or { chaos, type, change } with a poe.ninja exchange type and a
+// 7-day change in %. No item has art, so specs never fetch from the game CDN.
 function poeNinjaResponse(url, params = {}) {
   if (url.endsWith('/data/index-state')) {
     return { economyLeagues: [{ name: 'Standard', displayName: 'Standard', url: 'standard' }], oldEconomyLeagues: [] };
   }
-  if (url.includes('/economy/exchange/') && params.type === 'Currency') {
-    const names = Object.keys(prices);
+  const priceOf = (name) => (typeof prices[name] === 'object' ? prices[name] : { chaos: prices[name], type: 'Currency' });
+  const names = Object.keys(prices).filter((name) => priceOf(name).type === params.type);
+  if (url.includes('/economy/exchange/') && (params.type === 'Currency' || names.length > 0)) {
+    const sparkline = (change) => (change === undefined ? undefined : { totalChange: change, data: [0, change / 2, change] });
     return {
       core: { primary: 'chaos', rates: {} },
       items: names.map((name, index) => ({ id: `e2e-${index}`, name })),
-      lines: names.map((name, index) => ({ id: `e2e-${index}`, primaryValue: prices[name] }))
+      lines: names.map((name, index) => ({
+        id: `e2e-${index}`,
+        primaryValue: priceOf(name).chaos,
+        sparkline: sparkline(priceOf(name).change)
+      }))
     };
   }
   return { lines: [], items: [] };
