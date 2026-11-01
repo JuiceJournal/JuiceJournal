@@ -391,7 +391,7 @@ test('the status line names the league, its price count and sync age, and the fo
 
   assert.equal(
     status.textContent,
-    `Mirage · ${fakeT('currency.priceCount', { count: '4,210' })} · ${fakeT('currency.syncedAgo', { time: fakeT('misc.minutesAgo', { count: 4 }) })}`
+    `Mirage · ${fakeT('currency.priceCount', { count: '4,210' })} · ${fakeT('currency.syncedAgo', { time: fakeT('time.minutesAgo', { count: 4 }) })}`
   );
   assert.equal(footer.textContent, listed('500', '4,210'));
   assert.deepEqual(JSON.parse(JSON.stringify(context.currencyState.syncedTypes)), ['currency', 'divination_card']);
@@ -409,10 +409,10 @@ test('the status line names the league, its price count and sync age, and the fo
 test('the sync age reads in the page language at each step', () => {
   const { context } = loadCurrencyPricesRenderer();
   const ago = (minutes) => context.formatSyncedAgo(new Date(Date.now() - minutes * 60000).toISOString());
-  assert.equal(ago(0), 'misc.justNow');
-  assert.equal(ago(59), fakeT('misc.minutesAgo', { count: 59 }));
-  assert.equal(ago(125), fakeT('misc.hoursAgo', { count: 2 }));
-  assert.equal(ago(3 * 1440), fakeT('misc.daysAgo', { count: 3 }));
+  assert.equal(ago(0), 'time.justNow');
+  assert.equal(ago(59), fakeT('time.minutesAgo', { count: 59 }));
+  assert.equal(ago(125), fakeT('time.hoursAgo', { count: 2 }));
+  assert.equal(ago(3 * 1440), fakeT('time.daysAgo', { count: 3 }));
 });
 
 test('a cache-only currency reload keeps the rows when main no longer holds the listed league', async () => {

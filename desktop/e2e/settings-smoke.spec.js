@@ -340,6 +340,47 @@ test('settings smoke: launches desktop app and shows core settings controls', as
     await expect(page.locator('#save-settings')).toBeVisible();
     await expect(page.locator('#reset-settings')).toBeVisible();
 
+    // Reset to Defaults asks in the app's own dialog with Cancel focused; Escape closes it and resets nothing.
+    await page.locator('#reset-settings').click();
+    await expect(page.locator('#reset-settings-modal')).toBeVisible();
+    await expect(page.locator('#reset-settings-cancel')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#reset-settings-modal')).toBeHidden();
+    await expect(page.locator('#reset-settings')).toBeFocused();
+    await expect(page.locator('#api-url')).toHaveValue(backend.baseUrl);
+
+    // At the minimum window width a long account name gives way, and the close button stays in the window.
+    const mainWindow = await electronApp.browserWindow(page);
+    const defaultBounds = await mainWindow.evaluate((window) => window.getBounds());
+    await mainWindow.evaluate((window) => window.setSize(1180, 820));
+    await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(1180);
+    const savedName = await page.locator('#username').textContent();
+    await page.evaluate(() => {
+      document.getElementById('username').textContent = 'AVeryLongAccountName#12345';
+    });
+    for (const language of ['en', 'de', 'fr']) {
+      const fits = await page.evaluate((lang) => {
+        window._appState.language = lang;
+        window.applyTranslations();
+        return document.getElementById('win-close').getBoundingClientRect().right <= document.documentElement.clientWidth;
+      }, language);
+      expect(fits, language).toBe(true);
+    }
+    // Turkish labels are ASCII-folded, so their uppercase keeps a plain I instead of a dotted one.
+    const turkishNav = await page.evaluate(() => {
+      window._appState.language = 'tr';
+      window.applyTranslations();
+      return document.querySelector('.nav-btn[data-page="sessions"]').innerText;
+    });
+    expect(turkishNav).toBe("SESSION'LAR");
+    await page.evaluate((name) => {
+      window._appState.language = 'en';
+      window.applyTranslations();
+      document.getElementById('username').textContent = name;
+    }, savedName);
+    await mainWindow.evaluate((window, bounds) => window.setBounds(bounds), defaultBounds);
+    await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(defaultBounds.width);
+
     await expect(page.locator('#global-language')).toBeVisible();
     await expect(page.locator('#api-url')).toHaveValue(backend.baseUrl);
 

@@ -716,6 +716,7 @@ test('renderer logout clears normalized account state', async () => {
     currentSession: { id: 'session-1' },
     sessions: [{ id: 'session-1' }],
     mapResults: [{ id: 'map-result-1' }],
+    mapResultsLoadFailed: true,
     recentLoot: [{ id: 'loot-1' }],
     poeDeviceConnected: true,
     onlineAccount: { enabled: true, signedIn: true },
@@ -763,6 +764,8 @@ test('renderer logout clears normalized account state', async () => {
   assert.equal(state.poeDeviceConnected, false);
   assert.equal(Array.isArray(state.mapResults), true);
   assert.equal(state.mapResults.length, 0);
+  // A failed load before sign-out must not leave the Last Map Result card in its error state.
+  assert.equal(state.mapResultsLoadFailed, false);
   assert.equal(stashState.beforeSnapshotId, null);
   assert.equal(stashState.afterSnapshotId, null);
   assert.equal(stashState.beforeSnapshot, null);

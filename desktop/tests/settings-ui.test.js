@@ -444,6 +444,7 @@ test('generic translation passes reapply authenticated chrome after static copy 
   };
   let activeSessionRedraws = 0;
   let recentLootRedraws = 0;
+  const cardRedraws = [];
   const context = loadFunctions([
     'renderUserIdentity',
     'renderPoeLinkStatus',
@@ -452,6 +453,9 @@ test('generic translation passes reapply authenticated chrome after static copy 
     elements,
     updateActiveSessionUI: () => { activeSessionRedraws += 1; },
     renderRecentLoot: () => { recentLootRedraws += 1; },
+    renderCharacterSummaryCard: () => cardRedraws.push('character'),
+    renderLatestMapResult: () => cardRedraws.push('latestMapResult'),
+    renderMapResultHistory: () => cardRedraws.push('mapResultHistory'),
     state: {
       currentUser: { username: 'Esquetta4179', accountName: 'RangerMain' },
       poeDeviceConnected: true
@@ -472,6 +476,7 @@ test('generic translation passes reapply authenticated chrome after static copy 
 
   assert.equal(activeSessionRedraws, 1, 'the active map card follows the new language');
   assert.equal(recentLootRedraws, 1, "Recent Loot's empty state follows the new language");
+  assert.deepEqual(cardRedraws, ['character', 'latestMapResult', 'mapResultHistory'], 'their fallback lines follow it too');
   assert.equal(elements.username.textContent, 'Esquetta4179');
   assert.equal(elements.userAvatar.textContent, 'E');
   assert.equal(elements.poeLinkStatus.textContent, 'settings.poeLinked');
@@ -643,7 +648,7 @@ test('reset settings persists only resettable settings and preserves signed-in h
     'applyLocalizedChrome',
     'handleResetSettings'
   ], {
-    confirm: () => true,
+    requestResetSettingsConfirmation: async () => true,
     elements,
     state: {
       currentUser: { username: 'Esquetta4179' },
@@ -2852,4 +2857,162 @@ test('hotkey fields are the keycaps and explain how to capture', () => {
   // Focus selects the value; the system selection colour must not cover the gold keycap text.
   assert.match(css, /\.hotkey-input \.hotkey-field::selection \{\s*color: var\(--gold-light\);\s*background: transparent;\s*\}/);
   assert.match(css, /\.connection-status\.is-off \.connection-dot \{\s*background: var\(--text-muted\);\s*box-shadow: none;\s*\}/);
+});
+
+// The Reset to Defaults dialog with fake controls, built like createDeleteAllDialog.
+function createResetSettingsDialog() {
+  const listeners = new Map();
+  const doc = { activeElement: null };
+  const listenable = (name, target) => Object.assign(target, {
+    name,
+    focus() {
+      doc.activeElement = target;
+    },
+    addEventListener(type, handler) {
+      listeners.set(`${name}:${type}`, handler);
+    },
+    removeEventListener(type, handler) {
+      if (listeners.get(`${name}:${type}`) === handler) listeners.delete(`${name}:${type}`);
+    }
+  });
+  const cancel = listenable('cancel', {});
+  const confirm = listenable('confirm', {});
+  const panel = listenable('panel', {});
+  const modal = listenable('modal', createDatasetElement(['hidden']));
+  const resetSettingsBtn = listenable('resetSettingsBtn', {});
+  listenable('document', doc);
+  const fire = (name, type, event = {}) => {
+    let prevented = false;
+    listeners.get(`${name}:${type}`)?.({ ...event, preventDefault: () => { prevented = true; } });
+    return prevented;
+  };
+  const context = loadFunctions(['requestResetSettingsConfirmation'], {
+    document: doc,
+    elements: {
+      resetSettingsModal: modal,
+      resetSettingsCancelBtn: cancel,
+      resetSettingsConfirmBtn: confirm,
+      resetSettingsBtn
+    }
+  });
+  const open = () => {
+    const outcome = { value: undefined };
+    context.requestResetSettingsConfirmation().then((value) => {
+      outcome.value = value;
+    });
+    return outcome;
+  };
+  return { cancel, confirm, panel, modal, resetSettingsBtn, doc, listeners, fire, open };
+}
+
+test('Reset to Defaults asks in an in-app dialog, not a native confirm', () => {
+  const appJs = fs.readFileSync(appJsPath, 'utf8');
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const body = extractFunctionSource(appJs, 'handleResetSettings');
+
+  assert.ok(body.includes('if (!(await requestResetSettingsConfirmation())) return;'));
+  assert.doesNotMatch(body, /confirm\(window\.t/);
+  for (const part of [
+    '<div id="reset-settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="reset-settings-title" aria-describedby="reset-settings-body">',
+    '<h2 id="reset-settings-title" data-i18n="settings.resetTitle">',
+    '<p class="modal-subtitle" id="reset-settings-body" data-i18n="settings.resetConfirm">',
+    '<button id="reset-settings-cancel" type="button" class="btn btn-secondary" data-i18n="settings.resetCancel">Cancel</button>',
+    '<button id="reset-settings-confirm" type="button" class="btn btn-primary" data-i18n="settings.reset">'
+  ]) {
+    assert.ok(html.includes(part), part);
+  }
+  // Cancel comes first, and there is no form, so Enter never resets.
+  const modalStart = html.indexOf('<!-- Reset Settings Modal -->');
+  const modal = html.slice(modalStart, html.indexOf('<!-- Delete Everything Modal -->'));
+  assert.ok(modalStart > 0);
+  assert.ok(!modal.includes('<form'));
+  assert.ok(modal.indexOf('id="reset-settings-cancel"') < modal.indexOf('id="reset-settings-confirm"'));
+});
+
+test('the Reset to Defaults dialog opens on Cancel and only its Reset button confirms', async () => {
+  const dialog = createResetSettingsDialog();
+  const outcome = dialog.open();
+
+  assert.equal(dialog.modal.classList.contains('hidden'), false);
+  assert.equal(dialog.doc.activeElement, dialog.cancel);
+  assert.deepEqual([...dialog.listeners.keys()].sort(), ['cancel:click', 'confirm:click', 'document:keydown', 'modal:click']);
+
+  // Enter and a click inside the panel do nothing.
+  assert.equal(dialog.fire('document', 'keydown', { key: 'Enter' }), false);
+  dialog.fire('modal', 'click', { target: dialog.panel });
+  await settleMicrotasks();
+  assert.equal(outcome.value, undefined);
+
+  dialog.fire('confirm', 'click');
+  await settleMicrotasks();
+  assert.equal(outcome.value, true);
+  assert.equal(dialog.modal.classList.contains('hidden'), true);
+  assert.equal(dialog.doc.activeElement, dialog.resetSettingsBtn);
+  assert.equal(dialog.listeners.size, 0);
+});
+
+test('Escape, Cancel and a backdrop click close the Reset to Defaults dialog without resetting', async () => {
+  const ways = [
+    ['Escape', (dialog) => dialog.fire('document', 'keydown', { key: 'Escape' })],
+    ['Cancel', (dialog) => dialog.fire('cancel', 'click')],
+    ['backdrop', (dialog) => dialog.fire('modal', 'click', { target: dialog.modal })]
+  ];
+
+  for (const [way, close] of ways) {
+    const dialog = createResetSettingsDialog();
+    const outcome = dialog.open();
+
+    close(dialog);
+    await settleMicrotasks();
+
+    assert.equal(outcome.value, false, way);
+    assert.equal(dialog.modal.classList.contains('hidden'), true, way);
+    assert.equal(dialog.doc.activeElement, dialog.resetSettingsBtn, way);
+    assert.equal(dialog.listeners.size, 0, way);
+  }
+});
+
+test('Tab keeps focus between the two Reset to Defaults dialog buttons', () => {
+  const dialog = createResetSettingsDialog();
+  dialog.open();
+  const tab = (shiftKey = false) => dialog.fire('document', 'keydown', { key: 'Tab', shiftKey });
+
+  assert.equal(tab(), true);
+  assert.equal(dialog.doc.activeElement, dialog.confirm);
+  assert.equal(tab(), true);
+  assert.equal(dialog.doc.activeElement, dialog.cancel);
+  assert.equal(tab(true), true);
+  assert.equal(dialog.doc.activeElement, dialog.confirm);
+});
+
+test('a cancelled Reset to Defaults saves nothing', async () => {
+  const savedSettings = [];
+  const context = loadFunctions(['handleResetSettings'], {
+    requestResetSettingsConfirmation: async () => false,
+    getSettingsModel: () => assert.fail('nothing is reset'),
+    window: { electronAPI: { setSettings: async (settings) => savedSettings.push(settings) } }
+  });
+
+  await context.handleResetSettings();
+
+  assert.deepEqual(savedSettings, []);
+});
+
+test('the active Settings tab is a lit plate without a side stripe, and session rows have no farm edge', () => {
+  const css = fs.readFileSync(stylesCssPath, 'utf8');
+  const cssRule = (selector) => {
+    const start = css.indexOf(`\n${selector} {`);
+    assert.ok(start > 0, selector);
+    return css.slice(start, css.indexOf('}', start) + 1);
+  };
+
+  const active = cssRule('.settings-nav-btn.active');
+  assert.match(active, /background: var\(--gold-glow\);/);
+  assert.match(active, /box-shadow: inset 0 0 0 1px var\(--gold-dim\);/);
+  assert.match(cssRule('.settings-nav-btn.active svg'), /stroke: var\(--ember-hot\);/);
+  for (const selector of ['.settings-nav-btn.active', '.session-item']) {
+    assert.doesNotMatch(cssRule(selector), /border-left|box-shadow:\s*inset [1-9]/, selector);
+  }
+  // The farm colour moved to a chip on the farm name in the meta line.
+  assert.match(cssRule('.session-meta [data-farm-type]'), /background: color-mix\(in srgb, var\(--farm-color\) 14%, transparent\);/);
 });
