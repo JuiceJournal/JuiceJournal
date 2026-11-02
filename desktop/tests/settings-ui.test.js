@@ -1356,6 +1356,43 @@ test('async price sync completion does not re-enable or mutate stale stash UI af
   assert.equal(context.elements.syncPricesBtn.disabled, true);
 });
 
+test('a stash price sync that read nothing says it failed, and counts as synced only with a list left to price from', async () => {
+  const toasts = [];
+  let answer = { itemCount: 42, syncFailed: true };
+  const context = loadFunctions([
+    'isStashTrackingEnabled',
+    'handleSyncPrices',
+    'syncPricesForCurrentStashRun'
+  ], {
+    getResolvedLeagueVersion: () => 'poe1',
+    getResolvedActiveLeague: () => 'Standard',
+    state: { settings: {}, capabilities: { stashTracking: { enabled: true, reason: null } } },
+    stashState: { pricesSynced: false },
+    elements: { syncPricesBtn: { disabled: false, innerHTML: 'Sync' } },
+    window: {
+      t: (key) => key,
+      electronAPI: { syncPrices: async () => answer }
+    },
+    renderPriceItemCount() {},
+    refreshProfitCurrencyRates: async () => null,
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe1' }),
+    showToast: (title, message, type) => toasts.push([title, type]),
+    getUserFacingErrorMessage: (error, key) => key
+  });
+
+  await context.handleSyncPrices();
+  assert.deepEqual(toasts, [['stash.pricesSyncFailed', 'error']]);
+  assert.equal(context.stashState.pricesSynced, true);
+
+  answer = { itemCount: 0, syncFailed: true };
+  await context.handleSyncPrices();
+  assert.equal(context.stashState.pricesSynced, false);
+
+  // An automatic snapshot asks once, not on each of its retries while poe.ninja is down.
+  await context.syncPricesForCurrentStashRun({ league: 'Standard', poeVersion: 'poe1' });
+  assert.equal(context.stashState.pricesSynced, true);
+});
+
 test('stale profit result rendering is ignored while stash tracking is unavailable', () => {
   const context = loadFunctions([
     'isStashTrackingUnavailable',

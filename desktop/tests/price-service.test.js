@@ -649,6 +649,102 @@ test('a price sync past its deadline stops reading, and the list does not count 
   assert.equal(service.fullySynced, true);
 });
 
+test('a Sync that reads nothing keeps the list and its time, so loot still prices, and says it failed', async (t) => {
+  t.mock.method(console, 'error', () => {});
+  const { service } = loadPacedSync(t);
+  const first = await service.ensureSynced('Mirage', 'poe1', { full: true });
+  assert.equal(first.syncFailed, false);
+  const itemCount = service.priceMap.size;
+  service.lastFullSync = 1;
+  for (const entry of service.cache.values()) entry.fetchedAt = 0;
+  const kept = [];
+  service.onSynced = (snapshot) => kept.push(snapshot);
+  service.client.get = async () => { throw new Error('poe.ninja is down'); };
+
+  const status = await service.ensureSynced('Mirage', 'poe1', { full: true, force: true });
+
+  assert.equal(status.syncFailed, true);
+  assert.equal(status.itemCount, itemCount);
+  assert.equal(status.lastSync, 1);
+  assert.equal(service.getChaosValue('Currency Item'), 2);
+  assert.equal(service.fullySynced, true);
+  assert.ok(service.queryPrices().syncedTypes.length > 0);
+  assert.deepEqual(kept, []);
+});
+
+test('a Sync with no list of this league to keep reads as failed and leaves no other league readable', async (t) => {
+  t.mock.method(console, 'error', () => {});
+  const { service } = loadPacedSync(t);
+  await service.ensureSynced('Mirage', 'poe1', { full: true });
+  service.client.get = async () => { throw new Error('poe.ninja is down'); };
+
+  const status = await service.ensureSynced('Standard', 'poe1', { full: true, force: true });
+
+  assert.equal(status.syncFailed, true);
+  assert.equal(status.itemCount, 0);
+  assert.equal(service.getChaosValue('Currency Item'), 0);
+});
+
+test('a Sync that misses some overviews takes what it read and keeps the last prices of the rest', async (t) => {
+  t.mock.method(console, 'error', () => {});
+  const { service } = loadPacedSync(t);
+  await service.ensureSynced('Mirage', 'poe1', { full: true });
+  for (const entry of service.cache.values()) entry.fetchedAt = 0;
+  const [readType, missedType] = registry.getCurrencyTypes();
+  const kept = [];
+  service.onSynced = (snapshot) => kept.push(snapshot);
+  const get = service.client.get;
+  service.client.get = async (url, options = {}) => {
+    if (options.params?.type === missedType) throw new Error('poe.ninja is down');
+    const response = await get(url, options);
+    if (response.data.lines) response.data.lines[0].primaryValue = 5;
+    return response;
+  };
+
+  const status = await service.ensureSynced('Mirage', 'poe1', { full: true, force: true });
+
+  assert.equal(status.syncFailed, false);
+  assert.equal(service.getChaosValue(`${readType} Item`), 5);
+  assert.equal(service.getChaosValue(`${missedType} Item`), 2);
+  assert.deepEqual(kept, []);
+  // Not complete, so a later full sync asks again.
+  assert.equal(service.fullySynced, false);
+});
+
+test('a Sync that read every type drops what poe.ninja no longer lists', async (t) => {
+  const { service } = loadPacedSync(t);
+  await service.ensureSynced('Mirage', 'poe1', { full: true });
+  service._addPrice('Delisted Item', { chaosValue: 9, category: 'currency' });
+  for (const entry of service.cache.values()) entry.fetchedAt = 0;
+
+  await service.ensureSynced('Mirage', 'poe1', { full: true, force: true });
+
+  assert.equal(service.getChaosValue('Delisted Item'), 0);
+  assert.equal(service.fullySynced, true);
+});
+
+test('a price sync past its deadline keeps the last prices of what it did not read', async (t) => {
+  const { service } = loadPacedSync(t);
+  await service.ensureSynced('Mirage', 'poe1', { full: true });
+  for (const entry of service.cache.values()) entry.fetchedAt = 0;
+  const [readType, unreadType] = registry.getCurrencyTypes();
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const get = service.client.get;
+  service.client.get = async (url, options = {}) => {
+    const response = await get(url, options);
+    response.data.lines[0].primaryValue = 5;
+    now += 6 * 60 * 1000;
+    return response;
+  };
+
+  await service.ensureSynced('Mirage', 'poe1', { full: true, force: true });
+
+  assert.equal(service.getChaosValue(`${readType} Item`), 5);
+  assert.equal(service.getChaosValue(`${unreadType} Item`), 2);
+  assert.equal(service.fullySynced, false);
+});
+
 test('a price sync past its deadline does not offer its partial list to keep', async (t) => {
   const service = new PriceService();
   service.setPoeVersion('poe1');

@@ -1062,12 +1062,14 @@ function getJournalStatus() {
 }
 
 // Loads poe.ninja prices for the session's game and league, again when they change or the price list no longer
-// holds them (a game switch cleared it, the Currency page synced another league, or poe.ninja was unreachable:
-// then only after SESSION_PRICES_RETRY_MS). The load waits its turn behind other syncs of the price service.
+// holds them all (a game switch cleared it, the Currency page synced another league or only a quick list, or poe.ninja
+// did not answer for every type: then only after SESSION_PRICES_RETRY_MS). The load waits its turn behind other syncs
+// of the price service.
 function loadSessionPrices(session) {
   const key = `${session.poeVersion}:${session.league}`;
   const loaded = priceService.poeVersion === session.poeVersion
     && priceService.league === session.league
+    && priceService.fullySynced
     && priceService.getStatus().itemCount > 0;
   if (sessionPrices?.key === key && (sessionPrices.pending || loaded || Date.now() < sessionPrices.retryAt)) {
     return sessionPrices.load;
@@ -1078,7 +1080,7 @@ function loadSessionPrices(session) {
     .catch((error) => console.warn('Unable to load poe.ninja prices for the session', error))
     .then((result) => {
       entry.pending = false;
-      if (!result?.itemCount) {
+      if (!result?.itemCount || !priceService.fullySynced) {
         entry.retryAt = Date.now() + SESSION_PRICES_RETRY_MS;
       }
       notifyPricesUpdated(session.poeVersion, session.league, result);

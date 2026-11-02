@@ -6696,8 +6696,14 @@ async function handleSyncPrices() {
       return;
     }
 
-    stashState.pricesSynced = true;
+    // A failed sync may leave the last list, which can still price a snapshot.
+    stashState.pricesSynced = result.itemCount > 0;
     renderPriceItemCount(result.itemCount);
+    if (result.syncFailed) {
+      showToast(window.t('stash.pricesSyncFailed'), window.t('toast.tryAgain'), 'error');
+      return;
+    }
+
     await refreshProfitCurrencyRates(result.poeVersion || state.settings.poeVersion || 'poe1', league);
     showToast(window.t('stash.pricesSyncedTitle'), window.t('stash.pricesSynced', { count: result.itemCount }), 'success');
   } catch (error) {
@@ -7559,8 +7565,15 @@ async function switchCurrencyGame(poeVersion) {
   currencyState.unreachable = false;
   updateTypeFilterDropdown();
   showCurrencyLoadingRows();
+  // The league select still lists the game left behind, so neither control can name a league until the list answers.
+  const syncBtn = document.getElementById('currency-sync-btn');
+  const leagueSelect = document.getElementById('currency-league');
+  if (syncBtn) syncBtn.disabled = true;
+  if (leagueSelect) leagueSelect.disabled = true;
   await loadCurrencyLeagues();
   if (currencyState.poeVersion === poeVersion) {
+    if (syncBtn) syncBtn.disabled = currencyState.syncing || !canCurrentUserSyncPrices();
+    if (leagueSelect) leagueSelect.disabled = false;
     await loadCurrencyPrices();
   }
 }
@@ -7635,7 +7648,10 @@ function setupCurrencyListeners() {
 }
 
 async function loadCurrencyPage() {
-  currencyState.poeVersion = state.settings.poeVersion || 'poe1';
+  const settingsGame = state.settings.poeVersion || 'poe1';
+  // Another game's league must not pair with this game while the league list loads.
+  if (currencyState.poeVersion !== settingsGame) currencyState.league = '';
+  currencyState.poeVersion = settingsGame;
   document.querySelectorAll('.poe-toggle-btn').forEach((btn) => {
     setToggleButtonPressed(btn, btn.dataset.poe === currencyState.poeVersion);
   });
@@ -8401,12 +8417,14 @@ function timeAgo(date) {
 }
 
 async function handleCurrencySync() {
-  // The header Sync and the table's Sync now start one sync between them.
-  if (currencyState.syncing) return;
+  // The header Sync and the table's Sync now start one sync between them. A game switch has no league until its list
+  // answers, and main would read a blank league as Standard and unload the prices loot reads.
+  if (currencyState.syncing || !currencyState.league) return;
   if (!canCurrentUserSyncPrices()) {
     showToast(window.t('currency.syncRestrictedTitle'), window.t('currency.syncRestricted'), 'warning');
     return;
   }
+  const { poeVersion, league } = currencyState;
 
   currencyState.syncing = true;
   const syncButtons = () => [document.getElementById('currency-sync-btn'), ...document.querySelectorAll('.currency-empty-sync')];
@@ -8416,17 +8434,15 @@ async function handleCurrencySync() {
 
   try {
     // The table refreshing with the new prices says the sync worked. Main answers without an error when poe.ninja gave
-    // nothing, and the table may go on listing the kept prices, so only this says the sync failed.
-    const status = await window.electronAPI.syncCurrencyPrices({
-      league: currencyState.league,
-      poeVersion: currencyState.poeVersion
-    });
-    if (status?.itemCount === 0) {
+    // nothing, and the table may go on listing the last prices, so only this says the sync failed.
+    const status = await window.electronAPI.syncCurrencyPrices({ league, poeVersion });
+    if (status?.itemCount === 0 || status?.syncFailed) {
       showToast(window.t('currency.syncFailed'), window.t('toast.tryAgain'), 'error');
     }
-    await refreshProfitCurrencyRates(currencyState.poeVersion, currencyState.league);
+    // Cache-only: the page may have moved on meanwhile, and a sync here would unload the prices it moved to.
+    await refreshProfitCurrencyRates(poeVersion, league, { cacheOnly: true });
     await loadCurrencyLeagues();
-    await loadCurrencyPrices();
+    if (currencyState.league) await loadCurrencyPrices();
   } catch (e) {
     showToast(window.t('currency.syncFailed'), getUserFacingErrorMessage(e, 'toast.tryAgain'), 'error');
   } finally {

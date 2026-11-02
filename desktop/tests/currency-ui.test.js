@@ -666,10 +666,12 @@ function loadCurrencyGameSwitch(currencyState = {}) {
   const elements = {
     'currency-table-body': { innerHTML: '<tr><td>Divine Orb</td></tr>' },
     'currency-footer': { textContent: '1 items' },
-    'currency-league': { innerHTML: '', value: '' }
+    'currency-league': { innerHTML: '', value: '' },
+    'currency-sync-btn': { disabled: false }
   };
   const context = vm.createContext({
     document: { getElementById: (id) => elements[id] || null },
+    canCurrentUserSyncPrices: () => true,
     window: {
       t: fakeT,
       electronAPI: { getCurrencyLeagues: (game) => new Promise((resolve) => leagues.push({ game, resolve })) }
@@ -704,6 +706,21 @@ test('a game switch asks for prices only once the league is known, so the table 
   leagues[0].resolve({ activeLeagues: [{ name: 'Fate of the Vaal' }] });
   await switching;
   assert.deepEqual(calls, ['rail', ['prices', 'poe2', 'Fate of the Vaal']]);
+});
+
+test('the header Sync waits for a game switch to know its league', async () => {
+  const { context, leagues } = loadCurrencyGameSwitch();
+  const button = context.document.getElementById('currency-sync-btn');
+  const select = context.document.getElementById('currency-league');
+
+  const switching = context.switchCurrencyGame('poe2');
+  assert.equal(button.disabled, true);
+  assert.equal(select.disabled, true);
+
+  leagues[0].resolve({ activeLeagues: [{ name: 'Fate of the Vaal' }] });
+  await switching;
+  assert.equal(button.disabled, false);
+  assert.equal(select.disabled, false);
 });
 
 test('without poe.ninja the page opens on the league of the newest kept list, and without one on its usual choice', async () => {
@@ -1231,6 +1248,52 @@ test('a Sync that read nothing says it failed, though main answers without an er
   };
   assert.deepEqual(await run({ itemCount: 0 }), [['currency.syncFailed', 'toast.tryAgain', 'error']]);
   assert.deepEqual(await run({ itemCount: 12 }), []);
+  // Main kept the last list, so it still counts items.
+  assert.deepEqual(await run({ itemCount: 12, syncFailed: true }), [['currency.syncFailed', 'toast.tryAgain', 'error']]);
+});
+
+test('a Sync while the game switch has no league yet starts nothing, because main would sync Standard', async () => {
+  const { context, header, syncCalls } = loadCurrencyTableRenderer({ currencyState: { poeVersion: 'poe2', league: '' } });
+
+  await context.handleCurrencySync();
+
+  assert.deepEqual(syncCalls, []);
+  assert.equal(context.currencyState.syncing, false);
+  assert.equal(header.getAttribute('aria-busy'), null);
+});
+
+test('a Sync that ends during a game switch reads the rates of what it synced and asks for no prices without a league', async () => {
+  let finishSync;
+  const rates = [];
+  const prices = [];
+  const { context } = loadCurrencyTableRenderer({
+    syncCurrencyPrices: () => new Promise((resolve) => { finishSync = resolve; }),
+    loadCurrencyPrices: async () => prices.push('prices')
+  });
+  context.refreshProfitCurrencyRates = async (poeVersion, league, options) => rates.push([poeVersion, league, options.cacheOnly]);
+
+  const sync = context.handleCurrencySync();
+  context.currencyState.poeVersion = 'poe2';
+  context.currencyState.league = '';
+  finishSync({ itemCount: 12 });
+  await sync;
+
+  assert.deepEqual(rates, [['poe1', 'Mirage', true]]);
+  assert.deepEqual(prices, []);
+});
+
+test('opening the page on another game drops the old league, so a Sync cannot pair it with this game', async () => {
+  let answerLeagues;
+  const { context, syncCalls } = loadCurrencyTableRenderer({ currencyState: { poeVersion: 'poe2', league: 'Fate of the Vaal' } });
+  context.loadCurrencyLeagues = () => new Promise((resolve) => { answerLeagues = resolve; });
+
+  const opening = context.loadCurrencyPage();
+  assert.equal(context.currencyState.poeVersion, 'poe1');
+  await context.handleCurrencySync();
+  assert.deepEqual(syncCalls, []);
+
+  answerLeagues();
+  await opening;
 });
 
 test('coming back to the Currency page while a sync runs keeps the header Sync busy', async () => {
