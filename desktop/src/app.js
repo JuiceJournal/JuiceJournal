@@ -2381,6 +2381,17 @@ function setupEventListeners() {
       closeSessionDrawer();
     }
   });
+  // An open dropdown gets its keys first: Escape closes only the list, not the modal or drawer behind it, and a
+  // list whose options were rebuilt while open takes the focus back.
+  window.addEventListener('keydown', (event) => {
+    const openSelect = document.querySelector('select:open');
+    if (!openSelect) return;
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+    } else if (!openSelect.contains(document.activeElement)) {
+      openSelect.selectedOptions[0]?.focus();
+    }
+  }, true);
 }
 
 /**

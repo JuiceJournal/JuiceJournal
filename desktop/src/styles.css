@@ -699,15 +699,6 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   color: rgb(var(--ash-rgb) / 0.58);
 }
 
-.map-session-select {
-  appearance: none;
-  cursor: pointer;
-  background:
-    linear-gradient(45deg, transparent 50%, rgb(var(--brass-light-rgb) / 0.9) 50%) right 1rem center / 7px 7px no-repeat,
-    linear-gradient(135deg, rgb(var(--brass-light-rgb) / 0.9) 50%, transparent 50%) right 0.72rem center / 7px 7px no-repeat,
-    rgb(var(--plate-deep-rgb) / 0.68);
-}
-
 .map-session-actions {
   display: flex;
   justify-content: flex-end;
@@ -1804,7 +1795,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   gap: 0.75rem;
 }
 
-#map-result-filter {
+.map-result-filter-select {
   min-width: 180px;
   max-width: 220px;
   padding: 0.55rem 0.75rem;
@@ -2071,6 +2062,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 
 .filters select,
 .filters input {
+  min-height: 2.25rem;
   padding: 0.45rem 0.8rem;
   background: var(--bg-input);
   border: 1px solid var(--line);
@@ -2079,6 +2071,11 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   font-family: var(--font);
   font-size: 0.8rem;
   cursor: pointer;
+}
+
+/* Filter bars keep their width when a pick changes the label. */
+.filters select {
+  min-width: 8.5rem;
 }
 
 .filters input {
@@ -2887,25 +2884,6 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   flex: 1;
 }
 
-/* Language Select */
-#global-language {
-  width: 100%;
-  padding: 0.75rem 0.9rem;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: var(--bevel-sm);
-  color: var(--text);
-  font-family: var(--font);
-  font-size: 0.84rem;
-  transition: var(--transition);
-}
-
-#global-language:focus {
-  outline: none;
-  border-color: var(--gold-dim);
-  box-shadow: 0 0 0 3px var(--gold-glow);
-}
-
 /* PoE Version Select */
 .poe-version-select {
   display: flex;
@@ -3303,7 +3281,9 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 .currency-select {
-  padding: 0.35rem 0.6rem;
+  min-width: 9rem;
+  min-height: 1.75rem;
+  padding: 0.2rem 0.6rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--bevel-sm);
@@ -4062,6 +4042,117 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: var(--bevel-xs); }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
+/* ==================== DROPDOWNS ==================== */
+/* base-select keeps the real <select> (value, change, keyboard) and draws its list on the page, so the theme reaches it. */
+select,
+::picker(select) {
+  appearance: base-select;
+}
+
+select {
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.25rem;
+  cursor: pointer;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+select:hover:not(:disabled, :open, :focus) {
+  border-color: var(--line-strong);
+}
+
+select:open {
+  border-color: var(--gold);
+}
+
+select:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+select::picker-icon {
+  content: '';
+  flex: none;
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-inline-start: auto;
+  border-right: 1.5px solid var(--gold-light);
+  border-bottom: 1.5px solid var(--gold-light);
+  translate: 0 -0.08rem;
+  rotate: 45deg;
+  transition: rotate var(--transition), translate var(--transition);
+}
+
+select:open::picker-icon {
+  translate: 0 0.08rem;
+  rotate: 225deg;
+}
+
+::picker(select) {
+  max-height: min(20rem, 60vh);
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
+  margin-block: 0.35rem;
+  padding: 0.3rem;
+  overflow-y: auto;
+  border: 1px solid rgb(var(--brass-rgb) / 0.38);
+  border-radius: var(--bevel-sm);
+  corner-shape: var(--corner-shape);
+  background: rgb(var(--plate-deep-rgb));
+  box-shadow: 0 16px 36px rgb(var(--shadow-rgb) / 0.6);
+  font-family: var(--font);
+}
+
+option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.15rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--bevel-xs);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+option:not([data-farm-type]) {
+  color: var(--text);
+}
+
+option:hover,
+option:focus-visible {
+  background: var(--gold-glow);
+  outline: none;
+}
+
+option:checked {
+  background: rgb(var(--brass-rgb) / 0.1);
+  font-weight: 700;
+}
+
+option:not([data-farm-type]):checked {
+  color: var(--gold-light);
+}
+
+option:checked:hover,
+option:checked:focus-visible {
+  background: var(--gold-glow);
+}
+
+option::checkmark {
+  order: 1;
+  margin-inline-start: auto;
+  color: var(--gold-light);
+}
+
 /* ==================== FOCUS & ACCESSIBILITY ==================== */
 .form-group input:focus-visible,
 .form-group select:focus-visible,
@@ -4082,7 +4173,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *, *::before, *::after, select::picker-icon {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

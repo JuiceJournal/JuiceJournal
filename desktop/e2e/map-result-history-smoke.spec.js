@@ -339,7 +339,11 @@ test('map result history smoke: shows persisted results newest-first and filters
     await expect(historyItems.nth(2)).toContainText('Ritual');
     await expect(page.locator('#map-result-history')).not.toContainText('history-incomplete');
 
-    await page.locator('#map-result-filter').selectOption('Ritual');
+    // Clicking opens the themed list with the open border, and a row in it picks.
+    const resultFilter = page.locator('#map-result-filter');
+    await resultFilter.click();
+    await expect.poll(() => resultFilter.evaluate((element) => getComputedStyle(element).borderTopColor)).toBe('rgb(232, 182, 90)');
+    await resultFilter.locator('option', { hasText: 'Ritual' }).click();
 
     await expect(historyItems).toHaveCount(2);
     await expect(historyItems.nth(0)).toContainText('Ritual');
