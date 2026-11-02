@@ -806,11 +806,11 @@ test('a map started without a name carries no date in its name', async () => {
   assert.equal((await context.requestMapSessionDetails({})).mapName, 'misc.unknownMap');
 });
 
-test('an update that finished downloading raises one sticky toast with Restart now', () => {
+test('a new version raises one sticky toast that opens the download page', () => {
   const listeners = {};
   const toasts = [];
-  const handleInstallAppUpdate = async () => {};
-  const context = loadFunctions(['setupIPCListeners'], {
+  const handleOpenAppUpdatePage = async () => {};
+  const context = loadFunctions(['applyAppUpdateState', 'setupIPCListeners'], {
     state: { currentSession: null, appUpdate: null },
     window: {
       t: (key) => key,
@@ -825,20 +825,20 @@ test('an update that finished downloading raises one sticky toast with Restart n
       }
     },
     renderAppUpdateState: () => {},
-    handleInstallAppUpdate,
+    handleOpenAppUpdatePage,
     showToast: (...args) => toasts.push(args)
   });
 
   context.setupIPCListeners();
-  listeners.appUpdate({ enabled: true, available: true, downloaded: false, progress: 40 });
-  listeners.appUpdate({ enabled: true, available: true, downloaded: true });
-  listeners.appUpdate({ enabled: true, available: true, downloaded: true });
+  listeners.appUpdate({ enabled: true, available: false, checking: true });
+  listeners.appUpdate({ enabled: true, available: true, nextVersion: '1.1.0' });
+  listeners.appUpdate({ enabled: true, available: true, nextVersion: '1.1.0' });
 
   assert.equal(toasts.length, 1);
   const [title, message, type, options] = toasts[0];
-  assert.deepEqual([title, message, type], ['toast.updateReadyTitle', 'toast.updateReadyBody', 'success']);
-  assert.equal(options.action.label, 'toast.updateRestart');
-  assert.equal(options.action.onSelect, handleInstallAppUpdate);
+  assert.deepEqual([title, message, type], ['toast.updateAvailableTitle', 'toast.updateAvailableBody', 'info']);
+  assert.equal(options.action.label, 'settings.openUpdatePage');
+  assert.equal(options.action.onSelect, handleOpenAppUpdatePage);
 });
 
 test('renderer keeps an active session visible when current-session refresh fails', async () => {

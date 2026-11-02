@@ -94,6 +94,7 @@ class APIClient {
       baseURL: this.baseURL,
       timeout: REQUEST_TIMEOUT_MS,
       maxContentLength: MAX_RESPONSE_BYTES,
+      ...this.getTransportOptions(),
       headers: {
         'Content-Type': 'application/json'
       }
@@ -310,6 +311,21 @@ class APIClient {
     return match.split(';')[0] || null;
   }
 
+  // These requests carry the password and the session cookie, so they go straight to the server address and stay on it.
+  // With a proxy in the environment axios would send an https request to an http proxy in plain text, and a redirect
+  // would re-send the body to wherever it points, over http too.
+  getTransportOptions() {
+    return {
+      proxy: false,
+      beforeRedirect: (options) => {
+        const server = new URL(this.baseURL);
+        if (options.protocol !== server.protocol || options.hostname !== server.hostname || String(options.port || '') !== server.port) {
+          throw new Error('The server redirected to another address');
+        }
+      }
+    };
+  }
+
   async requestWithSessionCookie(config) {
     // This path uses axios directly, so the instance interceptor above does not see it.
     if (!this.online) {
@@ -320,6 +336,7 @@ class APIClient {
       baseURL: this.baseURL,
       timeout: REQUEST_TIMEOUT_MS,
       maxContentLength: MAX_RESPONSE_BYTES,
+      ...this.getTransportOptions(),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS * REQUEST_DEADLINE_FACTOR),
       headers: {
         'Content-Type': 'application/json',

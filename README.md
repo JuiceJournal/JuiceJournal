@@ -82,7 +82,7 @@ npm install
 npm run dev
 ```
 
-If `npm install` warns that install scripts were skipped (npm 12 does this by default), approve them with `npm install-scripts approve electron koffi` and run `npm install` again; otherwise Electron is not downloaded.
+`npm install` may warn that install scripts were skipped (npm 12 does this by default). You can ignore that: Electron downloads itself the first time it runs.
 
 Good to know:
 

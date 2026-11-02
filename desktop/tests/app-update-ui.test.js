@@ -147,10 +147,11 @@ test('settings html includes desktop update status controls', () => {
   assert.match(html, /id="app-update-status"/);
   assert.match(html, /id="app-update-detail"/);
   assert.match(html, /id="check-updates-btn"/);
-  assert.match(html, /id="install-update-btn"/);
+  assert.match(html, /id="open-update-page-btn"/);
+  assert.doesNotMatch(html, /install-update-btn/);
 });
 
-test('renderer about tab shows install action only when an update is downloaded', () => {
+test('renderer about tab offers the download page only when an update is available', () => {
   // Labels sit in a .btn-label span next to the icon, so writes must not touch the button's own text.
   const buttonWithLabel = (extra) => {
     const label = { textContent: '' };
@@ -162,7 +163,7 @@ test('renderer about tab shows install action only when an update is downloaded'
       appUpdateStatus: { textContent: '' },
       appUpdateDetail: { textContent: '' },
       checkUpdatesBtn: buttonWithLabel({ disabled: false }),
-      installUpdateBtn: buttonWithLabel({ hidden: true, disabled: true })
+      openUpdatePageBtn: buttonWithLabel({ hidden: true, disabled: true })
     },
     state: {
       appUpdate: {
@@ -170,9 +171,6 @@ test('renderer about tab shows install action only when an update is downloaded'
         supported: true,
         checking: false,
         available: true,
-        downloading: false,
-        downloaded: true,
-        progressPercent: 100,
         currentVersion: '1.0.0',
         nextVersion: '1.1.0',
         error: null
@@ -180,7 +178,6 @@ test('renderer about tab shows install action only when an update is downloaded'
     },
     window: {
       t: (key, values) => {
-        if (key === 'settings.updateReady') return 'Update ready to install.';
         if (key === 'settings.updateAvailable') return `Update available: ${values.version}`;
         return key;
       }
@@ -190,14 +187,19 @@ test('renderer about tab shows install action only when an update is downloaded'
   context.renderAppUpdateState();
 
   assert.equal(context.elements.appVersionValue.textContent, '1.0.0');
-  assert.equal(context.elements.appUpdateStatus.textContent, 'Update ready to install.');
-  assert.equal(context.elements.appUpdateDetail.textContent, '1.1.0');
-  assert.equal(context.elements.installUpdateBtn.hidden, false);
-  assert.equal(context.elements.installUpdateBtn.disabled, false);
+  assert.equal(context.elements.appUpdateStatus.textContent, 'Update available: 1.1.0');
+  assert.equal(context.elements.openUpdatePageBtn.hidden, false);
+  assert.equal(context.elements.openUpdatePageBtn.disabled, false);
   assert.equal(context.elements.checkUpdatesBtn.disabled, false);
   assert.equal(context.elements.checkUpdatesBtn.label.textContent, 'settings.checkForUpdates');
-  assert.equal(context.elements.installUpdateBtn.label.textContent, 'settings.installUpdate');
+  assert.equal(context.elements.openUpdatePageBtn.label.textContent, 'settings.openUpdatePage');
   assert.equal(context.elements.checkUpdatesBtn.textContent, undefined);
+
+  context.state.appUpdate = { ...context.state.appUpdate, available: false, nextVersion: null };
+  context.renderAppUpdateState();
+  assert.equal(context.elements.appUpdateStatus.textContent, 'settings.updateUpToDate');
+  assert.equal(context.elements.openUpdatePageBtn.hidden, true);
+  assert.equal(context.elements.openUpdatePageBtn.disabled, true);
 });
 
 test('a failed update check shows in the About status line and is read out, without a toast', async () => {
@@ -228,14 +230,39 @@ test('a failed update check shows in the About status line and is read out, with
   assert.equal(state.appUpdate.currentVersion, '1.0.0');
 });
 
-test('a failed install says which step failed, with the try-again hint instead of raw text', async () => {
+test('a new version found before the listener exists still raises its toast, and only one', () => {
   const toasts = [];
-  const context = loadFunctions(['handleInstallAppUpdate'], {
+  const context = loadFunctions(['applyAppUpdateState'], {
+    state: { appUpdate: null },
+    window: { t: (key) => key },
+    renderAppUpdateState: () => {},
+    handleOpenAppUpdatePage: async () => {},
+    showToast: (...args) => toasts.push(args)
+  });
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+
+  // The launch check can answer while the window still loads, so startup reads the state through the same path.
+  assert.match(source, /applyAppUpdateState\(await window\.electronAPI\.getAppUpdateState\(\)\)/);
+  context.applyAppUpdateState({ enabled: true, available: true, nextVersion: '1.1.0' });
+  context.applyAppUpdateState({ enabled: true, available: true, nextVersion: '1.1.0' });
+
+  assert.equal(toasts.length, 1);
+});
+
+test('a language change redraws the update status line', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+  const chrome = source.slice(source.indexOf('function applyLocalizedChrome()'), source.indexOf('function applyLocalizedChrome()') + 1200);
+  assert.match(chrome, /renderAppUpdateState\(\)/);
+});
+
+test('a download page that will not open says which step failed, with the try-again hint instead of raw text', async () => {
+  const toasts = [];
+  const context = loadFunctions(['handleOpenAppUpdatePage'], {
     window: {
       t: (key) => key,
       electronAPI: {
-        installAppUpdate: async () => {
-          throw new Error('EPERM: operation not permitted, C:\\Users\\someone\\AppData\\Local\\juice-journal-updater');
+        openAppUpdatePage: async () => {
+          throw new Error('EPERM: operation not permitted, C:\\Users\\someone\\AppData\\Local\\Temp');
         }
       }
     },
@@ -243,7 +270,7 @@ test('a failed install says which step failed, with the try-again hint instead o
     showToast: (...args) => toasts.push(args)
   });
 
-  await context.handleInstallAppUpdate();
+  await context.handleOpenAppUpdatePage();
 
-  assert.deepEqual(toasts, [['toast.updateInstallFailed', 'toast.tryAgain', 'error']]);
+  assert.deepEqual(toasts, [['toast.updatePageFailed', 'toast.tryAgain', 'error']]);
 });

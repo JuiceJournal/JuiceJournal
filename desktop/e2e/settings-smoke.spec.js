@@ -301,14 +301,11 @@ test('settings smoke: launches desktop app and shows core settings controls', as
     });
     const page = await waitForAppWindow(electronApp, /Juice Journal/i);
     // The bug report buttons write the real clipboard, so main keeps the developer's one and puts it back in finally.
-    await electronApp.evaluate(({ clipboard }) => {
-      const image = clipboard.readImage();
-      globalThis.__e2eSavedClipboard = {
-        text: clipboard.readText(),
-        html: clipboard.readHTML(),
-        rtf: clipboard.readRTF(),
-        ...(image.isEmpty() ? {} : { image })
-      };
+    await electronApp.evaluate(async ({ clipboard }) => {
+      // Only a new ClipboardItem can be written back, so this keeps what each item holds.
+      globalThis.__e2eSavedClipboard = await Promise.all((await clipboard.read()).map(async (item) => (
+        Object.fromEntries(await Promise.all(item.types.map(async (type) => [type, await item.getType(type)])))
+      )));
     });
 
     await waitForGuestReady(page);
@@ -532,14 +529,13 @@ test('settings smoke: launches desktop app and shows core settings controls', as
 
     if (electronApp) {
       try {
-        await electronApp.evaluate(({ clipboard }) => {
+        await electronApp.evaluate(async ({ clipboard, ClipboardItem }) => {
           const saved = globalThis.__e2eSavedClipboard;
           if (!saved) return;
-          const data = Object.fromEntries(Object.entries(saved).filter(([, value]) => value));
-          if (Object.keys(data).length) {
-            clipboard.write(data);
+          if (saved.length) {
+            await clipboard.write(saved.map((data) => new ClipboardItem(data)));
           } else {
-            clipboard.clear();
+            await clipboard.clear();
           }
         });
       } catch (error) {

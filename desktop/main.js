@@ -464,6 +464,8 @@ function toRendererError(error, fallback) {
   return new Error(normalizeErrorMessage(error, fallback));
 }
 
+const APP_RELEASES_URL = 'https://github.com/JuiceJournal/JuiceJournal/releases/latest';
+
 function broadcastAppUpdateState() {
   if (!mainWindow?.webContents || !appUpdateState) {
     return;
@@ -491,7 +493,9 @@ function initializeAppUpdater() {
   // IMPORTANT: runtime update checks only work after the release pipeline
   // publishes installer artifacts together with latest.yml metadata to
   // GitHub Releases. Keep this in sync with the release workflow.
-  autoUpdater.autoDownload = true;
+  // Releases carry no publisher signature, so the app only announces a new version. The user downloads it from
+  // APP_RELEASES_URL, and a compromised release cannot install itself.
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on('checking-for-update', () => {
@@ -507,35 +511,9 @@ function initializeAppUpdater() {
     applyAppUpdatePatch(appUpdateState, {
       checking: false,
       available: true,
-      downloading: true,
-      downloaded: false,
       nextVersion: info?.version || null,
       releaseName: info?.releaseName || null,
       releaseNotes: info?.releaseNotes || null,
-      error: null
-    });
-    broadcastAppUpdateState();
-  });
-
-  autoUpdater.on('download-progress', (progress) => {
-    applyAppUpdatePatch(appUpdateState, {
-      checking: false,
-      downloading: true,
-      progressPercent: Math.round(progress?.percent || 0)
-    });
-    broadcastAppUpdateState();
-  });
-
-  autoUpdater.on('update-downloaded', (info) => {
-    applyAppUpdatePatch(appUpdateState, {
-      checking: false,
-      available: true,
-      downloading: false,
-      downloaded: true,
-      progressPercent: 100,
-      nextVersion: info?.version || appUpdateState.nextVersion || null,
-      releaseName: info?.releaseName || appUpdateState.releaseName || null,
-      releaseNotes: info?.releaseNotes || appUpdateState.releaseNotes || null,
       error: null
     });
     broadcastAppUpdateState();
@@ -545,9 +523,6 @@ function initializeAppUpdater() {
     applyAppUpdatePatch(appUpdateState, {
       checking: false,
       available: false,
-      downloading: false,
-      downloaded: false,
-      progressPercent: 0,
       nextVersion: null,
       releaseName: null,
       releaseNotes: null,
@@ -560,7 +535,6 @@ function initializeAppUpdater() {
   autoUpdater.on('error', (error) => {
     applyAppUpdatePatch(appUpdateState, {
       checking: false,
-      downloading: false,
       error: normalizeErrorMessage(error, 'Failed to check for updates')
     });
     broadcastAppUpdateState();
@@ -591,7 +565,8 @@ function isLoopbackHost(hostname) {
     || normalized === '::1'
     || normalized === '0:0:0:0:0:0:0:1'
     || normalized === '127.0.0.1'
-    || normalized.startsWith('127.');
+    // Only as an address: a public name can start with 127. too.
+    || (net.isIP(normalized) === 4 && normalized.startsWith('127.'));
 }
 
 function isPrivateOrReservedIp(hostname) {
@@ -643,7 +618,8 @@ function isValidApiUrl(urlString) {
       return false;
     }
 
-    return true;
+    // A public address carries the password and the session cookie.
+    return url.protocol === 'https:';
   } catch {
     return false;
   }
@@ -1657,12 +1633,12 @@ function getBugReport() {
 
 // Copies the report the user last saw. Any other id means the view still shows older text: nothing is copied and the
 // renderer loads the report again.
-function copyBugReportToClipboard(reportId) {
+async function copyBugReportToClipboard(reportId) {
   if (!Number.isSafeInteger(reportId) || reportId !== bugReport?.id) {
     return { stale: true };
   }
 
-  clipboard.writeText(bugReport.text);
+  await clipboard.writeText(bugReport.text);
   return { copied: true };
 }
 
@@ -2222,7 +2198,7 @@ async function openBugReportIssue(url) {
 
 // Copies first, so the report is on the clipboard by the time the issue form opens.
 async function copyAndOpenBugReportIssue(reportId) {
-  const copied = copyBugReportToClipboard(reportId);
+  const copied = await copyBugReportToClipboard(reportId);
   if (copied.stale) {
     return copied;
   }
@@ -4380,14 +4356,15 @@ function setupIPC() {
     return { ...appUpdateState };
   });
 
-  ipcMain.handle('install-app-update', async () => {
-    const state = initializeAppUpdater();
-    if (!state?.downloaded) {
-      throw new Error('No downloaded update is ready to install');
+  ipcMain.handle('open-app-update-page', async () => {
+    try {
+      await shell.openExternal(APP_RELEASES_URL);
+    } catch (error) {
+      if (process.platform !== 'win32') {
+        throw error;
+      }
+      await openUrlWithWindowsFallback(APP_RELEASES_URL, error);
     }
-
-    setImmediate(() => autoUpdater.quitAndInstall());
-    return { accepted: true };
   });
 
   // The Currency page reads poe.ninja through the local price service; nothing goes to a server.
@@ -4436,6 +4413,8 @@ function setupIPC() {
   ipcMain.handle('browse-poe-path', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
       title: 'Select Client.txt',
+      // Without this the dialog opens in Downloads since Electron 43.
+      defaultPath: store.get('poePath') || DEFAULT_POE_LOG_PATH,
       filters: [{ name: 'Log Files', extensions: ['txt'] }],
       properties: ['openFile']
     });
