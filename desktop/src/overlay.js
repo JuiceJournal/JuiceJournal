@@ -28,6 +28,15 @@
   // swaps the meta text (no transition), and only while the state has a clock and the card is shown.
   var clockTimer = null;
   var clockState = null;
+  var appliedLanguage = '';
+
+  // Main sends the language with every state push, so a prompt's labels are current whenever it shows.
+  function applyLanguage(language) {
+    if (!language || language === appliedLanguage || typeof root.applyTranslations !== 'function') return;
+    appliedLanguage = language;
+    root._appState = { language: language };
+    root.applyTranslations();
+  }
 
   function setText(element, value) {
     if (element) { element.textContent = value || ''; }
@@ -337,6 +346,7 @@
   /* ── Main render ── */
   function renderState(input) {
     var state = deriveState(input);
+    applyLanguage(state.language);
     var visibility = state.visibility || 'waiting';
     var mode = state.mode || 'runtime';
     var tone = (state.mapResult && state.mapResult.tone) || state.tone || 'neutral';

@@ -5,6 +5,19 @@
 
 const axios = require('axios');
 
+const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+const REQUEST_TIMEOUT_MS = 10000;
+// The timeout covers idle time only, and a server can reset that by sending a byte now and then.
+const REQUEST_DEADLINE_FACTOR = 4;
+
+function getOrigin(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
 function createOnlineDisabledError() {
   return {
     status: null,
@@ -44,7 +57,7 @@ function normalizeApiError(error) {
     };
   }
 
-  if (error.code === 'ECONNABORTED') {
+  if (error.code === 'ECONNABORTED' || error.code === 'ERR_CANCELED') {
     return {
       status,
       code: 'REQUEST_TIMEOUT',
@@ -79,7 +92,8 @@ class APIClient {
     
     this.client = axios.create({
       baseURL: this.baseURL,
-      timeout: 10000,
+      timeout: REQUEST_TIMEOUT_MS,
+      maxContentLength: MAX_RESPONSE_BYTES,
       headers: {
         'Content-Type': 'application/json'
       }
@@ -94,6 +108,7 @@ class APIClient {
         if (this.token) {
           config.headers.Cookie = this.token;
         }
+        config.signal ??= AbortSignal.timeout((config.timeout || REQUEST_TIMEOUT_MS) * REQUEST_DEADLINE_FACTOR);
         return config;
       },
       (error) => Promise.reject(error)
@@ -135,9 +150,19 @@ class APIClient {
   }
 
   /**
-   * Set the base URL
+   * Whether a URL is on a different origin from the current server
+   */
+  isNewOrigin(baseURL) {
+    return getOrigin(baseURL) !== getOrigin(this.baseURL);
+  }
+
+  /**
+   * Set the base URL. A session cookie belongs to the server that issued it, so a new origin drops it.
    */
   setBaseURL(baseURL) {
+    if (this.isNewOrigin(baseURL)) {
+      this.setToken(null);
+    }
     this.baseURL = baseURL;
     this.client.defaults.baseURL = baseURL;
   }
@@ -293,7 +318,9 @@ class APIClient {
 
     const response = await axios.request({
       baseURL: this.baseURL,
-      timeout: 10000,
+      timeout: REQUEST_TIMEOUT_MS,
+      maxContentLength: MAX_RESPONSE_BYTES,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS * REQUEST_DEADLINE_FACTOR),
       headers: {
         'Content-Type': 'application/json',
         ...(this.token ? { Cookie: this.token } : {})

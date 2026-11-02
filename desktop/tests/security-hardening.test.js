@@ -130,6 +130,79 @@ test('desktop renderer avoids raw HTML for toast and currency table rows', () =>
   assert.match(getFunctionBody(appJs, 'resolveCurrencyRowArt'), /normalizeSafeImageSrc\(item\?\.iconUrl\)/);
 });
 
+test('escapeHTML also encodes quotes, so a remote string cannot leave a quoted attribute', () => {
+  const appJs = fs.readFileSync(path.join(desktopRoot, 'src', 'app.js'), 'utf8');
+  // What serialising a text node does in the page: only &, < and > are encoded.
+  const _escapeDiv = {
+    set textContent(value) {
+      this.text = value;
+    },
+    get innerHTML() {
+      return this.text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    }
+  };
+  const escapeHTML = new Function('_escapeDiv', `return function escapeHTML(str) ${getFunctionBody(appJs, 'escapeHTML')}`)(_escapeDiv);
+
+  assert.equal(escapeHTML('Standard" style="x'), 'Standard&quot; style=&quot;x');
+  assert.equal(escapeHTML("Standard' style='x"), 'Standard&#39; style=&#39;x');
+  assert.equal(escapeHTML('<b>&'), '&lt;b&gt;&amp;');
+  assert.equal(escapeHTML(null), '');
+  // Nothing has to patch its result by hand any more.
+  assert.doesNotMatch(appJs, /escapeHTML\([^)]*\)\.replace\(/);
+});
+
+test('main cancels file requests that have a host before any window opens', () => {
+  const body = getFunctionBody(mainJs, 'blockRemoteFileRequests');
+  let filter = null;
+  let listener = null;
+  const fakeRequire = () => ({
+    session: {
+      defaultSession: {
+        webRequest: {
+          onBeforeRequest(urlFilter, handler) {
+            filter = urlFilter;
+            listener = handler;
+          }
+        }
+      }
+    }
+  });
+  new Function('require', body)(fakeRequire);
+
+  assert.deepEqual(filter, { urls: ['file://*/*'] });
+  const cancelled = (url) => {
+    let result = null;
+    listener({ url }, (response) => {
+      result = response.cancel;
+    });
+    return result;
+  };
+  assert.equal(cancelled('file://192.0.2.1/s/a.png'), true);
+  assert.equal(cancelled('file://attacker.example/share/x.png'), true);
+  assert.equal(cancelled('FILE://192.0.2.1/s/a.png'), true);
+  assert.equal(cancelled('file:///C:/Program%20Files/Juice%20Journal/resources/app.asar/src/index.html'), false);
+  assert.equal(cancelled('file:///C:/Users/x/AppData/Roaming/JJ/icon-cache/a.png'), false);
+
+  const ready = mainJs.indexOf('app.whenReady().then(');
+  assert.notEqual(ready, -1);
+  assert.ok(mainJs.indexOf('blockRemoteFileRequests();', ready) < mainJs.indexOf('createMainWindow();', ready));
+});
+
+test('remote images are limited to the game CDN by the page policy too', () => {
+  assert.match(indexHtml, /img-src 'self' data: https:\/\/web\.poecdn\.com;/);
+  assert.doesNotMatch(indexHtml, /img-src[^;]*https:;/);
+});
+
+test('every Path of Exile loopback handler reads its callback through the state check', () => {
+  for (const functionName of ['openPoeLoginFlow', 'openPoeLinkFlow', 'waitForPoeAuthorizationCode']) {
+    // Their parameter lists open with a brace, so read up to the next function instead.
+    const rest = mainJs.slice(mainJs.indexOf(`async function ${functionName}(`) + 1);
+    const body = rest.slice(0, rest.search(/\n(?:async )?function /));
+    assert.match(body, /readPoeAuthCallback\(req, res, redirectUrl, expectedState\)/, functionName);
+    assert.doesNotMatch(body, /new URL\(req\.url/, functionName);
+  }
+});
+
 test('main records crashes with the monitor only', () => {
   assert.match(mainJs, /process\.on\('uncaughtExceptionMonitor'/);
   assert.doesNotMatch(mainJs, /process\.(?:on|once|prependListener)\(\s*['"](?:uncaughtException|unhandledRejection)['"]/);
