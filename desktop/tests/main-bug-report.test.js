@@ -905,18 +905,18 @@ test('Copy and the issue button use the report last shown, and only with its id'
   };
 
   // Nothing shown yet: no id can match.
-  assert.deepEqual(plain(context.copyBugReportToClipboard(1)), { stale: true });
+  assert.deepEqual(plain(await context.copyBugReportToClipboard(1)), { stale: true });
   assert.deepEqual(plain(await context.copyAndOpenBugReportIssue(1)), { stale: true });
   assert.equal(builds, 0);
 
   const first = context.getBugReport();
   store.settings = { ...store.settings, activeProfileId: null };
-  assert.deepEqual(plain(context.copyBugReportToClipboard(first.reportId)), { copied: true });
+  assert.deepEqual(plain(await context.copyBugReportToClipboard(first.reportId)), { copied: true });
   assert.deepEqual(calls, [['clipboard', first.text]]);
   assert.equal(builds, 1);
 
   for (const staleId of [first.reportId + 1, String(first.reportId), first.reportId + 0.5, undefined, null, Number.NaN, {}]) {
-    assert.deepEqual(plain(context.copyBugReportToClipboard(staleId)), { stale: true });
+    assert.deepEqual(plain(await context.copyBugReportToClipboard(staleId)), { stale: true });
     assert.deepEqual(plain(await context.copyAndOpenBugReportIssue(staleId)), { stale: true });
   }
   assert.equal(calls.length, 1);
@@ -924,10 +924,30 @@ test('Copy and the issue button use the report last shown, and only with its id'
   const second = context.getBugReport();
   assert.equal(second.reportId, first.reportId + 1);
   assert.match(second.text, /^Signed in \(local profile\): no$/m);
-  assert.deepEqual(plain(context.copyBugReportToClipboard(first.reportId)), { stale: true });
-  assert.deepEqual(plain(context.copyBugReportToClipboard(second.reportId)), { copied: true });
+  assert.deepEqual(plain(await context.copyBugReportToClipboard(first.reportId)), { stale: true });
+  assert.deepEqual(plain(await context.copyBugReportToClipboard(second.reportId)), { copied: true });
   assert.deepEqual(calls.at(-1), ['clipboard', second.text]);
   assert.equal(builds, 2);
+});
+
+test('the issue form waits for the clipboard, whose write finishes later since Electron 44', async (t) => {
+  const { context, calls } = loadReport(t);
+  const { reportId } = context.getBugReport();
+  let finishWrite;
+  context.clipboard.writeText = (text) => new Promise((resolve) => {
+    finishWrite = () => {
+      calls.push(['clipboard', text]);
+      resolve();
+    };
+  });
+
+  const opening = context.copyAndOpenBugReportIssue(reportId);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls, []);
+
+  finishWrite();
+  await opening;
+  assert.deepEqual(calls.map(([kind]) => kind), ['clipboard', 'openExternal']);
 });
 
 test('the issue button copies the report before it opens the issue form with version and environment only', async (t) => {

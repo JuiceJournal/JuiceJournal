@@ -517,7 +517,7 @@ test('Clear logs asks first, and Cancel keeps both logs and the report', async (
   assert.equal(store.settings.auditTrail.length, 3);
   assert.deepEqual(calls.send, []);
   assert.equal(readLog(), TWO_ERROR_LINES);
-  assert.deepEqual(plain(context.copyBugReportToClipboard(4)), { copied: true });
+  assert.deepEqual(plain(await context.copyBugReportToClipboard(4)), { copied: true });
   assert.deepEqual(calls.clipboard, ['old report']);
   assert.equal(context.dataActionRunning, false);
 
@@ -575,7 +575,7 @@ test('Clear clears the activity log and deletes the error log, and nothing else'
   assert.equal(errorLogState.redactionTargets, redactionTargets);
   assert.equal(errorLogState.disabled, false);
   assert.equal(context.bugReport, null);
-  assert.deepEqual(plain(context.copyBugReportToClipboard(4)), { stale: true });
+  assert.deepEqual(plain(await context.copyBugReportToClipboard(4)), { stale: true });
   assert.deepEqual(calls.clipboard, []);
   assert.equal(context.dataActionRunning, false);
   assert.deepEqual(calls.console, []);

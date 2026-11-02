@@ -24,7 +24,7 @@ test('packaged windows runtime enables app updates while development mode stays 
   );
 });
 
-test('update state tracks checking, availability, progress, and downloaded install readiness', () => {
+test('update state tracks checking and availability', () => {
   const state = createAppUpdateState({
     currentVersion: '1.0.0',
     isPackaged: true,
@@ -34,22 +34,18 @@ test('update state tracks checking, availability, progress, and downloaded insta
   applyAppUpdatePatch(state, {
     checking: true,
     available: true,
-    downloading: true,
-    nextVersion: '1.1.0',
-    progressPercent: 45
+    nextVersion: '1.1.0'
   });
 
   applyAppUpdatePatch(state, {
-    checking: false,
-    downloading: false,
-    downloaded: true,
-    progressPercent: 100
+    checking: false
   });
 
   assert.equal(state.enabled, true);
   assert.equal(state.supported, true);
   assert.equal(state.currentVersion, '1.0.0');
   assert.equal(state.nextVersion, '1.1.0');
-  assert.equal(state.downloaded, true);
-  assert.equal(state.progressPercent, 100);
+  assert.equal(state.available, true);
+  assert.equal(state.checking, false);
+  assert.equal('downloaded' in state, false);
 });

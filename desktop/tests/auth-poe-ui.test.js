@@ -392,6 +392,32 @@ test('a failed connection test says so in the status line, without a toast', asy
   assert.equal(button.disabled, false);
 });
 
+test('Test connection names a refused server address instead of reading as a network failure', async () => {
+  const connectionText = { textContent: '', dataset: {} };
+  const context = loadFunctions(['setButtonBusy', 'handleTestConnection'], {
+    elements: {
+      testConnection: createButtonStub('settings.testConnection', { text: 'Test connection', withLabelSpan: false }),
+      apiUrl: { value: 'http://server.example' },
+      connectionDot: { classList: { add: () => {}, remove: () => {} } },
+      connectionText
+    },
+    window: {
+      electronAPI: {
+        testOnlineConnection: async () => {
+          throw new Error("Error invoking remote method 'test-online-connection': Error: Invalid API URL");
+        }
+      },
+      t: (key) => key
+    },
+    renderOnlineSettings: () => {}
+  });
+
+  await context.handleTestConnection();
+
+  assert.equal(connectionText.textContent, 'errors.invalidApiUrl');
+  assert.equal(connectionText.dataset.i18n, 'errors.invalidApiUrl');
+});
+
 test('a failed Path of Exile connect hands the whole reply to the error copy and never shows its raw text', async () => {
   const toasts = [];
   const mapped = [];

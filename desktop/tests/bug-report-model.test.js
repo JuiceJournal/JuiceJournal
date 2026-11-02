@@ -299,6 +299,9 @@ test('classifyMainConsoleMessage keeps real problems and skips Node follow-up li
   assert.equal(classifyMainConsoleMessage('error', ['(Use `electron --trace-warnings ...` to show where the warning was created)']), null);
   assert.equal(classifyMainConsoleMessage('error', ['(node:1) UnhandledPromiseRejectionWarning: Error: boom']), 'error');
   assert.equal(classifyMainConsoleMessage('error', ['(node:1) [DEP0040] DeprecationWarning: x']), 'warn');
+  // Printed on every launch until the sync safeStorage calls move, so it would crowd real errors out of bug reports.
+  assert.equal(classifyMainConsoleMessage('warn', ["(electron) 'safeStorage.encryptString' is deprecated and will be removed."]), null);
+  assert.equal(classifyMainConsoleMessage('warn', ["(electron) 'webContents.other' is deprecated and will be removed."]), 'warn');
   assert.equal(classifyMainConsoleMessage('warn', ['plain']), 'warn');
   assert.equal(classifyMainConsoleMessage('error', ['plain']), 'error');
   assert.equal(classifyMainConsoleMessage('error', [new Error('x')]), 'error');
