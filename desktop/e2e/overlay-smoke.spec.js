@@ -456,6 +456,14 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     await expect.poll(() => page.evaluate(() => window.__overlayPromptResults)).toEqual([
       { action: 'confirm', mapName: 'Cemetery Map', farmTypeId: 'expedition', source: 'map-detected' }
     ]);
+
+    // The overlay's aria-labels follow the language main sends with each state push.
+    await expect(overlayWindow.locator('[data-overlay-start-farm-types]')).toHaveAttribute('aria-label', 'Farm type');
+    await expect(overlayWindow.locator('[data-overlay-characters]')).toHaveAttribute('aria-label', 'Character');
+    await page.evaluate(() => window.electronAPI.setSettings({ language: 'tr' }));
+    await showRuntimeOverlayPreview(page, { summary: { status: 'active', currentAreaName: 'Cemetery Map' } });
+    await expect(overlayWindow.locator('[data-overlay-start-farm-types]')).toHaveAttribute('aria-label', 'Farm tipi');
+    await expect(overlayWindow.locator('[data-overlay-characters]')).toHaveAttribute('aria-label', 'Karakter');
   } catch (error) {
     testError = error;
   } finally {

@@ -3294,7 +3294,8 @@ function updateOverlayWindow({ character, runtimeSession } = {}) {
   }
 
   applyOverlayWindowVisibility(overlayState);
-  overlayWindow.webContents.send('overlay-render-state', overlayState);
+  // The raw value, as in the main window: getLanguage folds every language but Turkish to English.
+  overlayWindow.webContents.send('overlay-render-state', { ...overlayState, language: store.get('language') });
 
   return overlayState;
 }

@@ -41,7 +41,7 @@ function extractMatches(source, pattern) {
 
 function extractDesktopUsedKeys() {
   const keys = new Set();
-  const html = read(path.join(desktopDir, 'src', 'index.html'));
+  const html = read(path.join(desktopDir, 'src', 'index.html')) + read(path.join(desktopDir, 'src', 'overlay.html'));
   const appSource = read(path.join(desktopDir, 'src', 'app.js'));
   const mainSource = read(path.join(desktopDir, 'main.js'));
 
@@ -465,6 +465,28 @@ test('desktop aria-labels and titles are bound to translations in en and tr', ()
   // Built in app.js, an aria-label comes from t() as well.
   assert.deepEqual(appSource.match(/aria-label="(?!\$\{window\.t\()[^"]*"/g), null);
   assert.deepEqual(appSource.match(/setAttribute\('aria-label',(?!\s*window\.t\()[^)]*\)/g), null);
+
+  // The overlay is its own window: same binding, through the translations script it loads itself.
+  const overlayHtml = read(path.join(desktopDir, 'src', 'overlay.html'));
+  const overlayLabelled = [...overlayHtml.matchAll(/<[a-z][^>]*\saria-label="[^"]*"[^>]*>/g)].map(([tag]) => tag);
+  assert.ok(overlayLabelled.length >= 2, String(overlayLabelled.length));
+  overlayLabelled.forEach((tag) => assertBound(tag, 'aria-label', 'data-i18n-aria'));
+  for (const [tag] of overlayHtml.matchAll(/<[a-z][^>]*\stitle="[^"]*"[^>]*>/g)) {
+    assertBound(tag, 'title', 'data-i18n-title');
+  }
+  assert.match(overlayHtml, /<script src="modules\/translations\.js"><\/script>/);
+  assert.deepEqual(read(path.join(desktopDir, 'src', 'overlay.js')).match(/aria-label/g), null);
+});
+
+test('image alt text is never hard-coded: decorative images are empty, game art takes its name from data', () => {
+  for (const file of ['index.html', 'overlay.html']) {
+    assert.deepEqual(read(path.join(desktopDir, 'src', file)).match(/<img[^>]*\salt="[^"]+"[^>]*>/g), null, file);
+  }
+  for (const file of ['app.js', 'overlay.js']) {
+    const source = read(path.join(desktopDir, 'src', file));
+    assert.deepEqual(source.match(/\salt="[^"$][^"]*"/g), null, file);
+    assert.deepEqual(source.match(/\.alt\s*=[^;\n]*(?:'[^'\r\n]+'|`[^`\r\n]+`)/g), null, file);
+  }
 });
 
 test('applyTranslations gives the index.html aria-labels the current language', () => {
