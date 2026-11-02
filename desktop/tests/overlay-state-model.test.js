@@ -322,3 +322,47 @@ test('prompts that close on their own count down to it', () => {
   assert.equal(character.metaLine, 'PoE 2 · 8s');
   assert.equal(formatOverlayClock(character.clock, now + 3000), 'PoE 2 · 5s');
 });
+
+test('overlay lines and clocks follow the language, and an untranslated language reads English', () => {
+  const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
+  const formatOverlayClock = getOverlayStateModelExport('formatOverlayClock');
+  const now = Date.parse('2026-05-04T12:15:12.000Z');
+  const language = 'tr';
+
+  const session = deriveOverlayState({ enabled: true, now, language, session: { status: 'active', elapsedSeconds: 70 } });
+  assert.equal(session.primaryLine, 'Bilinmeyen Map');
+  assert.equal(session.secondaryLine, 'Farm tipi yok');
+  assert.equal(session.metaLine, 'gecen sure 1dk 10sn');
+  assert.equal(formatOverlayClock(session.clock, now + 5000, language), 'gecen sure 1dk 15sn');
+
+  const prompt = deriveOverlayState({ enabled: true, now, language, startMapPrompt: {} });
+  assert.equal(prompt.primaryLine, 'Bilinmeyen Map');
+  assert.equal(prompt.secondaryLine, 'Farm tipi sec');
+  assert.equal(prompt.metaLine, 'map baslangicini onayla');
+
+  const timedPrompt = deriveOverlayState({ enabled: true, now, language, startMapPrompt: { expiresAt: now + 7000 } });
+  assert.equal(timedPrompt.metaLine, '7 sn icinde kapanir');
+
+  const characterPrompt = (characters) => deriveOverlayState({
+    enabled: true,
+    now,
+    language,
+    characterPrompt: { poeVersion: 'poe2', selectedId: 'a', expiresAt: now + 8000, characters }
+  });
+  const leveled = characterPrompt([{ id: 'a', name: 'MainOne', level: 95, className: 'Monk' }, { id: 'b', name: 'AltTwo' }]);
+  assert.equal(leveled.secondaryLine, 'Seviye 95 Monk');
+  assert.equal(leveled.metaLine, 'PoE 2 · 8sn');
+  assert.equal(characterPrompt([{ id: 'a', name: 'MainOne' }, { id: 'b', name: 'AltTwo' }]).secondaryLine, 'Son oynanan karakter');
+
+  const runtime = deriveOverlayState({
+    enabled: true,
+    now,
+    language,
+    runtime: { summary: { status: 'active', totalActiveSeconds: 60 } }
+  });
+  assert.equal(runtime.primaryLine, 'Karakter senkronu gerekli');
+  assert.equal(runtime.secondaryLine, 'Bolge bilgisi bekleniyor');
+  assert.equal(runtime.metaLine, 'Map 0:00 · Toplam 1:00');
+
+  assert.equal(deriveOverlayState({ enabled: true, now, language: 'de', startMapPrompt: {} }).metaLine, 'confirm map start');
+});

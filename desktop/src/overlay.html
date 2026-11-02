@@ -400,7 +400,7 @@
         <span class="jj-label" data-overlay-kicker-label>Juice Journal</span>
         <div class="jj-actions">
           <button class="jj-btn" type="button" data-overlay-pin aria-pressed="false" hidden>Pin</button>
-          <button class="jj-btn jj-btn-dismiss" type="button" data-overlay-dismiss hidden>Dismiss</button>
+          <button class="jj-btn jj-btn-dismiss" type="button" data-overlay-dismiss data-i18n="overlay.dismiss" hidden>Dismiss</button>
         </div>
       </div>
       <div class="jj-primary" data-overlay-primary>Waiting for game</div>
@@ -410,21 +410,21 @@
       </div>
       <form class="jj-form" data-overlay-start-form hidden>
         <div class="jj-field">
-          <span>Farm Type</span>
+          <span data-i18n="dashboard.farmType">Farm Type</span>
           <div class="jj-chips" role="group" aria-label="Farm type" data-i18n-aria="dashboard.farmType" data-overlay-start-farm-types></div>
         </div>
         <div class="jj-form-actions">
-          <button class="jj-form-btn" type="button" data-overlay-start-cancel>Cancel</button>
-          <button class="jj-form-btn primary" type="submit" data-overlay-start-submit>Start Map</button>
+          <button class="jj-form-btn" type="button" data-overlay-start-cancel data-i18n="mapSession.cancel">Cancel</button>
+          <button class="jj-form-btn primary" type="submit" data-overlay-start-submit data-i18n="mapSession.startMap">Start Map</button>
         </div>
       </form>
       <div class="jj-form" data-overlay-character-form hidden>
         <div class="jj-field">
-          <span>Switch character</span>
+          <span data-i18n="overlay.switchCharacter">Switch character</span>
           <div class="jj-chips" role="group" aria-label="Character" data-i18n-aria="overlay.characterAria" data-overlay-characters></div>
         </div>
         <div class="jj-form-actions">
-          <button class="jj-form-btn primary" type="button" data-overlay-character-keep>Keep</button>
+          <button class="jj-form-btn primary" type="button" data-overlay-character-keep data-i18n="overlay.keepCharacter">Keep</button>
         </div>
       </div>
     </section>

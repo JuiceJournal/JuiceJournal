@@ -61,6 +61,8 @@
   var CURRENCY_TEXT_SUFFIX = { chaos: 'c', divine: ' div', mirror: ' mirror' };
   var MEME_LABELS = { bricked: 'Bricked', pog: 'Pog', juiced: 'Juiced', mirror: 'Mirror tier' };
   var SEPARATOR = ' \u00b7 ';
+  // Map results store these English fallbacks, so they are translated when shown.
+  var STORED_FARM_TYPE_KEYS = { 'No farm type': 'dashboard.noFarmType', 'Unknown farm type': 'dashboard.unknownFarmType' };
 
   function getLocalIconPath(key, poeVersion) {
     if (!key) return '';
@@ -193,7 +195,9 @@
     if (!s) return '';
     var m = (s / 60) | 0;
     var sec = s % 60;
-    return m ? m + 'm ' + (sec < 10 ? '0' : '') + sec + 's' : sec + 's';
+    var minutesUnit = root.t('misc.durationMin');
+    var secondsUnit = root.t('misc.durationSec');
+    return m ? m + minutesUnit + ' ' + (sec < 10 ? '0' : '') + sec + secondsUnit : sec + secondsUnit;
   }
 
   function deriveState(input) {
@@ -202,13 +206,13 @@
     if (model && typeof model.deriveOverlayState === 'function') {
       return model.deriveOverlayState(input || {});
     }
-    return { visibility: 'waiting', primaryLine: 'Waiting for game', secondaryLine: 'Waiting for runtime session', metaLine: '' };
+    return { visibility: 'waiting', primaryLine: root.t('overlay.waitingForGame'), secondaryLine: root.t('overlay.waitingForSession'), metaLine: '' };
   }
 
   /* ── Mode: Runtime / Waiting ── */
   function renderRuntimeMode(state) {
     setText(el.kickerLabel, 'Juice Journal');
-    setPrimary(state.primaryLine || 'Waiting for game');
+    setPrimary(state.primaryLine || root.t('overlay.waitingForGame'));
     setSecondary(state.secondaryLine || '');
     setText(el.meta, state.metaLine || '');
   }
@@ -222,12 +226,17 @@
     var localIcon = topOutput ? getLocalItemIconPath(topOutput.label, poeVersion) : '';
     var iconUrl = !localIcon && topOutput && typeof topOutput.icon === 'string' ? topOutput.icon : '';
     var itemCount = Math.max(0, parseInt(result.lootItemCount, 10) || 0);
-    setText(el.kickerLabel, 'Map Complete');
-    setPrimary(result.farmType || 'Completed Map', createProfitValue(result.netProfit, rates, poeVersion), getFarmTypeId(result.farmType));
+    var farmTypeKey = STORED_FARM_TYPE_KEYS[result.farmType];
+    setText(el.kickerLabel, root.t('overlay.mapComplete'));
+    setPrimary(
+      farmTypeKey ? root.t(farmTypeKey) : (result.farmType || root.t('overlay.completedMap')),
+      createProfitValue(result.netProfit, rates, poeVersion),
+      getFarmTypeId(result.farmType)
+    );
     setSecondary(
       topOutput
         ? (topOutput.label || '') + ' ' + formatSignedProfit(topOutput.valueDelta, rates)
-        : (itemCount ? itemCount + (itemCount === 1 ? ' item scanned' : ' items scanned') : 'No loot scanned'),
+        : (itemCount ? root.t(itemCount === 1 ? 'overlay.itemScanned' : 'overlay.itemsScanned', { count: itemCount }) : root.t('overlay.noLootScanned')),
       localIcon || cachedIconSources[iconUrl]
     );
     if (iconUrl) {
@@ -248,14 +257,11 @@
   /* ── Mode: Start Map Prompt ── */
   function renderStartMapPrompt(state) {
     var prompt = (state.startMapPrompt && typeof state.startMapPrompt === 'object') ? state.startMapPrompt : {};
-    setText(el.kickerLabel, 'New Map');
-    setPrimary(prompt.mapName || state.primaryLine || 'Unknown Map');
-    var ctxParts = [prompt.farmType || 'Choose farm type'];
-    if (prompt.poeVersion) ctxParts.push(prompt.poeVersion.replace(/^poe/i, 'PoE '));
-    if (prompt.league) ctxParts.push(prompt.league);
-    setSecondary(ctxParts.filter(Boolean).join(SEPARATOR));
+    setText(el.kickerLabel, root.t('overlay.newMap'));
+    setPrimary(prompt.mapName || state.primaryLine || root.t('misc.unknownMap'));
+    setSecondary(state.secondaryLine || '');
     // "closes in 6s" while the prompt counts down to closing on its own.
-    setText(el.meta, state.metaLine || 'confirm map start');
+    setText(el.meta, state.metaLine || '');
   }
 
   function renderStartMapForm(state) {
@@ -273,10 +279,11 @@
       selectedFarmTypeId = opts.some(function (e) { return e.id === prompt.farmTypeId; }) ? prompt.farmTypeId : '';
     }
     // Rebuild the buttons only when they change, so state pushes cannot swallow a click in progress.
-    var chipsKey = JSON.stringify(opts);
+    var noFarmType = root.t('dashboard.noFarmType');
+    var chipsKey = JSON.stringify([noFarmType, opts]);
     if (el.startFarmTypes && chipsKey !== renderedChipsKey) {
       renderedChipsKey = chipsKey;
-      el.startFarmTypes.innerHTML = [{ id: '', label: 'No farm type' }].concat(opts).map(function (e) {
+      el.startFarmTypes.innerHTML = [{ id: '', label: noFarmType }].concat(opts).map(function (e) {
         var farmTypeId = getFarmTypeId(e.id);
         return '<button class="jj-chip" type="button" data-farm-type-id="' + escapeHTML(e.id) + '"' +
           (farmTypeId ? ' data-farm-type="' + farmTypeId + '"' : '') + ' aria-pressed="' +
@@ -295,7 +302,7 @@
 
   /* ── Mode: Character Prompt ── */
   function renderCharacterPrompt(state) {
-    setText(el.kickerLabel, 'Playing as');
+    setText(el.kickerLabel, root.t('dashboard.playingAs'));
     setPrimary(state.primaryLine || '');
     setSecondary(state.secondaryLine || '');
     setText(el.meta, state.metaLine || '');
@@ -329,7 +336,7 @@
   function tickClock() {
     var model = root.overlayStateModel;
     if (clockState && model && typeof model.formatOverlayClock === 'function') {
-      setText(el.meta, model.formatOverlayClock(clockState, Date.now()));
+      setText(el.meta, model.formatOverlayClock(clockState, Date.now(), appliedLanguage));
     }
   }
 
@@ -384,7 +391,7 @@
       el.pin.hidden = !showPin;
       el.pin.setAttribute('aria-pressed', pinned ? 'true' : 'false');
       // The label says it too, so the pinned state is not shown by colour alone.
-      setText(el.pin, pinned ? 'Pinned' : 'Pin');
+      setText(el.pin, root.t(pinned ? 'overlay.pinned' : 'overlay.pin'));
       if (el.dismiss) el.dismiss.hidden = !showPin;
     }
 

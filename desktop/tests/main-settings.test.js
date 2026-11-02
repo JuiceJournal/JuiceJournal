@@ -312,7 +312,8 @@ test('main overlay window is created lazily only when overlay state is visible',
     }
   };
   let visible = false;
-  const context = loadFunctions(['buildOverlayState', 'updateOverlayWindow'], {
+  let derivedLanguage = null;
+  const context = loadFunctions(['getLanguage', 'buildOverlayState', 'updateOverlayWindow'], {
     store: { get: (key) => (key === 'language' ? 'tr' : undefined) },
     overlayMapResultState: null,
     overlayStartMapPromptState: null,
@@ -333,7 +334,8 @@ test('main overlay window is created lazily only when overlay state is visible',
     deriveMapResultOverlayState() {
       return { visible: false };
     },
-    deriveOverlayState() {
+    deriveOverlayState({ language }) {
+      derivedLanguage = language;
       return visible
         ? { visibility: 'visible', primaryLine: 'Tower', secondaryLine: 'Expedition', metaLine: '1m' }
         : { visibility: 'hidden', primaryLine: '', secondaryLine: '', metaLine: '' };
@@ -361,6 +363,7 @@ test('main overlay window is created lazily only when overlay state is visible',
     ['applyOverlayWindowVisibility', 'visible'],
     ['send', 'overlay-render-state', 'tr']
   ]);
+  assert.equal(derivedLanguage, 'tr');
 
   // A quit destroyed the overlay; one made after that would cancel the quit.
   calls.length = 0;
@@ -374,6 +377,7 @@ test('main overlay window is created lazily only when overlay state is visible',
 test('main overlay window is not created again while the app quits', () => {
   const calls = [];
   const context = loadFunctions(['buildOverlayState', 'updateOverlayWindow'], {
+    getLanguage: () => 'en',
     overlayMapResultState: null,
     overlayStartMapPromptState: null,
     overlayCharacterPromptState: null,
