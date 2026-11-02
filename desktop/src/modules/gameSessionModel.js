@@ -11,7 +11,8 @@
   //   Got Instance Details from login server             -> first one after login = Play; later ones = zone changes
   //   : Name (Class) is now level N / : Name has been slain. / : Name has received ...
   // The name lines also cover party members, so consumers must match names against the account's own characters.
-  const CLIENT_LINE = /\[[A-Z]+ Client \d+\] (.*)$/;
+  // The s flag lets '.' cross U+2028 and CR, so a tag forged after one in chat can never win over the real first tag.
+  const CLIENT_LINE = /\[[A-Z]+ Client \d+\] (.*)$/s;
   // Chat: channel prefixes (#, $, %, &, @From/@To) or local chat "Name: text". System messages start with ": ".
   const CHAT_MESSAGE = /^(?:[#$%&@]|[^\s[:]+: )/;
   const LOGIN_CONNECT = /^Async connecting to \S*login\S*/i;
@@ -100,6 +101,7 @@
 
   return {
     createGameSessionState,
-    applyGameSessionLine
+    applyGameSessionLine,
+    readMessage
   };
 });

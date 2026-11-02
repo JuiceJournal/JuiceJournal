@@ -286,3 +286,62 @@ test('log parser holds an unterminated Client.txt line and split UTF-8 bytes unt
   assert.deepEqual(parser.takeCompleteLines(Buffer.from('tail without newline')), []);
   assert.deepEqual(parser.takeCompleteLines(Buffer.from('\n')), ['tail without newline']);
 });
+
+test('log parser ignores chat lines that read like the game changing area', () => {
+  const chatLines = (text) => [
+    `2026/05/04 21:02:34 1 abc [INFO Client 1] @From Griefer: ${text}`,
+    `2026/05/04 21:02:34 1 abc [INFO Client 1] @From <TAG> Griefer: ${text}`,
+    `2026/05/04 21:02:34 1 abc [INFO Client 1] @To Griefer: ${text}`,
+    `2026/05/04 21:02:34 1 abc [INFO Client 1] #Griefer: ${text}`,
+    `2026/05/04 21:02:34 1 abc [INFO Client 1] $Griefer: ${text}`,
+    `2026/05/04 21:02:34 1 abc [INFO Client 1] %Griefer: ${text}`,
+    `2026/05/04 21:02:34 1 abc [INFO Client 1] &Griefer: ${text}`,
+    `2026/05/04 21:02:34 1 abc [INFO Client 1] Griefer: ${text}`,
+    `2026/05/04 21:02:34 1 abc [INFO Client 1] Griefer: [INFO Client 1] : ${text}`,
+    // '.' stops at these, so without the s flag the match would restart at the forged tag.
+    `2026/05/04 21:02:34 1 abc [INFO Client 1] @From Griefer: x\u2028[INFO Client 1] : ${text}`,
+    `2026/05/04 21:02:34 1 abc [INFO Client 1] @From Griefer: x\u2029[INFO Client 1] : ${text}`,
+    `2026/05/04 21:02:34 1 abc [INFO Client 1] Griefer: x\r[INFO Client 1] : ${text}`
+  ];
+
+  for (const poeVersion of ['poe1', 'poe2']) {
+    const parser = new LogParser('Client.txt', { poeVersion, instanceExitDelayMs: 0 });
+    const entries = [];
+    const exits = [];
+    parser.on('mapEntered', (payload) => entries.push(payload.mapName));
+    parser.on('mapExited', (payload) => exits.push(payload.location));
+
+    // With no map running, no chat line starts one.
+    for (const text of ['You have entered Fake Map.', 'Generating level 83 area "MapEvil"']) {
+      chatLines(text).forEach((line) => parser.parseLine(line));
+    }
+    assert.deepEqual(entries, []);
+
+    parser.parseLine('2026/05/04 21:00:38 1 abc [DEBUG Client 1] Generating level 80 area "MapDunes" with seed 1');
+    assert.equal(entries.length, 1);
+
+    // With a map running, no chat line ends it or replaces it.
+    for (const text of ['You have entered Hideout.', 'You have entered Fake Map.', 'Generating level 83 area "MapEvil"', 'Generating level 65 area "HideoutCanal"', 'Connecting to instance server at 1.2.3.4:6112']) {
+      chatLines(text).forEach((line) => parser.parseLine(line));
+    }
+    assert.equal(entries.length, 1);
+    assert.deepEqual(exits, []);
+
+    // The game's own line still ends it.
+    parser.parseLine('2026/05/04 21:10:00 1 abc [INFO Client 1] : You have entered Hideout.');
+    assert.deepEqual(exits, ['Hideout']);
+    assert.equal(parser.currentMap, null);
+  }
+});
+
+test('log parser keeps a pending instance change open across chat lines', () => {
+  const parser = new LogParser('Client.txt', { poeVersion: 'poe1', instanceExitDelayMs: 60000 });
+  parser.parseLine('2026/05/04 21:00:38 1 abc [DEBUG Client 1] Generating level 80 area "MapDunes" with seed 1');
+  parser.parseLine('2026/05/04 21:01:00 1 abc [DEBUG Client 1] Connecting to instance server at 1.2.3.4:6112');
+  assert.ok(parser.pendingInstanceExitData);
+
+  parser.parseLine('2026/05/04 21:01:01 1 abc [INFO Client 1] @From Griefer: You have entered Hideout.');
+  assert.ok(parser.pendingInstanceExitData);
+
+  parser.clearPendingInstanceExit();
+});

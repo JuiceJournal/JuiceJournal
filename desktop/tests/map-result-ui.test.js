@@ -3249,7 +3249,7 @@ function loadSessionsSummary({ sessions, versionFilter = 'all', leagueFilter = '
     },
     formatAdaptiveProfitText: (value) => `${value > 0 ? '+' : ''}${value}c`,
     profitMemeHTML: (tier) => `<meme ${tier}>`,
-    escapeHTML: (value) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    escapeHTML: (value) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   });
   context.renderSessionsSummary(sessions);
   return { summary: elements.sessionsSummary, calls };

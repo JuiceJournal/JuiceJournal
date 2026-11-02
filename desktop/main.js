@@ -605,9 +605,9 @@ function isPrivateOrReservedIp(hostname) {
     if (normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80')) {
       return true;
     }
-    const mappedIpv4 = normalized.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mappedIpv4) {
-      return isPrivateOrReservedIp(mappedIpv4[1]);
+    // A zero prefix means a reserved range, IPv4-mapped addresses included. URL writes those in hex, such as ::ffff:a00:1.
+    if (normalized.startsWith('::')) {
+      return true;
     }
   }
 
@@ -1915,12 +1915,35 @@ async function closePoeAuthServer() {
   }
 
   await new Promise((resolve) => {
-    poeAuthServer.close(() => resolve());
+    const server = poeAuthServer;
+    server.close(() => resolve());
+    // close() waits for every open connection: a browser's keep-alive one, or one a local page holds open on purpose.
+    // The response just sent gets a moment to leave first.
+    setTimeout(() => server.closeAllConnections(), 250);
   });
   poeAuthServer = null;
 }
 
 const POE_AUTH_FALLBACK_PORTS = [34128, 34129, 34130, 34131];
+
+// Reads an OAuth redirect to the loopback server. Any local page or process can reach this port, so only a request with
+// this flow's state counts. Anything else is answered here and returns null, and the flow keeps waiting.
+function readPoeAuthCallback(req, res, redirectUrl, expectedState) {
+  let url = null;
+  try {
+    url = new URL(req.url, redirectUrl);
+  } catch {
+    // Not a URL at all, such as "//".
+  }
+
+  if (url?.pathname !== redirectUrl.pathname || url.searchParams.get('state') !== expectedState) {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('This sign-in link is no longer valid. Return to Juice Journal and try again.');
+    return null;
+  }
+
+  return { error: url.searchParams.get('error'), code: url.searchParams.get('code') };
+}
 
 async function openPoeLoginFlow(startResponse, { redirectUrl, redirectUri, expectedState, codeVerifier }) {
   await closePoeAuthServer();
@@ -1932,17 +1955,12 @@ async function openPoeLoginFlow(startResponse, { redirectUrl, redirectUri, expec
     }, 3 * 60 * 1000);
 
     poeAuthServer = http.createServer(async (req, res) => {
-      const url = new URL(req.url, redirectUri);
-
-      if (url.pathname !== redirectUrl.pathname) {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Not found');
+      const callback = readPoeAuthCallback(req, res, redirectUrl, expectedState);
+      if (!callback) {
         return;
       }
 
-      const error = url.searchParams.get('error');
-      const code = url.searchParams.get('code');
-      const state = url.searchParams.get('state');
+      const { error, code } = callback;
 
       if (error) {
         clearTimeout(timeout);
@@ -1953,7 +1971,7 @@ async function openPoeLoginFlow(startResponse, { redirectUrl, redirectUri, expec
         return;
       }
 
-      if (!code || state !== expectedState) {
+      if (!code) {
         clearTimeout(timeout);
         res.writeHead(400, { 'Content-Type': 'text/html' });
         res.end(renderBrowserCallbackPage('Sign-in Failed', 'The browser callback could not be validated. Return to the app and try again.'));
@@ -1970,7 +1988,7 @@ async function openPoeLoginFlow(startResponse, { redirectUrl, redirectUri, expec
           code,
           codeVerifier,
           redirectUri,
-          state,
+          state: expectedState,
         });
         clearTimeout(timeout);
         await closePoeAuthServer();
@@ -2464,17 +2482,12 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
     }, 3 * 60 * 1000);
 
     poeAuthServer = http.createServer(async (req, res) => {
-      const url = new URL(req.url, redirectUri);
-
-      if (url.pathname !== redirectUrl.pathname) {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Not found');
+      const callback = readPoeAuthCallback(req, res, redirectUrl, expectedState);
+      if (!callback) {
         return;
       }
 
-      const error = url.searchParams.get('error');
-      const code = url.searchParams.get('code');
-      const state = url.searchParams.get('state');
+      const { error, code } = callback;
 
       if (error) {
         clearTimeout(timeout);
@@ -2485,7 +2498,7 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
         return;
       }
 
-      if (!code || state !== expectedState) {
+      if (!code) {
         clearTimeout(timeout);
         res.writeHead(400, { 'Content-Type': 'text/html' });
         res.end(renderBrowserCallbackPage('Linking Failed', 'The browser callback could not be validated. Return to the app and try again.'));
@@ -2502,7 +2515,7 @@ async function openPoeLinkFlow(startResponse, { redirectUrl, redirectUri, expect
           code,
           codeVerifier,
           redirectUri,
-          state,
+          state: expectedState,
         });
         clearTimeout(timeout);
         await closePoeAuthServer();
@@ -2595,18 +2608,16 @@ async function waitForPoeAuthorizationCode({ authUrl, redirectUri, expectedState
     const timeout = setTimeout(() => finish(new Error('Path of Exile sign-in timed out')), 3 * 60 * 1000);
 
     poeAuthServer = http.createServer((req, res) => {
-      const url = new URL(req.url, redirectUri);
-      if (url.pathname !== redirectUrl.pathname) {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Not found');
+      const callback = readPoeAuthCallback(req, res, redirectUrl, expectedState);
+      if (!callback) {
         return;
       }
 
-      const code = url.searchParams.get('code');
-      if (url.searchParams.get('error') || !code || url.searchParams.get('state') !== expectedState) {
+      const { error, code } = callback;
+      if (error || !code) {
         res.writeHead(400, { 'Content-Type': 'text/html' });
         res.end(renderBrowserCallbackPage('Sign-in Failed', 'Return to Juice Journal and try again.'));
-        finish(new Error(url.searchParams.get('error') || 'Invalid callback state'));
+        finish(new Error(error || 'Invalid callback state'));
         return;
       }
 
@@ -4097,6 +4108,13 @@ function applyDesktopSettings(settings = {}) {
     }
 
     if (key === 'apiUrl') {
+      // A new server starts signed out. The stored session goes first and the client moves only after that, so a save that
+      // fails at any point, or a retry of one, cannot leave the old server's cookie beside the new address.
+      if (apiClient?.isNewOrigin(normalizedApiUrl)) {
+        store.set('authToken', null);
+        store.set('authTokenEncrypted', null);
+      }
+      apiClient?.setBaseURL(normalizedApiUrl);
       store.set(key, normalizedApiUrl);
       continue;
     }
@@ -4115,10 +4133,6 @@ function applyDesktopSettings(settings = {}) {
     }
 
     store.set(key, value);
-  }
-
-  if (hasApiUrl && apiClient) {
-    apiClient.setBaseURL(normalizedApiUrl);
   }
 
   if (Object.prototype.hasOwnProperty.call(settings, 'onlineEnabled') && apiClient) {
@@ -5050,7 +5064,18 @@ function setupIPC() {
 /**
  * App ready
  */
+// Windows opens an SMB connection to the host of a file://host/ URL, which can send the user's NTLM response there, and
+// the pages' 'self' CSP matches any file URL. The app's own files never have a host.
+function blockRemoteFileRequests() {
+  const { defaultSession } = require('electron').session;
+  defaultSession.webRequest.onBeforeRequest({ urls: ['file://*/*'] }, ({ url }, callback) => {
+    callback({ cancel: /^file:\/\/[^/]/i.test(url) });
+  });
+}
+
 app.whenReady().then(() => {
+  blockRemoteFileRequests();
+
   // Initialize the API client.
   const resolvedToken = getDecryptedAuthToken();
   apiClient = new APIClient(store.get('apiUrl'), resolvedToken, { online: isOnlineEnabled() });

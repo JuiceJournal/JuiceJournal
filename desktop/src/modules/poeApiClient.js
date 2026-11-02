@@ -22,6 +22,8 @@ const POE_CONTACT = 'https://github.com/JuiceJournal/JuiceJournal';
 
 // Rate limiting: GGG enforces per-endpoint limits via response headers.
 // We implement a simple token-bucket per endpoint pattern.
+const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+const REQUEST_DEADLINE_MS = 60000;
 const RATE_LIMIT_SAFETY_MS = 200; // minimum gap between requests
 // The character list policy is tight (seen 2026-10-21: 2 per 10 s and 5 per 300 s per account); one request
 // per 300 s is left for other tools on the same account.
@@ -42,9 +44,15 @@ class PoeApiClient {
     this.client = axios.create({
       baseURL: POE_API_BASE,
       timeout: 15000,
+      maxContentLength: MAX_RESPONSE_BYTES,
       headers: {
         'User-Agent': `OAuth ${this.clientId}/${APP_VERSION} (contact: ${POE_CONTACT}) JuiceJournal`
       }
+    });
+    // The timeout covers idle time only, and a server can reset that by sending a byte now and then.
+    this.client.interceptors.request.use((config) => {
+      config.signal ??= AbortSignal.timeout(REQUEST_DEADLINE_MS);
+      return config;
     });
   }
 

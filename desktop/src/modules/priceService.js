@@ -10,7 +10,14 @@
 
 const axios = require('axios');
 const registry = require('./currencyRegistry');
+const { normalizeIconUrl, ICON_HOST } = require('./iconCache');
 
+// poe.ninja's largest overview was about 4 MB on 2026-11-01.
+const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
+const REQUEST_TIMEOUT_MS = 15000;
+const REQUEST_DEADLINE_MS = 60000;
+// A full sync takes under a minute. One that runs longer stops reading, so it cannot hold up the syncs queued behind it.
+const SYNC_DEADLINE_MS = 5 * 60 * 1000;
 const POE1_CURRENCY_URL = 'https://poe.ninja/poe1/api/economy/stash/current/currency/overview';
 const POE1_ITEM_URL = 'https://poe.ninja/poe1/api/economy/stash/current/item/overview';
 const NINJA_API_URLS = {
@@ -71,6 +78,19 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_CACHE_SIZE = 5000;
 const MAX_PRICE_MAP_SIZE = 10000;
 const INDEX_CACHE_TTL_MS = 30 * 60 * 1000;
+
+// poe.ninja gives art as a URL or a path on the CDN. Anything that leads off the CDN has no art.
+function toCdnIconUrl(image) {
+  if (!image || typeof image !== 'string') {
+    return null;
+  }
+
+  try {
+    return normalizeIconUrl(new URL(image, `https://${ICON_HOST}`).href);
+  } catch {
+    return null;
+  }
+}
 
 function toPriceNumber(value) {
   const number = Number(value);
@@ -177,11 +197,23 @@ class PriceService {
     this.indexStates = new Map();
 
     this.client = axios.create({
-      timeout: 15000,
+      timeout: REQUEST_TIMEOUT_MS,
+      maxContentLength: MAX_RESPONSE_BYTES,
+      // A redirect must not aim a request from this machine at a local address.
+      beforeRedirect: (options) => {
+        if (options.protocol !== 'https:' || options.hostname !== 'poe.ninja') {
+          throw new Error('poe.ninja redirected to another host');
+        }
+      },
       headers: {
         'Accept': 'application/json',
         'User-Agent': 'JuiceJournal/1.0'
       }
+    });
+    // The timeout covers idle time only, and a server can reset that by sending a byte now and then.
+    this.client.interceptors.request.use((config) => {
+      config.signal ??= AbortSignal.timeout(REQUEST_DEADLINE_MS);
+      return config;
     });
   }
 
@@ -278,6 +310,7 @@ class PriceService {
     const prices = new Map();
     const syncedTypes = new Set();
     const generation = this.cacheGeneration;
+    const deadline = Date.now() + SYNC_DEADLINE_MS;
 
     // Get types from registry (version-aware, dynamic)
     const currencyTypes = registry.getCurrencyTypes();
@@ -287,6 +320,7 @@ class PriceService {
 
     // Fetch currency overviews
     for (const type of currencyTypes) {
+      if (Date.now() >= deadline) break;
       try {
         const data = await this._fetchCurrencyOverview(league, type);
         this._indexCurrencyData(data, type, prices);
@@ -299,6 +333,7 @@ class PriceService {
     // Fetch item overviews (PoE1 only for now)
     if (this.poeVersion === 'poe1') {
       for (const type of itemTypes) {
+        if (Date.now() >= deadline) break;
         try {
           const data = await this._fetchItemOverview(league, type);
           this._indexItemData(data, type, prices);
@@ -323,7 +358,8 @@ class PriceService {
     this.syncedTypes = syncedTypes;
     this.lastFullSync = Date.now();
     this.league = league;
-    this.fullySynced = options.full !== false;
+    // Past the deadline the list is partial. What it did read stays cached, so the next sync gets further.
+    this.fullySynced = options.full !== false && Date.now() < deadline;
     return {
       itemCount: this.priceMap.size,
       syncedAt: this.lastFullSync
@@ -455,7 +491,7 @@ class PriceService {
             category: itemInfo.category === 'Catalysts'
               ? 'catalyst'
               : (this.poeVersion === 'poe2' && type === 'Currency' && itemInfo.category === 'Vaal' ? 'vaal' : type.toLowerCase()),
-            icon: itemInfo.image ? `https://web.poecdn.com${itemInfo.image}` : null,
+            icon: toCdnIconUrl(itemInfo.image),
             tradeId: itemInfo.id || null,
             sparkline: getSparklineData(line),
             change: getSparklineChange(line)
@@ -485,7 +521,7 @@ class PriceService {
             chaosValue,
             divineValue: getPoe1LineDivineValue(line, divineToChaos),
             category: type.toLowerCase(),
-            icon: line.icon || details?.icon || null,
+            icon: toCdnIconUrl(line.icon || details?.icon),
             tradeId: details?.tradeId || null,
             sparkline: getSparklineData(line),
             change: getSparklineChange(line)
@@ -511,7 +547,7 @@ class PriceService {
         chaosValue: line.chaosValue || 0,
         divineValue: line.divineValue || 0,
         category: type.toLowerCase(),
-        icon: line.icon || null,
+        icon: toCdnIconUrl(line.icon),
         sparkline: getSparklineData(line),
         change: getSparklineChange(line),
         listingCount: line.listingCount || 0

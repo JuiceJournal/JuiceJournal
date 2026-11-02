@@ -761,6 +761,73 @@ test('main online features start off and the setting switches the live API clien
   assert.deepEqual(onlineCalls, [true, false]);
 });
 
+test('main settings forget the stored session when the server origin changes, and only then', () => {
+  const writes = [];
+  let originChanged = false;
+  const context = loadFunctions(['applyDesktopSettings'], {
+    SETTINGS_ALLOWLIST: getSettingsAllowlist(),
+    isValidApiUrl: () => true,
+    store: {
+      set(key, value) {
+        writes.push([key, value]);
+      }
+    },
+    apiClient: {
+      isNewOrigin: () => originChanged,
+      setBaseURL() {}
+    }
+  });
+
+  context.applyDesktopSettings({ apiUrl: 'http://localhost:3001/' });
+  assert.deepEqual(writes, [['apiUrl', 'http://localhost:3001/']]);
+
+  writes.length = 0;
+  originChanged = true;
+  context.applyDesktopSettings({ apiUrl: 'https://other.example' });
+  assert.deepEqual(writes, [['authToken', null], ['authTokenEncrypted', null], ['apiUrl', 'https://other.example']]);
+});
+
+for (const failingKey of ['authToken', 'authTokenEncrypted', 'apiUrl', 'theme']) {
+  test(`main settings keep the old session away from a new server when the ${failingKey} write fails, and on the retry`, () => {
+    const APIClient = require('../src/modules/apiClient');
+    const oldUrl = 'https://old.example';
+    const newUrl = 'https://new.example';
+    const stored = { apiUrl: oldUrl, authToken: 'old-cookie', authTokenEncrypted: 'old-sealed' };
+    const client = new APIClient(oldUrl, 'old-cookie', { online: true });
+    let failed = false;
+    const context = loadFunctions(['applyDesktopSettings'], {
+      SETTINGS_ALLOWLIST: getSettingsAllowlist(),
+      isValidApiUrl: () => true,
+      store: {
+        set(key, value) {
+          if (key === failingKey && !failed) {
+            failed = true;
+            throw new Error('config write failed');
+          }
+          stored[key] = value;
+        }
+      },
+      apiClient: client
+    });
+    const settings = { apiUrl: newUrl, onlineEnabled: true, theme: 'dark' };
+
+    assert.throws(() => context.applyDesktopSettings(settings), /config write failed/);
+    if (stored.authToken || stored.authTokenEncrypted) {
+      assert.equal(stored.apiUrl, oldUrl);
+    }
+    if (client.token) {
+      assert.equal(client.baseURL, oldUrl);
+    }
+
+    context.applyDesktopSettings(settings);
+    assert.equal(stored.apiUrl, newUrl);
+    assert.equal(stored.authToken, null);
+    assert.equal(stored.authTokenEncrypted, null);
+    assert.equal(client.baseURL, newUrl);
+    assert.equal(client.token, null);
+  });
+}
+
 test('main farm sharing stops before the server while online features are off', async () => {
   let publishCalls = 0;
   const context = loadFunctions(['publishMapResultsToFarmingHub'], {
@@ -805,6 +872,14 @@ test('main apiUrl validation allows expected localhost ports and rejects credent
   assert.equal(context.isValidApiUrl('http://192.168.1.10:3001'), false);
   assert.equal(context.isValidApiUrl('http://10.0.0.5:3001'), false);
   assert.equal(context.isValidApiUrl('http://[fd00::1]:3001'), false);
+  // URL writes IPv4-mapped addresses in hex, and the other ::/8 forms reach the same places.
+  assert.equal(context.isValidApiUrl('http://[::ffff:10.0.0.1]/'), false);
+  assert.equal(context.isValidApiUrl('http://[::ffff:127.0.0.1]:22/'), false);
+  assert.equal(context.isValidApiUrl('http://[0:0:0:0:0:ffff:c0a8:101]/'), false);
+  assert.equal(context.isValidApiUrl('http://[::]:22/'), false);
+  assert.equal(context.isValidApiUrl('http://[::1]:3001/'), true);
+  assert.equal(context.isValidApiUrl('http://[::1]:22/'), false);
+  assert.equal(context.isValidApiUrl('https://[2606:4700::1111]/'), true);
 });
 
 test('runtime game detection makes the detected game the Settings game and tells the renderer', () => {
@@ -1619,7 +1694,7 @@ test('main overlay character accepts only short display fields from the renderer
 });
 
 function loadPoeDeviceAuthMain(onOpen) {
-  return loadFunctions(['closePoeAuthServer', 'waitForPoeAuthorizationCode'], {
+  return loadFunctions(['closePoeAuthServer', 'readPoeAuthCallback', 'waitForPoeAuthorizationCode'], {
     http: require('node:http'),
     URL,
     poeAuthServer: null,
@@ -1658,17 +1733,77 @@ test('main device sign-in takes the code from the loopback redirect and closes t
   assert.equal(context.poeAuthServer, null);
 });
 
-test('main device sign-in rejects a redirect with the wrong state', async () => {
+test('main device sign-in answers requests without its state and keeps waiting for the real redirect', async () => {
   const redirectUri = 'http://127.0.0.1:34992/oauth/poe/callback';
+  const statuses = [];
   const context = loadPoeDeviceAuthMain(async () => {
-    await getLoopback(`${redirectUri}?code=code-1&state=forged`);
+    for (const stray of [
+      `${redirectUri}?code=code-1&state=forged`,
+      `${redirectUri}?code=code-1`,
+      `${redirectUri}?error=attacker%20text`,
+      `${redirectUri}?error=attacker%20text&state=forged`,
+      'http://127.0.0.1:34992//',
+      'http://127.0.0.1:34992/favicon.ico'
+    ]) {
+      statuses.push(await getLoopback(stray));
+    }
+    statuses.push(await getLoopback(`${redirectUri}?code=code-real&state=state-1`));
+  });
+
+  const code = await context.waitForPoeAuthorizationCode({
+    authUrl: 'https://www.pathofexile.com/oauth/authorize',
+    redirectUri,
+    expectedState: 'state-1'
+  });
+
+  assert.equal(code, 'code-real');
+  assert.deepEqual(statuses, [400, 400, 400, 400, 400, 400, 200]);
+  assert.equal(context.poeAuthServer, null);
+});
+
+test('main device sign-in finishes promptly while other connections stay open', async () => {
+  const redirectUri = 'http://127.0.0.1:34994/oauth/poe/callback';
+  const held = [];
+  const context = loadPoeDeviceAuthMain(async () => {
+    for (const bytes of [null, 'GET / HTTP/1.1\r\nHost: x\r\n']) {
+      await new Promise((resolve) => {
+        const socket = net.connect(34994, '127.0.0.1', () => {
+          if (bytes) {
+            socket.write(bytes);
+          }
+          resolve();
+        });
+        socket.on('error', () => {});
+        held.push(socket);
+      });
+    }
+    await getLoopback(`${redirectUri}?code=code-1&state=state-1`);
+  });
+
+  const startedAt = Date.now();
+  const code = await context.waitForPoeAuthorizationCode({
+    authUrl: 'https://www.pathofexile.com/oauth/authorize',
+    redirectUri,
+    expectedState: 'state-1'
+  });
+  held.forEach((socket) => socket.destroy());
+
+  assert.equal(code, 'code-1');
+  assert.ok(Date.now() - startedAt < 2000);
+  assert.equal(context.poeAuthServer, null);
+});
+
+test('main device sign-in stops on an error from the redirect that carries its state', async () => {
+  const redirectUri = 'http://127.0.0.1:34993/oauth/poe/callback';
+  const context = loadPoeDeviceAuthMain(async () => {
+    await getLoopback(`${redirectUri}?error=access_denied&state=state-1`);
   });
 
   await assert.rejects(context.waitForPoeAuthorizationCode({
     authUrl: 'https://www.pathofexile.com/oauth/authorize',
     redirectUri,
     expectedState: 'state-1'
-  }), /Invalid callback state/);
+  }), /access_denied/);
   assert.equal(context.poeAuthServer, null);
 });
 
