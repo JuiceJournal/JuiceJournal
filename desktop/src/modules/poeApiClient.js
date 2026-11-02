@@ -45,6 +45,8 @@ class PoeApiClient {
       baseURL: POE_API_BASE,
       timeout: 15000,
       maxContentLength: MAX_RESPONSE_BYTES,
+      // These requests carry the OAuth token. With a proxy in the environment axios would send them to it in plain text.
+      proxy: false,
       headers: {
         'User-Agent': `OAuth ${this.clientId}/${APP_VERSION} (contact: ${POE_CONTACT}) JuiceJournal`
       }

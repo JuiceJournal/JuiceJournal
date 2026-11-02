@@ -871,6 +871,16 @@ test('main apiUrl validation allows expected localhost ports and rejects credent
 
   assert.equal(context.isValidApiUrl('http://localhost:3001'), true);
   assert.equal(context.isValidApiUrl('https://api.juicejournal.example'), true);
+  // A public address carries the password and the session cookie, so it needs https. Only this PC may use http.
+  assert.equal(context.isValidApiUrl('http://api.juicejournal.example'), false);
+  assert.equal(context.isValidApiUrl('http://[2606:4700::1111]/'), false);
+  assert.equal(context.isValidApiUrl('http://8.8.8.8:3001'), false);
+  assert.equal(context.isValidApiUrl('https://localhost:3001'), true);
+  // Only an address counts as this PC: these are public names that start like one.
+  assert.equal(context.isValidApiUrl('http://127.0.0.1.nip.io/'), false);
+  assert.equal(context.isValidApiUrl('http://127.attacker.example:3001/'), false);
+  assert.equal(context.isValidApiUrl('https://127.0.0.1.nip.io/'), true);
+  assert.equal(context.isValidApiUrl('http://127.0.0.2:3001/'), true);
   assert.equal(context.isValidApiUrl('http://127.0.0.1:9999'), false);
   assert.equal(context.isValidApiUrl('https://user:pass@api.juicejournal.example'), false);
   assert.equal(context.isValidApiUrl('http://192.168.1.10:3001'), false);
