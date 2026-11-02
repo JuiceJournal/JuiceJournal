@@ -651,7 +651,7 @@ test('main shutdown finalizer keeps the loot recorded in a PoE1 session without 
 });
 
 // A price service whose queued sync loads `prices` (or nothing, or never finishes) for the OCR scan tests.
-function createFakePriceService({ prices = { 'Exalted Orb': 12 }, hang = false } = {}) {
+function createFakePriceService({ prices = { 'Exalted Orb': 12 }, hang = false, fullySynced = true } = {}) {
   return {
     poeVersion: 'poe1',
     league: null,
@@ -664,6 +664,7 @@ function createFakePriceService({ prices = { 'Exalted Orb': 12 }, hang = false }
       }
       this.poeVersion = poeVersion;
       this.league = league;
+      this.fullySynced = fullySynced;
       this.prices = new Map(Object.entries(prices).map(([name, chaosValue]) => [name, { chaosValue }]));
       return { itemCount: this.prices.size };
     },
@@ -757,6 +758,21 @@ test('main OCR scan waits before asking poe.ninja again after a load found no pr
 
   assert.equal(priceService.syncCalls.length, 1);
   assert.equal(backend.journal.sessions[0].lootEntries.length, 2);
+});
+
+test('main OCR scan asks again, after the wait, when a load left only part of the prices', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-partial');
+  const priceService = createFakePriceService({ fullySynced: false });
+  const context = loadOcrScan(backend, session, priceService);
+
+  await context.captureAndScan();
+  await context.captureAndScan();
+  assert.equal(priceService.syncCalls.length, 1);
+
+  context.sessionPrices.retryAt = 0;
+  await context.captureAndScan();
+  assert.equal(priceService.syncCalls.length, 2);
 });
 
 test('main OCR scan reloads prices that a game switch cleared', async () => {

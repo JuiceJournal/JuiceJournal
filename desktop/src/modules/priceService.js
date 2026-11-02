@@ -399,13 +399,30 @@ class PriceService {
       };
     }
 
+    // Past the deadline the list is partial. What it did read stays cached, so the next sync gets further.
+    const withinDeadline = Date.now() < deadline;
+    if (this.league === league) {
+      // Loot and profit read this list, so nothing read leaves it as it is, with its sync time.
+      if (prices.size === 0 && this.priceMap.size > 0) {
+        return {
+          itemCount: this.priceMap.size,
+          syncedAt: this.lastFullSync,
+          failed: true
+        };
+      }
+      // Overviews not read keep their last prices. A sync that read every type drops what poe.ninja no longer lists.
+      if (!readEveryType || !withinDeadline) {
+        for (const [key, entry] of this.priceMap) {
+          if (!prices.has(key)) prices.set(key, entry);
+        }
+      }
+    }
+
     this.priceMap = prices;
     this.syncedTypes = syncedTypes;
     this.lastFullSync = Date.now();
     this.league = league;
-    // Past the deadline the list is partial. What it did read stays cached, so the next sync gets further.
-    const withinDeadline = Date.now() < deadline;
-    this.fullySynced = options.full !== false && withinDeadline;
+    this.fullySynced = options.full !== false && readEveryType && withinDeadline;
     if (readEveryType && withinDeadline && prices.size > 0 && this.onSynced) {
       this.onSynced(this._toSnapshot());
     }
@@ -431,7 +448,8 @@ class PriceService {
 
   /**
    * Syncs a league's prices unless they are already loaded (`force` syncs anyway). Syncs run one at a time, so a
-   * queued call finds the league loaded when an earlier call already synced it.
+   * queued call finds the league loaded when an earlier call already synced it. `syncFailed` says poe.ninja gave no
+   * prices, even when the list still holds the last ones.
    */
   ensureSynced(league, poeVersion, { full = false, force = false } = {}) {
     const version = poeVersion === 'poe2' ? 'poe2' : 'poe1';
@@ -440,6 +458,7 @@ class PriceService {
         && this.poeVersion === version
         && this.league === league
         && (this.fullySynced || !full);
+      let keptLastPrices = false;
       if (force || !loaded) {
         if (this.poeVersion !== version || this.league !== league) {
           // Another game's or league's prices must not read as these while this sync runs. Only a re-sync of the
@@ -450,9 +469,9 @@ class PriceService {
           this.fullySynced = false;
         }
         this.setPoeVersion(version);
-        await this.syncPrices(league, { full });
+        keptLastPrices = Boolean((await this.syncPrices(league, { full }))?.failed);
       }
-      return { ...this.getStatus(), league: this.league };
+      return { ...this.getStatus(), league: this.league, syncFailed: keptLastPrices || this.priceMap.size === 0 };
     });
     return this.syncQueue;
   }
