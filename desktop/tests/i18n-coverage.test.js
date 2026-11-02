@@ -608,7 +608,7 @@ test('main process dialogs use keys that exist in en and tr', () => {
   for (const key of [
     'scanNoMapTitle', 'noActiveSession', 'scanFailedTitle', 'screenCaptureFailed', 'scanNothingTitle', 'scanNoItems',
     'lootScanFailed', 'sessionStartFailed', 'sessionEndFailed', 'notificationTryAgain', 'mapProfitBody', 'mapLossBody',
-    'mapDuration', 'journalUnreadableBody'
+    'mapDuration', 'mapDurationSeconds', 'mapNoLootBody', 'promptMessage', 'promptDetail', 'journalUnreadableBody'
   ]) {
     assert.ok(translations.en[key], `Missing en main process string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);

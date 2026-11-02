@@ -4165,7 +4165,7 @@ function populateMapSessionFarmTypes(selectedFarmTypeId = '', options = {}) {
 
 function requestMapSessionDetails({ defaultName, trackerContext } = {}) {
   const fallbackName = normalizeSessionMapName(defaultName)
-    || `${window.t ? window.t('misc.unknownMap') : 'Unknown Map'} ${new Date().toLocaleString()}`;
+    || (window.t ? window.t('misc.unknownMap') : 'Unknown Map');
 
   if (!elements.mapSessionModal || !elements.mapSessionNameInput || !elements.mapSessionForm) {
     return Promise.resolve({

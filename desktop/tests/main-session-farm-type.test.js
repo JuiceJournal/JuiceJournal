@@ -521,9 +521,7 @@ test('main map end notification names the map and reads the profit or loss with 
       currentSession: active,
       appendAuditTrail() {},
       showNotification: (title, body) => notifications.push([title, body]),
-      t: (key, values = {}) => [key, values.value, values.minutes, values.seconds]
-        .filter((part) => part !== undefined)
-        .join('|'),
+      t: (key, values = {}) => [key, ...Object.values(values)].join('|'),
       updateOverlayWindow() {},
       mainWindow: null
     });
@@ -531,7 +529,16 @@ test('main map end notification names the map and reads the profit or loss with 
     return notifications;
   };
 
-  assert.deepEqual(await endMap({ endedAt: '2026-05-06T12:05:30.000Z' }), [['Channel', 'mapProfitBody|0 · mapDuration|5|30']]);
+  // No loot and no stash result: there is no profit to report, rather than a profit of 0.
+  assert.deepEqual(await endMap({ endedAt: '2026-05-06T12:05:30.000Z' }), [['Channel', 'mapNoLootBody · mapDuration|5|30']]);
+  // A stash result of exactly 0 is a real result.
+  assert.deepEqual(
+    await endMap({ endedAt: '2026-05-06T12:05:30.000Z', totalLootChaos: 0, profitChaos: 0 }),
+    [['Channel', 'mapProfitBody|0 · mapDuration|5|30']]
+  );
+  // Under a minute reads in seconds alone.
+  assert.deepEqual(await endMap({ endedAt: '2026-05-06T12:00:01.000Z' }), [['Channel', 'mapNoLootBody · mapDurationSeconds|1']]);
+  assert.deepEqual(await endMap({ endedAt: '2026-05-06T12:01:00.000Z' }), [['Channel', 'mapNoLootBody · mapDuration|1|0']]);
   assert.deepEqual(
     await endMap({ endedAt: '2026-05-06T12:04:12.000Z', totalLootChaos: 412.4, profitChaos: 411.6 }),
     [['Channel', 'mapProfitBody|+412 · mapDuration|4|12']]
@@ -542,7 +549,50 @@ test('main map end notification names the map and reads the profit or loss with 
     [['Channel', 'mapLossBody|85 · mapDuration|5|30']]
   );
   // An end time before the start leaves no duration, so the notice leaves it out.
-  assert.deepEqual(await endMap({ endedAt: '2026-05-06T11:59:00.000Z' }), [['Channel', 'mapProfitBody|0']]);
+  assert.deepEqual(await endMap({ endedAt: '2026-05-06T11:59:00.000Z' }), [['Channel', 'mapNoLootBody']]);
+});
+
+test('main map end notification keeps a profit of 0 when the map has scanned loot without a price', async () => {
+  const backend = createJournalBackend();
+  const active = backend.start({ mapName: 'Channel', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-1');
+  backend.journal.sessions[0].lootEntries = [{ itemName: 'Unpriced Item', quantity: 1, chaosValue: 0 }];
+  const notifications = [];
+  const context = loadFunctions(['endCurrentSession'], {
+    ...backend.context,
+    currentSession: active,
+    appendAuditTrail() {},
+    showNotification: (title, body) => notifications.push(body),
+    t: (key) => key,
+    updateOverlayWindow() {},
+    mainWindow: null
+  });
+
+  await context.endCurrentSession({ endedAt: '2026-05-06T12:05:30.000Z' });
+
+  assert.deepEqual(notifications, ['mapProfitBody · mapDuration']);
+});
+
+test('a map started without a name is named plainly, and the prompt does not ask for text it cannot take', async () => {
+  const shown = [];
+  const context = loadFunctions(['promptMapName'], {
+    mainWindow: {},
+    dialog: {
+      showMessageBox: async (window, options) => {
+        shown.push(options);
+        return { response: shown.length === 1 ? 0 : 1 };
+      }
+    },
+    t: (key) => key
+  });
+
+  assert.equal(await context.promptMapName(), 'unknownMap');
+  assert.equal(shown[0].message, 'promptMessage');
+  assert.equal(shown[0].detail, 'promptDetail');
+  assert.equal(await context.promptMapName(), null);
+
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+  assert.match(source, /promptMessage: 'Start this map without a name\?'/);
+  assert.match(source, /promptMessage: 'Map adsiz baslatilsin mi\?'/);
 });
 
 test('main session end can target a journal session id after process state is lost', async () => {

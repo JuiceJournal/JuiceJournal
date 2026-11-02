@@ -146,13 +146,15 @@ const MAIN_PROCESS_TRANSLATIONS = {
     lootAddedBody: '{count} item eklendi. Toplam: {value}c',
     mapProfitBody: 'Kazanc {value}c',
     mapLossBody: 'Zarar {value}c',
+    mapNoLootBody: 'Loot taranmadi',
     mapDuration: '{minutes}dk {seconds}sn',
+    mapDurationSeconds: '{seconds}sn',
     autoSessionBody: '{mapName} mapi baslatildi',
     promptStart: 'Baslat',
     promptCancel: 'Iptal',
     promptTitle: 'Yeni Map Session',
-    promptMessage: 'Map adini girin:',
-    promptDetail: 'Ornegin: Dunes Map, City Square Map',
+    promptMessage: 'Map adsiz baslatilsin mi?',
+    promptDetail: "Bilinmeyen Map olarak listelenir. Ad vermek icin map'i Dashboard'dan baslat.",
     unknownMap: 'Bilinmeyen Map',
     auditLogin: 'Yerel kullanici girisi basarili',
     auditLogout: 'Kullanici cikis yapti',
@@ -208,13 +210,15 @@ const MAIN_PROCESS_TRANSLATIONS = {
     lootAddedBody: '{count} items added. Total: {value}c',
     mapProfitBody: 'Profit {value}c',
     mapLossBody: 'Loss {value}c',
+    mapNoLootBody: 'No loot scanned',
     mapDuration: '{minutes}m {seconds}s',
+    mapDurationSeconds: '{seconds}s',
     autoSessionBody: '{mapName} map started',
     promptStart: 'Start',
     promptCancel: 'Cancel',
     promptTitle: 'New Map Session',
-    promptMessage: 'Enter the map name:',
-    promptDetail: 'For example: Dunes Map, City Square Map',
+    promptMessage: 'Start this map without a name?',
+    promptDetail: 'It is listed as Unknown Map. To name a map, start it from the Dashboard.',
     unknownMap: 'Unknown Map',
     auditLogin: 'Local user login succeeded',
     auditLogout: 'User logged out',
@@ -3772,12 +3776,21 @@ async function endCurrentSession(options = {}) {
 
     // The OS notice names the map; the in-app result and the overlay card carry the rest.
     const profit = Math.round(parseFloat(session.profitChaos) || 0);
-    const outcome = profit < 0
-      ? t('mapLossBody', { value: Math.abs(profit) })
-      : t('mapProfitBody', { value: profit > 0 ? `+${profit}` : String(profit) });
-    const duration = durationSeconds
-      ? ` · ${t('mapDuration', { minutes: Math.floor(durationSeconds / 60), seconds: durationSeconds % 60 })}`
-      : '';
+    let outcome;
+    if (profit < 0) {
+      outcome = t('mapLossBody', { value: Math.abs(profit) });
+    } else if (profit > 0 || completionPayload.profitChaos !== undefined || session.lootEntries?.length) {
+      outcome = t('mapProfitBody', { value: profit > 0 ? `+${profit}` : String(profit) });
+    } else {
+      // Nothing was scanned or read from the stash, so there is no profit to report.
+      outcome = t('mapNoLootBody');
+    }
+    let duration = '';
+    if (durationSeconds) {
+      const minutes = Math.floor(durationSeconds / 60);
+      const seconds = durationSeconds % 60;
+      duration = ` · ${minutes ? t('mapDuration', { minutes, seconds }) : t('mapDurationSeconds', { seconds })}`;
+    }
     showNotification(session.mapName || t('unknownMap'), `${outcome}${duration}`);
 
     // Renderer'a bilgi gonder
@@ -3799,23 +3812,20 @@ async function endCurrentSession(options = {}) {
 }
 
 /**
- * Map adi icin prompt goster
+ * Asks before a map starts without a name. showMessageBox cannot take text, so it only confirms.
  */
 async function promptMapName() {
-  // showMessageBox cannot accept text input; return a default descriptive name.
-  // The user can edit it later in the session drawer.
-  const defaultName = `${t('unknownMap')} ${new Date().toLocaleString()}`;
   const { response } = await dialog.showMessageBox(mainWindow, {
     type: 'question',
     buttons: [t('promptStart'), t('promptCancel')],
     defaultId: 0,
     title: t('promptTitle'),
     message: t('promptMessage'),
-    detail: `${t('promptDetail')}\n\n${defaultName}`
+    detail: t('promptDetail')
   });
 
   if (response === 0) {
-    return defaultName;
+    return t('unknownMap');
   }
 
   return null;
