@@ -797,6 +797,15 @@ test('tray actions run the Scan Loot handler and report a failed map start in th
   ]);
 });
 
+test('a map started without a name carries no date in its name', async () => {
+  const context = loadFunctions(['normalizeSessionMapName', 'requestMapSessionDetails'], {
+    elements: {},
+    window: { t: (key) => key }
+  });
+
+  assert.equal((await context.requestMapSessionDetails({})).mapName, 'misc.unknownMap');
+});
+
 test('an update that finished downloading raises one sticky toast with Restart now', () => {
   const listeners = {};
   const toasts = [];
