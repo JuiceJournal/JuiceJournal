@@ -7,6 +7,50 @@
   root.overlayStateModel = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, function createOverlayStateModel() {
   const SEPARATOR = ' \u00b7 ';
+  // Main builds these lines and the overlay ticks the clocks, so both read one table here. The overlay's own labels are
+  // in translations.js.
+  const OVERLAY_TEXT = {
+    en: {
+      unknownMap: 'Unknown Map',
+      noFarmType: 'No farm type',
+      chooseFarmType: 'Choose farm type',
+      activeMapSession: 'Active map session',
+      confirmDetectedMap: 'Confirm detected map',
+      confirmMapStart: 'confirm map start',
+      characterSyncNeeded: 'Character sync needed',
+      lastPlayedCharacter: 'Last played character',
+      waitingForArea: 'Waiting for area data',
+      level: 'Level',
+      closesIn: (seconds) => `closes in ${seconds}s`,
+      elapsed: (time) => `elapsed ${time}`,
+      map: 'Map',
+      total: 'Total',
+      minutes: 'm',
+      seconds: 's'
+    },
+    tr: {
+      unknownMap: 'Bilinmeyen Map',
+      noFarmType: 'Farm tipi yok',
+      chooseFarmType: 'Farm tipi sec',
+      activeMapSession: 'Aktif map oturumu',
+      confirmDetectedMap: 'Algilanan mapi onayla',
+      confirmMapStart: 'map baslangicini onayla',
+      characterSyncNeeded: 'Karakter senkronu gerekli',
+      lastPlayedCharacter: 'Son oynanan karakter',
+      waitingForArea: 'Bolge bilgisi bekleniyor',
+      level: 'Seviye',
+      closesIn: (seconds) => `${seconds} sn icinde kapanir`,
+      elapsed: (time) => `gecen sure ${time}`,
+      map: 'Map',
+      total: 'Toplam',
+      minutes: 'dk',
+      seconds: 'sn'
+    }
+  };
+
+  function getOverlayText(language) {
+    return OVERLAY_TEXT[language] || OVERLAY_TEXT.en;
+  }
 
   function normalizeString(value, fallback = null) {
     const normalized = String(value ?? '').trim();
@@ -36,19 +80,19 @@
     return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 0;
   }
 
-  function formatDuration(seconds) {
+  function formatDuration(seconds, text) {
     const normalized = normalizeSeconds(seconds);
     if (!normalized) {
-      return '0s';
+      return `0${text.seconds}`;
     }
 
     const minutes = Math.floor(normalized / 60);
     const remainingSeconds = normalized % 60;
     if (!minutes) {
-      return `${remainingSeconds}s`;
+      return `${remainingSeconds}${text.seconds}`;
     }
 
-    return `${minutes}m ${String(remainingSeconds).padStart(2, '0')}s`;
+    return `${minutes}${text.minutes} ${String(remainingSeconds).padStart(2, '0')}${text.seconds}`;
   }
 
   // m:ss under an hour, h:mm:ss after.
@@ -65,23 +109,24 @@
 
   // Main only pushes overlay state on events, so the overlay counts a clock up from its base seconds at `at`
   // (epoch ms) and redraws the meta line with this.
-  function formatOverlayClock(clock, now = Date.now()) {
+  function formatOverlayClock(clock, now = Date.now(), language = 'en') {
     if (!clock || typeof clock !== 'object') {
       return '';
     }
 
+    const text = getOverlayText(language);
     // A prompt counts down to the moment it closes on its own.
     if (clock.kind === 'countdown') {
       const secondsLeft = Math.max(0, Math.ceil((clock.expiresAt - now) / 1000));
-      return clock.label ? `${clock.label}${SEPARATOR}${secondsLeft}s` : `closes in ${secondsLeft}s`;
+      return clock.label ? `${clock.label}${SEPARATOR}${secondsLeft}${text.seconds}` : text.closesIn(secondsLeft);
     }
 
     const passedSeconds = Math.max(0, Math.floor((now - clock.at) / 1000));
     if (clock.kind === 'session') {
-      return `elapsed ${formatDuration(clock.base + passedSeconds)}`;
+      return text.elapsed(formatDuration(clock.base + passedSeconds, text));
     }
 
-    return `Map ${formatClock(clock.mapBase + passedSeconds)}${SEPARATOR}Total ${formatClock(clock.totalBase + passedSeconds)}`;
+    return `${text.map} ${formatClock(clock.mapBase + passedSeconds)}${SEPARATOR}${text.total} ${formatClock(clock.totalBase + passedSeconds)}`;
   }
 
   function getCharacterSummary(character) {
@@ -111,7 +156,7 @@
     };
   }
 
-  function getActiveSessionSummary(session, now = Date.now()) {
+  function getActiveSessionSummary(session, now, text) {
     if (!session || typeof session !== 'object') {
       return null;
     }
@@ -121,7 +166,7 @@
       return null;
     }
 
-    const mapName = normalizeString(session.mapName ?? session.map_name, 'Unknown Map');
+    const mapName = normalizeString(session.mapName ?? session.map_name, text.unknownMap);
     const farmType = normalizeString(session.farmType ?? session.farmTypeLabel ?? session.mapTypeLabel);
     const league = normalizeString(session.league);
     const poeVersion = normalizeString(session.poeVersion ?? session.gameVersion);
@@ -190,12 +235,12 @@
     };
   }
 
-  function getStartMapPromptSummary(startMapPrompt) {
+  function getStartMapPromptSummary(startMapPrompt, text) {
     if (!startMapPrompt || typeof startMapPrompt !== 'object') {
       return null;
     }
 
-    const mapName = normalizeString(startMapPrompt.mapName ?? startMapPrompt.map_name, 'Unknown Map');
+    const mapName = normalizeString(startMapPrompt.mapName ?? startMapPrompt.map_name, text.unknownMap);
     const farmTypeId = normalizeString(startMapPrompt.farmTypeId ?? startMapPrompt.farm_type_id);
     const farmType = normalizeString(startMapPrompt.farmType ?? startMapPrompt.farmTypeLabel);
     const league = normalizeString(startMapPrompt.league);
@@ -248,22 +293,23 @@
     };
   }
 
-  function createPrimaryLine(characterSummary) {
+  function createPrimaryLine(characterSummary, text) {
     if (!characterSummary) {
-      return 'Character sync needed';
+      return text.characterSyncNeeded;
     }
 
     return [
       characterSummary.name,
       characterSummary.league
-    ].filter(Boolean).join(SEPARATOR) || 'Character sync needed';
+    ].filter(Boolean).join(SEPARATOR) || text.characterSyncNeeded;
   }
 
-  function deriveOverlayState({ enabled = false, character, runtime, session, startMapPrompt, characterPrompt, now = Date.now() } = {}) {
-    const sessionSummary = getActiveSessionSummary(session, now);
+  function deriveOverlayState({ enabled = false, character, runtime, session, startMapPrompt, characterPrompt, now = Date.now(), language = 'en' } = {}) {
+    const text = getOverlayText(language);
+    const sessionSummary = getActiveSessionSummary(session, now, text);
     if (sessionSummary) {
       const contextLine = [
-        sessionSummary.farmType || 'No farm type',
+        sessionSummary.farmType || text.noFarmType,
         sessionSummary.poeVersion ? sessionSummary.poeVersion.replace(/^poe/i, 'PoE ') : null,
         sessionSummary.league
       ].filter(Boolean).join(SEPARATOR);
@@ -273,16 +319,16 @@
       return {
         visibility: 'visible',
         primaryLine: sessionSummary.mapName,
-        secondaryLine: contextLine || 'Active map session',
-        metaLine: formatOverlayClock(clock, now),
+        secondaryLine: contextLine || text.activeMapSession,
+        metaLine: formatOverlayClock(clock, now, language),
         clock
       };
     }
 
-    const startMapPromptSummary = getStartMapPromptSummary(startMapPrompt);
+    const startMapPromptSummary = getStartMapPromptSummary(startMapPrompt, text);
     if (startMapPromptSummary) {
       const contextLine = [
-        startMapPromptSummary.farmType || 'Choose farm type',
+        startMapPromptSummary.farmType || text.chooseFarmType,
         startMapPromptSummary.poeVersion ? startMapPromptSummary.poeVersion.replace(/^poe/i, 'PoE ') : null,
         startMapPromptSummary.league
       ].filter(Boolean).join(SEPARATOR);
@@ -291,13 +337,13 @@
         visibility: 'visible',
         mode: 'start-map-prompt',
         primaryLine: startMapPromptSummary.mapName,
-        secondaryLine: contextLine || 'Confirm detected map',
-        metaLine: 'confirm map start',
+        secondaryLine: contextLine || text.confirmDetectedMap,
+        metaLine: text.confirmMapStart,
         startMapPrompt: startMapPromptSummary
       };
       if (startMapPromptSummary.expiresAt) {
         promptState.clock = { kind: 'countdown', expiresAt: startMapPromptSummary.expiresAt };
-        promptState.metaLine = formatOverlayClock(promptState.clock, now);
+        promptState.metaLine = formatOverlayClock(promptState.clock, now, language);
       }
       return promptState;
     }
@@ -320,14 +366,14 @@
         visibility: 'visible',
         mode: 'character-prompt',
         primaryLine: selected.name,
-        secondaryLine: [selected.level ? `Level ${selected.level}` : null, selected.className].filter(Boolean).join(' ')
-          || 'Last played character',
+        secondaryLine: [selected.level ? `${text.level} ${selected.level}` : null, selected.className].filter(Boolean).join(' ')
+          || text.lastPlayedCharacter,
         metaLine: gameLabel,
         characterPrompt: characterPromptSummary
       };
       if (characterPromptSummary.expiresAt) {
         promptState.clock = { kind: 'countdown', expiresAt: characterPromptSummary.expiresAt, label: gameLabel || null };
-        promptState.metaLine = formatOverlayClock(promptState.clock, now);
+        promptState.metaLine = formatOverlayClock(promptState.clock, now, language);
       }
       return promptState;
     }
@@ -351,9 +397,9 @@
     };
     const state = {
       visibility: 'visible',
-      primaryLine: createPrimaryLine(getCharacterSummary(character)),
-      secondaryLine: runtimeSummary.currentArea || 'Waiting for area data',
-      metaLine: formatOverlayClock(clock, now)
+      primaryLine: createPrimaryLine(getCharacterSummary(character), text),
+      secondaryLine: runtimeSummary.currentArea || text.waitingForArea,
+      metaLine: formatOverlayClock(clock, now, language)
     };
 
     if (runtimeSummary.running) {

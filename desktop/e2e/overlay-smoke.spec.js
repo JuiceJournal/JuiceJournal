@@ -464,6 +464,49 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     await showRuntimeOverlayPreview(page, { summary: { status: 'active', currentAreaName: 'Cemetery Map' } });
     await expect(overlayWindow.locator('[data-overlay-start-farm-types]')).toHaveAttribute('aria-label', 'Farm tipi');
     await expect(overlayWindow.locator('[data-overlay-characters]')).toHaveAttribute('aria-label', 'Karakter');
+
+    // So does the text on the card, and the longer Turkish lines stay inside it.
+    const expectCardFits = async () => {
+      const clipped = await overlayWindow.evaluate(() => [...document.querySelectorAll('[data-overlay-state] *')]
+        .filter((element) => element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.textContent));
+      expect(clipped).toEqual([]);
+    };
+    await expect(overlayWindow.locator('[data-overlay-meta]')).toContainText('Toplam');
+    await expectCardFits();
+
+    await showMapResultOverlay(page, {
+      id: 'map-result-smoke-tr',
+      farmType: 'No farm type',
+      durationSeconds: 245,
+      netProfit: 127,
+      profitState: 'positive',
+      lootItemCount: 3,
+      createdAt: new Date().toISOString()
+    }, {
+      durationMs: 1500
+    });
+    await expect(overlayWindow.locator('[data-overlay-kicker-label]')).toHaveText('Map Tamamlandi');
+    await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText('Farm tipi yok');
+    await expect(overlayWindow.locator('[data-overlay-secondary]')).toHaveText('3 item tarandi');
+    await expect(overlayWindow.locator('[data-overlay-meta]')).toHaveText('4dk 05sn');
+    await expect(overlayWindow.locator('[data-overlay-pin]')).toHaveText('Sabitle');
+    await expect(overlayWindow.locator('[data-overlay-dismiss]')).toHaveText('Kapat');
+    await expectCardFits();
+    await overlayWindow.locator('[data-overlay-dismiss]').click();
+
+    await page.evaluate(() => window.electronAPI.showStartMapPromptOverlay({
+      mapName: 'Cemetery Map',
+      farmTypeOptions: [{ id: 'ritual', label: 'Ritual' }, { id: 'expedition', label: 'Expedition' }]
+    }));
+    await expect(overlayWindow.locator('main[data-overlay-mode="start-map-prompt"]')).toBeVisible();
+    await expect(overlayWindow.locator('[data-overlay-kicker-label]')).toHaveText('Yeni Map');
+    await expect(overlayWindow.locator('[data-overlay-secondary]')).toContainText('Farm tipi sec');
+    await expect(overlayWindow.locator('[data-farm-type-id=""]')).toHaveText('Farm tipi yok');
+    await expect(overlayWindow.locator('[data-overlay-start-submit]')).toHaveText("Map'i Baslat");
+    await expect(overlayWindow.locator('[data-overlay-start-cancel]')).toHaveText('Iptal');
+    await expectCardFits();
+    await overlayWindow.locator('[data-overlay-start-cancel]').click();
   } catch (error) {
     testError = error;
   } finally {

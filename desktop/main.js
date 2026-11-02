@@ -3305,7 +3305,8 @@ function buildOverlayState({ character = overlayCharacterState, runtimeSession =
     session: getActiveSessionOverlayState(),
     startMapPrompt: currentSession ? null : overlayStartMapPromptState,
     characterPrompt: overlayCharacterPromptState,
-    now: Date.now()
+    now: Date.now(),
+    language: getLanguage()
   });
 }
 
