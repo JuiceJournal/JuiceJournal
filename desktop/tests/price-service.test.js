@@ -92,7 +92,7 @@ test('poe1 currency indexing derives stable divine values from the current Divin
     currencyDetails: [
       {
         name: 'Mirror of Kalandra',
-        icon: 'https://example.test/mirror.png',
+        icon: 'https://web.poecdn.com/mirror.png',
         tradeId: 'mirror'
       }
     ]
@@ -104,7 +104,7 @@ test('poe1 currency indexing derives stable divine values from the current Divin
 
   assert.equal(mirror.chaosValue, 357456);
   assert.equal(mirror.divineValue, 1127.265847);
-  assert.equal(mirror.icon, 'https://example.test/mirror.png');
+  assert.equal(mirror.icon, 'https://web.poecdn.com/mirror.png');
   assert.deepEqual(mirror.sparkline, [1, 2, 3]);
   assert.equal(divine.chaosValue, 317.1);
   assert.equal(divine.divineValue, 1);
@@ -449,4 +449,75 @@ test('getLeagues reads poe.ninja index state for each game', async () => {
     { name: 'Settlers', displayName: 'Settlers', active: false, hardcore: true }
   ]);
   assert.deepEqual(urls, ['https://poe.ninja/poe1/api/data/index-state']);
+});
+
+test('price service keeps art on the game CDN and drops the rest', () => {
+  const service = new PriceService();
+  service.setPoeVersion('poe2');
+  const exchange = (image) => {
+    const prices = new Map();
+    service._indexCurrencyData({
+      core: { primary: 'chaos', rates: {} },
+      items: [{ id: 'a', name: 'Icon Orb', image }],
+      lines: [{ id: 'a', primaryValue: 1 }]
+    }, 'Currency', prices);
+    return prices.get('icon orb')?.icon;
+  };
+
+  assert.equal(exchange('/gen/image/a.png'), 'https://web.poecdn.com/gen/image/a.png');
+  assert.equal(exchange(undefined), null);
+  assert.equal(exchange('.evil.example/x.png'), 'https://web.poecdn.com/.evil.example/x.png');
+  assert.equal(exchange('//evil.example/x.png'), null);
+  assert.equal(exchange('https://tracker.example/x.png'), null);
+
+  service.setPoeVersion('poe1');
+  const items = new Map();
+  service._indexItemData({
+    lines: [
+      { name: 'Cdn Item', chaosValue: 1, icon: 'https://web.poecdn.com/gen/image/b.png' },
+      { name: 'Tracker Item', chaosValue: 1, icon: 'https://tracker.example/x.png' }
+    ]
+  }, 'UniqueWeapon', items);
+  assert.equal(items.get('cdn item').icon, 'https://web.poecdn.com/gen/image/b.png');
+  assert.equal(items.get('tracker item').icon, null);
+
+  const currency = new Map();
+  service._indexCurrencyData({
+    lines: [{ currencyTypeName: 'Tracker Orb', chaosEquivalent: 1, icon: 'https://tracker.example/x.png' }]
+  }, 'Currency', currency);
+  assert.equal(currency.get('tracker orb').icon, null);
+});
+
+test('a price sync past its deadline stops reading, and the list does not count as complete', async (t) => {
+  const service = new PriceService();
+  service.setPoeVersion('poe1');
+  let now = 1000;
+  t.mock.method(Date, 'now', () => now);
+  const realSetTimeout = globalThis.setTimeout;
+  t.mock.method(globalThis, 'setTimeout', (callback) => realSetTimeout(callback, 0));
+  t.mock.method(console, 'error', () => {});
+
+  let requests = 0;
+  service.client.get = async (url) => {
+    if (url.endsWith('/data/index-state')) {
+      return { data: { economyLeagues: [{ name: 'Mirage', url: 'mirage' }], oldEconomyLeagues: [] } };
+    }
+    requests += 1;
+    now += 6 * 60 * 1000;
+    return { data: { lines: [] } };
+  };
+
+  await service.ensureSynced('Mirage', 'poe1', { full: true });
+  assert.equal(requests, 1);
+  assert.equal(service.league, 'Mirage');
+  assert.equal(service.fullySynced, false);
+
+  const stuckAfter = requests;
+  service.client.get = async () => {
+    requests += 1;
+    return { data: { lines: [] } };
+  };
+  await service.ensureSynced('Mirage', 'poe1', { full: true });
+  assert.ok(requests > stuckAfter);
+  assert.equal(service.fullySynced, true);
 });

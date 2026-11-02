@@ -118,6 +118,22 @@ test('desktop API client sends the persisted auth cookie on authenticated reques
   assert.equal(config.headers.Authorization, undefined);
 });
 
+test('desktop API client keeps the session cookie for its own origin only', () => {
+  const { axiosMock } = createAxiosMock();
+  const APIClient = loadApiClientWithAxiosMock(axiosMock);
+  const client = new APIClient('http://localhost:3001', 'juice_journal_auth=abc123', { online: true });
+
+  assert.equal(client.isNewOrigin('http://LOCALHOST:3001/'), false);
+  client.setBaseURL('http://LOCALHOST:3001/');
+  assert.equal(client.token, 'juice_journal_auth=abc123');
+
+  assert.equal(client.isNewOrigin('https://evil.example'), true);
+  assert.equal(client.token, 'juice_journal_auth=abc123');
+  client.setBaseURL('https://evil.example');
+  assert.equal(client.token, null);
+  assert.equal(client.baseURL, 'https://evil.example');
+});
+
 test('desktop API client exposes farming hub publish endpoints', async () => {
   const { axiosMock, calls } = createAxiosMock();
   const APIClient = loadApiClientWithAxiosMock(axiosMock);

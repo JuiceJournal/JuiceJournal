@@ -1205,6 +1205,26 @@ test('price types read as their localized tab label, never as the raw snake_case
   }
 });
 
+test('remote art loads from the game CDN and nowhere else', () => {
+  const { normalizeSafeImageSrc } = loadCurrencyHelpers({ poeVersion: 'poe1' });
+
+  assert.equal(normalizeSafeImageSrc('https://web.poecdn.com/gen/image/a.png'), 'https://web.poecdn.com/gen/image/a.png');
+  assert.equal(normalizeSafeImageSrc('//web.poecdn.com/gen/image/a.png'), 'https://web.poecdn.com/gen/image/a.png');
+  assert.equal(normalizeSafeImageSrc('assets/currency/poe1/fragment.png'), 'assets/currency/poe1/fragment.png');
+  for (const refused of [
+    'https://tracker.example/x.png',
+    'https://web.poecdn.com.evil.example/x.png',
+    'https://web.poecdn.com@evil.example/x.png',
+    'https://user@web.poecdn.com/x.png',
+    'https://web.poecdn.com:8443/x.png',
+    'http://web.poecdn.com/x.png',
+    'file://192.0.2.1/s/a.png',
+    '//192.0.2.1/s/a.png'
+  ]) {
+    assert.equal(normalizeSafeImageSrc(refused), '', refused);
+  }
+});
+
 test('a price row takes its own art, then its category art, then our chest icon', () => {
   const poe1 = loadCurrencyHelpers({ poeVersion: 'poe1' });
   const poe2 = loadCurrencyHelpers({ poeVersion: 'poe2' });

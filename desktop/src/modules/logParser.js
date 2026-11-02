@@ -13,7 +13,7 @@ const fsp = require('fs/promises');
 const path = require('path');
 const { EventEmitter } = require('events');
 const { StringDecoder } = require('string_decoder');
-const { createGameSessionState, applyGameSessionLine } = require('./gameSessionModel');
+const { createGameSessionState, applyGameSessionLine, readMessage } = require('./gameSessionModel');
 
 const GAME_SESSION_EVENT_NAMES = {
   session_entered: 'gameSessionEntered',
@@ -201,18 +201,24 @@ class LogParser extends EventEmitter {
   parseLine(line) {
     this.trackGameSession(line);
 
-    if (this.reconcilePendingInstanceExit(line)) {
+    // Chat can say anything, so map changes come only from the game's own lines, read after the client tag.
+    const message = readMessage(line)?.message;
+    if (!message) {
+      return;
+    }
+
+    if (this.reconcilePendingInstanceExit(message)) {
       return;
     }
 
     // Detect map entry.
     // Example: 2023/12/25 15:30:45 ***** MAP LOADING : Maps/Dunes_01.tbw
-    // Example: 2023/12/25 15:30:45 Generating level 16 area "MapDunes"
+    // Example: 2023/12/25 15:30:45 1 abc [DEBUG Client 1] Generating level 16 area "MapDunes"
     
     const mapEnterPatterns = [
       // Generating level X area "Map..."
       {
-        regex: /Generating level (\d+) area "([^"]+)"/i,
+        regex: /^(?:: )?Generating level (\d+) area "([^"]+)"/i,
         handler: (match) => {
           const areaId = match[2].trim();
           if (!/^Map/i.test(areaId)) {
@@ -236,7 +242,7 @@ class LogParser extends EventEmitter {
       },
       // Entering area Map...
       {
-        regex: /You have entered ([^\.]+)\./i,
+        regex: /^: You have entered ([^\.]+)\./i,
         handler: (match) => {
           const areaName = match[1].trim();
           const normalizedAreaName = normalizeAreaKey(areaName);
@@ -277,12 +283,12 @@ class LogParser extends EventEmitter {
     ];
 
     // Detect map exit.
-    // Example: 2023/12/25 15:45:12 ] You have entered Hideout.
-    // Example: 2023/12/25 15:45:12 ] Connecting to instance server...
+    // Example: 2023/12/25 15:45:12 1 abc [INFO Client 1] : You have entered Hideout.
+    // Example: 2023/12/25 15:45:12 1 abc [DEBUG Client 1] Connecting to instance server at 1.2.3.4:6112
     
     const mapExitPatterns = [
       {
-        regex: /Generating level \d+ area "([^"]+)"/i,
+        regex: /^(?:: )?Generating level \d+ area "([^"]+)"/i,
         handler: (match) => {
           const areaName = this.formatAreaName(match[1]);
           if (!isSafeAreaName(areaName)) {
@@ -299,7 +305,7 @@ class LogParser extends EventEmitter {
         }
       },
       {
-        regex: /You have entered ([^\.]+)\./i,
+        regex: /^: You have entered ([^\.]+)\./i,
         handler: (match) => {
           const areaName = match[1].trim();
           if (!isSafeAreaName(areaName)) {
@@ -316,7 +322,7 @@ class LogParser extends EventEmitter {
         }
       },
       {
-        regex: /Connecting to instance server/i,
+        regex: /^(?:: )?Connecting to instance server/i,
         handler: (match) => {
           if (this.poeVersion === 'poe2') {
             return null;
@@ -341,7 +347,7 @@ class LogParser extends EventEmitter {
 
     // Check for map entry.
     for (const pattern of mapEnterPatterns) {
-      const match = line.match(pattern.regex);
+      const match = message.match(pattern.regex);
       if (match) {
         const data = pattern.handler(match);
         if (data) {
@@ -353,7 +359,7 @@ class LogParser extends EventEmitter {
 
     // Check for map exit.
     for (const pattern of mapExitPatterns) {
-      const match = line.match(pattern.regex);
+      const match = message.match(pattern.regex);
       if (match) {
         const data = pattern.handler(match);
         if (data) {
@@ -406,14 +412,14 @@ class LogParser extends EventEmitter {
     }, this.instanceExitDelayMs);
   }
 
-  reconcilePendingInstanceExit(line) {
+  reconcilePendingInstanceExit(message) {
     if (!this.pendingInstanceExitData) {
       return false;
     }
 
-    const enteredMatch = line.match(/You have entered ([^\.]+)\./i);
+    const enteredMatch = message.match(/^: You have entered ([^\.]+)\./i);
     if (!enteredMatch) {
-      const generatedMatch = line.match(/Generating level \d+ area "([^"]+)"/i);
+      const generatedMatch = message.match(/^(?:: )?Generating level \d+ area "([^"]+)"/i);
       if (!generatedMatch) {
         return false;
       }
@@ -425,7 +431,7 @@ class LogParser extends EventEmitter {
       }
 
       if (/^Map/i.test(generatedMatch[1])) {
-        const nextIdentity = this.extractMapIdentity(line, generatedMatch[1]);
+        const nextIdentity = this.extractMapIdentity(message, generatedMatch[1]);
         if (this.isSameMapIdentity(nextIdentity)) {
           this.clearPendingInstanceExit();
           return true;

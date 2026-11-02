@@ -1956,7 +1956,10 @@ function normalizeSafeImageSrc(src) {
   try {
     const candidate = trimmed.startsWith('//') ? `https:${trimmed}` : trimmed;
     const parsed = new URL(candidate, window.location.href);
-    return parsed.protocol === 'https:' ? parsed.href : '';
+    // Remote art comes from GGG's CDN only, the same rule as the icon cache's.
+    return parsed.protocol === 'https:' && parsed.host === 'web.poecdn.com' && !parsed.username && !parsed.password
+      ? parsed.href
+      : '';
   } catch {
     return '';
   }
@@ -5133,7 +5136,7 @@ function renderSessionsSummary(sessions = []) {
     const peak = profit < 0 ? maxLoss : maxGain;
     const size = peak ? (magnitude(profit) / peak) * (below ? 100 - baseline : baseline) : 0;
     const title = `${session.mapName || window.t('misc.unknownMap')} ${formatAdaptiveProfitText(profit, poeVersion, { league, signed: true })}`;
-    return `<span class="sessions-summary-run${below ? ' is-below' : ''}" data-profit-tier="${tierFor(profit)}" title="${escapeHTML(title).replace(/"/g, '&quot;')}" style="--run-size: ${size.toFixed(1)}%"></span>`;
+    return `<span class="sessions-summary-run${below ? ' is-below' : ''}" data-profit-tier="${tierFor(profit)}" title="${escapeHTML(title)}" style="--run-size: ${size.toFixed(1)}%"></span>`;
   }).join('');
 
   summary.innerHTML = `
@@ -8141,7 +8144,8 @@ const _escapeDiv = document.createElement('div');
 function escapeHTML(str) {
   if (str == null) return '';
   _escapeDiv.textContent = String(str);
-  return _escapeDiv.innerHTML;
+  // innerHTML leaves quotes as they are, and callers also write this into quoted attributes.
+  return _escapeDiv.innerHTML.replace(/\u0022/g, '&quot;').replace(/\u0027/g, '&#39;');
 }
 
 function timeAgo(date) {

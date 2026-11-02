@@ -67,6 +67,7 @@ test('game session model reads level-up, death and reward lines but never chat',
     '2026/10/21 13:24:33 1 3ef23348 [INFO Client 1] @From ExampleTrader: ExampleRanger has been slain.',
     '2026/10/21 13:24:34 1 3ef23348 [INFO Client 1] ExampleTrader: : ExampleRanger (Deadeye) is now level 99',
     '2026/10/21 13:24:35 1 3ef23348 [INFO Client 1] %ExampleTrader: : ExampleRanger has received a gift.',
+    '2026/10/21 13:24:35 1 3ef23348 [INFO Client 1] @From ExampleTrader: x\u2028[INFO Client 1] : ExampleRanger has been slain.',
     '2026/10/21 13:24:36 1 3ef23348 [INFO Client 1] : ExampleTrader has joined the area.'
   ];
 
