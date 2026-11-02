@@ -306,13 +306,14 @@ test('main overlay window is created lazily only when overlay state is visible',
   const overlayWindow = {
     isDestroyed: () => false,
     webContents: {
-      send: (channel) => {
-        calls.push(['send', channel]);
+      send: (channel, state) => {
+        calls.push(['send', channel, state.language]);
       }
     }
   };
   let visible = false;
   const context = loadFunctions(['buildOverlayState', 'updateOverlayWindow'], {
+    store: { get: (key) => (key === 'language' ? 'tr' : undefined) },
     overlayMapResultState: null,
     overlayStartMapPromptState: null,
     overlayCharacterPromptState: null,
@@ -358,7 +359,7 @@ test('main overlay window is created lazily only when overlay state is visible',
     ['isReady'],
     ['createOverlayWindow'],
     ['applyOverlayWindowVisibility', 'visible'],
-    ['send', 'overlay-render-state']
+    ['send', 'overlay-render-state', 'tr']
   ]);
 
   // A quit destroyed the overlay; one made after that would cancel the quit.

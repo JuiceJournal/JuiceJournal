@@ -70,6 +70,7 @@ function loadOverlay() {
   vm.runInContext(fs.readFileSync(overlayJsPath, 'utf8'), context);
 
   return {
+    window,
     renderState: window.JuiceOverlay.renderState,
     card: elements['[data-overlay-state]'],
     primary: elements['[data-overlay-primary]'],
@@ -211,6 +212,19 @@ test('a loss keeps its colour on the card but shows the number in bright text', 
   const [meme, metaText] = overlay.meta.children;
   assert.equal(meme.src, 'assets/brand/reactions/bricked.svg');
   assert.equal(metaText, 'Bricked · 4m 10s');
+});
+
+test('the overlay takes its language from the state main pushes', () => {
+  const overlay = loadOverlay();
+  const applied = [];
+  overlay.window.applyTranslations = () => applied.push(overlay.window._appState.language);
+
+  overlay.renderState({ visibility: 'waiting' });
+  overlay.renderState({ visibility: 'waiting', language: 'tr' });
+  overlay.renderState({ visibility: 'visible', language: 'tr' });
+  overlay.renderState({ visibility: 'waiting', language: 'en' });
+
+  assert.deepEqual(applied, ['tr', 'en']);
 });
 
 test('a prompt counts down to closing on its own', () => {

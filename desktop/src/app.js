@@ -1347,7 +1347,6 @@ function renderCharacterSummaryCard() {
     }
     elements.characterBannerImage.hidden = !visual.bannerPath;
     elements.characterBannerImage.src = bannerSource;
-    elements.characterBannerImage.alt = isReady ? `${summary.name} banner` : 'Character banner';
   }
   if (elements.characterPortrait) {
     elements.characterPortrait.dataset.characterPortrait = visual.portraitKey || 'unknown';
@@ -1364,7 +1363,6 @@ function renderCharacterSummaryCard() {
     }
     elements.characterPortraitImage.hidden = !visual.portraitPath;
     elements.characterPortraitImage.src = portraitSource;
-    elements.characterPortraitImage.alt = isReady ? `${summary.name} portrait` : 'Character portrait';
   }
   if (elements.characterPortraitBadge) {
     elements.characterPortraitBadge.textContent = visual.badgeText;

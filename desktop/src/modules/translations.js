@@ -84,6 +84,7 @@ window.Translations = {
     'register.login': 'Giris Yap',
 
     // Dashboard
+    'overlay.characterAria': 'Karakter',
     'dashboard.characterSummary': 'Karakter Ozeti',
     'dashboard.playingAs': 'Oynanan karakter',
     'dashboard.characterConfirmed': 'Oyunda dogrulandi',
@@ -1026,6 +1027,7 @@ window.Translations = {
     'register.login': 'Sign In',
 
     // Dashboard
+    'overlay.characterAria': 'Character',
     'dashboard.characterSummary': 'Character Summary',
     'dashboard.playingAs': 'Playing as',
     'dashboard.characterConfirmed': 'Confirmed in game',
