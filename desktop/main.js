@@ -155,6 +155,9 @@ const MAIN_PROCESS_TRANSLATIONS = {
     promptTitle: 'Yeni Map Session',
     promptMessage: 'Map adsiz baslatilsin mi?',
     promptDetail: "Bilinmeyen Map olarak listelenir. Ad vermek icin map'i Dashboard'dan baslat.",
+    promptEndConfirm: 'Bitir ve baslat',
+    promptEndMessage: '{mapName} bitirilip yeni map baslatilsin mi?',
+    promptEndDetail: "Sonucunda yalnizca taradigin loot sayilir. Yeni map Bilinmeyen Map olarak listelenir. Ad vermek icin map'i Dashboard'dan baslat.",
     unknownMap: 'Bilinmeyen Map',
     auditLogin: 'Yerel kullanici girisi basarili',
     auditLogout: 'Kullanici cikis yapti',
@@ -219,6 +222,9 @@ const MAIN_PROCESS_TRANSLATIONS = {
     promptTitle: 'New Map Session',
     promptMessage: 'Start this map without a name?',
     promptDetail: 'It is listed as Unknown Map. To name a map, start it from the Dashboard.',
+    promptEndConfirm: 'End and start',
+    promptEndMessage: 'End {mapName} and start a new map?',
+    promptEndDetail: 'Its result counts only the loot you scanned. The new map is listed as Unknown Map. To name a map, start it from the Dashboard.',
     unknownMap: 'Unknown Map',
     auditLogin: 'Local user login succeeded',
     auditLogout: 'User logged out',
@@ -3593,17 +3599,17 @@ async function captureAndScan() {
  */
 async function startNewSession(input = {}) {
   try {
+    const { activeVersion: poeVersion, league } = resolveLeagueContext(input);
+    const farmTypeId = normalizeStoredFarmTypeId(input.farmTypeId || input.mapType || getActiveFarmTypeId());
+
+    // Resolve the map name. Cancelling here leaves a running map as it is.
+    const mapName = input.mapName || await promptMapName(currentSession);
+    if (!mapName) return;
+
     // End the current session first when one is active.
     if (currentSession) {
       await endCurrentSession();
     }
-
-    const { activeVersion: poeVersion, league } = resolveLeagueContext(input);
-    const farmTypeId = normalizeStoredFarmTypeId(input.farmTypeId || input.mapType || getActiveFarmTypeId());
-
-    // Resolve the map name.
-    const mapName = input.mapName || await promptMapName();
-    if (!mapName) return;
 
     // Session olustur
     const { journal, session } = localJournal.startSession(readJournal(), {
@@ -3806,8 +3812,9 @@ async function endCurrentSession(options = {}) {
     } else if (profit > 0 || completionPayload.profitChaos !== undefined || session.lootEntries?.length) {
       outcome = t('mapProfitBody', { value: profit > 0 ? `+${profit}` : String(profit) });
     } else {
-      // Nothing was scanned or read from the stash, so there is no profit to report.
+      // Nothing was scanned or read from the stash, so there is no profit to report. The window and the overlay read this too.
       outcome = t('mapNoLootBody');
+      session.noLoot = true;
     }
     let duration = '';
     if (durationSeconds) {
@@ -3836,16 +3843,21 @@ async function endCurrentSession(options = {}) {
 }
 
 /**
- * Asks before a map starts without a name. showMessageBox cannot take text, so it only confirms.
+ * Asks before a map starts without a name, and before that ends a running map. showMessageBox cannot take text, so it
+ * only confirms.
  */
-async function promptMapName() {
+async function promptMapName(runningSession = null) {
   const { response } = await dialog.showMessageBox(mainWindow, {
     type: 'question',
-    buttons: [t('promptStart'), t('promptCancel')],
-    defaultId: 0,
+    buttons: [runningSession ? t('promptEndConfirm') : t('promptStart'), t('promptCancel')],
+    defaultId: runningSession ? 1 : 0,
+    // Without this, Esc answers the first button unless the label reads "Cancel", which the Turkish one does not.
+    cancelId: 1,
     title: t('promptTitle'),
-    message: t('promptMessage'),
-    detail: t('promptDetail')
+    message: runningSession
+      ? t('promptEndMessage', { mapName: runningSession.mapName || t('unknownMap') })
+      : t('promptMessage'),
+    detail: runningSession ? t('promptEndDetail') : t('promptDetail')
   });
 
   if (response === 0) {

@@ -319,7 +319,7 @@ test('desktop Delete everything keys have their own ASCII Turkish strings', () =
 test('desktop notice keys have their own ASCII Turkish strings', () => {
   const translations = loadDesktopTranslations();
   const newKeys = [
-    'toast.dismiss', 'toast.mapProfit', 'toast.mapLoss', 'toast.mapUnpriced',
+    'toast.dismiss', 'toast.mapProfit', 'toast.mapLoss', 'toast.mapUnpriced', 'toast.mapNoLoot',
     'toast.tryAgain', 'toast.tryAgainShort', 'toast.restartHint',
     'toast.settingsLoadFailed', 'toast.settingsError', 'toast.settingsReset', 'toast.settingsResetFailed',
     'settings.savedState', 'settings.connectionFailed',
@@ -608,7 +608,8 @@ test('main process dialogs use keys that exist in en and tr', () => {
   for (const key of [
     'scanNoMapTitle', 'noActiveSession', 'scanFailedTitle', 'screenCaptureFailed', 'scanNothingTitle', 'scanNoItems',
     'lootScanFailed', 'sessionStartFailed', 'sessionEndFailed', 'notificationTryAgain', 'mapProfitBody', 'mapLossBody',
-    'mapDuration', 'mapDurationSeconds', 'mapNoLootBody', 'promptMessage', 'promptDetail', 'journalUnreadableBody'
+    'mapDuration', 'mapDurationSeconds', 'mapNoLootBody', 'promptMessage', 'promptDetail', 'promptEndConfirm',
+    'promptEndMessage', 'promptEndDetail', 'journalUnreadableBody'
   ]) {
     assert.ok(translations.en[key], `Missing en main process string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);

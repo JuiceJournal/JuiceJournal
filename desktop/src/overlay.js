@@ -230,7 +230,7 @@
     setText(el.kickerLabel, root.t('overlay.mapComplete'));
     setPrimary(
       farmTypeKey ? root.t(farmTypeKey) : (result.farmType || root.t('overlay.completedMap')),
-      createProfitValue(result.netProfit, rates, poeVersion),
+      result.noLoot ? null : createProfitValue(result.netProfit, rates, poeVersion),
       getFarmTypeId(result.farmType)
     );
     setSecondary(
@@ -249,7 +249,7 @@
   function getMapResultTier(state) {
     var model = root.profitTierModel;
     var result = (state.mapResult && state.mapResult.result) || {};
-    if (!model || typeof model.getProfitTier !== 'function' || result.profitUnavailable) return '';
+    if (!model || typeof model.getProfitTier !== 'function' || result.profitUnavailable || result.noLoot) return '';
     var rates = result.profitCurrencyRates || result.currencyRates || (state.mapResult && state.mapResult.profitCurrencyRates) || {};
     return model.getProfitTier(result.netProfit, rates);
   }

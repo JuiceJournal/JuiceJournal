@@ -2431,6 +2431,7 @@ function setupIPCListeners() {
     showMapResultToast(mapResult || {
       mapName: session?.mapName || '',
       netProfit: Number.isFinite(rawProfit) ? rawProfit : 0,
+      noLoot: session?.noLoot,
       poeVersion: session?.poeVersion,
       durationSeconds: getCompletedSessionDurationSeconds(session || {})
     });
@@ -3477,6 +3478,7 @@ function createCompletedSessionMapResult(session = {}) {
     topInputs: [],
     topOutputs: getScannedTopOutputs(lootEntries),
     lootItemCount: lootEntries.reduce((sum, loot) => sum + (parseInt(loot.quantity || 1, 10) || 1), 0),
+    noLoot: Boolean(session.noLoot),
     // The run's Divine and Mirror rates, as stash-diff results keep them: the overlay tiers the run by them.
     profitCurrencyRates: typeof getProfitCurrencyRates === 'function'
       ? getProfitCurrencyRates(poeVersion, league)
@@ -5607,7 +5609,9 @@ function showToast(title, message, type = 'info', options) {
 
 // The one routine notice: a finished map with its signed value in the profit tier, as on the overlay result card.
 function showMapResultToast(result = {}) {
-  const tier = getMapResultProfitTier(result);
+  // A map with no loot has no profit to report, rather than a profit of 0.
+  const hasValue = !result.profitUnavailable && !result.noLoot;
+  const tier = hasValue ? getMapResultProfitTier(result) : '';
   const shell = createToastShell('success', 'map');
   shell.toast.classList.add('toast--result');
   if (tier) {
@@ -5620,7 +5624,7 @@ function showMapResultToast(result = {}) {
   // A name too long for the plate ends in an ellipsis; the tooltip keeps all of it.
   shell.title.title = shell.title.textContent;
   head.append(shell.title);
-  if (!result.profitUnavailable) {
+  if (hasValue) {
     const value = document.createElement('span');
     value.className = 'toast-value';
     if (tier) {
@@ -5630,9 +5634,9 @@ function showMapResultToast(result = {}) {
     head.append(value);
   }
 
-  const label = result.profitUnavailable
-    ? window.t('toast.mapUnpriced')
-    : window.t(Number(result.netProfit) < 0 ? 'toast.mapLoss' : 'toast.mapProfit');
+  const label = hasValue
+    ? window.t(Number(result.netProfit) < 0 ? 'toast.mapLoss' : 'toast.mapProfit')
+    : window.t(result.noLoot ? 'toast.mapNoLoot' : 'toast.mapUnpriced');
   const seconds = Math.round(Number(result.durationSeconds) || 0);
   const meta = document.createElement('div');
   meta.className = 'toast-meta';
@@ -5640,16 +5644,16 @@ function showMapResultToast(result = {}) {
   messageElement.className = 'toast-message';
   messageElement.textContent = seconds > 0 ? `${label} · ${formatDuration(seconds)}` : label;
   meta.append(messageElement);
-  if (!result.profitUnavailable) {
+  if (hasValue) {
     // Extreme tiers get the flask mascot reaction, as on the Last Map Result card, on this row so the first row keeps
     // its room for the map name.
     meta.insertAdjacentHTML('beforeend', profitMemeHTML(tier));
   }
   shell.body.append(head, meta);
 
-  const amount = result.profitUnavailable
-    ? ''
-    : ` ${formatAdaptiveProfitText(result.netProfit || 0, result.poeVersion || state.settings.poeVersion || 'poe1', { signed: true })}`;
+  const amount = hasValue
+    ? ` ${formatAdaptiveProfitText(result.netProfit || 0, result.poeVersion || state.settings.poeVersion || 'poe1', { signed: true })}`
+    : '';
   return mountToast(shell, 'success', { announcement: `${shell.title.textContent}. ${label}${amount}` });
 }
 

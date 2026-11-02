@@ -563,6 +563,19 @@ test('a loss is a result in the loss tier, and a map without a name or a price s
   assert.deepEqual(unpriced.lines(), ['Tower. toast.mapUnpriced']);
 });
 
+test('a map with no loot says so, not a profit of 0', () => {
+  const { context, container, lines, profitCalls } = loadToasts();
+  context.showMapResultToast({ mapName: 'Tower', netProfit: 0, noLoot: true, durationSeconds: 61 });
+  const toast = container.children[0];
+
+  assert.equal(find(toast, 'toast-value'), null);
+  assert.equal(find(toast, 'toast-mark').getAttribute('data-profit-tier'), null);
+  assert.deepEqual(find(toast, 'toast-meta').adjacent, []);
+  assert.deepEqual(profitCalls, []);
+  assert.equal(find(toast, 'toast-message').textContent, 'toast.mapNoLoot · 1m 1s');
+  assert.deepEqual(lines(), ['Tower. toast.mapNoLoot']);
+});
+
 test('only fixed sprite markup, the value chip and the meme badge go into a toast as HTML', () => {
   const source = extractToastSource();
   const htmlWrites = [...source.matchAll(/(\w+)\.(?:innerHTML|outerHTML)\s*\+?=\s*([^;]+);/g)].map(([, target, value]) => `${target} = ${value}`);
