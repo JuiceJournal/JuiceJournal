@@ -3725,7 +3725,8 @@ async function finalizeActiveSessionOnShutdown() {
     endedAt,
     durationSeconds,
     totalLootChaos: completion?.totalLootChaos,
-    profitChaos: completion?.profitChaos
+    profitChaos: completion?.profitChaos,
+    shuttingDown: true
   }) || { ...session, status: 'completed', endedAt, durationSeconds };
 
   saveMapResultHistory(buildSessionShutdownMapResult(completedSession, {
@@ -3798,7 +3799,11 @@ async function endCurrentSession(options = {}) {
       const seconds = durationSeconds % 60;
       duration = ` · ${minutes ? t('mapDuration', { minutes, seconds }) : t('mapDurationSeconds', { seconds })}`;
     }
-    showNotification(session.mapName || t('unknownMap'), `${outcome}${duration}`);
+    // A process's first toast makes Electron check its Start Menu shortcut on a worker, and the process cannot exit until
+    // that check ends. The map is already saved, so a quit does not wait on this summary.
+    if (!options.shuttingDown) {
+      showNotification(session.mapName || t('unknownMap'), `${outcome}${duration}`);
+    }
 
     // Renderer'a bilgi gonder
     if (mainWindow) {

@@ -1379,7 +1379,7 @@ test('main shutdown finalizer closes a session without loot at zero when stash p
     },
     ...backend.context,
     appendAuditTrail() {},
-    showNotification() {},
+    showNotification: (title) => calls.push(['showNotification', title]),
     t: (key) => key,
     updateOverlayWindow() {},
     mainWindow: null,
@@ -1409,6 +1409,8 @@ test('main shutdown finalizer closes a session without loot at zero when stash p
 
   const result = await context.finalizeActiveSessionOnShutdown();
 
+  // The first toast of a process would hold its exit until Electron's shortcut check ends.
+  assert.deepEqual(calls.map(([name]) => name), ['saveMapResultHistory']);
   assert.equal(result.status, 'completed');
   assert.equal(result.profitChaos, 0);
   assert.equal(calls[0][0], 'saveMapResultHistory');

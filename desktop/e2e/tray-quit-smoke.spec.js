@@ -96,7 +96,7 @@ function createBootstrapScript(testInfo, { overlayEnabled }) {
   fs.writeFileSync(bootstrapPath, `
 const fs = require('fs');
 const path = require('path');
-const { app, Tray } = require('electron');
+const { app, Notification, Tray } = require('electron');
 require(${JSON.stringify(path.join(__dirname, 'network-stub.cjs'))});
 
 const appDataDir = process.env.JUICE_JOURNAL_E2E_APP_DATA_DIR;
@@ -129,6 +129,13 @@ const setContextMenu = Tray.prototype.setContextMenu;
 Tray.prototype.setContextMenu = function keepLatestTrayMenu(menu) {
   globalThis.__e2eTrayMenu = menu;
   return setContextMenu.call(this, menu);
+};
+
+// Written to a file, because the test reads it after the process has gone.
+const showToast = Notification.prototype.show;
+Notification.prototype.show = function recordToast() {
+  fs.appendFileSync(path.join(userDataDir, 'toasts.log'), this.title + '\\n');
+  return showToast.call(this);
 };
 `, 'utf8');
 
@@ -281,6 +288,8 @@ async function runTrayQuitScenario(testInfo, { overlayEnabled, hideToTray }) {
 
     expect(exit.exitCode).toBe(0);
     expect(readJournalSessions(isolatedProfile.userDataDir).map((session) => session.status)).toEqual(['completed']);
+    // The first toast of a run starts Electron's Start Menu shortcut check on a worker, and the exit waits for that worker.
+    expect(fs.existsSync(path.join(isolatedProfile.userDataDir, 'toasts.log'))).toBe(false);
   } finally {
     // Tear down only a process that is still alive: app.exit(0) skips app.quit, which is why this escaped the other specs.
     if (childProcess && childProcess.exitCode === null) {
