@@ -327,7 +327,7 @@ test('desktop notice keys have their own ASCII Turkish strings', () => {
     'settings.hotkeyErrorDuplicate', 'settings.hotkeyErrorInUse',
     'toast.mapStartFailed', 'toast.mapEndFailed', 'toast.poeConnectFailed', 'toast.poeDisconnectError',
     'login.failedTitle', 'login.failedInline', 'login.failedHint', 'toast.serverSignInFailed',
-    'toast.updateReadyTitle', 'toast.updateReadyBody', 'toast.updateRestart', 'toast.updateInstallFailed',
+    'toast.updateAvailableTitle', 'toast.updateAvailableBody', 'settings.openUpdatePage', 'toast.updatePageFailed',
     'toast.runOpenFailed', 'toast.sessionUpdateError', 'toast.farmPublished', 'toast.farmPublishFailed',
     'toast.diagnosticsSaved', 'toast.diagnosticsExportedSafe', 'toast.diagnosticsExportedSensitive', 'toast.diagnosticsFailed',
     'toast.logsClearFailedTitle', 'toast.bugReportChangedHint',

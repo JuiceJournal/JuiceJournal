@@ -271,7 +271,7 @@ const elements = {
   appUpdateStatus: document.getElementById('app-update-status'),
   appUpdateDetail: document.getElementById('app-update-detail'),
   checkUpdatesBtn: document.getElementById('check-updates-btn'),
-  installUpdateBtn: document.getElementById('install-update-btn'),
+  openUpdatePageBtn: document.getElementById('open-update-page-btn'),
   settingsPage: document.getElementById('settings-page'),
   settingsAboutTab: document.getElementById('settings-about'),
   settingsDataTab: document.getElementById('settings-data'),
@@ -374,11 +374,11 @@ function renderAppUpdateState() {
       elements.checkUpdatesBtn.disabled = true;
       setButtonLabel(elements.checkUpdatesBtn, window.t('settings.checkForUpdates'));
     }
-    if (elements.installUpdateBtn) {
-      elements.installUpdateBtn.hidden = true;
-      elements.installUpdateBtn.disabled = true;
-      setButtonLabel(elements.installUpdateBtn, window.t('settings.installUpdate'));
-      elements.installUpdateBtn.classList?.add('hidden');
+    if (elements.openUpdatePageBtn) {
+      elements.openUpdatePageBtn.hidden = true;
+      elements.openUpdatePageBtn.disabled = true;
+      setButtonLabel(elements.openUpdatePageBtn, window.t('settings.openUpdatePage'));
+      elements.openUpdatePageBtn.classList?.add('hidden');
     }
     return;
   }
@@ -389,22 +389,6 @@ function renderAppUpdateState() {
     }
     if (elements.appUpdateDetail) {
       elements.appUpdateDetail.textContent = update.error;
-    }
-  } else if (update.downloaded) {
-    if (elements.appUpdateStatus) {
-      elements.appUpdateStatus.textContent = window.t('settings.updateReady');
-    }
-    if (elements.appUpdateDetail) {
-      elements.appUpdateDetail.textContent = update.nextVersion || '';
-    }
-  } else if (update.downloading) {
-    if (elements.appUpdateStatus) {
-      elements.appUpdateStatus.textContent = window.t('settings.updateDownloading', {
-        percent: update.progressPercent || 0
-      });
-    }
-    if (elements.appUpdateDetail) {
-      elements.appUpdateDetail.textContent = update.nextVersion || '';
     }
   } else if (update.checking) {
     if (elements.appUpdateStatus) {
@@ -432,17 +416,28 @@ function renderAppUpdateState() {
   }
 
   if (elements.checkUpdatesBtn) {
-    elements.checkUpdatesBtn.disabled = Boolean(update.checking || update.downloading);
+    elements.checkUpdatesBtn.disabled = Boolean(update.checking);
     setButtonLabel(elements.checkUpdatesBtn, update.checking
       ? window.t('settings.checkingForUpdates')
       : window.t('settings.checkForUpdates'));
   }
 
-  if (elements.installUpdateBtn) {
-    elements.installUpdateBtn.hidden = !update.downloaded;
-    elements.installUpdateBtn.disabled = !update.downloaded;
-    setButtonLabel(elements.installUpdateBtn, window.t('settings.installUpdate'));
-    elements.installUpdateBtn.classList?.toggle('hidden', !update.downloaded);
+  if (elements.openUpdatePageBtn) {
+    elements.openUpdatePageBtn.hidden = !update.available;
+    elements.openUpdatePageBtn.disabled = !update.available;
+    setButtonLabel(elements.openUpdatePageBtn, window.t('settings.openUpdatePage'));
+    elements.openUpdatePageBtn.classList?.toggle('hidden', !update.available);
+  }
+}
+
+function applyAppUpdateState(data) {
+  const wasAvailable = Boolean(state.appUpdate?.available);
+  state.appUpdate = data || null;
+  renderAppUpdateState();
+  if (!wasAvailable && data?.available) {
+    showToast(window.t('toast.updateAvailableTitle'), window.t('toast.updateAvailableBody', { version: data.nextVersion || '?' }), 'info', {
+      action: { label: window.t('settings.openUpdatePage'), onSelect: handleOpenAppUpdatePage }
+    });
   }
 }
 
@@ -1524,8 +1519,8 @@ async function init() {
   updateActiveLeagueFieldContext();
   applyDashboardCapabilities();
   if (window.electronAPI?.getAppUpdateState) {
-    state.appUpdate = await window.electronAPI.getAppUpdateState();
-    renderAppUpdateState();
+    // The launch check can answer before the listener below exists.
+    applyAppUpdateState(await window.electronAPI.getAppUpdateState());
   }
 
   // Event listener'lari kur
@@ -2338,8 +2333,8 @@ function setupEventListeners() {
   if (elements.checkUpdatesBtn) {
     elements.checkUpdatesBtn.addEventListener('click', handleCheckForAppUpdate);
   }
-  if (elements.installUpdateBtn) {
-    elements.installUpdateBtn.addEventListener('click', handleInstallAppUpdate);
+  if (elements.openUpdatePageBtn) {
+    elements.openUpdatePageBtn.addEventListener('click', handleOpenAppUpdatePage);
   }
   // Report a bug: the About tab and the login screen share these handlers.
   Object.values(bugReportViews).forEach((view) => {
@@ -2461,16 +2456,7 @@ function setupIPCListeners() {
   }
 
   if (window.electronAPI.onAppUpdateStateChanged) {
-    window.electronAPI.onAppUpdateStateChanged((data) => {
-      const wasDownloaded = Boolean(state.appUpdate?.downloaded);
-      state.appUpdate = data || null;
-      renderAppUpdateState();
-      if (!wasDownloaded && data?.downloaded) {
-        showToast(window.t('toast.updateReadyTitle'), window.t('toast.updateReadyBody'), 'success', {
-          action: { label: window.t('toast.updateRestart'), onSelect: handleInstallAppUpdate }
-        });
-      }
-    });
+    window.electronAPI.onAppUpdateStateChanged(applyAppUpdateState);
   }
 
   // Game detection
@@ -2986,6 +2972,9 @@ function applyLocalizedChrome() {
 
   renderUserIdentity();
   renderPoeLinkStatus();
+  if (typeof renderAppUpdateState === 'function') {
+    renderAppUpdateState();
+  }
   // The active map card is written by JS (its badge too), so it follows the new language here.
   if (typeof updateActiveSessionUI === 'function') {
     updateActiveSessionUI();
@@ -5372,10 +5361,12 @@ async function handleTestConnection() {
     elements.connectionDot.classList.add('connected');
     elements.connectionText.dataset.i18n = 'settings.connected';
     elements.connectionText.textContent = window.t('settings.connected');
-  } catch {
+  } catch (error) {
+    // Main refused the address without trying it, so saying the connection failed would point at the network.
+    const messageKey = String(error?.message).includes('Invalid API URL') ? 'errors.invalidApiUrl' : 'settings.connectionFailed';
     elements.connectionDot.classList.remove('connected');
-    elements.connectionText.dataset.i18n = 'settings.connectionFailed';
-    elements.connectionText.textContent = window.t('settings.connectionFailed');
+    elements.connectionText.dataset.i18n = messageKey;
+    elements.connectionText.textContent = window.t(messageKey);
   } finally {
     setButtonBusy(btn, false);
     renderOnlineSettings();
@@ -6155,11 +6146,11 @@ async function completePoe1SessionWithStashProfit() {
   }
 }
 
-async function handleInstallAppUpdate() {
+async function handleOpenAppUpdatePage() {
   try {
-    await window.electronAPI.installAppUpdate();
+    await window.electronAPI.openAppUpdatePage();
   } catch (error) {
-    showToast(window.t('toast.updateInstallFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
+    showToast(window.t('toast.updatePageFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   }
 }
 
