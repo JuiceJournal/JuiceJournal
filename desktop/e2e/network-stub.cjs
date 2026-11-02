@@ -3,6 +3,7 @@
 // JUICE_JOURNAL_E2E_POE_ACCOUNT holds the account: { sub, username, characters: { poe1: [], poe2: [] } }.
 // JUICE_JOURNAL_E2E_POE_SCOPE overrides the granted scopes; by default only what the built-in sign-in asks for.
 // JUICE_JOURNAL_E2E_PRICES holds poe.ninja chaos values by item name; every league is "Standard".
+// JUICE_JOURNAL_E2E_POE_NINJA_OFFLINE=1 makes every poe.ninja request fail, as with no network.
 // Other URLs (the bug report issue page) are recorded in globalThis.__e2eExternalUrls and never opened.
 // shell.openPath records the path in globalThis.__e2eOpenedPaths and opens nothing.
 const http = require('http');
@@ -13,6 +14,7 @@ const axios = require(require.resolve('axios', { paths: [path.join(__dirname, '.
 const account = JSON.parse(process.env.JUICE_JOURNAL_E2E_POE_ACCOUNT || '{}');
 const grantedScope = process.env.JUICE_JOURNAL_E2E_POE_SCOPE || 'account:characters';
 const prices = JSON.parse(process.env.JUICE_JOURNAL_E2E_PRICES || '{}');
+const poeNinjaOffline = process.env.JUICE_JOURNAL_E2E_POE_NINJA_OFFLINE === '1';
 
 // The "browser" approves sign-in at once and calls the app's loopback redirect.
 shell.openExternal = async (externalUrl) => {
@@ -68,11 +70,15 @@ const createClient = axios.create.bind(axios);
 axios.create = (config = {}) => {
   const client = createClient(config);
   const get = client.get.bind(client);
-  client.get = async (url, options = {}) => (
-    String(url).startsWith('https://poe.ninja/')
-      ? { data: poeNinjaResponse(url, options.params), headers: {} }
-      : get(url, options)
-  );
+  client.get = async (url, options = {}) => {
+    if (!String(url).startsWith('https://poe.ninja/')) {
+      return get(url, options);
+    }
+    if (poeNinjaOffline) {
+      throw new Error('poe.ninja cannot be reached in this spec');
+    }
+    return { data: poeNinjaResponse(url, options.params), headers: {} };
+  };
 
   if (config.baseURL !== 'https://api.pathofexile.com') {
     return client;

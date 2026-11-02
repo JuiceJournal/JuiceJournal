@@ -195,6 +195,7 @@ function loadCurrencyPricesRenderer(currencyState = {}) {
   const emptyRows = [];
   const requests = [];
   const answers = [];
+  const lastKnownAnswers = [];
   const timers = new Map();
   let nextTimer = 0;
   const context = vm.createContext({
@@ -205,7 +206,8 @@ function loadCurrencyPricesRenderer(currencyState = {}) {
         getCurrencyPrices: (params) => {
           requests.push({ ...params });
           return new Promise((resolve, reject) => answers.push({ resolve, reject }));
-        }
+        },
+        getLastKnownCurrencyPrices: (params) => new Promise((resolve) => lastKnownAnswers.push({ params: { ...params }, resolve }))
       }
     },
     setTimeout: (callback, delay) => {
@@ -216,6 +218,7 @@ function loadCurrencyPricesRenderer(currencyState = {}) {
     currencyState: {
       poeVersion: 'poe1', league: 'Mirage', type: '', search: '', prices: [], pricesRequest: 0, listedKey: null, rates: {},
       total: 0, typeCounts: null, syncedTypes: [], updatedAt: null, loadError: null, syncing: false,
+      lastKnown: false, lastKnownTurn: 0, renderedList: '', rowWindow: null,
       ...currencyState
     },
     renderCurrencyTable: () => rendered.push(context.currencyState.prices.map((price) => price.league)),
@@ -223,7 +226,10 @@ function loadCurrencyPricesRenderer(currencyState = {}) {
     updateCurrencyTypeCounts() {},
     getUserFacingErrorMessage: (error, key) => key
   });
-  loadAppFunctions(context, ['currencyLoadingRowsHTML', 'loadCurrencyPrices', 'renderCurrencyStatus', 'formatSyncedAgo']);
+  loadAppFunctions(context, [
+    'currencyLoadingRowsHTML', 'markCurrencyRowsReplaced', 'showCurrencyLoadingRows', 'getCurrencyListSignature',
+    'applyCurrencyPriceAnswer', 'loadCurrencyPrices', 'renderCurrencyStatus', 'formatSyncedAgo'
+  ]);
   return {
     context,
     tbody: elements['currency-table-body'],
@@ -232,6 +238,7 @@ function loadCurrencyPricesRenderer(currencyState = {}) {
     rendered,
     emptyRows,
     requests,
+    lastKnownAnswers,
     timers,
     runTimers: () => {
       for (const [id, timer] of [...timers]) {
@@ -489,6 +496,273 @@ test('a cache-only currency reload does not drop a league load that waits for a 
   assert.equal(context.currencyState.listedKey, 'poe1:Mirage');
 });
 
+const KEPT_LIST = {
+  prices: [{ itemName: 'Divine Orb', league: 'Mirage' }],
+  total: 1,
+  typeCounts: { currency: 1 },
+  league: 'Mirage',
+  updatedAt: '2026-10-20T10:00:00.000Z',
+  rates: { divineChaos: 140 }
+};
+const flushAnswers = () => new Promise((resolve) => setImmediate(resolve));
+
+test('a cold Currency page lists the kept prices with their age while the sync runs, then the fresh ones', async () => {
+  const { context, status, rendered, lastKnownAnswers, answer } = loadCurrencyPricesRenderer();
+
+  const load = context.loadCurrencyPrices();
+  assert.deepEqual(lastKnownAnswers.map((entry) => entry.params), [{ poeVersion: 'poe1', limit: '500', league: 'Mirage' }]);
+  lastKnownAnswers[0].resolve(KEPT_LIST);
+  await flushAnswers();
+
+  assert.deepEqual(rendered, [['Mirage']]);
+  assert.equal(context.currencyState.lastKnown, true);
+  assert.equal(context.currencyState.updatedAt, KEPT_LIST.updatedAt);
+  assert.equal(context.currencyState.rates.divineChaos, 140);
+  // The line says how old the list is and that a fresher one is coming.
+  assert.match(status.textContent, /currency\.syncedAgo.*currency\.syncing$/);
+
+  answer(0, {
+    prices: [{ itemName: 'Divine Orb', league: 'Fresh' }],
+    total: 1,
+    league: 'Mirage',
+    updatedAt: '2026-10-21T10:00:00.000Z',
+    rates: { divineChaos: 150 }
+  });
+  await load;
+
+  assert.deepEqual(rendered, [['Mirage'], ['Fresh']]);
+  assert.equal(context.currencyState.lastKnown, false);
+  assert.equal(context.currencyState.rates.divineChaos, 150);
+  assert.doesNotMatch(status.textContent, /currency\.syncing/);
+});
+
+test('a kept list that main answers because poe.ninja gave nothing reads as old, with no sync coming', async () => {
+  const { context, status, rendered, lastKnownAnswers, answer } = loadCurrencyPricesRenderer();
+
+  const failed = context.loadCurrencyPrices();
+  lastKnownAnswers[0].resolve(KEPT_LIST);
+  await flushAnswers();
+  answer(0, { ...KEPT_LIST, lastKnown: true });
+  await failed;
+  assert.equal(context.currencyState.lastKnown, false);
+  assert.equal(context.currencyState.unreachable, true);
+  assert.match(status.textContent, /currency\.unreachable/);
+  assert.doesNotMatch(status.textContent, /currency\.syncing|currency\.syncedAgo/);
+  assert.equal(rendered.length, 2);
+
+  // The next try reads as one while it runs, and a real answer ends it.
+  const again = context.loadCurrencyPrices();
+  lastKnownAnswers[1].resolve(KEPT_LIST);
+  await flushAnswers();
+  assert.equal(context.currencyState.unreachable, false);
+  assert.match(status.textContent, /currency\.syncing/);
+  answer(1, { ...KEPT_LIST, updatedAt: '2026-10-21T10:00:00.000Z' });
+  await again;
+  assert.equal(context.currencyState.unreachable, false);
+  assert.match(status.textContent, /currency\.syncedAgo/);
+  assert.doesNotMatch(status.textContent, /currency\.unreachable/);
+});
+
+test('with no league yet the page asks main for nothing, and the pending list then uses the current type and search', async () => {
+  const { context, requests, lastKnownAnswers, answer } = loadCurrencyPricesRenderer({ league: '', pricesRequest: 3 });
+
+  await context.loadCurrencyPrices();
+  assert.deepEqual(requests, []);
+  assert.deepEqual(lastKnownAnswers, []);
+  assert.equal(context.currencyState.pricesRequest, 3);
+
+  // What a rail click and a search leave behind for the game switch's own request.
+  Object.assign(context.currencyState, { league: 'Mirage', type: 'fragment', search: 'orb' });
+  const load = context.loadCurrencyPrices();
+  assert.deepEqual(requests, [{ poeVersion: 'poe1', limit: '500', league: 'Mirage', type: 'fragment', search: 'orb' }]);
+  answer(0, { prices: [], total: 0, league: 'Mirage', updatedAt: null });
+  await load;
+});
+
+test('a kept list never replaces a fresher answer or a later request, and main having none changes nothing', async () => {
+  const late = loadCurrencyPricesRenderer();
+  const load = late.context.loadCurrencyPrices();
+  late.answer(0, { prices: [{ itemName: 'Divine Orb', league: 'Fresh' }], total: 1, league: 'Mirage', updatedAt: '2026-10-21T10:00:00.000Z' });
+  await load;
+  late.lastKnownAnswers[0].resolve(KEPT_LIST);
+  await flushAnswers();
+  assert.deepEqual(late.rendered, [['Fresh']]);
+  assert.equal(late.context.currencyState.lastKnown, false);
+
+  const replaced = loadCurrencyPricesRenderer();
+  replaced.context.loadCurrencyPrices();
+  replaced.context.currencyState.league = 'Standard';
+  replaced.context.loadCurrencyPrices();
+  replaced.lastKnownAnswers[0].resolve(KEPT_LIST);
+  await flushAnswers();
+  assert.deepEqual(replaced.rendered, []);
+
+  const none = loadCurrencyPricesRenderer();
+  none.context.loadCurrencyPrices();
+  none.lastKnownAnswers[0].resolve(null);
+  await flushAnswers();
+  assert.deepEqual(none.rendered, []);
+  assert.equal(none.context.currencyState.lastKnown, false);
+  assert.match(none.tbody.innerHTML, /currency\.waitingForSync/);
+});
+
+test('a kept list ends the wait of kept rows, and a cache-only reload asks for none', async () => {
+  const { context, timers, lastKnownAnswers, rendered, answer } = loadCurrencyPricesRenderer({ listedKey: 'poe1:Mirage' });
+  context.loadCurrencyPrices();
+  assert.equal(timers.size, 1);
+  lastKnownAnswers[0].resolve(KEPT_LIST);
+  await flushAnswers();
+  assert.equal(timers.size, 0);
+  assert.deepEqual(rendered, [['Mirage']]);
+
+  const reload = context.loadCurrencyPrices({ cacheOnly: true });
+  assert.equal(lastKnownAnswers.length, 1);
+  answer(1, { prices: null });
+  await reload;
+  assert.equal(context.currencyState.lastKnown, true);
+});
+
+test('the same list again keeps the drawn rows; any change to it draws them anew', async () => {
+  const answerOf = (updatedAt) => ({ prices: [{ itemName: 'Divine Orb', league: 'Mirage' }], total: 1, league: 'Mirage', updatedAt });
+  const { context, rendered, answer } = loadCurrencyPricesRenderer();
+  // What renderCurrencyTable records once it has drawn a list.
+  context.renderCurrencyTable = () => {
+    rendered.push('drawn');
+    context.currencyState.renderedList = context.getCurrencyListSignature();
+  };
+  vm.runInContext('this.getCurrencyListSignature = getCurrencyListSignature;', context);
+  Object.assign(context.currencyState, { type: '', search: '', sortField: 'chaosValue', sortDir: 'desc' });
+  const load = async (index, json) => {
+    const pending = context.loadCurrencyPrices();
+    answer(index, json);
+    await pending;
+  };
+
+  await load(0, answerOf('2026-10-21T10:00:00.000Z'));
+  assert.deepEqual(rendered, ['drawn']);
+  await load(1, answerOf('2026-10-21T10:00:00.000Z'));
+  assert.deepEqual(rendered, ['drawn']);
+  // A later sync of the same league.
+  await load(2, answerOf('2026-10-21T10:05:00.000Z'));
+  assert.deepEqual(rendered, ['drawn', 'drawn']);
+  // Another filter.
+  context.currencyState.search = 'orb';
+  await load(3, answerOf('2026-10-21T10:05:00.000Z'));
+  assert.equal(rendered.length, 3);
+  // Still rows replaced the drawn ones, so the same list must draw again.
+  context.showCurrencyLoadingRows();
+  await load(4, answerOf('2026-10-21T10:05:00.000Z'));
+  assert.equal(rendered.length, 4);
+  // The language changed while the page was hidden, so the drawn rows still read in the old one.
+  context.window._appState = { language: 'tr' };
+  await load(5, answerOf('2026-10-21T10:05:00.000Z'));
+  assert.equal(rendered.length, 5);
+});
+
+// switchCurrencyGame with a league list main answers when the test says so.
+function loadCurrencyGameSwitch(currencyState = {}) {
+  const calls = [];
+  const leagues = [];
+  const elements = {
+    'currency-table-body': { innerHTML: '<tr><td>Divine Orb</td></tr>' },
+    'currency-footer': { textContent: '1 items' },
+    'currency-league': { innerHTML: '', value: '' }
+  };
+  const context = vm.createContext({
+    document: { getElementById: (id) => elements[id] || null },
+    window: {
+      t: fakeT,
+      electronAPI: { getCurrencyLeagues: (game) => new Promise((resolve) => leagues.push({ game, resolve })) }
+    },
+    currencyState: {
+      poeVersion: 'poe1', league: 'Mirage', type: 'fragment', typeCounts: { fragment: 1 }, pricesRequest: 4, lastKnown: true,
+      rowWindow: null, renderedList: 'x', ...currencyState
+    },
+    FALLBACK_POE1_LEAGUES: ['Standard'],
+    FALLBACK_POE2_LEAGUES: ['Standard'],
+    getResolvedActiveLeague: () => null,
+    escapeHTML: (text) => text,
+    updateTypeFilterDropdown: () => calls.push('rail'),
+    loadCurrencyPrices: async () => calls.push(['prices', context.currencyState.poeVersion, context.currencyState.league])
+  });
+  loadAppFunctions(context, ['currencyLoadingRowsHTML', 'markCurrencyRowsReplaced', 'showCurrencyLoadingRows', 'loadCurrencyLeagues', 'switchCurrencyGame']);
+  return { context, calls, leagues, tbody: elements['currency-table-body'], footer: elements['currency-footer'] };
+}
+
+test('a game switch asks for prices only once the league is known, so the table lists the league the page names', async () => {
+  const { context, calls, leagues, tbody, footer } = loadCurrencyGameSwitch();
+
+  const switching = context.switchCurrencyGame('poe2');
+  // Feedback at once, and an answer for the game left behind no longer counts.
+  assert.match(tbody.innerHTML, /currency\.waitingForSync/);
+  assert.equal(footer.textContent, '');
+  assert.equal(context.currencyState.pricesRequest, 5);
+  assert.equal(context.currencyState.typeCounts, null);
+  assert.equal(context.currencyState.lastKnown, false);
+  assert.deepEqual(calls, ['rail']);
+
+  leagues[0].resolve({ activeLeagues: [{ name: 'Fate of the Vaal' }] });
+  await switching;
+  assert.deepEqual(calls, ['rail', ['prices', 'poe2', 'Fate of the Vaal']]);
+});
+
+test('without poe.ninja the page opens on the league of the newest kept list, and without one on its usual choice', async () => {
+  const kept = loadCurrencyGameSwitch();
+  const toKept = kept.context.switchCurrencyGame('poe2');
+  kept.leagues[0].resolve({ activeLeagues: [], lastKnownLeague: 'Rotated League' });
+  await toKept;
+  assert.deepEqual(kept.calls, ['rail', ['prices', 'poe2', 'Rotated League']]);
+  assert.match(kept.context.document.getElementById('currency-league').innerHTML, /Rotated League/);
+
+  const none = loadCurrencyGameSwitch();
+  const toNone = none.context.switchCurrencyGame('poe2');
+  none.leagues[0].resolve({ activeLeagues: [] });
+  await toNone;
+  assert.deepEqual(none.calls, ['rail', ['prices', 'poe2', 'Standard']]);
+});
+
+test('a league list that answers after another game switch changes nothing and lists no prices', async () => {
+  const { context, calls, leagues } = loadCurrencyGameSwitch();
+
+  const toPoe2 = context.switchCurrencyGame('poe2');
+  const backToPoe1 = context.switchCurrencyGame('poe1');
+  leagues[1].resolve({ activeLeagues: [{ name: 'Mirage' }] });
+  await backToPoe1;
+  leagues[0].resolve({ activeLeagues: [{ name: 'Fate of the Vaal' }] });
+  await toPoe2;
+
+  assert.equal(context.currencyState.league, 'Mirage');
+  assert.deepEqual(calls.filter((call) => call !== 'rail'), [['prices', 'poe1', 'Mirage']]);
+});
+
+test('a long list holds the rows near the screen and spacers for the rest; a short one holds every row', () => {
+  const prices = Array.from({ length: 500 }, (_, index) => ({
+    itemName: `Item ${index}`, itemType: 'currency', chaosValue: 500 - index, divineValue: 1, change: 0
+  }));
+  const { context, tbody } = loadCurrencyTableRenderer({ currencyState: { prices } });
+  context.renderCurrencyTable();
+
+  const { rowWindow } = context.currencyState;
+  const rows = tbody.children.filter((child) => child.className === 'currency-row');
+  assert.ok(rows.length > 20 && rows.length < 120, `${rows.length} rows`);
+  assert.equal(tbody.children[0].className, 'currency-row-spacer');
+  assert.equal(tbody.children[tbody.children.length - 1].className, 'currency-row-spacer');
+  assert.equal(tbody.children[0].getAttribute('aria-hidden'), 'true');
+  // The spacers stand for every other row, so the page is as tall as with all 500.
+  assert.equal(tbody.children[0].children[0].style.height, '0px');
+  assert.equal(tbody.children[tbody.children.length - 1].children[0].style.height, `${(500 - rowWindow.end) * 37}px`);
+  assert.equal(descendantsWithClass(rows[0], 'currency-item-name')[0].textContent, 'Item 0');
+  assert.equal(rows[0].getAttribute('aria-rowindex'), '2');
+  assert.deepEqual(rows.map((row) => row.tabIndex).filter((tabIndex) => tabIndex === 0), [0]);
+
+  // Every row of a short list exists, with no spacer and no window, as before.
+  const short = loadCurrencyTableRenderer({ currencyState: { prices: prices.slice(0, 120) } });
+  short.context.renderCurrencyTable();
+  assert.equal(short.context.currencyState.rowWindow, null);
+  assert.equal(short.tbody.children.length, 120);
+  assert.equal(short.tbody.children[0].getAttribute('aria-rowindex'), null);
+});
+
 test('currency table has four fixed columns, so widths never jump between still, empty and listed rows', () => {
   const table = indexHtml.match(/<table class="currency-table">[\s\S]*?<\/table>/)[0];
   assert.match(
@@ -627,7 +901,12 @@ function createFakeDocument() {
       dispatch: (type, event = {}) => (handlers[type] || []).forEach((handler) => handler({ type, ...event })),
       click: () => element.dispatch('click'),
       focus: () => { document.activeElement = element; },
-      querySelector: (selector) => descendantsWithClass(element, selector.slice(1))[0] || null
+      querySelector: (selector) => descendantsWithClass(element, selector.slice(1))[0] || null,
+      getBoundingClientRect: () => ({ top: 0, height: 37 }),
+      getClientRects: () => [{}],
+      get firstChild() { return element.children[0]; },
+      after() {},
+      before() {}
     };
     return element;
   };
@@ -669,7 +948,9 @@ function loadCurrencyTableRenderer({ currencyState = {}, canSync = true, syncCur
     document,
     window: {
       t: (key) => key,
+      innerHeight: 800,
       profitTierModel: require('../src/modules/profitTierModel'),
+      currencyRowWindowModel: require('../src/modules/currencyRowWindowModel'),
       electronAPI: {
         syncCurrencyPrices: (options) => {
           syncCalls.push({ ...options });
@@ -680,6 +961,7 @@ function loadCurrencyTableRenderer({ currencyState = {}, canSync = true, syncCur
     currencyState: {
       poeVersion: 'poe1', league: 'Mirage', type: '', search: '', sortField: 'chaosValue', sortDir: 'desc',
       prices: [], rates: {}, syncedTypes: [], loadError: null, expandedKey: null, syncing: false,
+      renderedList: '', rowWindow: null, sorted: [], rowHeight: 37, detailHeight: 0, listedKey: 'poe1:Mirage',
       ...currencyState
     },
     canCurrentUserSyncPrices: () => canSync,
@@ -723,7 +1005,9 @@ function loadCurrencyTableRenderer({ currencyState = {}, canSync = true, syncCur
   });
   loadAppFunctions(context, [
     'getProfitTierFor', 'applyProfitTier', 'setButtonBusy', 'selectCurrencyEmptyState', 'renderCurrencyEmptyRow',
-    'renderCurrencyTable', 'handleCurrencySync', 'loadCurrencyPage'
+    'markCurrencyRowsReplaced', 'getCurrencyListSignature', 'isCurrencyRowExpanded', 'appendCurrencyRow',
+    'createCurrencySpacerRow', 'getCurrencyRowLayout', 'selectCurrencyRowWindow', 'drawCurrencyRowWindow',
+    'keepCurrencyTabStop', 'syncCurrencyRowWindow', 'renderCurrencyTable', 'handleCurrencySync', 'loadCurrencyPage'
   ]);
   return { context, document, tbody, header, syncCalls, searchClears };
 }
@@ -935,6 +1219,18 @@ test('the header Sync and the table Sync now start one sync between them', async
     assert.equal(button.getAttribute('aria-busy'), null);
     assert.equal(button.querySelector('.btn-label').textContent, idleLabel);
   }
+});
+
+test('a Sync that read nothing says it failed, though main answers without an error and the table keeps a kept list', async () => {
+  const run = async (answer) => {
+    const harness = loadCurrencyTableRenderer({ syncCurrencyPrices: async () => answer });
+    const toasts = [];
+    harness.context.showToast = (title, message, type) => toasts.push([title, message, type]);
+    await harness.context.handleCurrencySync();
+    return toasts;
+  };
+  assert.deepEqual(await run({ itemCount: 0 }), [['currency.syncFailed', 'toast.tryAgain', 'error']]);
+  assert.deepEqual(await run({ itemCount: 12 }), []);
 });
 
 test('coming back to the Currency page while a sync runs keeps the header Sync busy', async () => {

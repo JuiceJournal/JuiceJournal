@@ -451,6 +451,133 @@ test('getLeagues reads poe.ninja index state for each game', async () => {
   assert.deepEqual(urls, ['https://poe.ninja/poe1/api/data/index-state']);
 });
 
+// A quick PoE1 sync over a poe.ninja stub, with the pacing sleep counted instead of waited for.
+function loadPacedSync(t, { failType = null } = {}) {
+  const service = new PriceService();
+  service.setPoeVersion('poe1');
+  const requests = [];
+  const sleeps = [];
+  service.client.get = async (url, options = {}) => {
+    if (url.endsWith('/data/index-state')) {
+      return { data: { economyLeagues: [{ name: 'Mirage', url: 'mirage' }], oldEconomyLeagues: [] } };
+    }
+    requests.push(options.params.type);
+    if (options.params.type === failType) throw new Error('poe.ninja is down');
+    return { data: { core: { primary: 'chaos', rates: {} }, items: [{ id: options.params.type, name: `${options.params.type} Item` }], lines: [{ id: options.params.type, primaryValue: 2, name: `${options.params.type} Item`, chaosValue: 2 }] } };
+  };
+  const realSetTimeout = global.setTimeout;
+  t.mock.method(global, 'setTimeout', (callback, delay, ...args) => {
+    if (delay === 300) {
+      sleeps.push(delay);
+      return realSetTimeout(callback, 0);
+    }
+    return realSetTimeout(callback, delay, ...args);
+  });
+  return { service, requests, sleeps };
+}
+
+test('a sync sleeps after each item overview it requested and not after one from the cache', async (t) => {
+  const { service, requests, sleeps } = loadPacedSync(t);
+
+  await service.syncPrices('Mirage', { full: false });
+  const itemTypes = registry.getQuickSyncTypes().filter((type) => !registry.getCurrencyTypes().includes(type));
+  assert.ok(itemTypes.length > 0);
+  assert.equal(sleeps.length, itemTypes.length);
+  const requestCount = requests.length;
+
+  await service.syncPrices('Mirage', { full: false });
+  assert.equal(requests.length, requestCount);
+  assert.equal(sleeps.length, itemTypes.length);
+  // The list is the same, read again from the overviews.
+  assert.ok(service.priceMap.size > 0);
+
+  // Past the cache's time the requests and their pacing come back.
+  for (const entry of service.cache.values()) entry.fetchedAt -= 11 * 60 * 1000;
+  await service.syncPrices('Mirage', { full: false });
+  assert.equal(sleeps.length, itemTypes.length * 2);
+  assert.ok(requests.length > requestCount);
+});
+
+test('a failed item overview keeps its pacing, because it did send a request', async (t) => {
+  const failType = registry.getQuickSyncTypes().filter((type) => !registry.getCurrencyTypes().includes(type))[0];
+  const { service, sleeps } = loadPacedSync(t, { failType });
+  await service.syncPrices('Mirage', { full: false });
+  assert.ok(sleeps.length >= 1);
+});
+
+test('only a sync that read every type offers its list to keep', async (t) => {
+  const complete = loadPacedSync(t);
+  const kept = [];
+  complete.service.onSynced = (snapshot) => kept.push(snapshot);
+  await complete.service.syncPrices('Mirage', { full: false });
+
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].poeVersion, 'poe1');
+  assert.equal(kept[0].league, 'Mirage');
+  assert.equal(kept[0].syncedAt, complete.service.lastFullSync);
+  assert.equal(kept[0].full, false);
+  assert.equal(kept[0].entries.length, complete.service.priceMap.size);
+  assert.deepEqual(kept[0].syncedTypes, complete.service.queryPrices().syncedTypes);
+  // Only what the page reads.
+  assert.deepEqual(Object.keys(kept[0].entries[0]).sort(), ['category', 'change', 'chaosValue', 'divineValue', 'icon', 'name', 'sparkline']);
+  // It lists the same as the live list.
+  const live = complete.service.queryPrices({ limit: '500' });
+  const fromKept = PriceService.querySnapshot(kept[0], { limit: '500' });
+  assert.deepEqual(fromKept.prices, live.prices);
+  assert.deepEqual(fromKept.typeCounts, live.typeCounts);
+  assert.equal(fromKept.total, live.total);
+
+  const failType = registry.getQuickSyncTypes().filter((type) => !registry.getCurrencyTypes().includes(type))[0];
+  const partial = loadPacedSync(t, { failType });
+  const partialKept = [];
+  partial.service.onSynced = (snapshot) => partialKept.push(snapshot);
+  await partial.service.syncPrices('Mirage', { full: false });
+  assert.deepEqual(partialKept, []);
+
+  // A game switch clearing the list during the sync: its prices belong to the old game.
+  const cleared = loadPacedSync(t);
+  const clearedKept = [];
+  cleared.service.onSynced = (snapshot) => clearedKept.push(snapshot);
+  const sync = cleared.service.syncPrices('Mirage', { full: false });
+  cleared.service.clearCache();
+  await sync;
+  assert.deepEqual(clearedKept, []);
+
+  const full = loadPacedSync(t);
+  const fullKept = [];
+  full.service.onSynced = (snapshot) => fullKept.push(snapshot);
+  await full.service.syncPrices('Mirage', { full: true });
+  assert.equal(fullKept[0].full, true);
+
+  // A reply without its lines counts as not read, for a currency type and for an item type alike.
+  const itemType = registry.getQuickSyncTypes().filter((type) => !registry.getCurrencyTypes().includes(type))[0];
+  for (const emptyType of [registry.getCurrencyTypes()[0], itemType]) {
+    const degraded = loadPacedSync(t);
+    const degradedKept = [];
+    degraded.service.onSynced = (snapshot) => degradedKept.push(snapshot);
+    const get = degraded.service.client.get;
+    degraded.service.client.get = async (url, options = {}) => (options.params?.type === emptyType ? { data: {} } : get(url, options));
+    await degraded.service.syncPrices('Mirage', { full: false });
+    assert.deepEqual(degradedKept, [], emptyType);
+    assert.ok(degraded.service.priceMap.size > 0);
+  }
+});
+
+test('a kept list reads its Divine and Mirror prices from itself', () => {
+  const snapshot = {
+    syncedTypes: ['currency'],
+    entries: [
+      { name: 'Divine Orb', chaosValue: 150, divineValue: 1, category: 'currency', icon: null, sparkline: [], change: null },
+      { name: 'Chaos Orb', chaosValue: 1, divineValue: 0.006, category: 'currency', icon: null, sparkline: [], change: 2 }
+    ]
+  };
+  const listed = PriceService.querySnapshot(snapshot, { search: 'chaos' });
+  assert.deepEqual(listed.prices.map((price) => price.itemName), ['Chaos Orb']);
+  assert.equal(listed.total, 1);
+  assert.deepEqual(listed.typeCounts, { currency: 2 });
+  assert.deepEqual(listed.rates, { divineChaos: 150, mirrorChaos: null });
+});
+
 test('price service keeps art on the game CDN and drops the rest', () => {
   const service = new PriceService();
   service.setPoeVersion('poe2');
@@ -520,4 +647,23 @@ test('a price sync past its deadline stops reading, and the list does not count 
   await service.ensureSynced('Mirage', 'poe1', { full: true });
   assert.ok(requests > stuckAfter);
   assert.equal(service.fullySynced, true);
+});
+
+test('a price sync past its deadline does not offer its partial list to keep', async (t) => {
+  const service = new PriceService();
+  service.setPoeVersion('poe1');
+  let now = 1000;
+  t.mock.method(Date, 'now', () => now);
+  const realSetTimeout = globalThis.setTimeout;
+  t.mock.method(globalThis, 'setTimeout', (callback) => realSetTimeout(callback, 0));
+  const kept = [];
+  service.onSynced = (snapshot) => kept.push(snapshot);
+  service.client.get = async () => {
+    now += 6 * 60 * 1000;
+    return { data: { lines: [{ currencyTypeName: 'Chaos Orb', chaosEquivalent: 1 }] } };
+  };
+
+  await service.syncPrices('Mirage', { full: false });
+  assert.ok(service.priceMap.size > 0);
+  assert.deepEqual(kept, []);
 });

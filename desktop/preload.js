@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Currency (IPC uzerinden guvenli)
   getCurrencyPrices: (params) => ipcRenderer.invoke('get-currency-prices', params),
+  getLastKnownCurrencyPrices: (params) => ipcRenderer.invoke('get-last-known-currency-prices', params),
   getCurrencyLeagues: (poeVersion) => ipcRenderer.invoke('get-currency-leagues', poeVersion),
   syncCurrencyPrices: (options) => ipcRenderer.invoke('sync-currency-prices', options),
 

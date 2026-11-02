@@ -2434,7 +2434,8 @@ function setupIPCListeners() {
       poeVersion: session?.poeVersion,
       durationSeconds: getCompletedSessionDurationSeconds(session || {})
     });
-    await refreshTrackerData({ includeSessions: true });
+    // The journal and the map result are written by now, so the numbers need not wait out the coalescing timer.
+    await refreshTrackerData({ includeSessions: true, immediate: true });
   });
 
   // Loot olaylari
@@ -2490,15 +2491,11 @@ function setupIPCListeners() {
 
       // Auto-refresh currency page if it's currently visible
       if (currencyState.poeVersion !== version) {
-        currencyState.poeVersion = version;
-        currencyState.type = '';
         // Update poe-toggle buttons on currency page
         document.querySelectorAll('.poe-toggle-btn').forEach(b => {
           setToggleButtonPressed(b, b.dataset.poe === version);
         });
-        updateTypeFilterDropdown();
-        loadCurrencyLeagues();
-        loadCurrencyPrices();
+        switchCurrencyGame(version);
       }
     });
   }
@@ -4063,15 +4060,23 @@ async function loadJournalStatus() {
 
 let _refreshPending = null;
 let _refreshOptions = {};
+let _refreshRunNow = null;
 
-async function refreshTrackerData({ includeSessions = false, includeCurrency = false } = {}) {
-  // Coalesce rapid calls within 300ms
+async function refreshTrackerData({ includeSessions = false, includeCurrency = false, immediate = false } = {}) {
+  // Coalesce rapid calls within 300ms. `immediate` ends the wait, and calls after it wait as usual.
   _refreshOptions.includeSessions = _refreshOptions.includeSessions || includeSessions;
   _refreshOptions.includeCurrency = _refreshOptions.includeCurrency || includeCurrency;
 
-  if (_refreshPending) return _refreshPending;
+  if (_refreshPending) {
+    if (immediate) _refreshRunNow();
+    return _refreshPending;
+  }
 
-  _refreshPending = new Promise(resolve => setTimeout(resolve, 300)).then(async () => {
+  _refreshPending = new Promise((resolve) => {
+    _refreshRunNow = resolve;
+    if (immediate) resolve();
+    else setTimeout(resolve, 300);
+  }).then(async () => {
     const opts = { ..._refreshOptions };
     _refreshOptions = {};
     _refreshPending = null;
@@ -7381,7 +7386,21 @@ const currencyState = {
   // The lowercased name of the row whose detail is open.
   expandedKey: null,
   syncing: false,
-  searchTimer: null
+  searchTimer: null,
+  // Whether the rows are the list kept from the last sync while main syncs the real one; bumping the turn drops a kept
+  // list that is still on its way.
+  lastKnown: false,
+  lastKnownTurn: 0,
+  // Whether the rows are that kept list because poe.ninja gave nothing, so no sync is coming.
+  unreachable: false,
+  // The signature of the list the rows show, '' when they show none.
+  renderedList: '',
+  // The listed prices in table order. A long list holds only some of them as rows: rowWindow is { start, end, rows, top,
+  // bottom } (the rows by list index and the two spacers), null when every price has its row.
+  sorted: [],
+  rowWindow: null,
+  rowHeight: 37,
+  detailHeight: 0
 };
 
 function getCurrencyCategoryList(poeVersion = currencyState.poeVersion) {
@@ -7527,17 +7546,43 @@ function clearCurrencySearch() {
   loadCurrencyPrices();
 }
 
+// Lists another game. Its league comes from its league list, so the prices wait for that list: asked for sooner, main
+// would answer for its stored league while the page names the first active one. The still rows show from the start, and
+// an answer for the game left behind no longer counts.
+async function switchCurrencyGame(poeVersion) {
+  currencyState.poeVersion = poeVersion;
+  currencyState.league = '';
+  currencyState.type = '';
+  currencyState.typeCounts = null;
+  currencyState.pricesRequest += 1;
+  currencyState.lastKnown = false;
+  currencyState.unreachable = false;
+  updateTypeFilterDropdown();
+  showCurrencyLoadingRows();
+  await loadCurrencyLeagues();
+  if (currencyState.poeVersion === poeVersion) {
+    await loadCurrencyPrices();
+  }
+}
+
 function setupCurrencyListeners() {
+  // A long list draws the rows near the screen as the page moves.
+  let rowWindowFrame = null;
+  const scheduleRowWindow = () => {
+    if (rowWindowFrame !== null || !currencyState.rowWindow) return;
+    rowWindowFrame = requestAnimationFrame(() => {
+      rowWindowFrame = null;
+      syncCurrencyRowWindow();
+    });
+  };
+  window.addEventListener('scroll', scheduleRowWindow, { passive: true });
+  window.addEventListener('resize', scheduleRowWindow);
+
   // PoE version toggle
   document.querySelectorAll('.poe-toggle-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.poe-toggle-btn').forEach(b => setToggleButtonPressed(b, b === btn));
-      currencyState.poeVersion = btn.dataset.poe;
-      currencyState.league = '';
-      currencyState.type = '';
-      updateTypeFilterDropdown();
-      loadCurrencyLeagues();
-      loadCurrencyPrices();
+      switchCurrencyGame(btn.dataset.poe);
     });
   });
 
@@ -7596,8 +7641,16 @@ async function loadCurrencyPage() {
   });
   updateTypeFilterDropdown();
   updateCurrencySortHeaders();
+  const { poeVersion } = currencyState;
+  // The league list may wait for poe.ninja, so a game with no rows yet says so at once.
+  if (!String(currencyState.listedKey || '').startsWith(`${poeVersion}:`)) {
+    showCurrencyLoadingRows();
+  }
+  syncCurrencyRowWindow();
   await loadCurrencyLeagues();
-  await loadCurrencyPrices();
+  if (currencyState.poeVersion === poeVersion) {
+    await loadCurrencyPrices();
+  }
 
   const syncBtn = document.getElementById('currency-sync-btn');
   if (syncBtn) {
@@ -7618,10 +7671,12 @@ async function loadCurrencyLeagues() {
 
   let allLeagues = [];
   let activeLeagueNames = [];
+  let lastKnownLeague = null;
+  const { poeVersion } = currencyState;
 
   try {
     // res = { activeLeagues: [...] } from poe.ninja
-    const res = await window.electronAPI.getCurrencyLeagues(currencyState.poeVersion);
+    const res = await window.electronAPI.getCurrencyLeagues(poeVersion);
     const leagueData = res?.data || res || {};
 
     // Use active leagues from poe.ninja if available
@@ -7635,10 +7690,17 @@ async function loadCurrencyLeagues() {
     for (const l of dbLeagues) {
       if (!allLeagues.includes(l)) allLeagues.push(l);
     }
+
+    // poe.ninja's list could not be read, and main names the league of the newest kept list.
+    lastKnownLeague = leagueData.lastKnownLeague || null;
+    if (lastKnownLeague && !allLeagues.includes(lastKnownLeague)) allLeagues.push(lastKnownLeague);
   } catch { }
 
+  // The page moved to another game meanwhile, and that game's own list decides the league.
+  if (poeVersion !== currencyState.poeVersion) return;
+
   // Always merge fallback leagues so standard options are available
-  const fallback = currencyState.poeVersion === 'poe2' ? FALLBACK_POE2_LEAGUES : FALLBACK_POE1_LEAGUES;
+  const fallback = poeVersion === 'poe2' ? FALLBACK_POE2_LEAGUES : FALLBACK_POE1_LEAGUES;
   for (const l of fallback) {
     if (!allLeagues.includes(l)) allLeagues.push(l);
   }
@@ -7648,6 +7710,7 @@ async function loadCurrencyLeagues() {
   const preferredLeague = [
     currencyState.league,
     activeLeagueNames[0],
+    lastKnownLeague,
     getResolvedActiveLeague(),
     allLeagues[0],
     'Standard'
@@ -7669,21 +7732,51 @@ function currencyLoadingRowsHTML() {
     + placeholderRow.repeat(8);
 }
 
+function showCurrencyLoadingRows() {
+  const tbody = document.getElementById('currency-table-body');
+  if (!tbody) return;
+  markCurrencyRowsReplaced(tbody);
+  tbody.innerHTML = currencyLoadingRowsHTML();
+  const footer = document.getElementById('currency-footer');
+  if (footer) footer.textContent = '';
+}
+
+// What the table lists comes from one answer of main, so the same answer again draws nothing new. The rows carry text
+// in the language they were drawn in, and a language changed on another page does not redraw them.
+function getCurrencyListSignature() {
+  const { listedKey, type, search, sortField, sortDir, updatedAt } = currencyState;
+  return JSON.stringify([listedKey, type, search, sortField, sortDir, updatedAt, window._appState?.language]);
+}
+
+function applyCurrencyPriceAnswer(json, poeVersion) {
+  currencyState.prices = json?.prices || json?.data?.prices || [];
+  currencyState.rates = json?.rates || {};
+  currencyState.total = Number(json?.total) || currencyState.prices.length;
+  currencyState.typeCounts = json?.typeCounts || null;
+  currencyState.syncedTypes = Array.isArray(json?.syncedTypes) ? json.syncedTypes : [];
+  currencyState.updatedAt = json?.updatedAt || json?.data?.updatedAt || null;
+  currencyState.loadError = null;
+  currencyState.listedKey = `${poeVersion}:${json?.league || currencyState.league}`;
+  if (currencyState.renderedList !== getCurrencyListSignature()) {
+    renderCurrencyTable();
+  }
+  updateCurrencyTypeCounts();
+  renderCurrencyStatus();
+}
+
 // `cacheOnly` (the reload after prices-updated) lists only what main already holds and never starts a sync. When
 // main holds another game or league by then, it answers prices null and the table keeps its rows.
 async function loadCurrencyPrices({ cacheOnly = false } = {}) {
   const tbody = document.getElementById('currency-table-body');
   if (!tbody) return;
+  // No league yet: the page's load or game switch is waiting for the league list and lists next, with the current type
+  // and search. Asked now, main would answer for its stored league and could queue a sync of it.
+  if (!cacheOnly && !currencyState.league) return;
   // A request queued behind a running sync can answer after a later one that main answered at once, so only the
   // latest request renders. A cache-only reload takes the latest request's turn, so it never drops an answer still
   // waiting for a sync.
   const request = cacheOnly ? currencyState.pricesRequest : ++currencyState.pricesRequest;
   const poeVersion = currencyState.poeVersion;
-  const showLoadingRows = () => {
-    tbody.innerHTML = currencyLoadingRowsHTML();
-    const footer = document.getElementById('currency-footer');
-    if (footer) footer.textContent = '';
-  };
   // A filter, search or reload of the listed game and league keeps its rows, because main usually answers those at
   // once from the loaded list. Another game or league shows still rows, because main may first wait for a sync.
   // Another league's sync can unload the listed one, and then main waits too, so kept rows that get no answer within
@@ -7694,10 +7787,10 @@ async function loadCurrencyPrices({ cacheOnly = false } = {}) {
       // The rail's counts belong to the listed game and league.
       currencyState.typeCounts = null;
       updateCurrencyTypeCounts();
-      showLoadingRows();
+      showCurrencyLoadingRows();
     } else {
       slowAnswer = setTimeout(() => {
-        if (request === currencyState.pricesRequest) showLoadingRows();
+        if (request === currencyState.pricesRequest) showCurrencyLoadingRows();
       }, 300);
     }
   }
@@ -7709,24 +7802,33 @@ async function loadCurrencyPrices({ cacheOnly = false } = {}) {
     if (currencyState.search) params.search = currencyState.search;
     if (cacheOnly) params.cacheOnly = true;
 
+    // While main waits for a sync, the list kept from the last sync shows, with its age and that a sync runs. Any answer
+    // from the real list ends that. Main answers null when it holds the list already.
+    const lastKnownTurn = cacheOnly ? null : ++currencyState.lastKnownTurn;
+    if (!cacheOnly) {
+      window.electronAPI.getLastKnownCurrencyPrices(params).then((lastKnown) => {
+        if (lastKnownTurn !== currencyState.lastKnownTurn || request !== currencyState.pricesRequest || !lastKnown?.prices) return;
+        clearTimeout(slowAnswer);
+        currencyState.lastKnown = true;
+        currencyState.unreachable = false;
+        applyCurrencyPriceAnswer(lastKnown, poeVersion);
+      }).catch(() => {});
+    }
+
     // json = { prices, count, total, typeCounts, syncedTypes, league, updatedAt, rates } from the local poe.ninja cache
     const json = await window.electronAPI.getCurrencyPrices(params);
     if (request !== currencyState.pricesRequest) return;
     if (cacheOnly && json?.prices === null) return;
-    currencyState.prices = json?.prices || json?.data?.prices || [];
-    currencyState.rates = json?.rates || {};
-    currencyState.total = Number(json?.total) || currencyState.prices.length;
-    currencyState.typeCounts = json?.typeCounts || null;
-    currencyState.syncedTypes = Array.isArray(json?.syncedTypes) ? json.syncedTypes : [];
-    currencyState.updatedAt = json?.updatedAt || json?.data?.updatedAt || null;
-    currencyState.loadError = null;
-    currencyState.listedKey = `${poeVersion}:${json?.league || currencyState.league}`;
-    renderCurrencyTable();
-    updateCurrencyTypeCounts();
-    renderCurrencyStatus();
+    currencyState.lastKnownTurn += 1;
+    currencyState.lastKnown = false;
+    currencyState.unreachable = Boolean(json?.lastKnown);
+    applyCurrencyPriceAnswer(json, poeVersion);
   } catch (error) {
     // A failed cache-only reload leaves the listed rows as they are.
     if (request !== currencyState.pricesRequest || cacheOnly) return;
+    currencyState.lastKnownTurn += 1;
+    currencyState.lastKnown = false;
+    currencyState.unreachable = false;
     currencyState.listedKey = null;
     currencyState.loadError = error || new Error();
     // Nothing is listed, so the rail and status line drop the last list's counts and sync time.
@@ -7750,8 +7852,9 @@ function formatSyncedAgo(date) {
   return window.t('time.daysAgo', { count: Math.floor(hours / 24) });
 }
 
-// The line under the title names the listed league, its price count and when it was synced (or that a sync runs;
-// after a failed load only the league); the footer says how many of the matches the table shows.
+// The line under the title names the listed league, its price count and when it was synced (or that a sync runs, or
+// that poe.ninja gave nothing and the list is an older one; after a failed load only the league); the footer says how
+// many of the matches the table shows.
 function renderCurrencyStatus() {
   const status = document.getElementById('currency-status');
   if (status) {
@@ -7761,7 +7864,9 @@ function renderCurrencyStatus() {
     } else if (currencyState.updatedAt) {
       const count = Object.values(currencyState.typeCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
       parts.push(window.t('currency.priceCount', { count: count.toLocaleString('en-US') }));
-      parts.push(window.t('currency.syncedAgo', { time: formatSyncedAgo(currencyState.updatedAt) }));
+      const time = formatSyncedAgo(currencyState.updatedAt);
+      parts.push(currencyState.unreachable ? window.t('currency.unreachable', { time }) : window.t('currency.syncedAgo', { time }));
+      if (currencyState.lastKnown) parts.push(window.t('currency.syncing'));
     } else if (!currencyState.loadError) {
       parts.push(window.t('currency.neverSynced'));
     }
@@ -7790,6 +7895,7 @@ function selectCurrencyEmptyState({ search = '', type = '', syncedTypes = [] } =
 
 // The table's one message row, with at most one way out: Sync now, Clear search or Retry.
 function renderCurrencyEmptyRow(tbody, message, { action = '' } = {}) {
+  markCurrencyRowsReplaced(tbody);
   const row = document.createElement('tr');
   const cell = document.createElement('td');
   cell.colSpan = 4;
@@ -7877,83 +7983,220 @@ function renderCurrencyTable() {
     return;
   }
 
-  // A tab already names the type, so only All shows it under each name.
-  const showType = !currencyState.type;
-  const isExpanded = (item) => Boolean(item.itemName) && String(item.itemName).toLowerCase() === currencyState.expandedKey;
+  currencyState.sorted = sorted;
+  currencyState.renderedList = currencyState.updatedAt ? getCurrencyListSignature() : '';
   // The rows are one Tab stop (the open row, else the first), so Tab gets past up to 500 of them in one press.
-  const tabStop = Math.max(sorted.findIndex(isExpanded), 0);
+  const tabStop = Math.max(sorted.findIndex(isCurrencyRowExpanded), 0);
   const fragment = document.createDocumentFragment();
-  sorted.forEach((item, index) => {
-    const chaos = parseFloat(item.chaosValue) || 0;
-    const divine = parseFloat(item.divineValue);
-
-    const row = document.createElement('tr');
-    row.className = 'currency-row';
-    row.tabIndex = index === tabStop ? 0 : -1;
-    row.setAttribute('aria-expanded', 'false');
-
-    const itemCell = document.createElement('td');
-    itemCell.className = 'currency-td-item';
-    const itemBox = document.createElement('div');
-    itemBox.className = 'currency-item';
-    const text = document.createElement('span');
-    text.className = 'currency-item-text';
-    const name = document.createElement('span');
-    name.className = 'currency-item-name';
-    name.textContent = item.itemName || '';
-    // A long name ends in an ellipsis, so its full text is one hover away.
-    name.title = item.itemName || '';
-    text.appendChild(name);
-    if (showType) {
-      const meta = document.createElement('span');
-      meta.className = 'currency-item-meta';
-      meta.textContent = getCurrencyTypeLabel(item.itemType);
-      text.appendChild(meta);
+  if (sorted.length > window.currencyRowWindowModel.FULL_LIST_MAX) {
+    // Read before the old rows go: a table that is short for a moment would pull the page's scroll position back.
+    const { start, end, topHeight, bottomHeight } = selectCurrencyRowWindow(tbody);
+    const rowWindow = {
+      start,
+      end,
+      rows: new Map(),
+      top: createCurrencySpacerRow(topHeight),
+      bottom: createCurrencySpacerRow(bottomHeight)
+    };
+    currencyState.rowWindow = rowWindow;
+    tbody.parentElement?.setAttribute('aria-rowcount', String(sorted.length + 1));
+    fragment.appendChild(rowWindow.top);
+    for (let index = start; index < end; index += 1) {
+      appendCurrencyRow(fragment, index, tabStop);
     }
-    itemBox.append(createCurrencyItemSlot(item), text);
-    itemCell.appendChild(itemBox);
-
-    const chaosCell = document.createElement('td');
-    chaosCell.className = 'currency-td-chaos';
-    chaosCell.appendChild(createCurrencyValueElement(chaos, 'chaos', 18, currencyState.poeVersion));
-    // A loot-filter colour for the item's own value, measured against this list's Divine and Mirror prices.
-    applyProfitTier(chaosCell, getProfitTierFor(chaos, currencyState.poeVersion, { rates: currencyState.rates || {} }));
-
-    const divineCell = document.createElement('td');
-    divineCell.className = 'currency-td-divine';
-    if (Number.isFinite(divine) && divine > 0) {
-      divineCell.appendChild(createCurrencyValueElement(divine, 'divine', 18, currencyState.poeVersion, { markTiny: true }));
-    } else {
-      const muted = document.createElement('span');
-      muted.className = 'text-muted';
-      muted.textContent = '-';
-      divineCell.appendChild(muted);
-    }
-
-    const changeCell = document.createElement('td');
-    changeCell.className = 'currency-td-change';
-    changeCell.appendChild(createPriceChangeElement(item.change, item.sparklineData));
-
-    row.append(itemCell, chaosCell, divineCell, changeCell);
-    row.addEventListener('click', () => toggleCurrencyRowDetail(row, item));
-    row.addEventListener('keydown', (event) => {
-      if (event.target !== row) return;
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        toggleCurrencyRowDetail(row, item);
-      } else if (moveCurrencyRowFocus(row, event.key)) {
-        event.preventDefault();
-      }
-    });
-    fragment.appendChild(row);
-    if (isExpanded(item)) {
-      row.setAttribute('aria-expanded', 'true');
-      fragment.appendChild(buildCurrencyDetailRow(item));
-    }
-  });
+    fragment.appendChild(rowWindow.bottom);
+  } else {
+    markCurrencyRowsReplaced(tbody, { keepList: true });
+    sorted.forEach((item, index) => appendCurrencyRow(fragment, index, tabStop));
+  }
 
   tbody.replaceChildren(fragment);
   applyCachedItemIcons(tbody);
+  if (currencyState.rowWindow) {
+    keepCurrencyTabStop(tbody);
+    syncCurrencyRowWindow();
+  }
+}
+
+// Whatever replaces the rows ends the row window, and the signature says no list is drawn, unless a list follows.
+function markCurrencyRowsReplaced(tbody, { keepList = false } = {}) {
+  currencyState.rowWindow = null;
+  if (!keepList) currencyState.renderedList = '';
+  tbody.parentElement?.removeAttribute?.('aria-rowcount');
+}
+
+function isCurrencyRowExpanded(item) {
+  return Boolean(item.itemName) && String(item.itemName).toLowerCase() === currencyState.expandedKey;
+}
+
+function appendCurrencyRow(target, index, tabStop) {
+  const item = currencyState.sorted[index];
+  const chaos = parseFloat(item.chaosValue) || 0;
+  const divine = parseFloat(item.divineValue);
+
+  const row = document.createElement('tr');
+  row.className = 'currency-row';
+  row.tabIndex = index === tabStop ? 0 : -1;
+  row.setAttribute('aria-expanded', 'false');
+
+  const itemCell = document.createElement('td');
+  itemCell.className = 'currency-td-item';
+  const itemBox = document.createElement('div');
+  itemBox.className = 'currency-item';
+  const text = document.createElement('span');
+  text.className = 'currency-item-text';
+  const name = document.createElement('span');
+  name.className = 'currency-item-name';
+  name.textContent = item.itemName || '';
+  // A long name ends in an ellipsis, so its full text is one hover away.
+  name.title = item.itemName || '';
+  text.appendChild(name);
+  // A tab already names the type, so only All shows it under each name.
+  if (!currencyState.type) {
+    const meta = document.createElement('span');
+    meta.className = 'currency-item-meta';
+    meta.textContent = getCurrencyTypeLabel(item.itemType);
+    text.appendChild(meta);
+  }
+  itemBox.append(createCurrencyItemSlot(item), text);
+  itemCell.appendChild(itemBox);
+
+  const chaosCell = document.createElement('td');
+  chaosCell.className = 'currency-td-chaos';
+  chaosCell.appendChild(createCurrencyValueElement(chaos, 'chaos', 18, currencyState.poeVersion));
+  // A loot-filter colour for the item's own value, measured against this list's Divine and Mirror prices.
+  applyProfitTier(chaosCell, getProfitTierFor(chaos, currencyState.poeVersion, { rates: currencyState.rates || {} }));
+
+  const divineCell = document.createElement('td');
+  divineCell.className = 'currency-td-divine';
+  if (Number.isFinite(divine) && divine > 0) {
+    divineCell.appendChild(createCurrencyValueElement(divine, 'divine', 18, currencyState.poeVersion, { markTiny: true }));
+  } else {
+    const muted = document.createElement('span');
+    muted.className = 'text-muted';
+    muted.textContent = '-';
+    divineCell.appendChild(muted);
+  }
+
+  const changeCell = document.createElement('td');
+  changeCell.className = 'currency-td-change';
+  changeCell.appendChild(createPriceChangeElement(item.change, item.sparklineData));
+
+  row.append(itemCell, chaosCell, divineCell, changeCell);
+  row.addEventListener('click', () => toggleCurrencyRowDetail(row, item));
+  row.addEventListener('keydown', (event) => {
+    if (event.target !== row) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      toggleCurrencyRowDetail(row, item);
+    } else if (handleCurrencyRowKey(row, index, event.key)) {
+      event.preventDefault();
+    }
+  });
+  target.appendChild(row);
+  if (currencyState.rowWindow) {
+    currencyState.rowWindow.rows.set(index, row);
+    // The header is row 1. The table holds only some rows, so each says its place in the list.
+    row.setAttribute('aria-rowindex', String(index + 2));
+  }
+  if (isCurrencyRowExpanded(item)) {
+    row.setAttribute('aria-expanded', 'true');
+    target.appendChild(buildCurrencyDetailRow(item));
+  }
+}
+
+function createCurrencySpacerRow(height) {
+  const row = document.createElement('tr');
+  row.className = 'currency-row-spacer';
+  row.setAttribute('aria-hidden', 'true');
+  const cell = document.createElement('td');
+  cell.colSpan = 4;
+  cell.style.height = `${height}px`;
+  row.appendChild(cell);
+  return row;
+}
+
+function getCurrencyRowLayout() {
+  const { sorted, rowHeight, detailHeight } = currencyState;
+  return { count: sorted.length, rowHeight, detailIndex: sorted.findIndex(isCurrencyRowExpanded), detailHeight };
+}
+
+// The window for the screen's place on the list, unless `viewTop` names another place.
+function selectCurrencyRowWindow(tbody, { current = null, viewTop = -tbody.getBoundingClientRect().top } = {}) {
+  return window.currencyRowWindowModel.selectRowWindow({
+    ...getCurrencyRowLayout(),
+    viewTop,
+    viewHeight: window.innerHeight,
+    current
+  });
+}
+
+// Takes the table to a new window. Rows in both stay in place, so they keep focus and their loaded art.
+function drawCurrencyRowWindow(tbody, next) {
+  const rowWindow = currencyState.rowWindow;
+  const { rows, start, end, top, bottom } = rowWindow;
+  for (const [index, row] of rows) {
+    if (index < next.start || index >= next.end) {
+      if (row.getAttribute('aria-expanded') === 'true') row.nextElementSibling?.remove();
+      row.remove();
+      rows.delete(index);
+    }
+  }
+  const before = document.createDocumentFragment();
+  for (let index = next.start; index < Math.min(start, next.end); index += 1) {
+    appendCurrencyRow(before, index, -1);
+  }
+  const after = document.createDocumentFragment();
+  for (let index = Math.max(end, next.start); index < next.end; index += 1) {
+    appendCurrencyRow(after, index, -1);
+  }
+  // Called before the rows go in: it collects the images at once and sets them when main answers.
+  applyCachedItemIcons(before);
+  applyCachedItemIcons(after);
+  top.after(before);
+  bottom.before(after);
+  top.firstChild.style.height = `${next.topHeight}px`;
+  bottom.firstChild.style.height = `${next.bottomHeight}px`;
+  rowWindow.start = next.start;
+  rowWindow.end = next.end;
+  keepCurrencyTabStop(tbody);
+}
+
+// The Tab stop leaves with its row, so the first row held takes it over.
+function keepCurrencyTabStop(tbody) {
+  if (!tbody.querySelector('.currency-row[tabindex="0"]')) {
+    tbody.querySelector('.currency-row').tabIndex = 0;
+  }
+}
+
+// Puts the window where the screen is, after a scroll, a resize, a row opening or the page showing again. A hidden page
+// has no place on the screen.
+function syncCurrencyRowWindow() {
+  const { rowWindow } = currencyState;
+  const tbody = document.getElementById('currency-table-body');
+  if (!rowWindow || !tbody.getClientRects().length) return;
+  // A row in the middle: collapsed borders leave the rows at the window's edges half a pixel apart from the rest.
+  const rowHeight = rowWindow.rows.get(Math.floor((rowWindow.start + rowWindow.end) / 2))?.getBoundingClientRect().height;
+  if (rowHeight > 0) currencyState.rowHeight = rowHeight;
+  const detailRowHeight = tbody.querySelector('.currency-detail-row')?.getBoundingClientRect().height;
+  if (detailRowHeight > 0) currencyState.detailHeight = detailRowHeight;
+  drawCurrencyRowWindow(tbody, selectCurrencyRowWindow(tbody, { current: rowWindow }));
+}
+
+// A key that moves to a row the window does not hold draws the window around that row first.
+function handleCurrencyRowKey(row, index, key) {
+  const { rowWindow, sorted } = currencyState;
+  const target = { ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: sorted.length - 1 }[key];
+  if (!rowWindow || !sorted[target] || rowWindow.rows.has(target)) {
+    return moveCurrencyRowFocus(row, key);
+  }
+  const tbody = row.parentElement;
+  const viewTop = window.currencyRowWindowModel.getRowTop(target, getCurrencyRowLayout());
+  drawCurrencyRowWindow(tbody, selectCurrencyRowWindow(tbody, { viewTop }));
+  const next = rowWindow.rows.get(target);
+  rowWindow.rows.forEach((other) => { other.tabIndex = other === next ? 0 : -1; });
+  next.focus();
+  return true;
 }
 
 // Arrow keys, Home and End move between the price rows, and the Tab stop moves with them. Says whether the key moved.
@@ -7982,6 +8225,7 @@ function toggleCurrencyRowDetail(row, item) {
     row.setAttribute('aria-expanded', 'true');
     applyCachedItemIcons(detail);
   }
+  syncCurrencyRowWindow();
 }
 
 // The detail under a price row: bigger art, the full name and type, both values, the week's change with a larger line,
@@ -8171,11 +8415,15 @@ async function handleCurrencySync() {
   renderCurrencyStatus();
 
   try {
-    // The table refreshing with the new prices says the sync worked.
-    await window.electronAPI.syncCurrencyPrices({
+    // The table refreshing with the new prices says the sync worked. Main answers without an error when poe.ninja gave
+    // nothing, and the table may go on listing the kept prices, so only this says the sync failed.
+    const status = await window.electronAPI.syncCurrencyPrices({
       league: currencyState.league,
       poeVersion: currencyState.poeVersion
     });
+    if (status?.itemCount === 0) {
+      showToast(window.t('currency.syncFailed'), window.t('toast.tryAgain'), 'error');
+    }
     await refreshProfitCurrencyRates(currencyState.poeVersion, currencyState.league);
     await loadCurrencyLeagues();
     await loadCurrencyPrices();

@@ -3558,6 +3558,12 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 .currency-row:hover,
 .currency-row[aria-expanded="true"] { background: var(--bg-card-hover); }
 
+/* Stands for the rows of a long list that are far from the screen. */
+.currency-table .currency-row-spacer > td {
+  padding: 0;
+  border: none;
+}
+
 /* One cell for the item: its art slot, the name (full name on hover) and, in All, its type. */
 .currency-item {
   display: flex;

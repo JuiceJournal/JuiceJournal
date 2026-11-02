@@ -263,6 +263,7 @@ function loadDataManagement(t, {
   const context = loadFunctions(functions, {
     fs,
     path,
+    priceSnapshots: null,
     app: { getPath: () => userData },
     shell: {
       openPath: (target) => {
@@ -749,7 +750,7 @@ class FixedDate extends Date {
   }
 }
 
-const JOURNAL_FUNCTIONS = ['getJournalStore', 'readJournal', 'writeJournal', 'getJournalStatus', 'startNewJournal'];
+const JOURNAL_FUNCTIONS = ['getJournalStore', 'loadParsedJournal', 'readJournal', 'writeJournal', 'getJournalStatus', 'startNewJournal'];
 const BROKEN_JOURNAL = '{"sessions": [ {"id": "a", "mapName": "Secret Map", ';
 const BROKEN_NAME = 'journal.broken-20261028-190509.json';
 const UNREADABLE = { message: 'JOURNAL_UNREADABLE', code: 'JOURNAL_UNREADABLE' };
@@ -827,6 +828,32 @@ test('a journal read once and broken afterwards is unreadable too', (t) => {
   assert.equal(context.journalStore, cached);
   assert.deepEqual(plain(context.getJournalStatus()), { unreadable: true });
   assert.deepEqual(warnings(), [[UNREADABLE_WARNING]]);
+});
+
+test('a journal stays parsed until the file changes, by this app or from outside', (t) => {
+  const { context, profile, journalPath, writeJournalFile } = loadJournalRecovery(t);
+  writeJournalFile('{"sessions":[{"id":"a","status":"completed"}]}');
+
+  const first = context.readJournal();
+  assert.equal(context.readJournal().sessions, first.sessions);
+
+  // A write through the app reads back what it wrote.
+  context.writeJournal({ sessions: [{ id: 'b', status: 'active' }] });
+  assert.deepEqual(plain(context.readJournal()), { sessions: [{ id: 'b', status: 'active' }] });
+  assert.equal(JSON.parse(fs.readFileSync(journalPath, 'utf8')).sessions[0].id, 'b');
+
+  // So does an edit from outside, even one that leaves the size as it was.
+  const edited = fs.readFileSync(journalPath, 'utf8').replace('"b"', '"c"');
+  const { mtime } = fs.statSync(journalPath);
+  writeJournalFile(edited);
+  fs.utimesSync(journalPath, mtime, new Date(mtime.getTime() + 2000));
+  assert.equal(context.readJournal().sessions[0].id, 'c');
+
+  // Another profile never reads the last one's parsed journal.
+  profile.current = { id: 'p2' };
+  assert.deepEqual(plain(context.readJournal()), { sessions: [] });
+  profile.current = { id: 'p1' };
+  assert.equal(context.readJournal().sessions[0].id, 'c');
 });
 
 test('a journal whose sessions are not a list is unreadable, so no write replaces them', (t) => {
@@ -1131,7 +1158,7 @@ test('after Clear logs, the next read of an unreadable journal is logged again',
   assert.deepEqual(warnings(), [[UNREADABLE_WARNING], [UNREADABLE_WARNING]]);
 });
 
-const DELETED_FOLDERS = ['profiles', 'icon-cache', 'ocr-cache', 'logs', 'Partitions'];
+const DELETED_FOLDERS = ['profiles', 'icon-cache', 'price-snapshots', 'ocr-cache', 'logs', 'Partitions'];
 // No maxRetries: rm repeats those at every folder level, so main tries the whole folder again instead.
 const RM_OPTIONS = { recursive: true, force: true };
 // A few of main.js's store defaults, null ones included: conf's clear() writes back only the defaults that are not null.
@@ -1399,6 +1426,7 @@ test('Delete everything removes every profile folder, readable or not, the cache
     [`profiles/p1/${BROKEN_NAME}`]: BROKEN_JOURNAL,
     'profiles/p2/journal.json': '{"sessions":[]}',
     [`icon-cache/${'a'.repeat(64)}.png`]: Buffer.alloc(10),
+    'price-snapshots/kept.json': '{}',
     'ocr-cache/eng.traineddata': Buffer.alloc(10),
     'logs/errors.jsonl': TWO_ERROR_LINES,
     'Partitions/x/Preferences': '{}',
@@ -1414,6 +1442,58 @@ test('Delete everything removes every profile folder, readable or not, the cache
   assert.ok(fs.existsSync(path.join(userData, 'Cache', 'Cache_Data', 'f_000001')));
   assert.ok(fs.existsSync(path.join(userData, 'config.json')));
   assert.deepEqual(forbidden, []);
+});
+
+test('Delete everything stops the kept price lists first, so a sync that ends later writes none back', async (t) => {
+  let stopped = 0;
+  let resumed = 0;
+  let writeRunning = false;
+  const removedDuringWrite = [];
+  const { context, state } = loadDeleteAll(t, {
+    overrides: {
+      priceSnapshots: {
+        stop: async () => {
+          stopped += 1;
+          writeRunning = true;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          writeRunning = false;
+        },
+        resume: () => {
+          resumed += 1;
+        }
+      }
+    }
+  });
+  const rm = state.rm;
+  state.rm = (target, options) => {
+    if (writeRunning) removedDuringWrite.push(path.basename(target));
+    return rm(target, options);
+  };
+  await context.deleteAllLocalData();
+  assert.equal(stopped, 1);
+  assert.deepEqual(removedDuringWrite, []);
+  // The app restarts, so nothing writes again.
+  assert.equal(resumed, 0);
+});
+
+test('Delete everything that fails a step keeps the price lists going, since the app goes on', async (t) => {
+  let resumed = 0;
+  const { context, state } = loadDeleteAll(t, {
+    overrides: {
+      priceSnapshots: {
+        stop: async () => {},
+        resume: () => {
+          resumed += 1;
+        }
+      }
+    }
+  });
+  state.rm = (target, options) => (path.basename(target) === 'icon-cache'
+    ? Promise.reject(Object.assign(new Error('EBUSY'), { code: 'EBUSY' }))
+    : fs.promises.rm(target, options));
+
+  assert.deepEqual(plain(await context.deleteAllLocalData()), { deleted: false, reason: 'failed', failed: ['icon-cache'] });
+  assert.equal(resumed, 1);
 });
 
 test('a folder that cannot be removed fails by name only; the other steps still run and nothing restarts', async (t) => {
@@ -1482,6 +1562,7 @@ test('a folder is tried again as a whole, three times at most, so a file held op
   assert.deepEqual(events.filter((event) => event.startsWith('rm ')), [
     'rm profiles',
     'rm icon-cache', 'rm icon-cache', 'rm icon-cache',
+    'rm price-snapshots',
     'rm ocr-cache',
     'rm logs', 'rm logs', 'rm logs',
     'rm Partitions'
@@ -1573,7 +1654,7 @@ test('the quit after Delete everything writes no journal, map result or error lo
   let loaded = null;
   const toErrorLog = (level) => (...args) => loaded.context.recordError('main', level, args);
   loaded = loadDeleteAll(t, {
-    functions: ['handleLogout', 'getActiveProfile', 'getJournalStore', 'readJournal', 'loadActiveSession', 'finalizeActiveSessionOnShutdown'],
+    functions: ['handleLogout', 'getActiveProfile', 'getJournalStore', 'loadParsedJournal', 'readJournal', 'loadActiveSession', 'finalizeActiveSessionOnShutdown'],
     settings: { localProfiles: { p1: { id: 'p1' } }, activeProfileId: 'p1' },
     overrides: {
       Store: JournalStore,

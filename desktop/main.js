@@ -27,6 +27,7 @@ const OCRScanner = require('./src/modules/ocrScanner');
 const APIClient = require('./src/modules/apiClient');
 const PoeApiClient = require('./src/modules/poeApiClient');
 const PriceService = require('./src/modules/priceService');
+const PriceSnapshotStore = require('./src/modules/priceSnapshotStore');
 const { IconCache } = require('./src/modules/iconCache');
 const StashAnalyzer = require('./src/modules/stashAnalyzer');
 const GameDetector = require('./src/modules/gameDetector');
@@ -386,6 +387,7 @@ let ocrScanner = null;
 let apiClient = null;
 let poeApiClient = null;
 let priceService = null;
+let priceSnapshots = null;
 let iconCache = null;
 let stashAnalyzer = null;
 let gameDetector = null;
@@ -986,6 +988,27 @@ function getJournalStore() {
   return journalStore.store;
 }
 
+// conf reads and parses the whole file on every read, tens of milliseconds at thousands of runs and several reads per
+// dashboard refresh, all of it blocking this process. The parsed journal stands while the file keeps its size and time,
+// so a write or an edit from outside is read again. The journal model never changes what it is given, so one object can
+// serve every caller. It lives on journalStore, so a profile change or a set-aside journal drops it too.
+function loadParsedJournal() {
+  const store = getJournalStore();
+  let stats = null;
+  try {
+    stats = fs.statSync(store.path);
+  } catch {
+    // A missing or locked file: conf answers for it below.
+  }
+  const parsed = journalStore.parsed;
+  if (stats && parsed && parsed.mtimeMs === stats.mtimeMs && parsed.size === stats.size) {
+    return parsed.journal;
+  }
+  const journal = store.store;
+  journalStore.parsed = stats ? { mtimeMs: stats.mtimeMs, size: stats.size, journal } : null;
+  return journal;
+}
+
 // conf throws a SyntaxError for a journal.json that is not valid JSON, in the Store constructor and on every read. A
 // journal whose sessions are not a list counts the same, because the next write would replace them. The file stays as
 // it is, callers get JOURNAL_UNREADABLE, and the error log gets one line per finding without the parse error, whose
@@ -993,7 +1016,7 @@ function getJournalStore() {
 function readJournal() {
   let journal = null;
   try {
-    journal = getJournalStore().store;
+    journal = loadParsedJournal();
   } catch (error) {
     // By name: the tests run this in another realm than the one conf throws from.
     if (error?.name !== 'SyntaxError') {
@@ -1017,7 +1040,9 @@ function readJournal() {
 }
 
 function writeJournal(journal) {
-  getJournalStore().set('sessions', journal.sessions);
+  const store = getJournalStore();
+  journalStore.parsed = null;
+  store.set('sessions', journal.sessions);
 }
 
 // Restores the active session, for example after a restart.
@@ -1889,6 +1914,14 @@ async function getCurrencyPrices(params = {}) {
     return { prices: null, count: 0, total: 0, typeCounts: {}, syncedTypes: [], league, poeVersion, updatedAt: null, rates: {} };
   }
   const status = loaded ? priceService.getStatus() : await priceService.ensureSynced(league, poeVersion);
+  if (!status.itemCount) {
+    // poe.ninja gave nothing, so the page keeps the kept list if there is one, and its status line says so. Loot and
+    // profit still read the price service's own list, which holds nothing now.
+    const lastKnown = await getLastKnownCurrencyPrices(params);
+    if (lastKnown) {
+      return { ...lastKnown, lastKnown: true };
+    }
+  }
   const { prices, total, typeCounts, syncedTypes } = priceService.queryPrices(params);
   return {
     prices,
@@ -1905,6 +1938,32 @@ async function getCurrencyPrices(params = {}) {
       divineChaos: readLocalChaosPrice('Divine Orb', poeVersion),
       mirrorChaos: readLocalChaosPrice('Mirror of Kalandra', poeVersion)
     }
+  };
+}
+
+// The kept list of a league main does not hold yet, for the page to show while its sync runs. It answers null for a
+// loaded league, whose prices getCurrencyPrices lists at once, and when no list was kept. The list says when it was
+// synced, so the page can say how old it is.
+async function getLastKnownCurrencyPrices(params = {}) {
+  const { activeVersion: poeVersion, league } = resolveLeagueContext(params);
+  const loaded = priceService.poeVersion === poeVersion
+    && priceService.league === league
+    && priceService.getStatus().itemCount > 0;
+  const snapshot = loaded ? null : await priceSnapshots.load(poeVersion, league);
+  if (!snapshot) {
+    return null;
+  }
+  const { prices, total, typeCounts, syncedTypes, rates } = PriceService.querySnapshot(snapshot, params);
+  return {
+    prices,
+    count: prices.length,
+    total,
+    typeCounts,
+    syncedTypes,
+    league,
+    poeVersion,
+    updatedAt: new Date(snapshot.syncedAt).toISOString(),
+    rates
   };
 }
 
@@ -2384,6 +2443,7 @@ async function deleteAllLocalData() {
     journalStore = null;
     unreadableJournalProfileId = null;
     bugReport = null;
+    const priceSnapshotWrites = priceSnapshots?.stop();
 
     try {
       if (ocrScanner) {
@@ -2392,12 +2452,14 @@ async function deleteAllLocalData() {
     } catch {
       // A worker that does not stop keeps its files; the ocr-cache step reports them.
     }
+    // A write under way would put its folder back after the removal below. It never rejects.
+    await priceSnapshotWrites;
 
     const userData = app.getPath('userData');
     // Generic folder names: at a drive root they could belong to other programs.
     if (path.isAbsolute(userData) && path.dirname(userData) !== userData) {
       // Partitions is left over from the Overwolf version.
-      for (const folder of ['profiles', 'icon-cache', 'ocr-cache', 'logs', 'Partitions']) {
+      for (const folder of ['profiles', 'icon-cache', 'price-snapshots', 'ocr-cache', 'logs', 'Partitions']) {
         let removed = false;
         for (let attempt = 1; !removed && attempt <= DELETE_ALL_FOLDER_ATTEMPTS; attempt += 1) {
           if (attempt > 1) {
@@ -2468,6 +2530,7 @@ async function deleteAllLocalData() {
     if (!restarting) {
       errorLogState.disabled = false;
       dataActionRunning = false;
+      priceSnapshots?.resume();
     }
   }
 }
@@ -4322,10 +4385,24 @@ function setupIPC() {
     }
   });
 
+  ipcMain.handle('get-last-known-currency-prices', async (event, params = {}) => {
+    try {
+      return await getLastKnownCurrencyPrices(params);
+    } catch (error) {
+      throw toRendererError(error, 'Failed to load prices');
+    }
+  });
+
   ipcMain.handle('get-currency-leagues', async (event, poeVersion = 'poe1') => {
     try {
       return { activeLeagues: await priceService.getLeagues(poeVersion) };
     } catch (error) {
+      // Without poe.ninja's list the Currency page opens on the league of the newest kept list, which a built-in league
+      // list may not name any more.
+      const lastKnownLeague = await priceSnapshots.newestLeague(poeVersion);
+      if (lastKnownLeague) {
+        return { activeLeagues: [], lastKnownLeague };
+      }
       throw toRendererError(error, 'Failed to load leagues');
     }
   });
@@ -5082,6 +5159,8 @@ app.whenReady().then(() => {
   ocrScanner = new OCRScanner({ cachePath: path.join(app.getPath('userData'), 'ocr-cache') });
   poeApiClient = new PoeApiClient();
   priceService = new PriceService();
+  priceSnapshots = new PriceSnapshotStore({ dir: path.join(app.getPath('userData'), 'price-snapshots') });
+  priceService.onSynced = (snapshot) => priceSnapshots.save(snapshot);
   iconCache = new IconCache({ dir: path.join(app.getPath('userData'), 'icon-cache') });
   stashAnalyzer = new StashAnalyzer();
 
