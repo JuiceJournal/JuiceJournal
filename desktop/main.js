@@ -1623,12 +1623,12 @@ function getBugReport() {
 
 // Copies the report the user last saw. Any other id means the view still shows older text: nothing is copied and the
 // renderer loads the report again.
-function copyBugReportToClipboard(reportId) {
+async function copyBugReportToClipboard(reportId) {
   if (!Number.isSafeInteger(reportId) || reportId !== bugReport?.id) {
     return { stale: true };
   }
 
-  clipboard.writeText(bugReport.text);
+  await clipboard.writeText(bugReport.text);
   return { copied: true };
 }
 
@@ -2188,7 +2188,7 @@ async function openBugReportIssue(url) {
 
 // Copies first, so the report is on the clipboard by the time the issue form opens.
 async function copyAndOpenBugReportIssue(reportId) {
-  const copied = copyBugReportToClipboard(reportId);
+  const copied = await copyBugReportToClipboard(reportId);
   if (copied.stale) {
     return copied;
   }
@@ -4391,6 +4391,8 @@ function setupIPC() {
   ipcMain.handle('browse-poe-path', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
       title: 'Select Client.txt',
+      // Without this the dialog opens in Downloads since Electron 43.
+      defaultPath: store.get('poePath') || DEFAULT_POE_LOG_PATH,
       filters: [{ name: 'Log Files', extensions: ['txt'] }],
       properties: ['openFile']
     });

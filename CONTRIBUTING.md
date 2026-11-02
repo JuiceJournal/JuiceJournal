@@ -28,7 +28,7 @@ npm install
 npm run dev
 ```
 
-npm 12 skips dependency install scripts by default. If it warns about that, run `npm install-scripts approve electron koffi` and `npm install` again, or Electron will not be downloaded.
+npm 12 skips dependency install scripts by default. You can ignore its warning about that: Electron downloads itself the first time it runs.
 
 Optional backend (only for backend changes):
 

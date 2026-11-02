@@ -256,6 +256,10 @@ function classifyMainConsoleMessage(method, args) {
   if (first.startsWith("Error occurred in handler for '")) {
     return 'warn';
   }
+  // Printed on every launch since Electron 45, until main moves to the async safeStorage calls (needed for Electron 46).
+  if (first.startsWith("(electron) 'safeStorage.")) {
+    return null;
+  }
   // Node's generic follow-up line after each unhandled rejection, and its trace hint.
   if (/^\(node:\d+\) UnhandledPromiseRejectionWarning: Unhandled promise rejection\./.test(first)
     || first.startsWith('(Use `')) {
