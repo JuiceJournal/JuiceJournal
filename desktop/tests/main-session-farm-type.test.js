@@ -552,6 +552,30 @@ test('main map end notification names the map and reads the profit or loss with 
   assert.deepEqual(await endMap({ endedAt: '2026-05-06T11:59:00.000Z' }), [['Channel', 'mapNoLootBody']]);
 });
 
+test('main tells the window only when a map ended with nothing scanned or read from the stash', async () => {
+  const endMap = async (options, lootEntries = []) => {
+    const backend = createJournalBackend();
+    const active = backend.start({ mapName: 'Channel', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-1');
+    backend.journal.sessions[0].lootEntries = lootEntries;
+    const sent = [];
+    const context = loadFunctions(['endCurrentSession'], {
+      ...backend.context,
+      currentSession: active,
+      appendAuditTrail() {},
+      showNotification() {},
+      t: (key) => key,
+      updateOverlayWindow() {},
+      mainWindow: { webContents: { send: (channel, session) => sent.push(session) } }
+    });
+    await context.endCurrentSession({ endedAt: '2026-05-06T12:05:30.000Z', ...options });
+    return sent[0].noLoot;
+  };
+
+  assert.equal(await endMap(), true);
+  assert.equal(await endMap({ totalLootChaos: 0, profitChaos: 0 }), undefined);
+  assert.equal(await endMap({}, [{ itemName: 'Unpriced Item', quantity: 1, chaosValue: 0 }]), undefined);
+});
+
 test('main map end notification keeps a profit of 0 when the map has scanned loot without a price', async () => {
   const backend = createJournalBackend();
   const active = backend.start({ mapName: 'Channel', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-1');
@@ -593,6 +617,74 @@ test('a map started without a name is named plainly, and the prompt does not ask
   const source = fs.readFileSync(mainJsPath, 'utf8');
   assert.match(source, /promptMessage: 'Start this map without a name\?'/);
   assert.match(source, /promptMessage: 'Map adsiz baslatilsin mi\?'/);
+});
+
+function loadTrayStart(response) {
+  const backend = createJournalBackend();
+  const running = backend.start({ mapName: 'Channel', startedAt: '2026-05-06T12:00:00.000Z' }, 'running');
+  const shown = [];
+  const sent = [];
+  const notifications = [];
+  const context = loadFunctions(['normalizeStoredFarmTypeId', 'endCurrentSession', 'promptMapName', 'startNewSession'], {
+    ...backend.context,
+    currentSession: running,
+    resolveLeagueContext: () => ({ activeVersion: 'poe1', league: 'Mirage' }),
+    getActiveFarmTypeId: () => null,
+    crypto: { randomUUID: () => 'new-map' },
+    appendAuditTrail() {},
+    showNotification: (title, body) => notifications.push([title, body]),
+    t: (key, values = {}) => [key, ...Object.values(values)].join('|'),
+    dialog: {
+      showMessageBox: async (window, options) => {
+        shown.push(options);
+        return { response };
+      }
+    },
+    mainWindow: { webContents: { send: (channel, data) => sent.push([channel, data]) } }
+  });
+  return { backend, context, running, shown, sent, notifications };
+}
+
+test('the tray Start New Map asks before ending the running map, and Cancel leaves it running', async () => {
+  const { backend, context, running, shown, sent, notifications } = loadTrayStart(1);
+
+  assert.equal(await context.startNewSession(), undefined);
+
+  assert.equal(context.currentSession, running);
+  assert.deepEqual(backend.journal.sessions.map((stored) => [stored.id, stored.status]), [['running', 'active']]);
+  assert.deepEqual(sent, []);
+  assert.deepEqual(notifications, []);
+  // Enter keeps the map, and Esc or closing the dialog answers Cancel in every language.
+  assert.equal(shown[0].message, 'promptEndMessage|Channel');
+  assert.equal(shown[0].detail, 'promptEndDetail');
+  assert.deepEqual([...shown[0].buttons], ['promptEndConfirm', 'promptCancel']);
+  assert.equal(shown[0].defaultId, 1);
+  assert.equal(shown[0].cancelId, 1);
+});
+
+test('the tray Start New Map ends the running map once the player confirms', async () => {
+  const { backend, context, sent } = loadTrayStart(0);
+
+  const session = await context.startNewSession();
+
+  assert.equal(session.id, 'new-map');
+  assert.equal(session.mapName, 'unknownMap');
+  assert.equal(context.currentSession.id, 'new-map');
+  assert.deepEqual(backend.journal.sessions.map((stored) => [stored.id, stored.status]).sort(), [
+    ['new-map', 'active'],
+    ['running', 'completed']
+  ]);
+  assert.deepEqual(sent.map(([channel]) => channel), ['session-ended', 'session-started']);
+});
+
+test('a map started with a name ends the running map without asking', async () => {
+  const { backend, context, shown } = loadTrayStart(1);
+
+  const session = await context.startNewSession({ mapName: 'Dunes Map' });
+
+  assert.equal(session.mapName, 'Dunes Map');
+  assert.deepEqual(shown, []);
+  assert.equal(backend.journal.sessions.find((stored) => stored.id === 'running').status, 'completed');
 });
 
 test('main session end can target a journal session id after process state is lost', async () => {

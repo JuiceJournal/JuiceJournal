@@ -276,6 +276,19 @@ test('the result card uses the same game art only and says how much loot was sca
   assert.equal(overlay.secondary.textContent, 'No loot scanned');
 });
 
+test('the result card of a map with no loot shows no profit of 0 and no tier', () => {
+  const overlay = loadOverlay();
+  renderResult(overlay, { netProfit: 0, noLoot: true, durationSeconds: 250, lootItemCount: 0, topOutputs: [] });
+
+  assert.equal(overlay.primary.children.length, 1, 'only the name');
+  assert.equal(overlay.secondary.textContent, 'No loot scanned');
+  assert.equal(overlay.card.dataset.profitTier, undefined);
+  assert.equal(overlay.meta.textContent, '4m 10s');
+
+  renderResult(overlay, { netProfit: 0, totalLootChaos: 0, durationSeconds: 250, topOutputs: [] });
+  assert.equal(overlay.primary.children.length, 3, 'a stash result of exactly 0 keeps its value');
+});
+
 test('a loss keeps its colour on the card but shows the number in bright text', () => {
   const overlay = loadOverlay();
   renderResult(overlay, { netProfit: -540, durationSeconds: 250, topOutputs: [] });

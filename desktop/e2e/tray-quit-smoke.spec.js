@@ -292,6 +292,55 @@ async function runTrayQuitScenario(testInfo, { overlayEnabled, hideToTray }) {
   }
 }
 
+test('tray smoke: Start New Map keeps the running map on Cancel and ends it, with no profit of 0, on confirm', async ({}, testInfo) => {
+  const backend = await startSmokeBackend();
+  const isolatedProfile = createIsolatedProfile(testInfo, backend.baseUrl);
+  const bootstrap = createBootstrapScript(testInfo, { overlayEnabled: true });
+  let electronApp;
+  let childProcess;
+
+  const answerNextDialog = (response) => electronApp.evaluate(({ dialog }, answer) => {
+    dialog.showMessageBox = async () => answer;
+  }, { response });
+  const sessionStatuses = () => readJournalSessions(isolatedProfile.userDataDir).map((session) => session.status).sort();
+
+  try {
+    electronApp = await electron.launch({
+      args: ['-r', bootstrap.bootstrapPath, path.join(__dirname, '..')],
+      cwd: path.join(__dirname, '..'),
+      env: isolatedProfile.env
+    });
+    childProcess = electronApp.process();
+    const page = await waitForAppWindow(electronApp, /^Juice Journal$/i);
+    await signInWithPoeOAuth(page);
+    await startMap(page);
+    const overlay = await waitForAppWindow(electronApp, /Juice Journal Overlay/i);
+
+    await answerNextDialog(1);
+    await clickTrayItem(electronApp, 'Start New Map');
+    await expect(page.locator('#end-session-btn')).toBeVisible();
+    await page.waitForTimeout(500);
+    await expect(page.locator('.toast--result')).toHaveCount(0);
+    expect(sessionStatuses()).toEqual(['active']);
+
+    await answerNextDialog(0);
+    await clickTrayItem(electronApp, 'Start New Map');
+    await expect(page.locator('.toast--result .toast-message')).toContainText('No loot scanned');
+    await expect(page.locator('.toast--result .toast-value')).toHaveCount(0);
+    await expect(overlay.locator('[data-overlay-secondary]')).toHaveText('No loot scanned');
+    await expect(overlay.locator('.jj-value')).toHaveCount(0);
+    await expect.poll(sessionStatuses).toEqual(['active', 'completed']);
+    await expect(page.locator('#end-session-btn')).toBeVisible();
+  } finally {
+    if (childProcess && childProcess.exitCode === null) {
+      await shutdownElectronApp(electronApp, childProcess);
+    }
+    await closeServer(backend.server);
+    fs.rmSync(isolatedProfile.rootDir, { recursive: true, force: true });
+    fs.rmSync(bootstrap.bootstrapDir, { recursive: true, force: true });
+  }
+});
+
 test('tray quit smoke: quits with a map running, the overlay open and the window hidden to the tray', async ({}, testInfo) => {
   await runTrayQuitScenario(testInfo, { overlayEnabled: true, hideToTray: true });
 });
