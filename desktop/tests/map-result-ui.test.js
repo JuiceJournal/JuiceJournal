@@ -1653,7 +1653,62 @@ test('session-ended events persist completed map results for automatic log exits
   }]);
   // One notice per finished map, built from the saved result.
   assert.deepEqual(mapToasts, persistedResults);
-  assert.deepEqual(refreshCalls, [{ includeSessions: true }]);
+  // The numbers refresh at once: everything they read is written by now.
+  assert.deepEqual(refreshCalls, [{ includeSessions: true, immediate: true }]);
+});
+
+function loadTrackerRefresh() {
+  const timers = [];
+  const loads = [];
+  const context = loadFunctions(['refreshTrackerData'], {
+    state: { currentUser: { id: 'p1' } },
+    setTimeout: (callback, delay) => timers.push({ callback, delay }),
+    _refreshPending: null,
+    _refreshOptions: {},
+    _refreshRunNow: null,
+    isPageActive: () => false,
+    loadCurrentSession: async () => loads.push('session'),
+    loadDashboardStats: async () => loads.push('stats'),
+    loadRecentLoot: async () => loads.push('loot'),
+    loadMapResultHistory: async () => loads.push('history'),
+    loadJournalStatus: async () => loads.push('journal'),
+    loadSessions: async () => loads.push('sessions')
+  });
+  return { context, timers, loads };
+}
+
+test('a refresh waits out the coalescing timer, and one call covers every call that came meanwhile', async () => {
+  const { context, timers, loads } = loadTrackerRefresh();
+  context.refreshTrackerData();
+  const second = context.refreshTrackerData({ includeSessions: true });
+  assert.deepEqual(timers.map((timer) => timer.delay), [300]);
+  assert.deepEqual(loads, []);
+
+  timers[0].callback();
+  await second;
+  assert.deepEqual([...loads].sort(), ['history', 'journal', 'loot', 'session', 'sessions', 'stats']);
+});
+
+test('an immediate refresh reads at once, also ending a wait already running, and later calls wait again', async () => {
+  const atOnce = loadTrackerRefresh();
+  await atOnce.context.refreshTrackerData({ immediate: true });
+  assert.deepEqual(atOnce.timers, []);
+  assert.equal(atOnce.loads.includes('stats'), true);
+
+  const { context, timers, loads } = loadTrackerRefresh();
+  context.refreshTrackerData();
+  await context.refreshTrackerData({ includeSessions: true, immediate: true });
+  assert.equal(loads.includes('stats'), true);
+  // The options of the call that was waiting count too, and the old timer starts nothing.
+  assert.equal(loads.includes('sessions'), true);
+  const readsBefore = loads.length;
+  timers[0].callback();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(loads.length, readsBefore);
+
+  context.refreshTrackerData();
+  assert.deepEqual(timers.map((timer) => timer.delay), [300, 300]);
+  assert.equal(loads.length, readsBefore);
 });
 
 function loadSessionEndedListener({ stashState = { lastMapResult: null } } = {}) {

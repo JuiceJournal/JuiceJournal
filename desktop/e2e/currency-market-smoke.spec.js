@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
 const os = require('os');
@@ -61,7 +62,7 @@ async function startSmokeBackend() {
   return { server, baseUrl: `http://127.0.0.1:${address.port}` };
 }
 
-function createIsolatedProfile(testInfo, apiUrl) {
+function createIsolatedProfile(testInfo, apiUrl, prices = PRICES) {
   const tempRoot = path.join(os.tmpdir(), 'juice-journal-playwright');
   fs.mkdirSync(tempRoot, { recursive: true });
   const rootDir = fs.mkdtempSync(path.join(tempRoot, `${toSlug(testInfo.title)}-`));
@@ -96,7 +97,7 @@ function createIsolatedProfile(testInfo, apiUrl) {
       JUICE_JOURNAL_E2E_APP_DATA_DIR: appDataDir,
       JUICE_JOURNAL_E2E_USER_DATA_DIR: userDataDir,
       JUICE_JOURNAL_E2E_POE_ACCOUNT: JSON.stringify(POE_ACCOUNT),
-      JUICE_JOURNAL_E2E_PRICES: JSON.stringify(PRICES),
+      JUICE_JOURNAL_E2E_PRICES: JSON.stringify(prices),
       TMP: tempDir,
       TEMP: tempDir,
     },
@@ -321,6 +322,216 @@ test('currency market smoke: bundled art for rows without art, a localized type,
     for (const [lang, [idle, busy]] of Object.entries(syncWidths)) {
       expect(busy, lang).toBe(idle);
     }
+  } finally {
+    if (electronApp) {
+      await shutdownElectronApp(electronApp);
+    }
+    await new Promise((resolve) => backend.server.close(resolve));
+    for (const target of [isolatedProfile.rootDir, bootstrap.bootstrapDir]) {
+      fs.rmSync(target, { recursive: true, force: true });
+    }
+  }
+});
+
+test('currency market offline: the league and list kept on disk show, marked as old, and a Sync says it failed', async ({}, testInfo) => {
+  test.setTimeout(120000);
+  const backend = await startSmokeBackend();
+  const isolatedProfile = createIsolatedProfile(testInfo, backend.baseUrl);
+  isolatedProfile.env.JUICE_JOURNAL_E2E_POE_NINJA_OFFLINE = '1';
+  const bootstrap = createBootstrapScript(testInfo);
+  let electronApp;
+
+  // The last list of a league the built-in league lists do not name, as after a league rotation.
+  const league = 'E2E Rotated League';
+  const entry = (name, chaosValue, category) => ({ name, chaosValue, divineValue: chaosValue / 150, category, icon: null, sparkline: [], change: null });
+  const keptDir = path.join(isolatedProfile.env.JUICE_JOURNAL_E2E_USER_DATA_DIR, 'price-snapshots');
+  const keptFile = path.join(keptDir, `${crypto.createHash('sha256').update(`poe1:${league}`).digest('hex')}.json`);
+  const keptText = JSON.stringify({
+    version: 1,
+    poeVersion: 'poe1',
+    league,
+    syncedAt: Date.now() - 3 * 24 * 60 * 60 * 1000,
+    full: true,
+    syncedTypes: ['currency', 'fragment'],
+    entries: [entry('Divine Orb', 150, 'currency'), entry('Chaos Orb', 1, 'currency'), entry('E2E Kept Fragment', 12, 'fragment')]
+  });
+  fs.mkdirSync(keptDir, { recursive: true });
+  fs.writeFileSync(keptFile, keptText);
+
+  try {
+    electronApp = await electron.launch({
+      args: ['-r', bootstrap.bootstrapPath, path.join(__dirname, '..')],
+      cwd: path.join(__dirname, '..'),
+      env: isolatedProfile.env,
+    });
+    const page = await waitForAppWindow(electronApp, /^Juice Journal$/i);
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('#poe-oauth-login')).toBeEnabled();
+    await page.locator('#poe-oauth-login').click();
+    await expect(page.locator('#login-modal')).toBeHidden();
+
+    await page.locator('.nav-btn[data-page="currency"]').click();
+    const status = page.locator('#currency-status');
+    const rows = page.locator('#currency-table-body tr.currency-row');
+    const unreachable = `${league} · 3 prices · poe.ninja unreachable, list from 3d ago`;
+    await expect(page.locator('#currency-league')).toHaveValue(league);
+    await expect(rows).toHaveCount(3);
+    // No sync is coming, so the line drops that once the page's own sync has failed.
+    await expect(status).toHaveText(unreachable, { timeout: 60000 });
+    await expect(rows).toHaveCount(3);
+    await expect(page.locator('.currency-empty')).toHaveCount(0);
+
+    // The kept list still filters.
+    await page.locator('.currency-type-btn[data-type="fragment"]').click();
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first().locator('.currency-item-name')).toHaveText('E2E Kept Fragment');
+    await expect(status).toHaveText(unreachable, { timeout: 60000 });
+    await page.locator('.currency-type-btn[data-type=""]').click();
+    await expect(rows).toHaveCount(3);
+    await expect(status).toHaveText(unreachable, { timeout: 60000 });
+
+    // A Sync that reads nothing says so, and the kept list stays on the page and on disk.
+    await page.locator('#currency-sync-btn').click();
+    await expect(page.locator('.toast.error .toast-title')).toHaveText('Could not sync prices', { timeout: 60000 });
+    await expect(page.locator('#currency-sync-btn')).toBeEnabled({ timeout: 60000 });
+    await expect(status).toHaveText(unreachable);
+    await expect(rows).toHaveCount(3);
+    expect(fs.readFileSync(keptFile, 'utf8')).toBe(keptText);
+  } finally {
+    if (electronApp) {
+      await shutdownElectronApp(electronApp);
+    }
+    await new Promise((resolve) => backend.server.close(resolve));
+    for (const target of [isolatedProfile.rootDir, bootstrap.bootstrapDir]) {
+      fs.rmSync(target, { recursive: true, force: true });
+    }
+  }
+});
+
+// More rows than the table draws whole, so it holds only those near the screen.
+const LONG_LIST_COUNT = 300;
+const LONG_LIST_PRICES = {
+  'Divine Orb': 150,
+  ...Object.fromEntries(Array.from({ length: LONG_LIST_COUNT - 1 }, (_, index) => [
+    `Long Card ${String(index + 1).padStart(3, '0')}`,
+    { chaos: 100000 - index * 100, type: 'DivinationCard', change: 1 }
+  ]))
+};
+
+test('currency market long list: rows near the screen, a full-height page, keyboard moves past the drawn rows', async ({}, testInfo) => {
+  const backend = await startSmokeBackend();
+  const isolatedProfile = createIsolatedProfile(testInfo, backend.baseUrl, LONG_LIST_PRICES);
+  const bootstrap = createBootstrapScript(testInfo);
+  let electronApp;
+
+  try {
+    electronApp = await electron.launch({
+      args: ['-r', bootstrap.bootstrapPath, path.join(__dirname, '..')],
+      cwd: path.join(__dirname, '..'),
+      env: isolatedProfile.env,
+    });
+    const page = await waitForAppWindow(electronApp, /^Juice Journal$/i);
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('#poe-oauth-login')).toBeEnabled();
+    await page.locator('#poe-oauth-login').click();
+    await expect(page.locator('#login-modal')).toBeHidden();
+
+    await page.locator('.nav-btn[data-page="currency"]').click();
+    const rows = page.locator('#currency-table-body tr.currency-row');
+    const name = (text) => rows.filter({ has: page.locator('.currency-item-name', { hasText: text }) });
+    const firstName = 'Long Card 001';
+    // The cheapest price, so the end of the list.
+    const lastName = 'Divine Orb';
+    await expect(name(firstName)).toHaveCount(1);
+    await expect(page.locator('#currency-footer')).toHaveText(`Showing ${LONG_LIST_COUNT} of ${LONG_LIST_COUNT}`);
+    await expect(page.locator('.currency-type-btn[data-type=""] .currency-tab-count')).toHaveText(String(LONG_LIST_COUNT));
+    expect(await rows.count()).toBeLessThan(120);
+    await expect(name(lastName)).toHaveCount(0);
+    await expect(page.locator('.currency-table')).toHaveAttribute('aria-rowcount', String(LONG_LIST_COUNT + 1));
+
+    // The spacers keep the page as tall as with every row, and the rows sit where they would.
+    const rowHeight = await rows.nth(5).evaluate((row) => row.getBoundingClientRect().height);
+    const tableHeight = () => page.locator('#currency-table-body').evaluate((body) => body.getBoundingClientRect().height);
+    expect(Math.abs(await tableHeight() - rowHeight * LONG_LIST_COUNT)).toBeLessThan(2);
+
+    // Scrolling to the end draws the end, and the table's height stays.
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect(name(lastName)).toHaveCount(1);
+    await expect(name(lastName)).toBeInViewport();
+    await expect(name(firstName)).toHaveCount(0);
+    expect(await rows.count()).toBeLessThan(120);
+    expect(Math.abs(await tableHeight() - rowHeight * LONG_LIST_COUNT)).toBeLessThan(2);
+    await expect(page.locator('#currency-table-body tr.currency-row[tabindex="0"]')).toHaveCount(1);
+
+    // A sort keeps the place on the page and lists the other end there.
+    const scrollBeforeSort = await page.evaluate(() => window.scrollY);
+    await page.locator('.currency-table th[data-sort="chaosValue"] .currency-sort').click();
+    await expect(page.locator('.currency-table th[data-sort="chaosValue"]')).toHaveAttribute('aria-sort', 'ascending');
+    await expect(name('Long Card 001')).toHaveCount(1);
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrollBeforeSort);
+    await page.locator('.currency-table th[data-sort="chaosValue"] .currency-sort').click();
+    await expect(name(lastName)).toHaveCount(1);
+
+    // End and Home reach rows the table does not hold yet, and one row stays the Tab stop.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(name(firstName)).toHaveCount(1);
+    await name(firstName).focus();
+    await page.keyboard.press('End');
+    await expect(name(lastName)).toBeFocused();
+    await expect(name(lastName)).toHaveAttribute('tabindex', '0');
+    await expect(name(lastName)).toBeInViewport();
+    await expect(page.locator('#currency-table-body tr.currency-row[tabindex="0"]')).toHaveCount(1);
+    await page.keyboard.press('Home');
+    await expect(name(firstName)).toBeFocused();
+    await expect(name(firstName)).toBeInViewport();
+    await expect(page.locator('#currency-table-body tr.currency-row[tabindex="0"]')).toHaveCount(1);
+
+    // Arrow keys walk past the rows that were drawn at first, focus never dropping to the page.
+    await page.keyboard.press('ArrowDown');
+    for (let step = 0; step < 70; step += 1) {
+      await page.keyboard.press('ArrowDown');
+    }
+    await expect(name('Long Card 072')).toBeFocused();
+    await expect(name('Long Card 072')).toBeInViewport();
+
+    // An open row's detail leaves with its row and comes back with it, and the rows after it make room.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(name(firstName)).toHaveCount(1);
+    await name(firstName).click();
+    await expect(page.locator('.currency-detail-row')).toHaveCount(1);
+    const detailHeight = await page.locator('.currency-detail-row').evaluate((row) => row.getBoundingClientRect().height);
+    expect(Math.abs(await tableHeight() - (rowHeight * LONG_LIST_COUNT + detailHeight))).toBeLessThan(2);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect(name(lastName)).toHaveCount(1);
+    await expect(page.locator('.currency-detail-row')).toHaveCount(0);
+    expect(Math.abs(await tableHeight() - (rowHeight * LONG_LIST_COUNT + detailHeight))).toBeLessThan(2);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(page.locator('.currency-detail-row')).toHaveCount(1);
+    await expect(name(firstName)).toHaveAttribute('aria-expanded', 'true');
+
+    // A language changed on another page reaches the rows on the way back, though main's answer is the same.
+    // This label has no data-i18n, so only a redraw can change it.
+    const trendLabel = page.locator('.currency-detail-label');
+    const showIn = async (language) => {
+      await page.locator('.nav-btn[data-page="dashboard"]').click();
+      await page.evaluate((value) => {
+        window._appState.language = value;
+        applyLocalizedChrome();
+      }, language);
+      await page.locator('.nav-btn[data-page="currency"]').click();
+      const expected = await page.evaluate(() => window.t('currency.change7d'));
+      await expect(trendLabel).toHaveText(expected);
+      return expected;
+    };
+    const english = (await trendLabel.textContent()).trim();
+    expect(await showIn('tr')).not.toBe(english);
+    expect(await showIn('en')).toBe(english);
+
+    // A short tab draws every row again, with no spacers left.
+    await page.locator('#currency-search').fill('Long Card 00');
+    await expect(rows).toHaveCount(9);
+    await expect(page.locator('.currency-row-spacer')).toHaveCount(0);
+    await expect(page.locator('.currency-table')).not.toHaveAttribute('aria-rowcount', /./);
   } finally {
     if (electronApp) {
       await shutdownElectronApp(electronApp);

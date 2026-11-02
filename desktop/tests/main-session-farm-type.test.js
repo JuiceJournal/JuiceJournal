@@ -857,6 +857,80 @@ test('main Currency page waits for the price sync when another league is asked f
   assert.equal(result.prices[0].league, 'Standard');
 });
 
+// getLastKnownCurrencyPrices over a kept list of Mirage, next to a price service that holds what the test says.
+function loadLastKnownPrices({ league = null, itemCount = 0 } = {}) {
+  const PriceService = require('../src/modules/priceService');
+  const loads = [];
+  const syncCalls = [];
+  const priceService = {
+    poeVersion: 'poe1',
+    league,
+    itemCount,
+    getStatus() {
+      return { itemCount: this.itemCount, lastSync: Date.parse('2026-10-24T10:00:00.000Z') };
+    },
+    ensureSynced(wanted, poeVersion) {
+      syncCalls.push([poeVersion, wanted]);
+      return Promise.resolve(this.getStatus());
+    },
+    getPriceInfo: () => null,
+    queryPrices: () => ({ prices: [], total: 0, typeCounts: {}, syncedTypes: [] })
+  };
+  const context = loadFunctions(['getLastKnownCurrencyPrices', 'getCurrencyPrices', 'readLocalChaosPrice', 'normalizePositiveRate'], {
+    PriceService,
+    priceService,
+    priceSnapshots: {
+      load: async (poeVersion, wanted) => {
+        loads.push([poeVersion, wanted]);
+        return wanted === 'Mirage' ? {
+          syncedAt: Date.parse('2026-10-20T10:00:00.000Z'),
+          syncedTypes: ['currency'],
+          entries: [{ name: 'Divine Orb', chaosValue: 140, divineValue: 1, category: 'currency', icon: null, sparkline: [], change: null }]
+        } : null;
+      }
+    },
+    resolveLeagueContext: (options) => ({ activeVersion: options.poeVersion, league: options.league })
+  });
+  return { context, loads, syncCalls };
+}
+
+test('main answers the kept list with its own age and rates, and none for a loaded league or without one', async () => {
+  const cold = loadLastKnownPrices();
+  const kept = JSON.parse(JSON.stringify(await cold.context.getLastKnownCurrencyPrices({ poeVersion: 'poe1', league: 'Mirage' })));
+  assert.equal(kept.updatedAt, '2026-10-20T10:00:00.000Z');
+  assert.deepEqual(kept.rates, { divineChaos: 140, mirrorChaos: null });
+  assert.deepEqual(kept.prices.map((price) => price.itemName), ['Divine Orb']);
+  assert.equal(kept.total, 1);
+  assert.equal(kept.league, 'Mirage');
+  assert.deepEqual(cold.syncCalls, []);
+
+  assert.equal(await cold.context.getLastKnownCurrencyPrices({ poeVersion: 'poe1', league: 'Standard' }), null);
+
+  const loaded = loadLastKnownPrices({ league: 'Mirage', itemCount: 3 });
+  assert.equal(await loaded.context.getLastKnownCurrencyPrices({ poeVersion: 'poe1', league: 'Mirage' }), null);
+  // The loaded list needs no file read.
+  assert.deepEqual(loaded.loads, []);
+});
+
+test('main keeps the kept list when poe.ninja gives nothing, and prices from it never reach loot or profit', async () => {
+  const { context, syncCalls } = loadLastKnownPrices();
+  const listed = JSON.parse(JSON.stringify(await context.getCurrencyPrices({ poeVersion: 'poe1', league: 'Mirage' })));
+  assert.deepEqual(syncCalls, [['poe1', 'Mirage']]);
+  assert.deepEqual(listed.prices.map((price) => price.itemName), ['Divine Orb']);
+  assert.equal(listed.updatedAt, '2026-10-20T10:00:00.000Z');
+  // It says so, because the same list while a sync runs reads differently on the page.
+  assert.equal(listed.lastKnown, true);
+  assert.equal(JSON.parse(JSON.stringify(await context.getLastKnownCurrencyPrices({ poeVersion: 'poe1', league: 'Mirage' }))).lastKnown, undefined);
+  // What prices loot and works out profit reads the price service's own list, which is empty.
+  assert.equal(context.readLocalChaosPrice('Divine Orb', 'poe1'), null);
+
+  // No kept list, and it stays the empty answer it always was.
+  const empty = JSON.parse(JSON.stringify(await context.getCurrencyPrices({ poeVersion: 'poe1', league: 'Standard' })));
+  assert.deepEqual(empty.prices, []);
+  assert.equal(empty.total, 0);
+  assert.equal(empty.lastKnown, undefined);
+});
+
 test('main cache-only Currency reload never starts a sync and answers no prices for a league the list does not hold', async () => {
   const { context, priceService } = loadCurrencyPricesWithRunningSync();
 

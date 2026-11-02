@@ -12,6 +12,7 @@
     "test:security": "node --test tests/security-hardening.test.js",
     "test:perf": "node --expose-gc scripts/bench-desktop.js",
     "bench:desktop": "node --expose-gc scripts/bench-desktop.js",
+    "bench": "node bench/run.cjs",
     "test:e2e": "playwright test",
     "test:smoke": "playwright test e2e/settings-smoke.spec.js e2e/overlay-smoke.spec.js",
     "test:visual-qa": "playwright test e2e/adaptive-profit-visual-qa.spec.js",

@@ -144,6 +144,37 @@ function normalizeLookupKey(value) {
   return String(value || '').toLowerCase().trim();
 }
 
+// A price list in the shape the Currency page reads, most valuable first, plus what the page says around the list:
+// `total` matches before the limit, `typeCounts` prices per item type over the whole list (search and type ignored),
+// and `syncedTypes` the item types the sync read.
+function queryPriceEntries(entries, syncedTypes, { type = '', search = '', limit } = {}) {
+  const query = normalizeLookupKey(search);
+  const typeCounts = {};
+  const matches = [];
+  for (const entry of entries) {
+    const price = {
+      itemName: entry.name,
+      itemType: NINJA_ITEM_TYPES[entry.category] || 'other',
+      chaosValue: entry.chaosValue,
+      divineValue: entry.divineValue,
+      iconUrl: entry.icon,
+      sparklineData: { data: entry.sparkline || [] },
+      change: Number.isFinite(entry.change) ? entry.change : null
+    };
+    typeCounts[price.itemType] = (typeCounts[price.itemType] || 0) + 1;
+    if ((!type || price.itemType === type) && (!query || price.itemName.toLowerCase().includes(query))) {
+      matches.push(price);
+    }
+  }
+  matches.sort((left, right) => right.chaosValue - left.chaosValue);
+  return {
+    prices: matches.slice(0, Number.parseInt(limit, 10) || 500),
+    total: matches.length,
+    typeCounts,
+    syncedTypes: [...syncedTypes]
+  };
+}
+
 function getExchangeDivineToChaos(data) {
   const primary = data?.core?.primary;
   const rates = data?.core?.rates || {};
@@ -175,6 +206,8 @@ class PriceService {
     this.cacheGeneration = 0;
     // poe.ninja's league list per game: poeVersion → { data, fetchedAt }
     this.indexStates = new Map();
+    // Called with the list after a sync that read every type it asked for, so main can keep it for the next launch.
+    this.onSynced = null;
 
     this.client = axios.create({
       timeout: 15000,
@@ -244,14 +277,18 @@ class PriceService {
     return data;
   }
 
+  _hasFreshItemOverview(league, type) {
+    const cached = this.cache.get(`${this.poeVersion}:${league}:item:${type}`);
+    return Boolean(cached) && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
+  }
+
   /**
    * Fetch item overview from poe.ninja (PoE1 only)
    */
   async _fetchItemOverview(league, type) {
     const cacheKey = `${this.poeVersion}:${league}:item:${type}`;
-    const cached = this.cache.get(cacheKey);
-    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
-      return cached.data;
+    if (this._hasFreshItemOverview(league, type)) {
+      return this.cache.get(cacheKey).data;
     }
 
     const url = POE1_ITEM_URL;
@@ -278,6 +315,7 @@ class PriceService {
     const prices = new Map();
     const syncedTypes = new Set();
     const generation = this.cacheGeneration;
+    let readEveryType = true;
 
     // Get types from registry (version-aware, dynamic)
     const currencyTypes = registry.getCurrencyTypes();
@@ -290,8 +328,10 @@ class PriceService {
       try {
         const data = await this._fetchCurrencyOverview(league, type);
         this._indexCurrencyData(data, type, prices);
+        if (!Array.isArray(data?.lines)) readEveryType = false;
         syncedTypes.add(NINJA_ITEM_TYPES[type.toLowerCase()] || 'other');
       } catch (err) {
+        readEveryType = false;
         console.error(`Price sync failed for currency/${type}:`, err.message);
       }
     }
@@ -299,15 +339,20 @@ class PriceService {
     // Fetch item overviews (PoE1 only for now)
     if (this.poeVersion === 'poe1') {
       for (const type of itemTypes) {
+        const fromCache = this._hasFreshItemOverview(league, type);
         try {
           const data = await this._fetchItemOverview(league, type);
           this._indexItemData(data, type, prices);
+          if (!Array.isArray(data?.lines)) readEveryType = false;
           syncedTypes.add(NINJA_ITEM_TYPES[type.toLowerCase()] || 'other');
         } catch (err) {
+          readEveryType = false;
           console.error(`Price sync failed for item/${type}:`, err.message);
         }
-        // Small delay to respect rate limits
-        await new Promise(r => setTimeout(r, 300));
+        // Small delay to respect rate limits; an overview from the cache sent no request.
+        if (!fromCache) {
+          await new Promise(r => setTimeout(r, 300));
+        }
       }
     }
 
@@ -324,9 +369,26 @@ class PriceService {
     this.lastFullSync = Date.now();
     this.league = league;
     this.fullySynced = options.full !== false;
+    if (readEveryType && prices.size > 0 && this.onSynced) {
+      this.onSynced(this._toSnapshot());
+    }
     return {
       itemCount: this.priceMap.size,
       syncedAt: this.lastFullSync
+    };
+  }
+
+  // The loaded list with only what the Currency page reads.
+  _toSnapshot() {
+    return {
+      poeVersion: this.poeVersion,
+      league: this.league,
+      syncedAt: this.lastFullSync,
+      full: this.fullySynced,
+      syncedTypes: [...this.syncedTypes],
+      entries: [...this.priceMap.values()].map(({ name, chaosValue, divineValue, category, icon, sparkline, change }) => ({
+        name, chaosValue, divineValue, category, icon, sparkline, change
+      }))
     };
   }
 
@@ -377,35 +439,22 @@ class PriceService {
   }
 
   /**
-   * The synced league's prices in the shape the Currency page reads, most valuable first, plus what the page says
-   * around the list: `total` matches before the limit, `typeCounts` prices per item type over the whole list (search
-   * and type ignored), and `syncedTypes` the item types the last sync read.
+   * The synced league's prices for the Currency page; see queryPriceEntries.
    */
-  queryPrices({ type = '', search = '', limit } = {}) {
-    const query = normalizeLookupKey(search);
-    const typeCounts = {};
-    const matches = [];
-    for (const entry of this.priceMap.values()) {
-      const price = {
-        itemName: entry.name,
-        itemType: NINJA_ITEM_TYPES[entry.category] || 'other',
-        chaosValue: entry.chaosValue,
-        divineValue: entry.divineValue,
-        iconUrl: entry.icon,
-        sparklineData: { data: entry.sparkline || [] },
-        change: Number.isFinite(entry.change) ? entry.change : null
-      };
-      typeCounts[price.itemType] = (typeCounts[price.itemType] || 0) + 1;
-      if ((!type || price.itemType === type) && (!query || price.itemName.toLowerCase().includes(query))) {
-        matches.push(price);
-      }
-    }
-    matches.sort((left, right) => right.chaosValue - left.chaosValue);
+  queryPrices(params) {
+    return queryPriceEntries(this.priceMap.values(), this.syncedTypes, params);
+  }
+
+  /**
+   * A kept list (see _toSnapshot) in the same shape as queryPrices, with its own Divine and Mirror prices.
+   */
+  static querySnapshot(snapshot, params) {
+    const chaosValueOf = (itemName) => (
+      toPriceNumber(snapshot.entries.find((entry) => normalizeLookupKey(entry.name) === itemName)?.chaosValue) || null
+    );
     return {
-      prices: matches.slice(0, Number.parseInt(limit, 10) || 500),
-      total: matches.length,
-      typeCounts,
-      syncedTypes: [...this.syncedTypes]
+      ...queryPriceEntries(snapshot.entries, snapshot.syncedTypes, params),
+      rates: { divineChaos: chaosValueOf('divine orb'), mirrorChaos: chaosValueOf('mirror of kalandra') }
     };
   }
 

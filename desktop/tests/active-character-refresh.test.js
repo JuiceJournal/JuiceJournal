@@ -363,6 +363,7 @@ test('game-version change triggers active character refresh scheduling for poe2'
     showToast: (...args) => calls.push(['showToast', ...args]),
     formatDuration() { return '0m 0s'; },
     refreshTrackerData() {},
+    switchCurrencyGame() {},
     updateActiveSessionUI() {},
     ensureSessionClock() {},
     stopSessionClock() {},
