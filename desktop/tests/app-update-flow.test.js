@@ -16,22 +16,23 @@ function setup({ verify = async () => true, attemptedVersion = null, currentVers
   const state = createAppUpdateState({ currentVersion, isPackaged: true, platform: 'win32' });
   const verifyCalls = [];
   const pending = { value: attemptedVersion };
+  const pendingInstall = {
+    read: () => pending.value,
+    write: (version) => { pending.value = version; },
+    clear: () => { pending.value = null; }
+  };
   const flow = createAppUpdateFlow({
     updater,
     state,
     onChange: () => {},
     normalizeError: (error) => error.message,
-    pendingInstall: {
-      read: () => pending.value,
-      write: (version) => { pending.value = version; },
-      clear: () => { pending.value = null; }
-    },
+    pendingInstall,
     verify: async (args) => {
       verifyCalls.push(args);
       return verify(args);
     }
   });
-  return { updater, state, flow, verifyCalls, pending };
+  return { updater, state, flow, verifyCalls, pending, pendingInstall };
 }
 
 async function finishDownload(updater, overrides = {}) {
@@ -350,6 +351,21 @@ test('a version unchanged after an install attempt is reported, once', () => {
 
   assert.equal(state.installFailedVersion, '1.0.1');
   assert.equal(pending.value, null);
+});
+
+test('a version installed by hand after a failed attempt reports nothing', () => {
+  const { state } = setup({ attemptedVersion: '1.0.9', currentVersion: '1.0.10' });
+
+  assert.equal(state.installFailedVersion, null);
+});
+
+test('a record that cannot be written does not stop the install', async () => {
+  const { updater, flow, pendingInstall } = await readyToInstall();
+  pendingInstall.write = () => { throw new Error('disk full'); };
+  await flow.beginInstall();
+
+  assert.equal(flow.install(), true);
+  assert.deepEqual(updater.calls.install, [[true, true]]);
 });
 
 test('a completed update reports nothing', () => {

@@ -445,7 +445,7 @@ function renderAppUpdateState() {
   }
 
   if (elements.openUpdatePageBtn) {
-    const showPage = canAct && !update.readyToInstall && !update.installing;
+    const showPage = canAct && !update.readyToInstall;
     elements.openUpdatePageBtn.hidden = !showPage;
     elements.openUpdatePageBtn.disabled = !showPage;
     setButtonLabel(elements.openUpdatePageBtn, window.t('settings.openUpdatePage'));
@@ -477,7 +477,8 @@ function applyAppUpdateState(data) {
     dismissToast(state.appUpdateToast);
     state.appUpdateToast = null;
   }
-  if (data?.available && data.nextVersion !== previous?.nextVersion) {
+  // After a failed install the launch check offers the same version again, and that must not replace the failure toast.
+  if (data?.available && data.nextVersion !== previous?.nextVersion && !data.installFailedVersion) {
     showAppUpdateToast(window.t('toast.updateAvailableTitle'), window.t('toast.updateAvailableBody', { version }), 'info', {
       action: { label: window.t('settings.downloadUpdate'), onSelect: handleDownloadAppUpdate }
     });
@@ -6237,7 +6238,7 @@ function handleAppUpdateAction() {
 async function handleDownloadAppUpdate() {
   const update = state.appUpdate;
   // A sticky toast can outlive the offer it was raised for, and must not claim a download that never starts.
-  if (!update?.available || update.readyToInstall || update.downloading || update.verifying || update.installing) {
+  if (!update?.available || update.readyToInstall || update.downloading || update.verifying) {
     return;
   }
 

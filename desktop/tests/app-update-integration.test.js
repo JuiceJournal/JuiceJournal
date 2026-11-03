@@ -37,6 +37,10 @@ test('main process installs updates only through the signature-checking flow', (
 
   assert.doesNotMatch(source, /quitAndInstall|downloadUpdate|autoUpdater\.(checkForUpdates|on)\b/);
   assert.match(source, /if \(await appUpdateFlow\?\.beginInstall\(\)\) \{\s+installUpdateOnQuit = true;/);
+  // The record of an install attempt has to outlive the restart.
+  assert.match(source, /read: \(\) => store\.get\('pendingUpdateVersion'\)/);
+  assert.match(source, /write: \(version\) => store\.set\('pendingUpdateVersion', version\)/);
+  assert.match(source, /clear: \(\) => store\.delete\('pendingUpdateVersion'\)/);
   assert.match(source, /APP_RELEASES_URL = 'https:\/\/github\.com\/JuiceJournal\/JuiceJournal\/releases\/latest'/);
 });
 

@@ -239,8 +239,8 @@ const UPDATE_RENDER_CASES = [
   },
   {
     name: 'installing',
-    update: { available: true, readyToInstall: false, installing: true },
-    status: 'settings.updateAvailable',
+    update: { available: true, readyToInstall: true, installing: true },
+    status: 'settings.updateReady',
     label: 'settings.updateInstalling',
     action: { hidden: false, disabled: true },
     page: { hidden: true },
@@ -373,7 +373,7 @@ for (const [name, appUpdate] of [
   ['no update is offered', { available: false }],
   ['the update is already verified', { available: true, readyToInstall: true }],
   ['a download is running', { available: true, downloading: true }],
-  ['an install has begun', { available: true, installing: true }]
+  ['an install has begun', { available: true, readyToInstall: true, installing: true }]
 ]) {
   test(`a leftover download toast claims nothing when ${name}`, async () => {
     const toasts = [];
@@ -466,15 +466,17 @@ test('each update step replaces the toast before it, so no stale button stays on
   assert.deepEqual(dismissed, ['toast.updateAvailableTitle', 'toast.updateReadyTitle']);
 });
 
-for (const [name, next, expectedShown] of [
-  ['a newer version replaces the ready toast', { available: true, nextVersion: '1.2.0' }, ['toast.updateAvailableTitle']],
-  ['a withdrawn release removes the ready toast', { available: false, nextVersion: null }, []]
+const READY_UPDATE = { available: true, nextVersion: '1.1.0', readyToInstall: true };
+for (const [name, previous, next, expectedShown] of [
+  ['a newer version replaces the ready toast', READY_UPDATE, { available: true, nextVersion: '1.2.0' }, ['toast.updateAvailableTitle']],
+  ['a withdrawn release removes the ready toast', READY_UPDATE, { available: false, nextVersion: null }, []],
+  ['a withdrawn release removes the download toast', { available: true, nextVersion: '1.1.0' }, { available: false, nextVersion: null }, []]
 ]) {
   test(`${name}`, () => {
     const shown = [];
     const dismissed = [];
     const context = loadFunctions(['applyAppUpdateState', 'showAppUpdateToast'], {
-      state: { appUpdate: { available: true, nextVersion: '1.1.0', readyToInstall: true }, appUpdateToast: 'ready toast' },
+      state: { appUpdate: previous, appUpdateToast: 'ready toast' },
       window: { t: (key) => key },
       renderAppUpdateState: () => {},
       handleDownloadAppUpdate: async () => {},
@@ -506,6 +508,8 @@ test('a failed install after a restart raises one toast that opens the download 
 
   context.applyAppUpdateState(update);
   context.applyAppUpdateState({ ...update, checking: true });
+  // The launch check finds the version that failed, as it normally will.
+  context.applyAppUpdateState({ ...update, available: true, nextVersion: '1.1.0' });
 
   assert.equal(toasts.length, 1);
   assert.equal(toasts[0][0], 'toast.updateInstallFailedTitle');

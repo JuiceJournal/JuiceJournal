@@ -61,7 +61,8 @@ function createAppUpdateFlow({ updater, state, onChange, normalizeError, pending
   const attemptedVersion = pendingInstall.read();
   if (attemptedVersion) {
     pendingInstall.clear();
-    if (attemptedVersion !== state.currentVersion) {
+    // A newer version than the attempted one means the user has since installed by hand.
+    if (attemptedVersion.localeCompare(state.currentVersion, undefined, { numeric: true }) > 0) {
       state.installFailedVersion = attemptedVersion;
     }
   }
@@ -187,7 +188,12 @@ function createAppUpdateFlow({ updater, state, onChange, normalizeError, pending
       if (!state.installing || !verifiedUpdate?.file || updater.installerPath !== verifiedUpdate.file) {
         return false;
       }
-      pendingInstall.write(verifiedUpdate.version);
+      try {
+        pendingInstall.write(verifiedUpdate.version);
+      } catch (error) {
+        // This record only reports a failed install, so losing it must not stop the install.
+        console.warn('Failed to record the update install', error);
+      }
       updater.quitAndInstall(true, true);
       return true;
     }
