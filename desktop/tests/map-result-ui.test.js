@@ -806,11 +806,11 @@ test('a map started without a name carries no date in its name', async () => {
   assert.equal((await context.requestMapSessionDetails({})).mapName, 'misc.unknownMap');
 });
 
-test('a new version raises one sticky toast that opens the download page', () => {
+test('a new version raises one sticky toast that starts the download', () => {
   const listeners = {};
   const toasts = [];
-  const handleOpenAppUpdatePage = async () => {};
-  const context = loadFunctions(['applyAppUpdateState', 'setupIPCListeners'], {
+  const handleDownloadAppUpdate = async () => {};
+  const context = loadFunctions(['applyAppUpdateState', 'showAppUpdateToast', 'setupIPCListeners'], {
     state: { currentSession: null, appUpdate: null },
     window: {
       t: (key) => key,
@@ -825,7 +825,7 @@ test('a new version raises one sticky toast that opens the download page', () =>
       }
     },
     renderAppUpdateState: () => {},
-    handleOpenAppUpdatePage,
+    handleDownloadAppUpdate,
     showToast: (...args) => toasts.push(args)
   });
 
@@ -837,8 +837,8 @@ test('a new version raises one sticky toast that opens the download page', () =>
   assert.equal(toasts.length, 1);
   const [title, message, type, options] = toasts[0];
   assert.deepEqual([title, message, type], ['toast.updateAvailableTitle', 'toast.updateAvailableBody', 'info']);
-  assert.equal(options.action.label, 'settings.openUpdatePage');
-  assert.equal(options.action.onSelect, handleOpenAppUpdatePage);
+  assert.equal(options.action.label, 'settings.downloadUpdate');
+  assert.equal(options.action.onSelect, handleDownloadAppUpdate);
 });
 
 test('renderer keeps an active session visible when current-session refresh fails', async () => {

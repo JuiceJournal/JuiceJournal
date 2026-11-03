@@ -14,11 +14,12 @@
     "bench:desktop": "node --expose-gc scripts/bench-desktop.js",
     "bench": "node bench/run.cjs",
     "test:e2e": "playwright test",
-    "test:smoke": "playwright test e2e/settings-smoke.spec.js e2e/overlay-smoke.spec.js",
+    "test:smoke": "playwright test e2e/settings-smoke.spec.js e2e/overlay-smoke.spec.js e2e/app-update-smoke.spec.js",
     "test:visual-qa": "playwright test e2e/adaptive-profit-visual-qa.spec.js",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "pack": "electron-builder --dir",
+    "sign:update": "node scripts/sign-update.js",
     "icon:build": "electron scripts/build-brand-assets.js",
     "icon:test": "node --test tests/branding.test.js",
     "postinstall": "node scripts/patch-deprecated-deps.js && electron-builder install-app-deps"

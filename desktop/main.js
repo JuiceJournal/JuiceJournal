@@ -52,9 +52,9 @@ const {
 } = require('./src/modules/hotkeyModel');
 const {
   getAppUpdateSupportState,
-  createAppUpdateState,
-  applyAppUpdatePatch
+  createAppUpdateState
 } = require('./src/modules/appUpdateModel');
+const { createAppUpdateFlow } = require('./src/modules/appUpdateFlow');
 const bugReportModel = require('./src/modules/bugReportModel');
 const DEFAULT_POE_LOG_PATH = GameDetector.DEFAULT_POE_LOG_PATH;
 
@@ -429,6 +429,7 @@ let scanHotkeyGateInterval = null;
 let scanHotkeysActive = false;
 let appUpdateState = null;
 let appUpdateInitialized = false;
+let appUpdateFlow = null;
 
 function getLanguage() {
   const lang = store.get('language');
@@ -493,51 +494,16 @@ function initializeAppUpdater() {
   // IMPORTANT: runtime update checks only work after the release pipeline
   // publishes installer artifacts together with latest.yml metadata to
   // GitHub Releases. Keep this in sync with the release workflow.
-  // Releases carry no publisher signature, so the app only announces a new version. The user downloads it from
-  // APP_RELEASES_URL, and a compromised release cannot install itself.
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = false;
-
-  autoUpdater.on('checking-for-update', () => {
-    applyAppUpdatePatch(appUpdateState, {
-      checking: true,
-      error: null,
-      lastCheckedAt: new Date().toISOString()
-    });
-    broadcastAppUpdateState();
-  });
-
-  autoUpdater.on('update-available', (info) => {
-    applyAppUpdatePatch(appUpdateState, {
-      checking: false,
-      available: true,
-      nextVersion: info?.version || null,
-      releaseName: info?.releaseName || null,
-      releaseNotes: info?.releaseNotes || null,
-      error: null
-    });
-    broadcastAppUpdateState();
-  });
-
-  autoUpdater.on('update-not-available', () => {
-    applyAppUpdatePatch(appUpdateState, {
-      checking: false,
-      available: false,
-      nextVersion: null,
-      releaseName: null,
-      releaseNotes: null,
-      error: null,
-      lastCheckedAt: new Date().toISOString()
-    });
-    broadcastAppUpdateState();
-  });
-
-  autoUpdater.on('error', (error) => {
-    applyAppUpdatePatch(appUpdateState, {
-      checking: false,
-      error: normalizeErrorMessage(error, 'Failed to check for updates')
-    });
-    broadcastAppUpdateState();
+  appUpdateFlow = createAppUpdateFlow({
+    updater: autoUpdater,
+    state: appUpdateState,
+    onChange: broadcastAppUpdateState,
+    normalizeError: (error) => normalizeErrorMessage(error, 'Failed to check for updates'),
+    pendingInstall: {
+      read: () => store.get('pendingUpdateVersion'),
+      write: (version) => store.set('pendingUpdateVersion', version),
+      clear: () => store.delete('pendingUpdateVersion')
+    }
   });
 
   appUpdateInitialized = true;
@@ -4357,7 +4323,22 @@ function setupIPC() {
       return { ...state };
     }
 
-    await autoUpdater.checkForUpdates();
+    await appUpdateFlow.check();
+    return { ...appUpdateState };
+  });
+
+  ipcMain.handle('download-app-update', () => {
+    initializeAppUpdater();
+    appUpdateFlow?.download();
+    return { ...appUpdateState };
+  });
+
+  ipcMain.handle('install-app-update', async () => {
+    initializeAppUpdater();
+    if (await appUpdateFlow?.beginInstall()) {
+      installUpdateOnQuit = true;
+      app.quit();
+    }
     return { ...appUpdateState };
   });
 
@@ -5195,7 +5176,7 @@ app.whenReady().then(() => {
   ensureOverlayWindowForSettings();
 
   if (appUpdateState?.enabled) {
-    autoUpdater.checkForUpdates().catch(() => {});
+    appUpdateFlow.check().catch(() => {});
   }
 
   createTray();
@@ -5264,15 +5245,20 @@ function handleAppWillQuit() {
 
 let isFinalizingQuitSession = false;
 let didFinalizeQuitSession = false;
+let installUpdateOnQuit = false;
 
 function handleAppBeforeQuit(event) {
   app.isQuiting = true;
 
-  if (didFinalizeQuitSession || isFinalizingQuitSession) {
+  if (didFinalizeQuitSession) {
     return;
   }
 
+  // A second quit waits too: letting it through would close the app before the run is saved or an update starts.
   event.preventDefault();
+  if (isFinalizingQuitSession) {
+    return;
+  }
   isFinalizingQuitSession = true;
 
   finalizeActiveSessionOnShutdown()
@@ -5286,6 +5272,10 @@ function handleAppBeforeQuit(event) {
       if (overlayWindow && !overlayWindow.isDestroyed()) {
         overlayWindow.destroy();
         overlayWindow = null;
+      }
+      // The installer starts only now: it closes a running app, which must not cut the map save short.
+      if (installUpdateOnQuit && appUpdateFlow.install()) {
+        return;
       }
       app.quit();
     });

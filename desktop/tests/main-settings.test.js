@@ -1376,6 +1376,7 @@ test('a quit ends the run first, then destroys the overlay before it closes the 
       overlayWindow,
       isFinalizingQuitSession: false,
       didFinalizeQuitSession: false,
+      installUpdateOnQuit: false,
       finalizeActiveSessionOnShutdown: () => new Promise((resolve, reject) => {
         calls.push('finalize');
         finishRun = outcome === 'ended' ? resolve : reject;
@@ -1411,12 +1412,101 @@ test('a quit ends the run first, then destroys the overlay before it closes the 
       overlayWindow,
       isFinalizingQuitSession: false,
       didFinalizeQuitSession: false,
+      installUpdateOnQuit: false,
       finalizeActiveSessionOnShutdown: async () => null
     });
     context.handleAppBeforeQuit(quitEvent());
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(calls, ['app.quit']);
   }
+});
+
+test('an update install starts only after the run is saved and the overlay is gone', async () => {
+  for (const outcome of ['ended', 'failed']) {
+    const calls = [];
+    let finishRun;
+    const context = loadFunctions(['handleAppBeforeQuit'], {
+      app: { quit: () => calls.push('app.quit') },
+      appUpdateFlow: {
+        install: () => {
+          calls.push('install');
+          return true;
+        }
+      },
+      overlayWindow: {
+        isDestroyed: () => false,
+        destroy: () => calls.push('overlay.destroy')
+      },
+      isFinalizingQuitSession: false,
+      didFinalizeQuitSession: false,
+      installUpdateOnQuit: true,
+      finalizeActiveSessionOnShutdown: () => new Promise((resolve, reject) => {
+        calls.push('finalize');
+        finishRun = outcome === 'ended' ? resolve : reject;
+      }),
+      console: { warn: () => {} }
+    });
+
+    context.handleAppBeforeQuit({ preventDefault() {} });
+    assert.deepEqual(calls, ['finalize']);
+
+    finishRun(new Error('save failed'));
+    await new Promise(setImmediate);
+
+    assert.deepEqual(calls, ['finalize', 'overlay.destroy', 'install']);
+  }
+});
+
+test('an install that cannot start still finishes the quit', async () => {
+  const calls = [];
+  const context = loadFunctions(['handleAppBeforeQuit'], {
+    app: { quit: () => calls.push('app.quit') },
+    appUpdateFlow: { install: () => false },
+    overlayWindow: null,
+    isFinalizingQuitSession: false,
+    didFinalizeQuitSession: false,
+    installUpdateOnQuit: true,
+    finalizeActiveSessionOnShutdown: async () => null
+  });
+
+  context.handleAppBeforeQuit({ preventDefault() {} });
+  await new Promise(setImmediate);
+
+  assert.deepEqual(calls, ['app.quit']);
+});
+
+test('a second quit waits for the run to end instead of closing the app', async () => {
+  const calls = [];
+  let finishRun;
+  const context = loadFunctions(['handleAppBeforeQuit'], {
+    app: { quit: () => calls.push('app.quit') },
+    overlayWindow: null,
+    isFinalizingQuitSession: false,
+    didFinalizeQuitSession: false,
+    installUpdateOnQuit: false,
+    finalizeActiveSessionOnShutdown: () => new Promise((resolve) => {
+      calls.push('finalize');
+      finishRun = resolve;
+    })
+  });
+  const quitEvent = () => ({
+    prevented: false,
+    preventDefault() {
+      this.prevented = true;
+    }
+  });
+
+  context.handleAppBeforeQuit(quitEvent());
+  const second = quitEvent();
+  context.handleAppBeforeQuit(second);
+
+  assert.equal(second.prevented, true);
+  assert.deepEqual(calls, ['finalize']);
+
+  finishRun();
+  await new Promise(setImmediate);
+
+  assert.deepEqual(calls, ['finalize', 'app.quit']);
 });
 
 test('main quit destroys the overlay before Electron closes the windows', async () => {
