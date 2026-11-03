@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRuntimeMode: () => ipcRenderer.invoke('get-runtime-mode'),
   getAppUpdateState: () => ipcRenderer.invoke('get-app-update-state'),
   checkForAppUpdate: () => ipcRenderer.invoke('check-for-app-update'),
+  downloadAppUpdate: () => ipcRenderer.invoke('download-app-update'),
+  installAppUpdate: () => ipcRenderer.invoke('install-app-update'),
   openAppUpdatePage: () => ipcRenderer.invoke('open-app-update-page'),
 
   // Dosya secici

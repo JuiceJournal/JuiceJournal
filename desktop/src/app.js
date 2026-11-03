@@ -38,6 +38,7 @@ const state = {
   overlay: null,
   profitCurrencyRates: {},
   appUpdate: null,
+  appUpdateToast: null,
   capabilities: null,
   selectedSession: null,
   auditTrail: [],
@@ -271,6 +272,7 @@ const elements = {
   appUpdateStatus: document.getElementById('app-update-status'),
   appUpdateDetail: document.getElementById('app-update-detail'),
   checkUpdatesBtn: document.getElementById('check-updates-btn'),
+  appUpdateActionBtn: document.getElementById('app-update-action-btn'),
   openUpdatePageBtn: document.getElementById('open-update-page-btn'),
   settingsPage: document.getElementById('settings-page'),
   settingsAboutTab: document.getElementById('settings-about'),
@@ -374,6 +376,11 @@ function renderAppUpdateState() {
       elements.checkUpdatesBtn.disabled = true;
       setButtonLabel(elements.checkUpdatesBtn, window.t('settings.checkForUpdates'));
     }
+    if (elements.appUpdateActionBtn) {
+      elements.appUpdateActionBtn.hidden = true;
+      elements.appUpdateActionBtn.disabled = true;
+      elements.appUpdateActionBtn.classList?.add('hidden');
+    }
     if (elements.openUpdatePageBtn) {
       elements.openUpdatePageBtn.hidden = true;
       elements.openUpdatePageBtn.disabled = true;
@@ -385,10 +392,10 @@ function renderAppUpdateState() {
 
   if (update.error) {
     if (elements.appUpdateStatus) {
-      elements.appUpdateStatus.textContent = window.t('settings.updateError');
+      elements.appUpdateStatus.textContent = getAppUpdateErrorText(update);
     }
     if (elements.appUpdateDetail) {
-      elements.appUpdateDetail.textContent = update.error;
+      elements.appUpdateDetail.textContent = update.errorKind === 'signature' ? '' : update.error;
     }
   } else if (update.checking) {
     if (elements.appUpdateStatus) {
@@ -399,7 +406,7 @@ function renderAppUpdateState() {
     }
   } else if (update.available) {
     if (elements.appUpdateStatus) {
-      elements.appUpdateStatus.textContent = window.t('settings.updateAvailable', {
+      elements.appUpdateStatus.textContent = window.t(update.readyToInstall ? 'settings.updateReady' : 'settings.updateAvailable', {
         version: update.nextVersion || '?'
       });
     }
@@ -416,29 +423,70 @@ function renderAppUpdateState() {
   }
 
   if (elements.checkUpdatesBtn) {
-    elements.checkUpdatesBtn.disabled = Boolean(update.checking);
+    elements.checkUpdatesBtn.disabled = Boolean(update.checking || update.downloading || update.verifying);
     setButtonLabel(elements.checkUpdatesBtn, update.checking
       ? window.t('settings.checkingForUpdates')
       : window.t('settings.checkForUpdates'));
   }
 
+  // After a failed signature check, neither button offers that release again until a new check clears the failure.
+  const canAct = Boolean(update.available) && update.errorKind !== 'signature';
+  if (elements.appUpdateActionBtn) {
+    elements.appUpdateActionBtn.hidden = !canAct;
+    elements.appUpdateActionBtn.disabled = !canAct || Boolean(update.downloading || update.verifying);
+    setButtonLabel(elements.appUpdateActionBtn, getAppUpdateActionLabel(update));
+    elements.appUpdateActionBtn.classList?.toggle('hidden', !canAct);
+  }
+
   if (elements.openUpdatePageBtn) {
-    elements.openUpdatePageBtn.hidden = !update.available;
-    elements.openUpdatePageBtn.disabled = !update.available;
+    const showPage = canAct && !update.readyToInstall;
+    elements.openUpdatePageBtn.hidden = !showPage;
+    elements.openUpdatePageBtn.disabled = !showPage;
     setButtonLabel(elements.openUpdatePageBtn, window.t('settings.openUpdatePage'));
-    elements.openUpdatePageBtn.classList?.toggle('hidden', !update.available);
+    elements.openUpdatePageBtn.classList?.toggle('hidden', !showPage);
   }
 }
 
+function getAppUpdateErrorText(update) {
+  if (update.errorKind === 'signature') return window.t('settings.updateSignatureFailed');
+  if (update.errorKind === 'download') return window.t('settings.updateDownloadFailed');
+  return window.t('settings.updateError');
+}
+
+function getAppUpdateActionLabel(update) {
+  if (update.downloading) return window.t('settings.updateDownloading', { percent: update.downloadPercent ?? 0 });
+  if (update.verifying) return window.t('settings.updateVerifying');
+  if (update.readyToInstall) return window.t('settings.installUpdate');
+  return window.t('settings.downloadUpdate');
+}
+
 function applyAppUpdateState(data) {
-  const wasAvailable = Boolean(state.appUpdate?.available);
+  const previous = state.appUpdate;
   state.appUpdate = data || null;
   renderAppUpdateState();
-  if (!wasAvailable && data?.available) {
-    showToast(window.t('toast.updateAvailableTitle'), window.t('toast.updateAvailableBody', { version: data.nextVersion || '?' }), 'info', {
-      action: { label: window.t('settings.openUpdatePage'), onSelect: handleOpenAppUpdatePage }
+  const version = data?.nextVersion || '?';
+  if (!previous?.available && data?.available) {
+    showAppUpdateToast(window.t('toast.updateAvailableTitle'), window.t('toast.updateAvailableBody', { version }), 'info', {
+      action: { label: window.t('settings.downloadUpdate'), onSelect: handleDownloadAppUpdate }
     });
   }
+  if (!previous?.readyToInstall && data?.readyToInstall) {
+    showAppUpdateToast(window.t('toast.updateReadyTitle'), window.t('toast.updateReadyBody', { version }), 'success', {
+      action: { label: window.t('settings.installUpdate'), onSelect: handleInstallAppUpdate }
+    });
+  }
+  // A failed check stays on the About tab, but a failed download started from a toast has to be seen anywhere.
+  if (data?.error && data.errorKind !== 'check' && previous?.error !== data.error) {
+    showAppUpdateToast(getAppUpdateErrorText(data), '', 'error');
+  }
+}
+
+// Update toasts are sticky, so each step takes the one before it off the screen, along with its stale button.
+function showAppUpdateToast(title, message, type, options) {
+  if (state.appUpdateToast) {
+    dismissToast(state.appUpdateToast);
+  }
+  state.appUpdateToast = showToast(title, message, type, options);
 }
 
 function clearActiveCharacterRefreshTimers() {
@@ -2332,6 +2380,11 @@ function setupEventListeners() {
   });
   if (elements.checkUpdatesBtn) {
     elements.checkUpdatesBtn.addEventListener('click', handleCheckForAppUpdate);
+  }
+  if (elements.appUpdateActionBtn) {
+    elements.appUpdateActionBtn.addEventListener('click', () => (
+      state.appUpdate?.readyToInstall ? handleInstallAppUpdate() : handleDownloadAppUpdate()
+    ));
   }
   if (elements.openUpdatePageBtn) {
     elements.openUpdatePageBtn.addEventListener('click', handleOpenAppUpdatePage);
@@ -6158,6 +6211,27 @@ async function completePoe1SessionWithStashProfit() {
 
     showToast(window.t('toast.mapEndFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
     return false;
+  }
+}
+
+async function handleDownloadAppUpdate() {
+  try {
+    showAppUpdateToast(
+      window.t('toast.updateDownloadingTitle'),
+      window.t('toast.updateDownloadingBody', { version: state.appUpdate?.nextVersion || '?' }),
+      'info'
+    );
+    await window.electronAPI.downloadAppUpdate();
+  } catch (error) {
+    showToast(window.t('settings.updateDownloadFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
+  }
+}
+
+async function handleInstallAppUpdate() {
+  try {
+    await window.electronAPI.installAppUpdate();
+  } catch (error) {
+    showToast(window.t('settings.updateError'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   }
 }
 

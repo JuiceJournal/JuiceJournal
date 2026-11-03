@@ -24,7 +24,12 @@
       nextVersion: null,
       releaseName: null,
       releaseNotes: null,
+      downloading: false,
+      downloadPercent: null,
+      verifying: false,
+      readyToInstall: false,
       error: null,
+      errorKind: null,
       lastCheckedAt: null
     };
   }
