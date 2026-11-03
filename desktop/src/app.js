@@ -422,8 +422,14 @@ function renderAppUpdateState() {
     }
   }
 
+  // The check that opens this About tab can fail for its own reasons, and must not hide that the last install failed.
+  if (update.installFailedVersion && !update.error && elements.appUpdateDetail) {
+    elements.appUpdateDetail.textContent = window.t('settings.updateInstallFailed', { version: update.installFailedVersion });
+  }
+
+  const busy = Boolean(update.checking || update.downloading || update.verifying || update.installing);
   if (elements.checkUpdatesBtn) {
-    elements.checkUpdatesBtn.disabled = Boolean(update.checking || update.downloading || update.verifying);
+    elements.checkUpdatesBtn.disabled = busy;
     setButtonLabel(elements.checkUpdatesBtn, update.checking
       ? window.t('settings.checkingForUpdates')
       : window.t('settings.checkForUpdates'));
@@ -433,13 +439,13 @@ function renderAppUpdateState() {
   const canAct = Boolean(update.available) && update.errorKind !== 'signature';
   if (elements.appUpdateActionBtn) {
     elements.appUpdateActionBtn.hidden = !canAct;
-    elements.appUpdateActionBtn.disabled = !canAct || Boolean(update.downloading || update.verifying);
+    elements.appUpdateActionBtn.disabled = !canAct || busy;
     setButtonLabel(elements.appUpdateActionBtn, getAppUpdateActionLabel(update));
     elements.appUpdateActionBtn.classList?.toggle('hidden', !canAct);
   }
 
   if (elements.openUpdatePageBtn) {
-    const showPage = canAct && !update.readyToInstall;
+    const showPage = canAct && !update.readyToInstall && !update.installing;
     elements.openUpdatePageBtn.hidden = !showPage;
     elements.openUpdatePageBtn.disabled = !showPage;
     setButtonLabel(elements.openUpdatePageBtn, window.t('settings.openUpdatePage'));
@@ -454,6 +460,7 @@ function getAppUpdateErrorText(update) {
 }
 
 function getAppUpdateActionLabel(update) {
+  if (update.installing) return window.t('settings.updateInstalling');
   if (update.downloading) return window.t('settings.updateDownloading', { percent: update.downloadPercent ?? 0 });
   if (update.verifying) return window.t('settings.updateVerifying');
   if (update.readyToInstall) return window.t('settings.installUpdate');
@@ -465,7 +472,12 @@ function applyAppUpdateState(data) {
   state.appUpdate = data || null;
   renderAppUpdateState();
   const version = data?.nextVersion || '?';
-  if (!previous?.available && data?.available) {
+  const offerWithdrawn = (previous?.available && !data?.available) || (previous?.readyToInstall && !data?.readyToInstall);
+  if (offerWithdrawn && state.appUpdateToast) {
+    dismissToast(state.appUpdateToast);
+    state.appUpdateToast = null;
+  }
+  if (data?.available && data.nextVersion !== previous?.nextVersion) {
     showAppUpdateToast(window.t('toast.updateAvailableTitle'), window.t('toast.updateAvailableBody', { version }), 'info', {
       action: { label: window.t('settings.downloadUpdate'), onSelect: handleDownloadAppUpdate }
     });
@@ -478,6 +490,12 @@ function applyAppUpdateState(data) {
   // A failed check stays on the About tab, but a failed download started from a toast has to be seen anywhere.
   if (data?.error && data.errorKind !== 'check' && previous?.error !== data.error) {
     showAppUpdateToast(getAppUpdateErrorText(data), '', 'error');
+  }
+  if (!previous?.installFailedVersion && data?.installFailedVersion) {
+    const failedVersion = data.installFailedVersion;
+    showAppUpdateToast(window.t('toast.updateInstallFailedTitle'), window.t('settings.updateInstallFailed', { version: failedVersion }), 'error', {
+      action: { label: window.t('settings.openUpdatePage'), onSelect: handleOpenAppUpdatePage }
+    });
   }
 }
 
@@ -2382,9 +2400,7 @@ function setupEventListeners() {
     elements.checkUpdatesBtn.addEventListener('click', handleCheckForAppUpdate);
   }
   if (elements.appUpdateActionBtn) {
-    elements.appUpdateActionBtn.addEventListener('click', () => (
-      state.appUpdate?.readyToInstall ? handleInstallAppUpdate() : handleDownloadAppUpdate()
-    ));
+    elements.appUpdateActionBtn.addEventListener('click', handleAppUpdateAction);
   }
   if (elements.openUpdatePageBtn) {
     elements.openUpdatePageBtn.addEventListener('click', handleOpenAppUpdatePage);
@@ -6214,7 +6230,17 @@ async function completePoe1SessionWithStashProfit() {
   }
 }
 
+function handleAppUpdateAction() {
+  return state.appUpdate?.readyToInstall ? handleInstallAppUpdate() : handleDownloadAppUpdate();
+}
+
 async function handleDownloadAppUpdate() {
+  const update = state.appUpdate;
+  // A sticky toast can outlive the offer it was raised for, and must not claim a download that never starts.
+  if (!update?.available || update.readyToInstall || update.downloading || update.verifying || update.installing) {
+    return;
+  }
+
   try {
     showAppUpdateToast(
       window.t('toast.updateDownloadingTitle'),

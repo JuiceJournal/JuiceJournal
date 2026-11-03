@@ -10,6 +10,12 @@ if (!outputPath) {
   process.exit(1);
 }
 
+const insideRepo = !path.relative(path.resolve(__dirname, '..', '..'), path.resolve(outputPath)).startsWith('..');
+if (insideRepo) {
+  console.error('The private key must stay outside the repo: anything under desktop/src ships in every installer.');
+  process.exit(1);
+}
+
 const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
 
 fs.mkdirSync(path.dirname(path.resolve(outputPath)), { recursive: true });

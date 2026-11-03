@@ -126,7 +126,7 @@ const applyUpdate = (page, patch) => page.evaluate(
   { ...IDLE_UPDATE, ...patch }
 );
 
-test('app update smoke: the About tab and toasts follow download, verify, install and failure', async ({}, testInfo) => {
+test('app update smoke: the About tab and toasts follow download, verify, ready and failure', async ({}, testInfo) => {
   test.setTimeout(90000);
   const backend = await startSmokeBackend();
   const profile = createIsolatedProfile(backend.baseUrl);

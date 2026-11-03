@@ -394,6 +394,8 @@ window.Translations = {
     'settings.updateReady': '{version} surumu dogrulandi ve kuruluma hazir.',
     'settings.updateDownloadFailed': 'Guncelleme indirilemedi.',
     'settings.updateSignatureFailed': 'Bu guncelleme imza denetiminden gecemedi ve kurulmadi.',
+    'settings.updateInstalling': 'Kuruluma hazirlaniyor...',
+    'settings.updateInstallFailed': '{version} surumu kurulamadi. Indirme sayfasindan elle kurabilirsin.',
 
     // Settings - Actions
     'settings.save': 'Kaydet',
@@ -442,7 +444,8 @@ window.Translations = {
     'toast.updateDownloadingTitle': 'Guncelleme indiriliyor',
     'toast.updateDownloadingBody': '{version} surumu iniyor. Uygulamayi kullanmaya devam edebilirsin.',
     'toast.updateReadyTitle': 'Guncelleme hazir',
-    'toast.updateReadyBody': '{version} surumunu kurmak icin yeniden baslat. Calisan harita once kaydedilir.',
+    'toast.updateReadyBody': '{version} surumunu kurmak icin yeniden baslat. Calisan harita once bitirilir.',
+    'toast.updateInstallFailedTitle': 'Guncelleme kurulamadi',
     'toast.updatePageFailed': 'Indirme sayfasi acilamadi',
     'toast.dismiss': 'Kapat',
     'toast.mapProfit': 'Kazanc',
@@ -1360,6 +1363,8 @@ window.Translations = {
     'settings.updateReady': 'Version {version} is verified and ready to install.',
     'settings.updateDownloadFailed': 'Update download failed.',
     'settings.updateSignatureFailed': 'This update failed its signature check and was not installed.',
+    'settings.updateInstalling': 'Preparing to install...',
+    'settings.updateInstallFailed': 'Version {version} did not install. You can install it by hand from the download page.',
 
     // Settings - Actions
     'settings.save': 'Save',
@@ -1408,7 +1413,8 @@ window.Translations = {
     'toast.updateDownloadingTitle': 'Downloading update',
     'toast.updateDownloadingBody': 'Version {version} is downloading. You can keep using the app.',
     'toast.updateReadyTitle': 'Update ready',
-    'toast.updateReadyBody': 'Restart to install version {version}. A running map is saved first.',
+    'toast.updateReadyBody': 'Restart to install version {version}. A running map ends first.',
+    'toast.updateInstallFailedTitle': 'Update did not install',
     'toast.updatePageFailed': 'Could not open the download page',
     'toast.dismiss': 'Dismiss',
     'toast.mapProfit': 'Profit',

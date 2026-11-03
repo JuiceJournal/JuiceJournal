@@ -147,6 +147,7 @@ test('settings html includes desktop update status controls', () => {
   assert.match(html, /id="app-update-status"/);
   assert.match(html, /id="app-update-detail"/);
   assert.match(html, /id="check-updates-btn"/);
+  assert.match(html, /id="app-update-action-btn"/);
   assert.match(html, /id="open-update-page-btn"/);
   assert.doesNotMatch(html, /install-update-btn/);
 });
@@ -207,6 +208,191 @@ test('renderer about tab offers the download and its page only when an update is
   assert.equal(context.elements.openUpdatePageBtn.hidden, true);
   assert.equal(context.elements.openUpdatePageBtn.disabled, true);
 });
+
+const UPDATE_RENDER_CASES = [
+  {
+    name: 'downloading',
+    update: { available: true, downloading: true, downloadPercent: 42 },
+    status: 'settings.updateAvailable',
+    label: 'settings.updateDownloading',
+    action: { hidden: false, disabled: true },
+    page: { hidden: false },
+    checkDisabled: true
+  },
+  {
+    name: 'verifying',
+    update: { available: true, verifying: true },
+    status: 'settings.updateAvailable',
+    label: 'settings.updateVerifying',
+    action: { hidden: false, disabled: true },
+    page: { hidden: false },
+    checkDisabled: true
+  },
+  {
+    name: 'ready',
+    update: { available: true, readyToInstall: true },
+    status: 'settings.updateReady',
+    label: 'settings.installUpdate',
+    action: { hidden: false, disabled: false },
+    page: { hidden: true },
+    checkDisabled: false
+  },
+  {
+    name: 'installing',
+    update: { available: true, readyToInstall: false, installing: true },
+    status: 'settings.updateAvailable',
+    label: 'settings.updateInstalling',
+    action: { hidden: false, disabled: true },
+    page: { hidden: true },
+    checkDisabled: true
+  },
+  {
+    name: 'checking while an update is offered',
+    update: { available: true, checking: true },
+    status: 'settings.checkingForUpdates',
+    label: 'settings.downloadUpdate',
+    action: { hidden: false, disabled: true },
+    page: { hidden: false },
+    checkDisabled: true
+  },
+  {
+    name: 'signature failure',
+    update: { available: true, error: 'bad', errorKind: 'signature' },
+    status: 'settings.updateSignatureFailed',
+    detail: '',
+    label: 'settings.downloadUpdate',
+    action: { hidden: true, disabled: true },
+    page: { hidden: true },
+    checkDisabled: false
+  },
+  {
+    name: 'download failure',
+    update: { available: true, error: 'network down', errorKind: 'download' },
+    status: 'settings.updateDownloadFailed',
+    detail: 'network down',
+    label: 'settings.downloadUpdate',
+    action: { hidden: false, disabled: false },
+    page: { hidden: false },
+    checkDisabled: false
+  },
+  {
+    name: 'a failed install after restart',
+    update: { available: true, installFailedVersion: '1.1.0' },
+    status: 'settings.updateAvailable',
+    detail: 'settings.updateInstallFailed',
+    label: 'settings.downloadUpdate',
+    action: { hidden: false, disabled: false },
+    page: { hidden: false },
+    checkDisabled: false
+  }
+];
+
+for (const expected of UPDATE_RENDER_CASES) {
+  test(`renderer about tab while ${expected.name}`, () => {
+    const buttonWithLabel = () => {
+      const label = { textContent: '' };
+      return { hidden: true, disabled: true, label, querySelector: () => label };
+    };
+    const context = loadFunctions(['setButtonLabel', 'getAppUpdateErrorText', 'getAppUpdateActionLabel', 'renderAppUpdateState'], {
+      elements: {
+        appVersionValue: { textContent: '' },
+        appUpdateStatus: { textContent: '' },
+        appUpdateDetail: { textContent: '' },
+        checkUpdatesBtn: buttonWithLabel(),
+        appUpdateActionBtn: buttonWithLabel(),
+        openUpdatePageBtn: buttonWithLabel()
+      },
+      state: { appUpdate: { enabled: true, currentVersion: '1.0.0', nextVersion: '1.1.0', ...expected.update } },
+      window: { t: (key) => key }
+    });
+
+    context.renderAppUpdateState();
+
+    const { appUpdateStatus, appUpdateDetail, appUpdateActionBtn, openUpdatePageBtn, checkUpdatesBtn } = context.elements;
+    assert.equal(appUpdateStatus.textContent, expected.status);
+    if (expected.detail !== undefined) {
+      assert.equal(appUpdateDetail.textContent, expected.detail);
+    }
+    assert.equal(appUpdateActionBtn.label.textContent, expected.label);
+    assert.equal(appUpdateActionBtn.hidden, expected.action.hidden);
+    assert.equal(appUpdateActionBtn.disabled, expected.action.disabled);
+    assert.equal(openUpdatePageBtn.hidden, expected.page.hidden);
+    assert.equal(openUpdatePageBtn.disabled, expected.page.hidden);
+    assert.equal(checkUpdatesBtn.disabled, expected.checkDisabled);
+  });
+}
+
+test('the action button installs only when the update is ready', () => {
+  const calls = [];
+  const context = loadFunctions(['handleAppUpdateAction'], {
+    state: { appUpdate: { available: true, readyToInstall: false } },
+    handleDownloadAppUpdate: () => calls.push('download'),
+    handleInstallAppUpdate: () => calls.push('install')
+  });
+
+  context.handleAppUpdateAction();
+  context.state.appUpdate = { available: true, readyToInstall: true };
+  context.handleAppUpdateAction();
+
+  assert.deepEqual(calls, ['download', 'install']);
+});
+
+test('the ready toast offers the install', () => {
+  const toasts = [];
+  const handleInstallAppUpdate = async () => {};
+  const context = loadFunctions(['applyAppUpdateState', 'showAppUpdateToast'], {
+    state: { appUpdate: { available: true, nextVersion: '1.1.0' } },
+    window: { t: (key) => key },
+    renderAppUpdateState: () => {},
+    handleInstallAppUpdate,
+    showToast: (...args) => toasts.push(args)
+  });
+
+  context.applyAppUpdateState({ available: true, nextVersion: '1.1.0', readyToInstall: true });
+
+  assert.equal(toasts.length, 1);
+  assert.equal(toasts[0][3].action.label, 'settings.installUpdate');
+  assert.equal(toasts[0][3].action.onSelect, handleInstallAppUpdate);
+});
+
+test('the install button and toast reach the main process', async () => {
+  const calls = [];
+  const context = loadFunctions(['handleInstallAppUpdate'], {
+    window: {
+      t: (key) => key,
+      electronAPI: { installAppUpdate: async () => calls.push('install') }
+    }
+  });
+
+  await context.handleInstallAppUpdate();
+
+  assert.deepEqual(calls, ['install']);
+});
+
+for (const [name, appUpdate] of [
+  ['no update is offered', { available: false }],
+  ['the update is already verified', { available: true, readyToInstall: true }],
+  ['a download is running', { available: true, downloading: true }],
+  ['an install has begun', { available: true, installing: true }]
+]) {
+  test(`a leftover download toast claims nothing when ${name}`, async () => {
+    const toasts = [];
+    const calls = [];
+    const context = loadFunctions(['handleDownloadAppUpdate'], {
+      state: { appUpdate },
+      window: {
+        t: (key) => key,
+        electronAPI: { downloadAppUpdate: async () => calls.push('download') }
+      },
+      showAppUpdateToast: (...args) => toasts.push(args)
+    });
+
+    await context.handleDownloadAppUpdate();
+
+    assert.deepEqual(toasts, []);
+    assert.deepEqual(calls, []);
+  });
+}
 
 test('a failed update check shows in the About status line and is read out, without a toast', async () => {
   const toasts = [];
@@ -278,6 +464,52 @@ test('each update step replaces the toast before it, so no stale button stays on
 
   assert.deepEqual(shown, ['toast.updateAvailableTitle', 'toast.updateReadyTitle', 'settings.updateSignatureFailed']);
   assert.deepEqual(dismissed, ['toast.updateAvailableTitle', 'toast.updateReadyTitle']);
+});
+
+for (const [name, next, expectedShown] of [
+  ['a newer version replaces the ready toast', { available: true, nextVersion: '1.2.0' }, ['toast.updateAvailableTitle']],
+  ['a withdrawn release removes the ready toast', { available: false, nextVersion: null }, []]
+]) {
+  test(`${name}`, () => {
+    const shown = [];
+    const dismissed = [];
+    const context = loadFunctions(['applyAppUpdateState', 'showAppUpdateToast'], {
+      state: { appUpdate: { available: true, nextVersion: '1.1.0', readyToInstall: true }, appUpdateToast: 'ready toast' },
+      window: { t: (key) => key },
+      renderAppUpdateState: () => {},
+      handleDownloadAppUpdate: async () => {},
+      dismissToast: (toast) => dismissed.push(toast),
+      showToast: (title) => {
+        shown.push(title);
+        return title;
+      }
+    });
+
+    context.applyAppUpdateState(next);
+
+    assert.deepEqual(dismissed, ['ready toast']);
+    assert.deepEqual(shown, expectedShown);
+  });
+}
+
+test('a failed install after a restart raises one toast that opens the download page', () => {
+  const toasts = [];
+  const handleOpenAppUpdatePage = async () => {};
+  const context = loadFunctions(['applyAppUpdateState', 'showAppUpdateToast'], {
+    state: { appUpdate: null },
+    window: { t: (key) => key },
+    renderAppUpdateState: () => {},
+    handleOpenAppUpdatePage,
+    showToast: (...args) => toasts.push(args)
+  });
+  const update = { enabled: true, available: false, installFailedVersion: '1.1.0' };
+
+  context.applyAppUpdateState(update);
+  context.applyAppUpdateState({ ...update, checking: true });
+
+  assert.equal(toasts.length, 1);
+  assert.equal(toasts[0][0], 'toast.updateInstallFailedTitle');
+  assert.equal(toasts[0][3].action.onSelect, handleOpenAppUpdatePage);
 });
 
 test('a failed launch check raises no toast', () => {

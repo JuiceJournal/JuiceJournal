@@ -1427,7 +1427,12 @@ test('an update install starts only after the run is saved and the overlay is go
     let finishRun;
     const context = loadFunctions(['handleAppBeforeQuit'], {
       app: { quit: () => calls.push('app.quit') },
-      appUpdateFlow: { install: () => calls.push('install') },
+      appUpdateFlow: {
+        install: () => {
+          calls.push('install');
+          return true;
+        }
+      },
       overlayWindow: {
         isDestroyed: () => false,
         destroy: () => calls.push('overlay.destroy')
@@ -1450,6 +1455,58 @@ test('an update install starts only after the run is saved and the overlay is go
 
     assert.deepEqual(calls, ['finalize', 'overlay.destroy', 'install']);
   }
+});
+
+test('an install that cannot start still finishes the quit', async () => {
+  const calls = [];
+  const context = loadFunctions(['handleAppBeforeQuit'], {
+    app: { quit: () => calls.push('app.quit') },
+    appUpdateFlow: { install: () => false },
+    overlayWindow: null,
+    isFinalizingQuitSession: false,
+    didFinalizeQuitSession: false,
+    installUpdateOnQuit: true,
+    finalizeActiveSessionOnShutdown: async () => null
+  });
+
+  context.handleAppBeforeQuit({ preventDefault() {} });
+  await new Promise(setImmediate);
+
+  assert.deepEqual(calls, ['app.quit']);
+});
+
+test('a second quit waits for the run to end instead of closing the app', async () => {
+  const calls = [];
+  let finishRun;
+  const context = loadFunctions(['handleAppBeforeQuit'], {
+    app: { quit: () => calls.push('app.quit') },
+    overlayWindow: null,
+    isFinalizingQuitSession: false,
+    didFinalizeQuitSession: false,
+    installUpdateOnQuit: false,
+    finalizeActiveSessionOnShutdown: () => new Promise((resolve) => {
+      calls.push('finalize');
+      finishRun = resolve;
+    })
+  });
+  const quitEvent = () => ({
+    prevented: false,
+    preventDefault() {
+      this.prevented = true;
+    }
+  });
+
+  context.handleAppBeforeQuit(quitEvent());
+  const second = quitEvent();
+  context.handleAppBeforeQuit(second);
+
+  assert.equal(second.prevented, true);
+  assert.deepEqual(calls, ['finalize']);
+
+  finishRun();
+  await new Promise(setImmediate);
+
+  assert.deepEqual(calls, ['finalize', 'app.quit']);
 });
 
 test('main quit destroys the overlay before Electron closes the windows', async () => {

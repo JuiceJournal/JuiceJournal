@@ -36,7 +36,7 @@ test('main process installs updates only through the signature-checking flow', (
   const source = fs.readFileSync(mainJsPath, 'utf8');
 
   assert.doesNotMatch(source, /quitAndInstall|downloadUpdate|autoUpdater\.(checkForUpdates|on)\b/);
-  assert.match(source, /if \(await appUpdateFlow\?\.verifyForInstall\(\)\) \{\s+installUpdateOnQuit = true;/);
+  assert.match(source, /if \(await appUpdateFlow\?\.beginInstall\(\)\) \{\s+installUpdateOnQuit = true;/);
   assert.match(source, /APP_RELEASES_URL = 'https:\/\/github\.com\/JuiceJournal\/JuiceJournal\/releases\/latest'/);
 });
 

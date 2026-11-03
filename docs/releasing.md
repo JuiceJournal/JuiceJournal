@@ -27,5 +27,11 @@ Upload `latest.yml` only after signing. A release without a signature is announc
 
 The private key signs every update, so anyone who has it can ship code to every install. Keep it out of the repo and out of CI secrets, and keep an offline backup.
 
-- **Lost key:** make a new one with `node scripts/generate-update-key.js <path>` and put the printed public key in `src/modules/updateSignature.js`. Existing installs reject releases signed with the new key, so their users must install the next version by hand once.
+- **Lost key:** make a new one with `node scripts/generate-update-key.js <path outside the repo>` and put the printed public key in `src/modules/updateSignature.js`. Existing installs reject releases signed with the new key, so their users must install the next version by hand once.
 - **Leaked key:** do the same, and tell users to reinstall from the release page.
+
+## What a signature does not cover
+
+A signature never expires. Someone who takes over the GitHub account cannot ship new code, but can publish any past signed release again, and the app offers it to users on an older version. It can also hold users back by keeping a past release as the latest. A signed release can only be revoked by changing the key.
+
+Windows still sees the app as unsigned, so a first install from the release page shows a SmartScreen warning.

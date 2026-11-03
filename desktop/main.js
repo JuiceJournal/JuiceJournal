@@ -52,8 +52,7 @@ const {
 } = require('./src/modules/hotkeyModel');
 const {
   getAppUpdateSupportState,
-  createAppUpdateState,
-  applyAppUpdatePatch
+  createAppUpdateState
 } = require('./src/modules/appUpdateModel');
 const { createAppUpdateFlow } = require('./src/modules/appUpdateFlow');
 const bugReportModel = require('./src/modules/bugReportModel');
@@ -499,7 +498,12 @@ function initializeAppUpdater() {
     updater: autoUpdater,
     state: appUpdateState,
     onChange: broadcastAppUpdateState,
-    normalizeError: (error) => normalizeErrorMessage(error, 'Failed to check for updates')
+    normalizeError: (error) => normalizeErrorMessage(error, 'Failed to check for updates'),
+    pendingInstall: {
+      read: () => store.get('pendingUpdateVersion'),
+      write: (version) => store.set('pendingUpdateVersion', version),
+      clear: () => store.delete('pendingUpdateVersion')
+    }
   });
 
   appUpdateInitialized = true;
@@ -4331,7 +4335,7 @@ function setupIPC() {
 
   ipcMain.handle('install-app-update', async () => {
     initializeAppUpdater();
-    if (await appUpdateFlow?.verifyForInstall()) {
+    if (await appUpdateFlow?.beginInstall()) {
       installUpdateOnQuit = true;
       app.quit();
     }
@@ -5246,11 +5250,15 @@ let installUpdateOnQuit = false;
 function handleAppBeforeQuit(event) {
   app.isQuiting = true;
 
-  if (didFinalizeQuitSession || isFinalizingQuitSession) {
+  if (didFinalizeQuitSession) {
     return;
   }
 
+  // A second quit waits too: letting it through would close the app before the run is saved or an update starts.
   event.preventDefault();
+  if (isFinalizingQuitSession) {
+    return;
+  }
   isFinalizingQuitSession = true;
 
   finalizeActiveSessionOnShutdown()
@@ -5266,8 +5274,7 @@ function handleAppBeforeQuit(event) {
         overlayWindow = null;
       }
       // The installer starts only now: it closes a running app, which must not cut the map save short.
-      if (installUpdateOnQuit) {
-        appUpdateFlow.install();
+      if (installUpdateOnQuit && appUpdateFlow.install()) {
         return;
       }
       app.quit();
