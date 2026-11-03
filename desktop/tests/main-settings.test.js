@@ -1412,6 +1412,7 @@ test('a quit ends the run first, then destroys the overlay before it closes the 
       overlayWindow,
       isFinalizingQuitSession: false,
       didFinalizeQuitSession: false,
+      installUpdateOnQuit: false,
       finalizeActiveSessionOnShutdown: async () => null
     });
     context.handleAppBeforeQuit(quitEvent());
