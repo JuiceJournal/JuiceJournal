@@ -428,6 +428,76 @@ test('a sync records the item types it read, and PoE2 idols come from the Idols 
   assert.ok(!synced.includes('ultimatum'));
 });
 
+test('PoE2 reads every overview poe.ninja lists, keeps Ultimatum and Vaal, and PoE1 asks for none of the new ones', () => {
+  const listedByNinja = [
+    'Currency', 'Fragments', 'Abyss', 'UncutGems', 'LineageSupportGems', 'Essences', 'SoulCores', 'Idols', 'Runes',
+    'Ritual', 'Expedition', 'Delirium', 'Breach', 'Verisium'
+  ];
+  const expected = [...listedByNinja, 'Ultimatum', 'Vaal'].sort();
+
+  registry.setPoeVersion('poe2');
+  assert.deepEqual([...registry.getCurrencyTypes()].sort(), expected);
+  assert.deepEqual([...registry.getQuickSyncTypes()].sort(), expected);
+
+  registry.setPoeVersion('poe1');
+  const poe1Types = [...registry.getCurrencyTypes(), ...registry.getItemTypes(), ...registry.getQuickSyncTypes()];
+  for (const type of ['Ritual', 'Abyss', 'Breach', 'Delirium', 'Verisium', 'LineageSupportGems']) {
+    assert.ok(!poe1Types.includes(type), type);
+  }
+  assert.ok(poe1Types.includes('Omen'));
+  assert.ok(poe1Types.includes('Catalyst'));
+});
+
+test('a PoE2 sync prices the newer overviews and lists each under its Currency page type', async () => {
+  const service = new PriceService();
+  service.setPoeVersion('poe2');
+  const listed = {
+    Ritual: 'Omen of Dextral Necromancy',
+    Abyss: 'Ancient Rib',
+    Breach: 'Refined Sibilant Catalyst',
+    Delirium: 'Potent Liquid Ferocity',
+    Verisium: 'Celestial Alloy',
+    LineageSupportGems: "Uul-Netol's Embrace",
+    UncutGems: 'Uncut Spirit Gem (Level 20)',
+    // Older leagues still list items in this overview.
+    Ultimatum: 'Soul Core of Azcapa'
+  };
+  service._fetchCurrencyOverview = async (league, type) => (listed[type]
+    ? {
+      core: { primary: 'divine', rates: { chaos: 20 } },
+      items: [{ id: type, name: listed[type], category: type, image: `/gen/image/${type}.png` }],
+      lines: [{ id: type, primaryValue: 6.48 }]
+    }
+    // poe.ninja's answer to an overview it has nothing for.
+    : { core: { items: [], rates: {}, primary: 'chaos', secondary: 'divine' }, lines: [], items: [] });
+
+  await service.syncPrices('Forbidden Rites');
+
+  // Lookups ignore case, because loot names come from the game.
+  assert.equal(service.getChaosValue('Ancient Rib'), 129.6);
+  assert.equal(service.getPriceInfo('omen of dextral necromancy').divineValue, 6.48);
+  const namesOf = (type) => service.queryPrices({ type }).prices.map((price) => price.itemName).sort();
+  assert.deepEqual(namesOf('omen'), ['Omen of Dextral Necromancy']);
+  assert.deepEqual(namesOf('abyssal_bone'), ['Ancient Rib']);
+  assert.deepEqual(namesOf('catalyst'), ['Refined Sibilant Catalyst']);
+  assert.deepEqual(namesOf('liquid_emotion'), ['Potent Liquid Ferocity']);
+  assert.deepEqual(namesOf('verisium'), ['Celestial Alloy']);
+  assert.deepEqual(namesOf('gem'), ['Uncut Spirit Gem (Level 20)', "Uul-Netol's Embrace"]);
+  assert.deepEqual(namesOf('ultimatum'), ['Soul Core of Azcapa']);
+  assert.deepEqual(namesOf('other'), []);
+
+  const { typeCounts, syncedTypes } = service.queryPrices();
+  assert.equal(typeCounts.gem, 2);
+  for (const type of ['omen', 'abyssal_bone', 'catalyst', 'liquid_emotion', 'verisium', 'gem', 'ultimatum', 'vaal']) {
+    assert.ok(syncedTypes.includes(type), type);
+  }
+
+  // The list kept for the next launch files them the same way.
+  const kept = PriceService.querySnapshot(service._toSnapshot(), { type: 'abyssal_bone' });
+  assert.deepEqual(kept.prices.map((price) => price.itemName), ['Ancient Rib']);
+  assert.ok(kept.syncedTypes.includes('abyssal_bone'));
+});
+
 test('getLeagues reads poe.ninja index state for each game', async () => {
   const service = new PriceService();
   const urls = [];

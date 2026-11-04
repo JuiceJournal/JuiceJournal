@@ -528,6 +528,17 @@ test('the Vaal and Runegraft rail tabs have their strings in en and tr', () => {
   }
 });
 
+test('the PoE 2 rail tabs for the newer overviews have their strings in en and tr', () => {
+  const translations = loadDesktopTranslations();
+  for (const language of ['en', 'tr']) {
+    assert.equal(translations[language]['category.omen'], 'Omen');
+    assert.equal(translations[language]['category.catalyst'], 'Catalyst');
+    assert.equal(translations[language]['category.abyssalBone'], 'Abyssal Bone');
+    assert.equal(translations[language]['category.liquidEmotion'], 'Liquid Emotion');
+    assert.equal(translations[language]['category.verisium'], 'Verisium');
+  }
+});
+
 test('the Turkish UI does not get Turkish case mapping on its ASCII-folded uppercase labels', () => {
   // Chromium uppercases i to a dotted capital I under lang=tr; the tr copy has no dotless i, so it renders as en.
   for (const [language, expected] of [['tr', 'en'], ['en', 'en'], ['de', 'de']]) {

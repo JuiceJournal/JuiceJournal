@@ -98,6 +98,17 @@ test('addLoot stores entries newest first and recalculates totals', () => {
   assert.equal(getSession(second.journal, 'session-1').totalLootChaos, 157.5);
 });
 
+test('addLoot keeps the item types of the PoE 2 Currency tabs', () => {
+  const { journal } = startedJournal();
+  const itemTypes = ['omen', 'catalyst', 'abyssal_bone', 'liquid_emotion', 'verisium'];
+  const { lootEntries } = addLoot(journal, 'session-1', itemTypes.map((itemType) => ({ itemName: itemType, itemType })), {
+    createId: idFactory('loot'),
+    now: NOW
+  });
+
+  assert.deepEqual(lootEntries.map((loot) => loot.itemType).sort(), [...itemTypes].sort());
+});
+
 test('addLoot rejects unknown sessions and nameless items', () => {
   const { journal } = startedJournal();
   const options = { createId: idFactory('loot'), now: NOW };

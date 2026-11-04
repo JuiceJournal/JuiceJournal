@@ -1412,9 +1412,12 @@ test('every category tab shows its bundled art or our line icon in a slot, never
   // All is our layers icon; the tabs that are no game category, or have no current art, get our chest.
   const expectedGlyph = {
     poe1: { '': 'layers', incubator: 'chest', rune: 'chest', base_type: 'chest', other: 'chest' },
-    poe2: { '': 'layers', ultimatum: 'chest', vaal: 'chest', other: 'chest' }
+    poe2: {
+      '': 'layers', omen: 'chest', abyssal_bone: 'chest', catalyst: 'chest', liquid_emotion: 'chest', verisium: 'chest',
+      ultimatum: 'chest', vaal: 'chest', other: 'chest'
+    }
   };
-  for (const [poeVersion, tabCount] of [['poe1', 20], ['poe2', 12]]) {
+  for (const [poeVersion, tabCount] of [['poe1', 20], ['poe2', 17]]) {
     const tabs = renderCategoryRail(poeVersion).match(/<button [\s\S]*?<\/button>/g) || [];
     assert.equal(tabs.length, tabCount, poeVersion);
 
@@ -1561,6 +1564,18 @@ test('price types read as their localized tab label, never as the raw snake_case
     assert.equal(context.getCurrencyTypeLabel('rune', poeVersion), poeVersion === 'poe1' ? 'category.runegraft' : 'category.rune');
     assert.equal(context.getCurrencyTypeLabel('vaal', poeVersion), 'category.vaal');
     assert.equal(context.getCurrencyTypeLabel('lineage_support_gem', poeVersion), 'Lineage Support Gem');
+    assert.equal(context.getCurrencyTypeLabel('omen', poeVersion), 'category.omen');
+    assert.equal(context.getCurrencyTypeLabel('catalyst', poeVersion), 'category.catalyst');
+    assert.equal(context.getCurrencyTypeLabel('abyssal_bone', poeVersion), 'category.abyssalBone');
+    assert.equal(context.getCurrencyTypeLabel('liquid_emotion', poeVersion), 'category.liquidEmotion');
+    assert.equal(context.getCurrencyTypeLabel('verisium', poeVersion), 'category.verisium');
+  }
+});
+
+test('a PoE 2 tab with no art of its own never borrows the PoE 1 picture for its rows', () => {
+  const { resolveCurrencyRowArt } = loadCurrencyHelpers({ poeVersion: 'poe2' });
+  for (const itemType of ['omen', 'catalyst', 'abyssal_bone', 'liquid_emotion', 'verisium']) {
+    assert.deepEqual({ ...resolveCurrencyRowArt({ itemType }, 'poe2') }, { remote: '', bundled: '' }, itemType);
   }
 });
 

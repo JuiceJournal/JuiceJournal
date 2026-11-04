@@ -35,9 +35,13 @@ const POE1_ITEM_TYPES = [
   'UniqueRelic', 'Wombgift', 'BaseType'
 ];
 
+// What poe.ninja's economy pages listed on 2026-11-04, plus two overviews they no longer name. Ultimatum still has
+// prices in older leagues (Fate of the Vaal, Rise of the Abyssal). Vaal was empty in every league checked, but the Vaal
+// tab's items come from Currency, and reading this overview is what marks that tab as read when a league has none.
 const POE2_CURRENCY_TYPES = [
   'Currency', 'Fragments', 'UncutGems', 'SoulCores',
-  'Idols', 'Runes', 'Essences', 'Expedition', 'Ultimatum', 'Vaal'
+  'Idols', 'Runes', 'Essences', 'Expedition', 'Ultimatum', 'Vaal',
+  'Ritual', 'Abyss', 'Breach', 'Delirium', 'Verisium', 'LineageSupportGems'
 ];
 const POE2_ITEM_TYPES = [];
 
@@ -49,7 +53,8 @@ const POE1_QUICK_SYNC = [
 const POE2_QUICK_SYNC = [
   'Currency', 'Fragments', 'Essences', 'Runes',
   'UncutGems', 'SoulCores', 'Idols', 'Vaal',
-  'Expedition', 'Ultimatum'
+  'Expedition', 'Ultimatum',
+  'Ritual', 'Abyss', 'Breach', 'Delirium', 'Verisium', 'LineageSupportGems'
 ];
 
 // ─── Static core currencies (always present, per version) ─────────

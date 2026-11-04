@@ -41,8 +41,10 @@ const NINJA_ITEM_TYPES = {
   divinationcard: 'divination_card',
   skillgem: 'gem',
   uncutgems: 'gem',
+  lineagesupportgems: 'gem',
   oil: 'oil',
   catalyst: 'catalyst',
+  breach: 'catalyst',
   incubator: 'incubator',
   deliriumorb: 'delirium_orb',
   essence: 'essence',
@@ -52,6 +54,7 @@ const NINJA_ITEM_TYPES = {
   beast: 'beast',
   tattoo: 'tattoo',
   omen: 'omen',
+  ritual: 'omen',
   runegraft: 'rune',
   runes: 'rune',
   clusterjewel: 'unique',
@@ -70,7 +73,10 @@ const NINJA_ITEM_TYPES = {
   idols: 'idol',
   expedition: 'expedition',
   ultimatum: 'ultimatum',
-  vaal: 'vaal'
+  vaal: 'vaal',
+  abyss: 'abyssal_bone',
+  delirium: 'liquid_emotion',
+  verisium: 'verisium'
 };
 
 // Cache duration: 10 minutes
