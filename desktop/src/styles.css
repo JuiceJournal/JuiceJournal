@@ -4620,7 +4620,200 @@ option::checkmark {
 [data-farm-type="harvest"] { --farm-color: var(--farm-harvest); }
 [data-farm-type="betrayal"] { --farm-color: var(--farm-betrayal); }
 [data-farm-type="incursion"] { --farm-color: var(--farm-incursion); }
+[data-farm-type="overseer"] { --farm-color: var(--farm-overseer); }
+/* A player's own farm type picks one of the same colours. */
+[data-farm-color="green"] { --farm-color: var(--farm-abyss); }
+[data-farm-color="magenta"] { --farm-color: var(--farm-breach); }
+[data-farm-color="blue"] { --farm-color: var(--farm-expedition); }
+[data-farm-color="violet"] { --farm-color: var(--farm-ritual); }
+[data-farm-color="cyan"] { --farm-color: var(--farm-harbinger); }
+[data-farm-color="pink"] { --farm-color: var(--farm-essence); }
+[data-farm-color="silver"] { --farm-color: var(--farm-delirium); }
+[data-farm-color="lime"] { --farm-color: var(--farm-blight); }
+[data-farm-color="amber"] { --farm-color: var(--farm-legion); }
+[data-farm-color="teal"] { --farm-color: var(--farm-harvest); }
+[data-farm-color="red"] { --farm-color: var(--farm-betrayal); }
+[data-farm-color="orange"] { --farm-color: var(--farm-incursion); }
 [data-farm-type] { color: var(--farm-color); }
+
+.farm-type-icon {
+  margin-right: 0.3em;
+  vertical-align: -0.15em;
+  stroke-width: 2;
+}
+
+/* An option lays its content out with a gap already. */
+option .farm-type-icon {
+  margin-right: 0;
+}
+
+/* ===== Custom farm types (Settings > Path of Exile) ===== */
+.custom-farm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.custom-farm-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.custom-farm-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--bevel-sm);
+}
+
+.custom-farm-name {
+  overflow-wrap: anywhere;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.custom-farm-games {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.custom-farm-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.custom-farm-confirm {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.custom-farm-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--bevel-sm);
+}
+
+.custom-farm-form[hidden] {
+  display: none;
+}
+
+.custom-farm-form-title {
+  margin: 0;
+  color: var(--text-bright);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.custom-farm-form .form-group {
+  margin-bottom: 0;
+}
+
+.custom-farm-field {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.custom-farm-field legend {
+  margin-bottom: 0.4rem;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.custom-farm-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.custom-farm-option {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.custom-farm-option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.custom-farm-option-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0 0.4rem;
+  background: var(--plate-raised);
+  border-radius: var(--bevel-sm);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.custom-farm-swatch .custom-farm-option-face::before {
+  content: "";
+  width: 1.1rem;
+  height: 1.1rem;
+  background: var(--farm-color);
+  border-radius: var(--bevel-xs);
+}
+
+/* The selected option gets a heavier, brighter frame, so selection is not shown by colour alone. */
+.custom-farm-option input:checked + .custom-farm-option-face {
+  box-shadow: inset 0 0 0 2px var(--text-bright);
+  color: var(--text-bright);
+}
+
+.custom-farm-option input:focus-visible + .custom-farm-option-face {
+  outline: 2px solid var(--ember-hot);
+  outline-offset: 2px;
+}
+
+.custom-farm-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.custom-farm-preview-name {
+  color: var(--farm-color);
+  font-size: 0.88rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.custom-farm-error {
+  margin: 0;
+  color: rgb(var(--loss-rgb));
+  font-size: 0.8rem;
+}
 
 /* ===== Meme badges (flask mascot reactions for extreme profit tiers) ===== */
 .meme-badge {

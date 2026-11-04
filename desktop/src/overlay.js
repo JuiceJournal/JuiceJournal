@@ -81,13 +81,30 @@
     return model && typeof model.resolveFarmTypeId === 'function' ? model.resolveFarmTypeId(value) : null;
   }
 
+  // A player's own farm type also names its palette colour and icon.
+  function describeFarmType(value) {
+    var model = root.farmTypeModel;
+    return (model && typeof model.describeFarmType === 'function' && model.describeFarmType(value)) || {};
+  }
+
+  function getFarmTypeIconHTML(value) {
+    var icon = describeFarmType(value).icon;
+    return icon
+      ? '<svg class="jj-farm-icon" width="13" height="13" aria-hidden="true"><use href="assets/icons.svg#' + icon + '"/></svg>'
+      : '';
+  }
+
   // The primary line is a name plus an optional value element, so the value can carry the profit tier colour.
   function setPrimary(name, valueElement, farmTypeId) {
     if (!el.primary) return;
     var nameSpan = document.createElement('span');
     nameSpan.className = 'jj-primary-name';
+    var farmColor = farmTypeId ? describeFarmType(farmTypeId).color : '';
     if (farmTypeId) { nameSpan.setAttribute('data-farm-type', farmTypeId); }
+    if (farmColor) { nameSpan.setAttribute('data-farm-color', farmColor); }
     nameSpan.textContent = name || '';
+    var farmIconHTML = farmTypeId ? getFarmTypeIconHTML(farmTypeId) : '';
+    if (farmIconHTML) { nameSpan.insertAdjacentHTML('afterbegin', farmIconHTML); }
     el.primary.replaceChildren(nameSpan);
     if (valueElement) {
       el.primary.append(' ');
@@ -226,12 +243,13 @@
     var localIcon = topOutput ? getLocalItemIconPath(topOutput.label, poeVersion) : '';
     var iconUrl = !localIcon && topOutput && typeof topOutput.icon === 'string' ? topOutput.icon : '';
     var itemCount = Math.max(0, parseInt(result.lootItemCount, 10) || 0);
-    var farmTypeKey = STORED_FARM_TYPE_KEYS[result.farmType];
+    // A player can name a farm type anything, "constructor" included.
+    var farmTypeKey = Object.prototype.hasOwnProperty.call(STORED_FARM_TYPE_KEYS, result.farmType) ? STORED_FARM_TYPE_KEYS[result.farmType] : null;
     setText(el.kickerLabel, root.t('overlay.mapComplete'));
     setPrimary(
       farmTypeKey ? root.t(farmTypeKey) : (result.farmType || root.t('overlay.completedMap')),
       result.noLoot ? null : createProfitValue(result.netProfit, rates, poeVersion),
-      getFarmTypeId(result.farmType)
+      getFarmTypeId(result.farmTypeId || result.farmType)
     );
     setSecondary(
       topOutput
@@ -285,9 +303,12 @@
       renderedChipsKey = chipsKey;
       el.startFarmTypes.innerHTML = [{ id: '', label: noFarmType }].concat(opts).map(function (e) {
         var farmTypeId = getFarmTypeId(e.id);
+        var farmColor = farmTypeId ? describeFarmType(farmTypeId).color : '';
         return '<button class="jj-chip" type="button" data-farm-type-id="' + escapeHTML(e.id) + '"' +
-          (farmTypeId ? ' data-farm-type="' + farmTypeId + '"' : '') + ' aria-pressed="' +
-          (e.id === selectedFarmTypeId ? 'true' : 'false') + '">' + escapeHTML(e.label) + '</button>';
+          (farmTypeId ? ' data-farm-type="' + farmTypeId + '"' : '') +
+          (farmColor ? ' data-farm-color="' + farmColor + '"' : '') + ' aria-pressed="' +
+          (e.id === selectedFarmTypeId ? 'true' : 'false') + '">' +
+          (farmTypeId ? getFarmTypeIconHTML(farmTypeId) : '') + escapeHTML(e.label) + '</button>';
       }).join('');
     }
   }
@@ -352,6 +373,9 @@
 
   /* ── Main render ── */
   function renderState(input) {
+    if (input && root.farmTypeModel && typeof root.farmTypeModel.setCustomFarmTypes === 'function') {
+      root.farmTypeModel.setCustomFarmTypes(input.customFarmTypes);
+    }
     var state = deriveState(input);
     applyLanguage(state.language);
     var visibility = state.visibility || 'waiting';

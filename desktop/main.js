@@ -43,7 +43,14 @@ const localJournal = require('./src/modules/localJournalModel');
 const { deriveMapResultOverlayState } = require('./src/modules/mapResultOverlayModel');
 const { buildFarmPublishPayload } = require('./src/modules/farmPublishPayloadModel');
 const { deriveOverlayState } = require('./src/modules/overlayStateModel');
-const { listFarmTypes } = require('./src/modules/farmTypeModel');
+const {
+  listFarmTypes,
+  isCustomFarmTypeId,
+  normalizeCustomFarmTypes,
+  createCustomFarmType,
+  updateCustomFarmType,
+  deleteCustomFarmType
+} = require('./src/modules/farmTypeModel');
 const {
   DEFAULT_SCAN_HOTKEY,
   DEFAULT_STASH_SCAN_HOTKEY,
@@ -896,8 +903,25 @@ function normalizeStoredFarmTypeId(farmTypeId) {
   return normalized || null;
 }
 
+// Each profile keeps its own farm types, deleted ones included so its past sessions can still show them.
+function getCustomFarmTypesStoreKey(profileId = getActiveProfile()?.id) {
+  return profileId ? `customFarmTypes:${profileId}` : null;
+}
+
+function getStoredCustomFarmTypes() {
+  const storeKey = getCustomFarmTypesStoreKey();
+  return storeKey ? normalizeCustomFarmTypes(store.get(storeKey)) : [];
+}
+
 function getActiveFarmTypeId() {
-  return normalizeStoredFarmTypeId(store.get('activeFarmTypeId'));
+  const farmTypeId = normalizeStoredFarmTypeId(store.get('activeFarmTypeId'));
+  // Every profile shares this key, but a custom farm type belongs to one of them.
+  if (isCustomFarmTypeId(farmTypeId)
+    && !getStoredCustomFarmTypes().some((farmType) => farmType.id === farmTypeId && !farmType.deletedAt)) {
+    return null;
+  }
+
+  return farmTypeId;
 }
 
 function resolveFarmTypeLabel(farmTypeId) {
@@ -906,7 +930,52 @@ function resolveFarmTypeLabel(farmTypeId) {
     return null;
   }
 
+  if (isCustomFarmTypeId(normalized)) {
+    return getStoredCustomFarmTypes().find((farmType) => farmType.id === normalized)?.label || null;
+  }
+
   return listFarmTypes().find((farmType) => farmType.id === normalized)?.label || normalized;
+}
+
+// Map results store the label, so renaming a farm type renames it on them too.
+function renameFarmTypeInMapResults({ id, label }) {
+  const storeKey = getMapResultsStoreKey();
+  const results = getStoredMapResults();
+  if (storeKey && results.some((result) => result?.farmTypeId === id && result.farmType !== label)) {
+    store.set(storeKey, results.map((result) => (result?.farmTypeId === id ? { ...result, farmType: label } : result)));
+  }
+}
+
+function saveCustomFarmType(input) {
+  const details = input && typeof input === 'object' ? input : {};
+  const current = getStoredCustomFarmTypes();
+  const outcome = details.id
+    ? updateCustomFarmType(current, details.id, details)
+    : createCustomFarmType(current, details, { id: `custom-${crypto.randomUUID()}` });
+  if (outcome.error) {
+    return { ok: false, error: outcome.error };
+  }
+
+  store.set(getCustomFarmTypesStoreKey(), outcome.farmTypes);
+  if (details.id) {
+    renameFarmTypeInMapResults(outcome.farmType);
+  }
+  updateOverlayWindow();
+  return { ok: true, farmType: outcome.farmType, farmTypes: outcome.farmTypes };
+}
+
+function removeCustomFarmType(farmTypeId) {
+  const outcome = deleteCustomFarmType(getStoredCustomFarmTypes(), farmTypeId);
+  if (outcome.error) {
+    return { ok: false, error: outcome.error };
+  }
+
+  store.set(getCustomFarmTypesStoreKey(), outcome.farmTypes);
+  if (store.get('activeFarmTypeId') === farmTypeId) {
+    store.set('activeFarmTypeId', null);
+  }
+  updateOverlayWindow();
+  return { ok: true, farmTypes: outcome.farmTypes };
 }
 
 function setActiveFarmTypeId(farmTypeId) {
@@ -1318,6 +1387,7 @@ function buildSessionShutdownMapResult(session = {}, options = {}) {
     accountName: null,
     poeVersion: normalizePoeVersion(session.poeVersion ?? session.poe_version) || 'poe1',
     league: session.league || null,
+    farmTypeId: normalizeStoredFarmTypeId(farmTypeId),
     farmType: resolveFarmTypeLabel(farmTypeId) || session.mapName || session.map_name || 'Unknown farm type',
     durationSeconds,
     inputValue,
@@ -3324,7 +3394,11 @@ function updateOverlayWindow({ character, runtimeSession } = {}) {
 
   applyOverlayWindowVisibility(overlayState);
   // The raw value, as in the main window: getLanguage folds every language but Turkish to English.
-  overlayWindow.webContents.send('overlay-render-state', { ...overlayState, language: store.get('language') });
+  overlayWindow.webContents.send('overlay-render-state', {
+    ...overlayState,
+    language: store.get('language'),
+    customFarmTypes: getStoredCustomFarmTypes()
+  });
 
   return overlayState;
 }
@@ -4217,9 +4291,9 @@ function getRendererSettings() {
   delete allSettings.localProfiles;
   delete allSettings.activeProfileId;
   // The renderer sees only the signed-in profile's character cache. Map results
-  // reach it per profile through their own IPC.
+  // and custom farm types reach it per profile through their own IPC.
   Object.keys(allSettings)
-    .filter((key) => key.startsWith('lastKnownAccountState:') || key.startsWith('mapResults:'))
+    .filter((key) => key.startsWith('lastKnownAccountState:') || key.startsWith('mapResults:') || key.startsWith('customFarmTypes:'))
     .forEach((key) => delete allSettings[key]);
   const accountStateKey = getAccountStateStoreKey();
   allSettings.lastKnownAccountState = (accountStateKey && store.get(accountStateKey)) || null;
@@ -4417,6 +4491,18 @@ function setupIPC() {
 
   ipcMain.handle('set-active-farm-type', (event, farmTypeId) => {
     return setActiveFarmTypeId(farmTypeId);
+  });
+
+  ipcMain.handle('get-custom-farm-types', () => getStoredCustomFarmTypes());
+
+  ipcMain.handle('save-custom-farm-type', (event, input) => {
+    assertDesktopUserAuthenticated();
+    return saveCustomFarmType(input);
+  });
+
+  ipcMain.handle('delete-custom-farm-type', (event, farmTypeId) => {
+    assertDesktopUserAuthenticated();
+    return removeCustomFarmType(farmTypeId);
   });
 
   // End a session.

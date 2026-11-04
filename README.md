@@ -21,7 +21,7 @@ Inspired by [TLI Tracker](https://github.com/Giboork/TLI-tracker-translated) fro
 | In-game overlay | Run status, a "start session?" prompt on map entry, a character picker after Play and a result card when a session ends. Off by default (Settings) |
 | Local journal | Sessions, loot and map results per Path of Exile account, stored on your PC |
 | Path of Exile sign-in | Official OAuth sign-in on your PC; only reads your character list |
-| Farm types and profit tiers | Tag runs by league content; results are labelled by profit tier |
+| Farm types and profit tiers | Tag runs by league content or your own farm types with a color and icon; results are labelled by profit tier |
 | Languages | English and Turkish. German, French, Spanish, Italian, Portuguese (Brazil) and Russian are only partly translated; Japanese, Korean and Chinese can be selected but show English |
 | OCR loot scan | Experimental, during an active session with the game window in front: F9 or Ctrl+Shift+L takes a screenshot of your screen and reads loot names from it. The loot is priced with [poe.ninja](https://poe.ninja); in PoE2 only currency exchange items have a price |
 
@@ -31,7 +31,7 @@ Inspired by [TLI Tracker](https://github.com/Giboork/TLI-tracker-translated) fro
 
 Juice Journal has no accounts and no servers of its own. Your data is stored under `%APPDATA%\Juice Journal\`:
 
-- `config.json`: settings, your signed-in profile, map results, the cached character list, a short activity log (sign-ins, session starts and ends) and the GGG token (encrypted with Windows data protection)
+- `config.json`: settings, your signed-in profile, map results, your custom farm types, the cached character list, a short activity log (sign-ins, session starts and ends) and the GGG token (encrypted with Windows data protection)
 - `profiles/<id>/journal.json`: your sessions and loot
 - `icon-cache/`: downloaded item icons
 - `ocr-cache/`: the OCR language data (`eng.traineddata`), downloaded on the first scan

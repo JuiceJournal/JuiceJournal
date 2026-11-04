@@ -341,6 +341,7 @@
                     <option value="" data-i18n="dashboard.noFarmType">No farm type</option>
                   </select>
                   <button id="clear-farm-type-btn" class="btn btn-secondary btn-small" type="button" data-i18n="dashboard.clearFarmType">Clear</button>
+                  <button id="manage-farm-types-btn" class="btn btn-secondary btn-small" type="button" data-i18n="customFarm.manage">Manage</button>
                 </div>
               </div>
               <div id="active-session">
@@ -880,6 +881,45 @@
                     </button>
                   </div>
                 </div>
+              </div>
+              <div class="settings-group settings-group--wide" id="custom-farm-types-group">
+                <h3 data-i18n="customFarm.title">Custom farm types</h3>
+                <p class="settings-desc" data-i18n="customFarm.desc">Your own farm types, saved for this profile only. They appear in the start prompts and on your results. Changes save right away and also show on your past sessions.</p>
+                <div id="custom-farm-list" class="custom-farm-list"></div>
+                <div class="settings-actions-row">
+                  <button id="custom-farm-add-btn" class="btn btn-secondary btn-small" type="button" data-i18n="customFarm.add">New farm type</button>
+                </div>
+                <form id="custom-farm-form" class="custom-farm-form" hidden novalidate>
+                  <h4 id="custom-farm-form-title" class="custom-farm-form-title"></h4>
+                  <div class="form-group">
+                    <label for="custom-farm-name" data-i18n="customFarm.name">Name</label>
+                    <input id="custom-farm-name" type="text" autocomplete="off" data-i18n-placeholder="customFarm.namePlaceholder">
+                  </div>
+                  <fieldset class="custom-farm-field">
+                    <legend data-i18n="customFarm.games">Game</legend>
+                    <div class="custom-farm-options">
+                      <label class="custom-farm-option"><input type="checkbox" name="custom-farm-game" value="poe1"><span class="custom-farm-option-face">PoE 1</span></label>
+                      <label class="custom-farm-option"><input type="checkbox" name="custom-farm-game" value="poe2"><span class="custom-farm-option-face">PoE 2</span></label>
+                    </div>
+                  </fieldset>
+                  <fieldset class="custom-farm-field">
+                    <legend data-i18n="customFarm.color">Color</legend>
+                    <div id="custom-farm-colors" class="custom-farm-options"></div>
+                  </fieldset>
+                  <fieldset class="custom-farm-field">
+                    <legend data-i18n="customFarm.icon">Icon</legend>
+                    <div id="custom-farm-icons" class="custom-farm-options"></div>
+                  </fieldset>
+                  <div class="custom-farm-preview">
+                    <span data-i18n="customFarm.preview">Preview</span>
+                    <span id="custom-farm-preview" class="custom-farm-preview-name"></span>
+                  </div>
+                  <p id="custom-farm-error" class="custom-farm-error" role="alert" hidden></p>
+                  <div class="settings-actions-row">
+                    <button id="custom-farm-save-btn" class="btn btn-primary btn-small" type="submit" data-i18n="customFarm.save">Save</button>
+                    <button id="custom-farm-cancel-btn" class="btn btn-ghost btn-small" type="button" data-i18n="customFarm.cancel">Cancel</button>
+                  </div>
+                </form>
               </div>
             </div>
 
