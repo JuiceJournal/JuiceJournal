@@ -488,7 +488,7 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     });
     await expect(overlayWindow.locator('[data-overlay-kicker-label]')).toHaveText('Map Tamamlandi');
     await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText('Farm tipi yok');
-    await expect(overlayWindow.locator('[data-overlay-secondary]')).toHaveText('3 item tarandi');
+    await expect(overlayWindow.locator('[data-overlay-secondary]')).toHaveText('3 item sayildi');
     await expect(overlayWindow.locator('[data-overlay-meta]')).toHaveText('4dk 05sn');
     await expect(overlayWindow.locator('[data-overlay-pin]')).toHaveText('Sabitle');
     await expect(overlayWindow.locator('[data-overlay-dismiss]')).toHaveText('Kapat');
