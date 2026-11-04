@@ -393,6 +393,7 @@
       accountName: normalizeString(accountName),
       poeVersion: normalizePoeVersion(poeVersion),
       league: normalizeString(characterSummary?.league ?? afterSnapshot?.league ?? beforeSnapshot?.league),
+      farmTypeId: normalizeString(farmType?.id),
       farmType: farmTypeLabel,
       durationSeconds: deriveRuntimeDurationSeconds(runtimeSession, beforeSnapshot, afterSnapshot),
       inputValue,

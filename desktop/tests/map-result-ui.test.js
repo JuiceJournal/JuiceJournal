@@ -2465,7 +2465,10 @@ test('renderer colours farm names by their league content', () => {
   };
   const context = loadFunctions([
     'getFarmTypeIdFor',
+    'describeFarmTypeFor',
     'farmTypeAttr',
+    'farmIconHTML',
+    'farmTypeIconHTML',
     'applyFarmType',
     'formatMapResultProfitHTML',
     'renderLatestMapResult'
@@ -4446,4 +4449,122 @@ test('the session clock interval updates only the elapsed time', () => {
   const clockSource = appJs.slice(clockStart, clockStart + appJs.slice(clockStart).search(/\r?\n\}\r?\n/));
   assert.match(clockSource, /updateActiveSessionClock\(\)/);
   assert.doesNotMatch(clockSource, /updateActiveSessionUI\(\)/);
+});
+
+const CUSTOM_FARM_ID = 'custom-3f2b8f6e-0000-4000-8000-000000000001';
+
+// The renderer shows farm names through these helpers.
+function loadFarmNameFunctions(t, names, overrides = {}) {
+  const farmTypeModel = require('../src/modules/farmTypeModel');
+  farmTypeModel.setCustomFarmTypes([
+    { id: CUSTOM_FARM_ID, label: 'Boss <Tablets>', color: 'amber', icon: 'farm-tablet', poeVersions: ['poe2'] },
+    { id: 'custom-gone', label: 'Old Farm', color: 'red', icon: 'farm-skull', poeVersions: ['poe1'], deletedAt: '2026-11-04T10:00:00.000Z' }
+  ]);
+  t.after(() => farmTypeModel.setCustomFarmTypes([]));
+  return loadFunctions(['getFarmTypeIdFor', 'describeFarmTypeFor', 'farmTypeAttr', 'farmIconHTML', 'farmTypeIconHTML', 'applyFarmType', ...names], {
+    window: { t: (key) => key, farmTypeModel },
+    getFarmTypeModel: () => farmTypeModel,
+    ...overrides
+  });
+}
+
+test('a custom farm type carries its palette colour and icon, a built-in one only its colour', (t) => {
+  const context = loadFarmNameFunctions(t, []);
+
+  assert.equal(context.farmTypeAttr(CUSTOM_FARM_ID), ` data-farm-type="${CUSTOM_FARM_ID}" data-farm-color="amber"`);
+  assert.equal(context.farmTypeAttr('Old Farm'), ' data-farm-type="custom-gone" data-farm-color="red"');
+  assert.equal(context.farmTypeAttr('Ritual'), ' data-farm-type="ritual"');
+  assert.match(context.farmTypeIconHTML(CUSTOM_FARM_ID), /<use href="assets\/icons\.svg#farm-tablet"\/>/);
+  assert.equal(context.farmTypeIconHTML('Ritual'), '');
+  assert.equal(context.farmTypeIconHTML('Unknown farm'), '');
+});
+
+test('the result card shows a custom farm type icon and drops it for the next result', (t) => {
+  const context = loadFarmNameFunctions(t, []);
+  const inserted = [];
+  const element = {
+    dataset: {},
+    insertAdjacentHTML: (position, html) => inserted.push([position, html])
+  };
+
+  context.applyFarmType(element, CUSTOM_FARM_ID);
+  assert.equal(element.dataset.farmType, CUSTOM_FARM_ID);
+  assert.equal(element.dataset.farmColor, 'amber');
+  assert.equal(inserted.length, 1);
+  assert.equal(inserted[0][0], 'afterbegin');
+  assert.match(inserted[0][1], /#farm-tablet/);
+
+  context.applyFarmType(element, 'Ritual');
+  assert.equal(element.dataset.farmType, 'ritual');
+  assert.equal('farmColor' in element.dataset, false);
+  assert.equal(inserted.length, 1);
+});
+
+test('sessions show a custom farm type by name, deleted or on another game, and never by its id', (t) => {
+  const context = loadFarmNameFunctions(t, ['getSessionFarmTypeId', 'getSessionPoeVersion', 'getSessionFarmTypeLabel'], {
+    normalizePoeVersion: (value) => value || null
+  });
+
+  assert.equal(context.getSessionFarmTypeLabel({ farmTypeId: CUSTOM_FARM_ID, poeVersion: 'poe2' }), 'Boss <Tablets>');
+  // Taken off this game after the session was played.
+  assert.equal(context.getSessionFarmTypeLabel({ farmTypeId: CUSTOM_FARM_ID, poeVersion: 'poe1' }), 'Boss <Tablets>');
+  assert.equal(context.getSessionFarmTypeLabel({ farmTypeId: 'custom-gone', poeVersion: 'poe1' }), 'Old Farm');
+  // Nothing in this profile names it: a player must not see the id.
+  assert.equal(context.getSessionFarmTypeLabel({ farmTypeId: 'custom-never-seen', poeVersion: 'poe1' }), 'dashboard.unknownFarmType');
+  assert.equal(context.getSessionFarmTypeLabel({ farmTypeId: 'ritual', poeVersion: 'poe1' }), 'Ritual');
+});
+
+test('both start prompts list custom farm types for the current game, and escape their names', (t) => {
+  const select = { innerHTML: '', value: '' };
+  const context = loadFarmNameFunctions(t, ['populateMapSessionFarmTypes'], {
+    elements: { mapSessionFarmTypeSelect: select },
+    escapeHTML: (value) => String(value).replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  });
+
+  context.populateMapSessionFarmTypes(CUSTOM_FARM_ID, { poeVersion: 'poe2' });
+  assert.equal(select.value, CUSTOM_FARM_ID);
+  assert.ok(select.innerHTML.includes(`<option value="${CUSTOM_FARM_ID}" data-farm-type="${CUSTOM_FARM_ID}" data-farm-color="amber">Boss &lt;Tablets&gt;</option>`));
+  assert.equal(select.innerHTML.includes('custom-gone'), false);
+
+  context.populateMapSessionFarmTypes(CUSTOM_FARM_ID, { poeVersion: 'poe1' });
+  assert.equal(select.value, '');
+  assert.equal(select.innerHTML.includes(CUSTOM_FARM_ID), false);
+
+  const appSource = fs.readFileSync(appJsPath, 'utf8');
+  assert.match(appSource, /farmTypeOptions = farmTypeModel\.listFarmTypes\(\{/);
+});
+
+test('a map result from a completed session records which custom farm type it was', () => {
+  const appSource = fs.readFileSync(appJsPath, 'utf8');
+
+  assert.match(appSource, /farmTypeId: session\.farmTypeId\s+\|\| session\.mapType/);
+  assert.match(appSource, /applyFarmType\(elements\.lastMapResultFarmType, latest\.farmTypeId \|\| latest\.farmType\)/);
+  assert.match(appSource, /farmTypeAttr\(result\?\.farmTypeId \|\| result\?\.farmType\)/);
+  const { deriveMapResult } = require('../src/modules/mapResultModel');
+  const result = deriveMapResult({
+    farmType: { id: CUSTOM_FARM_ID, label: 'Boss Tablets' },
+    beforeSnapshot: { items: [], capturedAt: '2026-11-04T10:00:00.000Z' },
+    afterSnapshot: { items: [], capturedAt: '2026-11-04T10:05:00.000Z' }
+  });
+  assert.equal(result.farmTypeId, CUSTOM_FARM_ID);
+  assert.equal(result.farmType, 'Boss Tablets');
+});
+
+test('every palette colour has its token mapping in both windows, and the picker is in Settings', () => {
+  const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'src', 'styles.css'), 'utf8');
+  const overlayHtml = fs.readFileSync(path.join(__dirname, '..', 'src', 'overlay.html'), 'utf8');
+  const tokensCss = fs.readFileSync(path.join(__dirname, '..', 'src', 'tokens.css'), 'utf8');
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const { CUSTOM_FARM_TYPE_COLORS } = require('../src/modules/farmTypeModel');
+
+  assert.equal(CUSTOM_FARM_TYPE_COLORS.length, 12);
+  for (const color of CUSTOM_FARM_TYPE_COLORS) {
+    const mapping = new RegExp(`\\[data-farm-color="${color}"\\]\\s*\\{\\s*--farm-color:\\s*var\\(--(farm-[a-z]+)\\);`);
+    const token = stylesCss.match(mapping)?.[1];
+    assert.ok(token, `styles.css ${color}`);
+    assert.match(overlayHtml, mapping, `overlay.html ${color}`);
+    assert.match(tokensCss, new RegExp(`--${token}:\\s*#`), `tokens.css ${token}`);
+  }
+  assert.match(html, /id="settings-poe"[\s\S]*id="custom-farm-types-group"[\s\S]*id="settings-hotkeys"/);
+  assert.match(html, /id="manage-farm-types-btn"/);
 });
