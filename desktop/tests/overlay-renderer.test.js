@@ -369,6 +369,14 @@ test('the overlay result card shows a custom farm type in its colour and icon, a
   assert.equal(name.getAttribute('data-farm-color'), null);
 });
 
+test('the overlay result card shows a farm type name that matches an object property as written', () => {
+  const overlay = loadOverlay();
+
+  overlay.renderState({ visibility: 'visible', mode: 'map-result', mapResult: { visible: true, result: { farmType: 'constructor', netProfit: 40, profitCurrencyRates: RATES } } });
+
+  assert.equal(overlay.primary.children[0].textContent, 'constructor');
+});
+
 test('the overlay start prompt offers a custom farm type as a coloured chip with its icon', (t) => {
   const farmTypeModel = require('../src/modules/farmTypeModel');
   t.after(() => farmTypeModel.setCustomFarmTypes([]));

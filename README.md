@@ -31,7 +31,7 @@ Inspired by [TLI Tracker](https://github.com/Giboork/TLI-tracker-translated) fro
 
 Juice Journal has no accounts and no servers of its own. Your data is stored under `%APPDATA%\Juice Journal\`:
 
-- `config.json`: settings, your signed-in profile, map results, the cached character list, a short activity log (sign-ins, session starts and ends) and the GGG token (encrypted with Windows data protection)
+- `config.json`: settings, your signed-in profile, map results, your custom farm types, the cached character list, a short activity log (sign-ins, session starts and ends) and the GGG token (encrypted with Windows data protection)
 - `profiles/<id>/journal.json`: your sessions and loot
 - `icon-cache/`: downloaded item icons
 - `ocr-cache/`: the OCR language data (`eng.traineddata`), downloaded on the first scan

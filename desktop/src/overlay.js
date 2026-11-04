@@ -243,7 +243,8 @@
     var localIcon = topOutput ? getLocalItemIconPath(topOutput.label, poeVersion) : '';
     var iconUrl = !localIcon && topOutput && typeof topOutput.icon === 'string' ? topOutput.icon : '';
     var itemCount = Math.max(0, parseInt(result.lootItemCount, 10) || 0);
-    var farmTypeKey = STORED_FARM_TYPE_KEYS[result.farmType];
+    // A player can name a farm type anything, "constructor" included.
+    var farmTypeKey = Object.prototype.hasOwnProperty.call(STORED_FARM_TYPE_KEYS, result.farmType) ? STORED_FARM_TYPE_KEYS[result.farmType] : null;
     setText(el.kickerLabel, root.t('overlay.mapComplete'));
     setPrimary(
       farmTypeKey ? root.t(farmTypeKey) : (result.farmType || root.t('overlay.completedMap')),

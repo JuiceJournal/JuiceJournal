@@ -4523,7 +4523,7 @@ test('both start prompts list custom farm types for the current game, and escape
 
   context.populateMapSessionFarmTypes(CUSTOM_FARM_ID, { poeVersion: 'poe2' });
   assert.equal(select.value, CUSTOM_FARM_ID);
-  assert.ok(select.innerHTML.includes(`<option value="${CUSTOM_FARM_ID}" data-farm-type="${CUSTOM_FARM_ID}" data-farm-color="amber">Boss &lt;Tablets&gt;</option>`));
+  assert.match(select.innerHTML, new RegExp(`<option value="${CUSTOM_FARM_ID}" data-farm-type="${CUSTOM_FARM_ID}" data-farm-color="amber"><svg [^>]*><use href="assets/icons\\.svg#farm-tablet"/></svg>Boss &lt;Tablets&gt;</option>`));
   assert.equal(select.innerHTML.includes('custom-gone'), false);
 
   context.populateMapSessionFarmTypes(CUSTOM_FARM_ID, { poeVersion: 'poe1' });
@@ -4532,6 +4532,46 @@ test('both start prompts list custom farm types for the current game, and escape
 
   const appSource = fs.readFileSync(appJsPath, 'utf8');
   assert.match(appSource, /farmTypeOptions = farmTypeModel\.listFarmTypes\(\{/);
+});
+
+test('a custom farm type stays private to the player when filtering the public hub', (t) => {
+  const select = { value: 'all', innerHTML: '' };
+  const context = loadFarmNameFunctions(t, ['populateSelectOptions', 'getFilterValue', 'populateFarmingHubFarmOptions'], {
+    elements: { farmingHubFarmFilter: select, farmingHubVersionFilter: { value: 'all' } },
+    state: { farmingHubRuns: [] },
+    escapeHTML: (value) => String(value)
+  });
+
+  context.populateFarmingHubFarmOptions();
+
+  assert.equal(select.innerHTML.includes('Boss'), false);
+  assert.ok(select.innerHTML.includes('Ritual'));
+});
+
+test('custom farm types load before the selection is checked, at start and at each sign-in', async (t) => {
+  const appSource = fs.readFileSync(appJsPath, 'utf8');
+  assert.equal([...appSource.matchAll(/await loadCustomFarmTypes\(\);\s+await loadActiveFarmTypeSelection\(\);/g)].length, 2);
+
+  const farmTypeState = { selectedFarmTypeId: null };
+  const context = loadFarmNameFunctions(t, ['loadCustomFarmTypes', 'loadActiveFarmTypeSelection'], {
+    state: { farmType: farmTypeState },
+    getFarmTypePoeVersion: () => 'poe2',
+    closeCustomFarmForm() {},
+    renderCustomFarmTypes() {}
+  });
+  const cleared = [];
+  context.window.electronAPI = {
+    getCustomFarmTypes: async () => [{ id: CUSTOM_FARM_ID, label: 'Boss Tablets', color: 'amber', icon: 'farm-tablet', poeVersions: ['poe2'] }],
+    getActiveFarmType: async () => CUSTOM_FARM_ID,
+    setActiveFarmType: async (id) => cleared.push(id)
+  };
+  context.window.farmTypeModel.setCustomFarmTypes([]);
+
+  await context.loadCustomFarmTypes();
+  await context.loadActiveFarmTypeSelection();
+
+  assert.equal(farmTypeState.selectedFarmTypeId, CUSTOM_FARM_ID);
+  assert.deepEqual(cleared, []);
 });
 
 test('a map result from a completed session records which custom farm type it was', () => {

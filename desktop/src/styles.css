@@ -4642,6 +4642,11 @@ option::checkmark {
   stroke-width: 2;
 }
 
+/* An option lays its content out with a gap already. */
+option .farm-type-icon {
+  margin-right: 0;
+}
+
 /* ===== Custom farm types (Settings > Path of Exile) ===== */
 .custom-farm-list {
   display: flex;

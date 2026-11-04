@@ -1548,7 +1548,7 @@ function renderFarmTypeSelector() {
 
   elements.sessionFarmTypeSelect.innerHTML = [
     `<option value="" data-i18n="dashboard.noFarmType">${escapeHTML(window.t('dashboard.noFarmType'))}</option>`,
-    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType.id) : ''}>${escapeHTML(farmType.label)}</option>`)
+    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType.id) : ''}>${typeof farmTypeIconHTML === 'function' ? farmTypeIconHTML(farmType.id) : ''}${escapeHTML(farmType.label)}</option>`)
   ].join('');
   elements.sessionFarmTypeSelect.value = selectedFarmTypeId;
   elements.sessionFarmTypeSelect.disabled = hasActiveSession;
@@ -1739,19 +1739,19 @@ async function handleCustomFarmSubmit(event) {
     input.id = state.customFarmEditingId;
   }
 
+  let result = null;
   try {
-    const result = await window.electronAPI.saveCustomFarmType(input);
-    if (!result?.ok) {
-      setCustomFarmError(CUSTOM_FARM_ERROR_KEYS[result?.error] || 'customFarm.errorSaveFailed');
-      return;
-    }
-
-    closeCustomFarmForm();
-    await applyCustomFarmTypes(result.farmTypes);
+    result = await window.electronAPI.saveCustomFarmType(input);
   } catch (error) {
     console.error('Unable to save the custom farm type', error);
-    setCustomFarmError('customFarm.errorSaveFailed');
   }
+  if (!result?.ok) {
+    setCustomFarmError(CUSTOM_FARM_ERROR_KEYS[result?.error] || 'customFarm.errorSaveFailed');
+    return;
+  }
+
+  closeCustomFarmForm();
+  await applyCustomFarmTypes(result.farmTypes);
 }
 
 async function handleCustomFarmListClick(event) {
@@ -1768,21 +1768,23 @@ async function handleCustomFarmListClick(event) {
     state.customFarmDeletingId = action === 'delete' ? farmTypeId : null;
     renderCustomFarmTypes();
   } else if (action === 'confirm-delete') {
+    let result = null;
     try {
-      const result = await window.electronAPI.deleteCustomFarmType(farmTypeId);
-      if (result?.ok) {
-        // The form may still be open on the farm type that just went.
-        if (state.customFarmEditingId === farmTypeId) {
-          closeCustomFarmForm();
-        }
-        state.customFarmDeletingId = null;
-        await applyCustomFarmTypes(result.farmTypes);
-        return;
-      }
+      result = await window.electronAPI.deleteCustomFarmType(farmTypeId);
     } catch (error) {
       console.error('Unable to delete the custom farm type', error);
     }
-    showToast(window.t('customFarm.errorDeleteFailed'), '', 'error');
+    if (!result?.ok) {
+      showToast(window.t('customFarm.errorDeleteFailed'), '', 'error');
+      return;
+    }
+
+    // The form may still be open on the farm type that just went.
+    if (state.customFarmEditingId === farmTypeId) {
+      closeCustomFarmForm();
+    }
+    state.customFarmDeletingId = null;
+    await applyCustomFarmTypes(result.farmTypes);
   }
 }
 
@@ -4538,7 +4540,7 @@ function populateMapSessionFarmTypes(selectedFarmTypeId = '', options = {}) {
 
   elements.mapSessionFarmTypeSelect.innerHTML = [
     `<option value="" data-i18n="dashboard.noFarmType">${escapeHTML(window.t('dashboard.noFarmType'))}</option>`,
-    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType.id) : ''}>${escapeHTML(farmType.label)}</option>`)
+    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType.id) : ''}>${typeof farmTypeIconHTML === 'function' ? farmTypeIconHTML(farmType.id) : ''}${escapeHTML(farmType.label)}</option>`)
   ].join('');
   elements.mapSessionFarmTypeSelect.value = normalizedSelection;
 
@@ -5173,7 +5175,10 @@ function populateFarmingHubFarmOptions() {
 
   const previousValue = select.value || 'all';
   const versionFilter = getFilterValue(elements.farmingHubVersionFilter);
-  const farmTypes = getFarmTypeModel().listFarmTypes(versionFilter === 'all' ? {} : { poeVersion: versionFilter });
+  const { listFarmTypes, isCustomFarmTypeId } = getFarmTypeModel();
+  // The hub is public, so a player's own farm type is not offered as a filter sent to the server.
+  const farmTypes = listFarmTypes(versionFilter === 'all' ? {} : { poeVersion: versionFilter })
+    .filter((farmType) => !isCustomFarmTypeId?.(farmType.id));
   const runFarmTypes = state.farmingHubRuns.map((run) => run.farmType).filter(Boolean);
   const optionLabels = [...new Set([...farmTypes.map((farmType) => farmType.label), ...runFarmTypes])];
 
