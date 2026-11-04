@@ -1406,16 +1406,14 @@ test('every category tab shows its bundled art or our line icon in a slot, never
     },
     poe2: {
       currency: 'chaos', fragment: 'fragment', essence: 'essence', rune: 'rune', gem: 'uncut-gem',
-      soul_core: 'soul-core', idol: 'idol', expedition: 'expedition'
+      soul_core: 'soul-core', idol: 'idol', expedition: 'expedition', omen: 'omen', abyssal_bone: 'abyssal-bone',
+      catalyst: 'catalyst', liquid_emotion: 'liquid-emotion', verisium: 'verisium'
     }
   };
   // All is our layers icon; the tabs that are no game category, or have no current art, get our chest.
   const expectedGlyph = {
     poe1: { '': 'layers', incubator: 'chest', rune: 'chest', base_type: 'chest', other: 'chest' },
-    poe2: {
-      '': 'layers', omen: 'chest', abyssal_bone: 'chest', catalyst: 'chest', liquid_emotion: 'chest', verisium: 'chest',
-      ultimatum: 'chest', vaal: 'chest', other: 'chest'
-    }
+    poe2: { '': 'layers', ultimatum: 'chest', vaal: 'chest', other: 'chest' }
   };
   for (const [poeVersion, tabCount] of [['poe1', 20], ['poe2', 17]]) {
     const tabs = renderCategoryRail(poeVersion).match(/<button [\s\S]*?<\/button>/g) || [];
@@ -1572,11 +1570,17 @@ test('price types read as their localized tab label, never as the raw snake_case
   }
 });
 
-test('a PoE 2 tab with no art of its own never borrows the PoE 1 picture for its rows', () => {
+test('a PoE 2 row with no art of its own falls back to its PoE 2 category art, and PoE 1 keeps its own', () => {
   const { resolveCurrencyRowArt } = loadCurrencyHelpers({ poeVersion: 'poe2' });
-  for (const itemType of ['omen', 'catalyst', 'abyssal_bone', 'liquid_emotion', 'verisium']) {
-    assert.deepEqual({ ...resolveCurrencyRowArt({ itemType }, 'poe2') }, { remote: '', bundled: '' }, itemType);
-  }
+  const bundledFor = (itemType, poeVersion) => resolveCurrencyRowArt({ itemType }, poeVersion).bundled;
+
+  assert.equal(bundledFor('omen', 'poe2'), 'assets/currency/poe2/omen.png');
+  assert.equal(bundledFor('catalyst', 'poe2'), 'assets/currency/poe2/catalyst.png');
+  assert.equal(bundledFor('abyssal_bone', 'poe2'), 'assets/currency/poe2/abyssal-bone.png');
+  assert.equal(bundledFor('liquid_emotion', 'poe2'), 'assets/currency/poe2/liquid-emotion.png');
+  assert.equal(bundledFor('verisium', 'poe2'), 'assets/currency/poe2/verisium.png');
+  assert.equal(bundledFor('omen', 'poe1'), 'assets/currency/poe1/omen.png');
+  assert.equal(bundledFor('catalyst', 'poe1'), 'assets/currency/poe1/catalyst.png');
 });
 
 test('remote art loads from the game CDN and nowhere else', () => {

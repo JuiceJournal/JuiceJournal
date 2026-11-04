@@ -82,6 +82,19 @@ test('every PoE 1 category but Incubator and Base Type has bundled art, and so d
   assert.match(notice, /poe2\/idol\.png/);
 });
 
+test('the PoE 2 tabs for omens, bones, catalysts, emotions and Verisium show PoE 2 art the notice names', () => {
+  const vm = require('node:vm');
+  const images = vm.runInNewContext(`${getBlock(appJs, 'const CURRENCY_IMAGE_VARIANTS')}\n({ CURRENCY_IMAGE_VARIANTS })`);
+  const notice = fs.readFileSync(path.join(srcDir, 'assets', 'currency', 'NOTICE.md'), 'utf8');
+
+  for (const key of ['omen', 'abyssal-bone', 'catalyst', 'liquid-emotion', 'verisium']) {
+    const assetPath = `assets/currency/poe2/${key}.png`;
+    assert.equal(images.CURRENCY_IMAGE_VARIANTS.poe2[key], assetPath);
+    assert.ok(fs.existsSync(path.join(srcDir, assetPath)), assetPath);
+    assert.match(notice, new RegExp(`poe2/${key}\\.png`));
+  }
+});
+
 test('game art ships with a notice and the About page credits Grinding Gear Games', () => {
   const indexHtml = fs.readFileSync(path.join(srcDir, 'index.html'), 'utf8');
   const translations = fs.readFileSync(path.join(srcDir, 'modules', 'translations.js'), 'utf8');

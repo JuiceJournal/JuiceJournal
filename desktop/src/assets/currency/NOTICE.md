@@ -13,8 +13,10 @@ The PoE 2 images were taken from Grinding Gear Games' public image CDN
 
 The PoE 1 category images in `poe1/` (fragment, scarab, essence, fossil, map,
 divination-card, gem, unique, oil, beast, delirium-orb, catalyst, omen, tattoo)
-and `poe2/idol.png` were taken from the same CDN. Each shows one item of its
-category; `divination-card.png` is the inventory icon every divination card uses.
+and `poe2/idol.png`, `poe2/omen.png`, `poe2/abyssal-bone.png`, `poe2/catalyst.png`,
+`poe2/liquid-emotion.png` and `poe2/verisium.png` were taken from the same CDN.
+Each shows one item of its category; `divination-card.png` is the inventory icon
+every divination card uses.
 
 Other item art is not bundled. The desktop app downloads it from the same CDN
 the first time an item is shown and keeps a local copy (at most 64 MB) in the
