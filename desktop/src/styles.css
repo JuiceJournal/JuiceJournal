@@ -1537,18 +1537,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   gap: 0.5rem;
 }
 
-/* The real scan hotkey on the Scan loot button, as a small keycap. */
-.btn-kbd {
-  padding: 1px 5px;
-  border-radius: var(--bevel-xs);
-  background: rgb(var(--shadow-rgb) / 0.2);
-  font-family: var(--font);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0;
-}
-
-/* Price data moved here from the stash card, so OCR players see it too. */
+/* Price data moved here from the stash card, so every player sees it. */
 .stats-footer {
   display: flex;
   justify-content: space-between;

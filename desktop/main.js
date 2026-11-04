@@ -6,7 +6,7 @@
  * - System tray integration
  * - Global hotkey support (F9)
  * - PoE Client.txt log monitoring
- * - OCR-based stash scanning
+ * - Counting loot from your inventory after a map
  */
 
 const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, dialog, screen, shell, nativeImage, safeStorage, clipboard } = require('electron');
@@ -17,13 +17,12 @@ const fs = require('fs');
 const net = require('net');
 const os = require('os');
 const path = require('path');
-const { pathToFileURL } = require('url');
+const { fileURLToPath, pathToFileURL } = require('url');
 const { execFile } = require('child_process');
 const Store = require('electron-store');
 
 // Module imports
 const LogParser = require('./src/modules/logParser');
-const OCRScanner = require('./src/modules/ocrScanner');
 const APIClient = require('./src/modules/apiClient');
 const PoeApiClient = require('./src/modules/poeApiClient');
 const PriceService = require('./src/modules/priceService');
@@ -32,6 +31,8 @@ const { IconCache } = require('./src/modules/iconCache');
 const StashAnalyzer = require('./src/modules/stashAnalyzer');
 const GameDetector = require('./src/modules/gameDetector');
 const win32Probe = require('./src/modules/win32Probe');
+const InventoryWatcher = require('./src/modules/inventoryWatcher');
+const { COARSE_SIZE: INVENTORY_COARSE_SIZE, FINE_ART_SIZE: INVENTORY_FINE_ART_SIZE } = require('./src/modules/inventoryVision');
 const {
   createRuntimeSessionState,
   applyRuntimeEvent,
@@ -64,7 +65,10 @@ const APP_ID = 'JuiceJournal.Desktop';
 const DEFAULT_API_URL = 'http://localhost:3001';
 const DEFAULT_STRATEGY_PRESETS = ['Strongbox', 'Legion', 'Ritual', 'Expedition', 'Harvest', 'Boss Rush'];
 const MAP_RESULT_OVERLAY_DURATION_MS = 10_000;
-// An OCR scan waits this long for poe.ninja prices; loot without a price counts as 0.
+const INVENTORY_POLL_MS = 1_000;
+const INVENTORY_READING_CARD_MS = 1_200;
+const INVENTORY_STATUS_CARD_MS = 4_000;
+// Inventory loot waits this long for poe.ninja prices; loot without a price counts as 0.
 const SESSION_PRICES_WAIT_MS = 5_000;
 const SESSION_PRICES_RETRY_MS = 5 * 60_000;
 // Settings > Data's Delete everything waits this long for each browser data clear; longer counts as a failed step.
@@ -128,25 +132,26 @@ const MAIN_PROCESS_TRANSLATIONS = {
     trayCurrency: 'Currency',
     traySettings: 'Ayarlar',
     trayNewSession: 'Yeni Map Session',
-    trayAddLoot: 'Loot Ekle',
     trayQuit: 'Cikis',
-    notificationLootAdded: 'Loot Eklendi',
     notificationAutoSession: 'Otomatik Session',
     notificationTryAgain: 'Juice Journal uygulamasini ac ve tekrar dene.',
-    scanNoMapTitle: 'Aktif map yok',
-    noActiveSession: 'Once bir map baslat, sonra lootunu tara.',
-    scanFailedTitle: 'Tarama basarisiz',
-    screenCaptureFailed: 'Ekran goruntusu alinamadi.',
-    scanNothingTitle: 'Item bulunamadi',
-    scanNoItems: 'Lootun ekranda gorundugunden emin ol, sonra tekrar tara.',
-    lootScanFailed: 'Ekran okunurken bir sorun oldu. Tekrar dene.',
     sessionStartFailed: 'Map baslatilamadi',
     sessionEndFailed: 'Map bitirilemedi',
     journalUnreadableBody: 'Gunlugun okunamadi. Ne yapacagini gormek icin Juice Journal uygulamasini ac.',
-    lootAddedBody: '{count} item eklendi. Toplam: {value}c',
     mapProfitBody: 'Kazanc {value}c',
     mapLossBody: 'Zarar {value}c',
-    mapNoLootBody: 'Loot taranmadi',
+    mapNoLootBody: 'Loot sayilmadi',
+    inventoryStatusTitle: 'Envanter',
+    inventoryStatus_reading: 'Envanter okunuyor...',
+    inventoryStatus_saved: 'Envanter kaydedildi. Sonraki map buradan sayilir.',
+    inventoryStatus_noGain: 'Yeni loot bulunamadi.',
+    inventoryStatus_noBaseline: 'Bu map sayilamadi. Sonraki map sayilacak.',
+    inventoryStatus_notOpen: 'Once envanterini ac.',
+    inventoryStatus_covered: 'Itemlerin ustu kapali. Fareyi cek ve tekrar dene.',
+    inventoryStatus_inMap: 'Loot map bitince sayilir.',
+    inventoryStatus_unsupported: 'Bu oyunda henuz yok. Envanter okuma simdilik PoE 2 icin.',
+    inventoryStatus_notReady: 'Fiyatlar yukleniyor. Birazdan tekrar dene.',
+    inventoryStatus_failed: 'Envanter okunamadi. Tekrar dene.',
     mapDuration: '{minutes}dk {seconds}sn',
     mapDurationSeconds: '{seconds}sn',
     autoSessionBody: '{mapName} mapi baslatildi',
@@ -157,7 +162,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     promptDetail: "Bilinmeyen Map olarak listelenir. Ad vermek icin map'i Dashboard'dan baslat.",
     promptEndConfirm: 'Bitir ve baslat',
     promptEndMessage: '{mapName} bitirilip yeni map baslatilsin mi?',
-    promptEndDetail: "Sonucunda yalnizca taradigin loot sayilir. Yeni map Bilinmeyen Map olarak listelenir. Ad vermek icin map'i Dashboard'dan baslat.",
+    promptEndDetail: "Sonucunda yalnizca envanterinden okunan loot sayilir. Yeni map Bilinmeyen Map olarak listelenir. Ad vermek icin map'i Dashboard'dan baslat.",
     unknownMap: 'Bilinmeyen Map',
     auditLogin: 'Yerel kullanici girisi basarili',
     auditLogout: 'Kullanici cikis yapti',
@@ -195,25 +200,26 @@ const MAIN_PROCESS_TRANSLATIONS = {
     trayCurrency: 'Currency',
     traySettings: 'Settings',
     trayNewSession: 'Start New Map',
-    trayAddLoot: 'Add Loot',
     trayQuit: 'Quit',
-    notificationLootAdded: 'Loot Added',
     notificationAutoSession: 'Auto Session',
     notificationTryAgain: 'Open Juice Journal and try again.',
-    scanNoMapTitle: 'No map running',
-    noActiveSession: 'Start a map, then scan your loot.',
-    scanFailedTitle: 'Scan failed',
-    screenCaptureFailed: 'Could not capture the screen.',
-    scanNothingTitle: 'No items found',
-    scanNoItems: 'Make sure the loot is visible on screen, then scan again.',
-    lootScanFailed: 'Something went wrong while reading the screen. Try again.',
     sessionStartFailed: 'Could not start the map',
     sessionEndFailed: 'Could not end the map',
     journalUnreadableBody: 'Your journal could not be read. Open Juice Journal for the next steps.',
-    lootAddedBody: '{count} items added. Total: {value}c',
     mapProfitBody: 'Profit {value}c',
     mapLossBody: 'Loss {value}c',
-    mapNoLootBody: 'No loot scanned',
+    mapNoLootBody: 'No loot counted',
+    inventoryStatusTitle: 'Inventory',
+    inventoryStatus_reading: 'Reading your inventory...',
+    inventoryStatus_saved: 'Inventory noted. Your next map counts from here.',
+    inventoryStatus_noGain: 'No new loot found.',
+    inventoryStatus_noBaseline: 'This map was not counted. The next one will be.',
+    inventoryStatus_notOpen: 'Open your inventory first.',
+    inventoryStatus_covered: 'Your items are covered. Move the mouse away and try again.',
+    inventoryStatus_inMap: 'Loot counts when the map ends.',
+    inventoryStatus_unsupported: 'Not available in this game. Inventory reading is PoE 2 only for now.',
+    inventoryStatus_notReady: 'Prices are loading. Try again shortly.',
+    inventoryStatus_failed: 'Could not read your inventory. Try again.',
     mapDuration: '{minutes}m {seconds}s',
     mapDurationSeconds: '{seconds}s',
     autoSessionBody: '{mapName} map started',
@@ -224,7 +230,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     promptDetail: 'It is listed as Unknown Map. To name a map, start it from the Dashboard.',
     promptEndConfirm: 'End and start',
     promptEndMessage: 'End {mapName} and start a new map?',
-    promptEndDetail: 'Its result counts only the loot you scanned. The new map is listed as Unknown Map. To name a map, start it from the Dashboard.',
+    promptEndDetail: 'Its result counts only the loot read from your inventory. The new map is listed as Unknown Map. To name a map, start it from the Dashboard.',
     unknownMap: 'Unknown Map',
     auditLogin: 'Local user login succeeded',
     auditLogout: 'User logged out',
@@ -271,6 +277,7 @@ const store = new Store({
     scanHotkey: DEFAULT_SCAN_HOTKEY,
     stashScanHotkey: DEFAULT_STASH_SCAN_HOTKEY,
     overlayEnabled: false,
+    inventoryReadEnabled: true,
     currentUserId: null,
     localProfiles: {},
     activeProfileId: null,
@@ -393,7 +400,6 @@ migrateSettingsGameToLastDetected();
 let mainWindow = null;
 let tray = null;
 let logParser = null;
-let ocrScanner = null;
 let apiClient = null;
 let poeApiClient = null;
 let priceService = null;
@@ -418,6 +424,10 @@ let overlayWindowIgnoresMouse = null;
 let overlayCharacterState = null;
 let overlayRuntimeState = null;
 let overlayMapResultState = null;
+let overlayInventoryStatus = null;
+let overlayInventoryStatusTimer = null;
+let inventoryWatcher = null;
+let lastInventoryTickAt = 0;
 let overlayStartMapPromptState = null;
 let overlayCharacterPromptState = null;
 let overlayCharacterPromptTimer = null;
@@ -1608,32 +1618,6 @@ async function copyBugReportToClipboard(reportId) {
   return { copied: true };
 }
 
-function prepareOCRImage(imageBuffer) {
-  const image = nativeImage.createFromBuffer(imageBuffer);
-  const size = image.getSize();
-  if (!size.width || !size.height) {
-    return imageBuffer;
-  }
-
-  const cropRegion = {
-    x: Math.round(size.width * 0.08),
-    y: Math.round(size.height * 0.12),
-    width: Math.round(size.width * 0.84),
-    height: Math.round(size.height * 0.76)
-  };
-
-  const cropped = image.crop(cropRegion);
-  const croppedSize = cropped.getSize();
-  const resized = croppedSize.width > 1600
-    ? cropped.resize({
-      width: 1600,
-      height: Math.round((croppedSize.height / croppedSize.width) * 1600)
-    })
-    : cropped;
-
-  return resized.toPNG();
-}
-
 function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -1764,14 +1748,6 @@ function refreshTrayMenu() {
           'tray-action',
           error?.message === 'JOURNAL_UNREADABLE' ? 'startMapJournalUnreadable' : 'startMapFailed'
         ));
-      }
-    },
-    {
-      label: `${t('trayAddLoot')} (${getValidatedHotkeySettings().scanHotkey})`,
-      click: () => {
-        showMainWindow('dashboard');
-        // The Scan Loot button's handler scans and reports the outcome.
-        mainWindow?.webContents.send('tray-action', 'scanLoot');
       }
     },
     { type: 'separator' },
@@ -2369,7 +2345,7 @@ async function deleteAllLocalData() {
   dataActionRunning = true;
   let restarting = false;
   try {
-    // Nothing may write the error log, a scan, a journal or the settings back meanwhile. The run is dropped before
+    // Nothing may write the error log, an inventory read, a journal or the settings back meanwhile. The run is dropped before
     // the first wait, so a quit or a new map from the tray cannot end it into the journal while the files go.
     errorLogState.disabled = true;
     globalShortcut.unregisterAll();
@@ -2399,20 +2375,13 @@ async function deleteAllLocalData() {
     bugReport = null;
     const priceSnapshotWrites = priceSnapshots?.stop();
 
-    try {
-      if (ocrScanner) {
-        await ocrScanner.terminate();
-      }
-    } catch {
-      // A worker that does not stop keeps its files; the ocr-cache step reports them.
-    }
     // A write under way would put its folder back after the removal below. It never rejects.
     await priceSnapshotWrites;
 
     const userData = app.getPath('userData');
     // Generic folder names: at a drive root they could belong to other programs.
     if (path.isAbsolute(userData) && path.dirname(userData) !== userData) {
-      // Partitions is left over from the Overwolf version.
+      // Partitions is left over from the Overwolf version, ocr-cache from the OCR loot scan of older installs.
       for (const folder of ['profiles', 'icon-cache', 'price-snapshots', 'ocr-cache', 'logs', 'Partitions']) {
         let removed = false;
         for (let attempt = 1; !removed && attempt <= DELETE_ALL_FOLDER_ATTEMPTS; attempt += 1) {
@@ -2454,7 +2423,7 @@ async function deleteAllLocalData() {
     }
 
     if (failed.length) {
-      // Signed out, as at startup before a sign-in; OCR starts again with the next scan. After a failed sign-out the
+      // Signed out, as at startup before a sign-in. After a failed sign-out the
       // profile may still be the active one, so nothing that writes a journal starts again.
       if (!failed.includes('signOut')) {
         try {
@@ -3231,6 +3200,16 @@ function getActiveSessionOverlayState(session = currentSession) {
 }
 
 function buildOverlayState({ character = overlayCharacterState, runtimeSession = overlayRuntimeState } = {}) {
+  // A short note about the inventory read goes over everything else; what it covered shows again when it ends.
+  if (overlayInventoryStatus && isOverlayEnabled()) {
+    return {
+      visibility: 'visible',
+      mode: 'inventory-status',
+      primaryLine: overlayInventoryStatus.primaryLine,
+      secondaryLine: overlayInventoryStatus.secondaryLine
+    };
+  }
+
   const mapResultState = deriveMapResultOverlayState({
     overlayEnabled: isOverlayEnabled(),
     currentOverlayState: overlayMapResultState,
@@ -3388,14 +3367,14 @@ function registerHotkeySet({ scanHotkey, stashScanHotkey }) {
   globalShortcut.unregisterAll();
 
   if (!globalShortcut.register(scanHotkey, () => {
-    captureAndScan();
+    handleInventoryHotkey();
   })) {
     globalShortcut.unregisterAll();
     throw new Error(`Unable to register global shortcut: ${scanHotkey}`);
   }
 
   if (!globalShortcut.register(stashScanHotkey, () => {
-    captureAndScan();
+    handleInventoryHotkey();
   })) {
     globalShortcut.unregisterAll();
     throw new Error(`Unable to register global shortcut: ${stashScanHotkey}`);
@@ -3435,22 +3414,172 @@ function tryRegisterGlobalShortcuts() {
   }
 }
 
-// Holds the OCR hotkeys only while a session runs and the game window has focus (see shouldEnableScanHotkeys).
+function getGameProcessIds() {
+  return (gameDetector ? gameDetector.getDetectedProcesses() : []).map((entry) => entry.ProcessId);
+}
+
+function isGameWindowInFront() {
+  try {
+    return shouldEnableScanHotkeys({
+      enabled: true,
+      foregroundProcessId: win32Probe.getForegroundProcessId(),
+      gameProcessIds: getGameProcessIds()
+    });
+  } catch {
+    return false;
+  }
+}
+
+function getGameWindowRect() {
+  try {
+    return win32Probe.findProcessWindow(getGameProcessIds());
+  } catch {
+    return null;
+  }
+}
+
+function listPricedInventoryItems(game) {
+  const { league } = resolveLeagueContext({ poeVersion: game });
+  void loadSessionPrices({ poeVersion: game, league });
+  const complete = priceService.poeVersion === game
+    && priceService.league === league
+    && priceService.fullySynced
+    && priceService.getStatus().itemCount > 0;
+  return { complete, items: complete ? priceService.listItems() : [] };
+}
+
+function getInventoryIconPath(iconUrl) {
+  const fileUrl = iconCache.getCachedIconUrl(iconUrl);
+  return fileUrl ? fileURLToPath(fileUrl) : null;
+}
+
+function loadInventoryArt(iconPath) {
+  const image = nativeImage.createFromPath(iconPath);
+  if (image.isEmpty()) {
+    return null;
+  }
+
+  return {
+    coarse: image.resize({ width: INVENTORY_COARSE_SIZE, height: INVENTORY_COARSE_SIZE, quality: 'best' }).toBitmap(),
+    fine: image.resize({ width: INVENTORY_FINE_ART_SIZE, height: INVENTORY_FINE_ART_SIZE, quality: 'best' }).toBitmap()
+  };
+}
+
+function getInventoryBaselinesStoreKey(profileId) {
+  return `inventoryBaselines:${profileId}`;
+}
+
+function createInventoryWatcher() {
+  return new InventoryWatcher({
+    isEnabled: () => store.get('inventoryReadEnabled') !== false,
+    getProfileId: () => getActiveProfile()?.id || null,
+    getGame: () => (gameDetector ? gameDetector.getDetectedGame() : null),
+    isGameInFront: isGameWindowInFront,
+    isInMap: () => Boolean(logParser?.currentMap),
+    getGameWindow: getGameWindowRect,
+    readScreen: (x, y, width, height) => win32Probe.readScreenRegion(x, y, width, height),
+    getCharacter: () => overlayCharacterState,
+    listPricedItems: listPricedInventoryItems,
+    getIconPath: getInventoryIconPath,
+    loadArt: loadInventoryArt,
+    loadBaselines: (profileId) => store.get(getInventoryBaselinesStoreKey(profileId)) || {},
+    saveBaselines: (profileId, baselines) => store.set(getInventoryBaselinesStoreKey(profileId), baselines),
+    onGain: (sessionId, items) => {
+      addInventoryLoot(sessionId, items).catch((error) => {
+        console.warn('Could not add the inventory loot to the map', error);
+        showInventoryStatus('failed');
+      });
+    },
+    onStatus: showInventoryStatus
+  });
+}
+
+function tickInventoryWatcher() {
+  const now = Date.now();
+  if (!inventoryWatcher || now - lastInventoryTickAt < INVENTORY_POLL_MS) {
+    return;
+  }
+
+  lastInventoryTickAt = now;
+  try {
+    inventoryWatcher.tick();
+  } catch (error) {
+    console.warn('Inventory read failed', error);
+  }
+}
+
+function handleInventoryHotkey() {
+  try {
+    inventoryWatcher?.readNow();
+  } catch (error) {
+    console.warn('Inventory read failed', error);
+    showInventoryStatus('failed');
+  }
+}
+
+// Told on the overlay when it is on. Otherwise the game is in front and an OS notification is the only way to reach
+// the player; the note that a read is under way is not worth one, since its result follows.
+function showInventoryStatus(kind) {
+  const text = t(`inventoryStatus_${kind}`);
+  if (!isOverlayEnabled()) {
+    if (kind !== 'reading') {
+      showNotification(t('inventoryStatusTitle'), text);
+    }
+    return;
+  }
+
+  // The card's headline holds about 30 characters, so a message's first sentence goes there and the rest below it.
+  const [headline, ...rest] = text.split('. ');
+  clearTimeout(overlayInventoryStatusTimer);
+  overlayInventoryStatus = { kind, primaryLine: headline, secondaryLine: rest.join('. ') };
+  overlayInventoryStatusTimer = setTimeout(() => {
+    overlayInventoryStatusTimer = null;
+    overlayInventoryStatus = null;
+    updateOverlayWindow();
+  }, kind === 'reading' ? INVENTORY_READING_CARD_MS : INVENTORY_STATUS_CARD_MS);
+  updateOverlayWindow();
+}
+
+// A map's inventory loot arrives after it ended, from the first read back outside the map.
+async function addInventoryLoot(sessionId, items) {
+  const session = localJournal.getSession(readJournal(), sessionId);
+  await withTimeout(loadSessionPrices(session), SESSION_PRICES_WAIT_MS).catch(() => null);
+  const entries = items.map(({ name, quantity }) => ({
+    itemName: name,
+    itemType: priceService.getItemType(name),
+    quantity,
+    chaosValue: readLocalChaosPrice(name, session.poeVersion) || 0,
+    divineValue: priceService.getPriceInfo(name)?.divineValue ?? null,
+    source: 'inventory'
+  }));
+  const { journal, session: updated } = localJournal.addLoot(readJournal(), sessionId, entries, {
+    createId: () => crypto.randomUUID(),
+    now: new Date()
+  });
+  writeJournal(journal);
+  if (mainWindow) {
+    mainWindow.webContents.send('session-loot-updated', updated);
+  }
+}
+
+// Holds the read hotkeys only while someone is signed in and the game window has focus (see shouldEnableScanHotkeys).
 function syncScanHotkeys() {
-  const hasActiveSession = Boolean(currentSession);
+  tickInventoryWatcher();
+
+  const enabled = Boolean(getActiveProfile());
   let foregroundProcessId = null;
-  if (hasActiveSession) {
+  if (enabled) {
     try {
       foregroundProcessId = win32Probe.getForegroundProcessId();
     } catch {
-      // Unreadable: the session alone decides.
+      // Unreadable: the hotkeys stay released.
     }
   }
 
   const shouldBeActive = shouldEnableScanHotkeys({
-    hasActiveSession,
+    enabled,
     foregroundProcessId,
-    gameProcessIds: (gameDetector ? gameDetector.getDetectedProcesses() : []).map((entry) => entry.ProcessId)
+    gameProcessIds: getGameProcessIds()
   });
   if (shouldBeActive === scanHotkeysActive) {
     return;
@@ -3467,72 +3596,6 @@ function syncScanHotkeys() {
 function releaseInactiveScanHotkeys() {
   if (!scanHotkeysActive) {
     globalShortcut.unregisterAll();
-  }
-}
-
-// Answers the Scan Loot button with { count } or { reason }; an F9 scan from the game is told by the OS notification.
-async function captureAndScan() {
-  try {
-    if (!currentSession) {
-      showNotification(t('scanNoMapTitle'), t('noActiveSession'));
-      return { reason: 'noSession' };
-    }
-
-    // Prices load while the screen is read; a slow or unreachable poe.ninja holds the scan for a few seconds at most.
-    const scannedSession = currentSession;
-    const prices = withTimeout(loadSessionPrices(scannedSession), SESSION_PRICES_WAIT_MS).catch(() => null);
-
-    // Ekran goruntusu al
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const { width, height } = primaryDisplay.size;
-
-    const sources = await require('electron').desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: { width, height }
-    });
-
-    if (sources.length === 0) {
-      showNotification(t('scanFailedTitle'), t('screenCaptureFailed'));
-      return { reason: 'captureFailed' };
-    }
-
-    const screenshot = prepareOCRImage(sources[0].thumbnail.toPNG());
-
-    // OCR tara
-    const items = await ocrScanner.scanImage(screenshot);
-
-    if (items.length === 0) {
-      showNotification(t('scanNothingTitle'), t('scanNoItems'));
-      return { reason: 'noItems' };
-    }
-
-    await prices;
-    // The session may have ended (or another started) while the scan ran.
-    if (currentSession?.id !== scannedSession.id) {
-      showNotification(t('scanNoMapTitle'), t('noActiveSession'));
-      return { reason: 'noSession' };
-    }
-
-    const result = addLootToCurrentSession(items, 'ocr');
-    const totalValue = result.lootEntries.reduce((sum, loot) => sum + (loot.chaosValue * loot.quantity), 0);
-    showNotification(
-      t('notificationLootAdded'),
-      t('lootAddedBody', { count: result.lootEntries.length, value: totalValue.toFixed(1) })
-    );
-
-    // Renderer'a bilgi gonder
-    if (mainWindow) {
-      mainWindow.webContents.send('loot-added', { items: result.lootEntries, totalValue });
-    }
-
-    return { count: result.lootEntries.length };
-  } catch (error) {
-    if (error?.message === 'JOURNAL_UNREADABLE') {
-      showNotification(t('scanFailedTitle'), t('journalUnreadableBody'));
-      return { reason: 'journalUnreadable' };
-    }
-    showNotification(t('scanFailedTitle'), t('lootScanFailed'));
-    return { reason: 'failed' };
   }
 }
 
@@ -3573,7 +3636,7 @@ async function startNewSession(input = {}) {
     if (typeof updateOverlayWindow === 'function') {
       updateOverlayWindow();
     }
-    // Prices for scanned loot load in the background, so the first OCR scan does not wait for them.
+    // Prices for the loot counted after the map load in the background, so counting does not wait for them.
     if (typeof loadSessionPrices === 'function') {
       void loadSessionPrices(session);
     }
@@ -3755,10 +3818,12 @@ async function endCurrentSession(options = {}) {
     } else if (profit > 0 || completionPayload.profitChaos !== undefined || session.lootEntries?.length) {
       outcome = t('mapProfitBody', { value: profit > 0 ? `+${profit}` : String(profit) });
     } else {
-      // Nothing was scanned or read from the stash, so there is no profit to report. The window and the overlay read this too.
+      // Nothing was counted from the inventory or read from the stash, so there is no profit to report. The window and the overlay read this too.
       outcome = t('mapNoLootBody');
       session.noLoot = true;
     }
+    const inventoryCanSettle = !options.shuttingDown && Boolean(inventoryWatcher?.sessionEnded(session));
+    session.lootPending = Boolean(session.noLoot) && inventoryCanSettle;
     let duration = '';
     if (durationSeconds) {
       const minutes = Math.floor(durationSeconds / 60);
@@ -4076,7 +4141,7 @@ function applyGameVersion(version, options = {}) {
 const SETTINGS_ALLOWLIST = new Set([
   'apiUrl', 'onlineEnabled', 'poePath', 'autoStartSession', 'notifications',
   'soundNotifications', 'language', 'poeVersion', 'defaultLeaguePoe1', 'defaultLeaguePoe2',
-  'scanHotkey', 'stashScanHotkey', 'overlayEnabled', 'lastKnownAccountState', 'theme'
+  'scanHotkey', 'stashScanHotkey', 'overlayEnabled', 'inventoryReadEnabled', 'lastKnownAccountState', 'theme'
 ]);
 
 function applyDesktopSettings(settings = {}) {
@@ -4219,7 +4284,7 @@ function getRendererSettings() {
   // The renderer sees only the signed-in profile's character cache. Map results
   // reach it per profile through their own IPC.
   Object.keys(allSettings)
-    .filter((key) => key.startsWith('lastKnownAccountState:') || key.startsWith('mapResults:'))
+    .filter((key) => key.startsWith('lastKnownAccountState:') || key.startsWith('mapResults:') || key.startsWith('inventoryBaselines:'))
     .forEach((key) => delete allSettings[key]);
   const accountStateKey = getAccountStateStoreKey();
   allSettings.lastKnownAccountState = (accountStateKey && store.get(accountStateKey)) || null;
@@ -4548,11 +4613,6 @@ function setupIPC() {
     } catch (error) {
       throw toRendererError(error, 'Loot eklenemedi');
     }
-  });
-
-  // Ekran tara
-  ipcMain.handle('scan-screen', async () => {
-    return await captureAndScan();
   });
 
   // Login
@@ -5146,13 +5206,13 @@ app.whenReady().then(() => {
   // Initialize the API client.
   const resolvedToken = getDecryptedAuthToken();
   apiClient = new APIClient(store.get('apiUrl'), resolvedToken, { online: isOnlineEnabled() });
-  ocrScanner = new OCRScanner({ cachePath: path.join(app.getPath('userData'), 'ocr-cache') });
   poeApiClient = new PoeApiClient();
   priceService = new PriceService();
   priceSnapshots = new PriceSnapshotStore({ dir: path.join(app.getPath('userData'), 'price-snapshots') });
   priceService.onSynced = (snapshot) => priceSnapshots.save(snapshot);
   iconCache = new IconCache({ dir: path.join(app.getPath('userData'), 'icon-cache') });
   stashAnalyzer = new StashAnalyzer();
+  inventoryWatcher = createInventoryWatcher();
 
   // Set PoE version for price service
   priceService.setPoeVersion(store.get('poeVersion') || 'poe1');
@@ -5221,10 +5281,6 @@ function handleAppWillQuit() {
   // Stop the game detector.
   if (gameDetector) {
     gameDetector.stop();
-  }
-
-  if (ocrScanner) {
-    ocrScanner.terminate().catch(() => { });
   }
 
   if (tray) {

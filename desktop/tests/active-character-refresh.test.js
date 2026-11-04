@@ -353,6 +353,7 @@ test('game-version change triggers active character refresh scheduling for poe2'
         onMapExited() {},
         onSessionStarted() {},
         onSessionEnded() {},
+        onSessionLootUpdated() {},
         onLootAdded() {},
         onGameVersionChanged(handler) {
           this._handler = handler;
@@ -410,6 +411,7 @@ test('game-version change hands the Settings game to the renderer', () => {
         onMapExited() {},
         onSessionStarted() {},
         onSessionEnded() {},
+        onSessionLootUpdated() {},
         onLootAdded() {},
         onGameVersionChanged(handler) {
           this._handler = handler;

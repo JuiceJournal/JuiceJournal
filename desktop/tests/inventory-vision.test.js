@@ -173,6 +173,40 @@ test('an item the library does not hold is left out', () => {
   assert.deepEqual(result.items, {});
 });
 
+test('a tooltip over the grid makes the read report it as covered, with no items', () => {
+  const image = blankGrid();
+  paintCell(image, 0, 0, 1);
+  drawGridLines(image);
+  const art = [makeArt('First Orb', 1)];
+  assert.deepEqual(vision.readInventory(image, GRID, art).items, { 'First Orb': 1 });
+
+  for (let y = 0; y < Math.round(GRID.pitchY * 2); y += 1) {
+    for (let x = Math.round(GRID.pitchX * 3); x < Math.round(GRID.pitchX * 8); x += 1) {
+      const i = (y * image.width + x) * 4;
+      image.data[i] = 8;
+      image.data[i + 1] = 8;
+      image.data[i + 2] = 8;
+    }
+  }
+
+  assert.deepEqual(vision.readInventory(image, GRID, art), { open: true, covered: true, items: {} });
+});
+
+test('an item picture hiding the border inside it is not mistaken for a tooltip', () => {
+  const image = blankGrid();
+  drawGridLines(image);
+  for (let y = 0; y < Math.round(GRID.pitchY * 2); y += 1) {
+    for (let x = 5; x < Math.round(GRID.pitchX * 2) - 5; x += 1) {
+      const i = (y * image.width + x) * 4;
+      image.data[i] = 90;
+      image.data[i + 1] = 60;
+      image.data[i + 2] = 40;
+    }
+  }
+
+  assert.equal(vision.readInventory(image, GRID, []).covered, undefined);
+});
+
 test('an empty library reads nothing rather than failing', () => {
   const image = blankGrid();
   paintCell(image, 1, 1, 2);

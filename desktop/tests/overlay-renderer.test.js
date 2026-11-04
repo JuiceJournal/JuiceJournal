@@ -131,13 +131,13 @@ test('overlay renderer shows the map result card and its clockless lines in the 
   overlay.renderState(mapResult({ netProfit: 40, durationSeconds: 300, lootItemCount: 3 }));
   assert.equal(overlay.kicker.textContent, 'Map Tamamlandi');
   assert.equal(overlay.primary.children[0].textContent, 'Tamamlanan Map');
-  assert.equal(overlay.secondary.textContent, '3 item tarandi');
+  assert.equal(overlay.secondary.textContent, '3 item sayildi');
   assert.equal(overlay.meta.textContent, '5dk 00sn');
   assert.equal(overlay.pin.textContent, 'Sabitle');
 
   overlay.renderState(mapResult({ netProfit: 40, lootItemCount: 0, farmType: 'No farm type' }));
   assert.equal(overlay.primary.children[0].textContent, 'Farm tipi yok');
-  assert.equal(overlay.secondary.textContent, 'Loot taranmadi');
+  assert.equal(overlay.secondary.textContent, 'Loot sayilmadi');
 
   overlay.renderState(mapResult({ netProfit: 40, farmType: 'Unknown farm type' }));
   assert.equal(overlay.primary.children[0].textContent, 'Bilinmeyen farm tipi');
@@ -261,7 +261,7 @@ test('the result card shows the amount with its currency icon, the top drop in a
   assert.equal(metaText, 'Juiced · 6m 52s');
 });
 
-test('the result card uses the same game art only and says how much loot was scanned', () => {
+test('the result card uses the same game art only and says how much loot was counted', () => {
   const overlay = loadOverlay();
 
   renderResult(overlay, { netProfit: 250, poeVersion: 'poe2', topOutputs: [{ label: 'vaal orb', valueDelta: 40 }] });
@@ -269,11 +269,11 @@ test('the result card uses the same game art only and says how much loot was sca
   assert.equal(overlay.secondary.children.length, 0, 'no PoE 1 art for a PoE 2 drop');
 
   renderResult(overlay, { netProfit: 0, topOutputs: [], lootItemCount: 3 });
-  assert.equal(overlay.secondary.textContent, '3 items scanned');
+  assert.equal(overlay.secondary.textContent, '3 items counted');
   renderResult(overlay, { netProfit: 0, topOutputs: [], lootItemCount: 1 });
-  assert.equal(overlay.secondary.textContent, '1 item scanned');
+  assert.equal(overlay.secondary.textContent, '1 item counted');
   renderResult(overlay, { netProfit: 0, topOutputs: [] });
-  assert.equal(overlay.secondary.textContent, 'No loot scanned');
+  assert.equal(overlay.secondary.textContent, 'No loot counted');
 });
 
 test('the result card of a map with no loot shows no profit of 0 and no tier', () => {
@@ -281,12 +281,50 @@ test('the result card of a map with no loot shows no profit of 0 and no tier', (
   renderResult(overlay, { netProfit: 0, noLoot: true, durationSeconds: 250, lootItemCount: 0, topOutputs: [] });
 
   assert.equal(overlay.primary.children.length, 1, 'only the name');
-  assert.equal(overlay.secondary.textContent, 'No loot scanned');
+  assert.equal(overlay.secondary.textContent, 'No loot counted');
   assert.equal(overlay.card.dataset.profitTier, undefined);
   assert.equal(overlay.meta.textContent, '4m 10s');
 
   renderResult(overlay, { netProfit: 0, totalLootChaos: 0, durationSeconds: 250, topOutputs: [] });
   assert.equal(overlay.primary.children.length, 3, 'a stash result of exactly 0 keeps its value');
+});
+
+test('the result card of a map still waiting for its inventory loot asks for the inventory instead of saying no loot', () => {
+  const overlay = loadOverlay();
+
+  renderResult(overlay, { netProfit: 0, noLoot: true, lootPending: true, durationSeconds: 250, lootItemCount: 0, topOutputs: [] });
+  assert.equal(overlay.secondary.textContent, 'Open your inventory to count your loot');
+  assert.equal(overlay.primary.children.length, 1, 'still no profit of 0');
+
+  // Loot that arrived wins over the waiting line, and a map not waiting says it counted none.
+  renderResult(overlay, { netProfit: 0, lootPending: true, lootItemCount: 3, topOutputs: [] });
+  assert.equal(overlay.secondary.textContent, '3 items counted');
+  renderResult(overlay, { netProfit: 0, noLoot: true, lootPending: false, durationSeconds: 250, lootItemCount: 0, topOutputs: [] });
+  assert.equal(overlay.secondary.textContent, 'No loot counted');
+
+  overlay.renderState({
+    visibility: 'visible',
+    mode: 'map-result',
+    language: 'tr',
+    mapResult: { visible: true, result: { netProfit: 0, noLoot: true, lootPending: true, lootItemCount: 0, topOutputs: [] } }
+  });
+  assert.equal(overlay.secondary.textContent, 'Lootu saymak icin envanterini ac');
+});
+
+test('the inventory status mode shows its note under an Inventory kicker with nothing else', () => {
+  const overlay = loadOverlay();
+
+  overlay.renderState({ visibility: 'visible', mode: 'inventory-status', primaryLine: 'Open your inventory first.' });
+
+  assert.equal(overlay.kicker.textContent, 'Inventory');
+  assert.equal(overlay.primary.children[0].textContent, 'Open your inventory first.');
+  assert.equal(overlay.primary.children.length, 1);
+  assert.equal(overlay.secondary.textContent, '');
+  assert.equal(overlay.meta.textContent, '');
+
+  overlay.renderState({ visibility: 'visible', mode: 'inventory-status', language: 'tr', primaryLine: 'Once envanterini ac.' });
+  assert.equal(overlay.kicker.textContent, 'Envanter');
+  assert.equal(overlay.primary.children[0].textContent, 'Once envanterini ac.');
 });
 
 test('a loss keeps its colour on the card but shows the number in bright text', () => {

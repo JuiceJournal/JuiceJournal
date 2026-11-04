@@ -8,9 +8,6 @@ Electron tabanli masaustu uygulamasi.
 npm install
 ```
 
-Tesseract.js icin ek sistem gereksinimleri olabilir. 
-Windows'ta genelde ek kurulum gerekmez.
-
 ## Calistirma
 
 ```bash
@@ -31,15 +28,18 @@ npm run build:win
 - Map giris/cikisini otomatik tespit eder
 - Session'lari otomatik baslatabilir
 
-### OCR Tarama
-- Tesseract.js ile ekran goruntusu analizi
-- Stash'teki itemleri tespit eder
-- Fiyatlandirma icin backend'e gonderir
+### Envanterden Loot Sayimi
+- Deneysel. Su an yalnizca PoE2; PoE1 envanter yerlesimi henuz olculmedi
+- Yalnizca 2560x1440 cozunurlukte test edildi
+- Map oncesinde ve sonrasinda envanterini ac; okuma kendiliginden yapilir ya da `F9` ile
+- Yalnizca fiyati olan yigilabilir itemler sayilir, ekipman sayilmaz
+- Otomatik okuma acikken (Ayarlar > Path of Exile) oyun ondeyken ve map disindayken ekranin kucuk bir bolumunu okur
+- Ekrandan hicbir sey kaydedilmez ya da gonderilmez
 
-### OCR Kisayollari
-- `F9` - Hizli loot ekle
-- `Ctrl+Shift+L` - Stash tarama
-- Yalnizca aktif session varken ve oyun penceresi ondeyken kayitlidir (uygulama ondeki pencereyi okuyamazsa tum session boyunca); diger zamanlarda tuslar oyuna ve diger uygulamalara gider
+### Okuma Kisayollari
+- `F9` - Envanteri simdi oku
+- `Ctrl+Shift+L` - Ayni is icin ikinci kisayol
+- Yalnizca giris yapilmisken ve oyun penceresi ondeyken kayitlidir (uygulama ondeki pencereyi okuyamazsa serbest birakilir); diger zamanlarda tuslar oyuna ve diger uygulamalara gider
 
 ### System Tray
 - Windows bildirim alaninda calisir
@@ -55,7 +55,8 @@ Uygulama ici ayarlar:
 - **Dil**: Arayuz dili
 - **PoE Surumu**: PoE1 / PoE2 runtime secimi
 - **Aktif Ligler**: PoE1 ve PoE2 icin ayri varsayilan lig secimi
-- **Hotkeys**: `scanHotkey` ve `stashScanHotkey` kisayollari
+- **Hotkeys**: `scanHotkey` ve `stashScanHotkey` kisayollari (ikisi de envanteri okur)
+- **Envanterden otomatik sayim**: Ayarlar > Path of Exile
 - **Otomatik Session**: Map girisinde otomatik baslat
 - **Bildirimler**: Masaustu bildirimleri
 - **Sesli Bildirimler**: Sesli event bildirimleri
@@ -134,10 +135,11 @@ Build ciktisi `dist/` klasorunde olusur.
 
 ## Sorun Giderme
 
-### OCR calismiyor
-- Tesseract.js ilk kullanimda dil dosyasini `%APPDATA%\Juice Journal\ocr-cache\` altina indirir
-- Internet baglantisi gerekli
-- Windows Defender izin vermeli
+### Envanter okunmuyor
+- Su an yalnizca PoE2 ve 2560x1440 cozunurluk destekleniyor
+- Okuma sirasinda envanter acik olmali ve oyun ondeki pencere olmali
+- Otomatik okuma Ayarlar > Path of Exile altinda acik olmali
+- Map icindeyken okunmaz; loot map bitince sayilir
 
 ### Log izleme calismiyor
 - Client.txt yolu dogru mu kontrol edin

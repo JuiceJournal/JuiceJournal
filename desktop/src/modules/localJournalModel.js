@@ -13,7 +13,7 @@
     'delirium_orb', 'catalyst', 'essence', 'fossil', 'beast', 'rune', 'tattoo', 'omen', 'soul_core', 'idol',
     'expedition', 'ultimatum', 'vaal', 'abyssal_bone', 'liquid_emotion', 'verisium', 'base_type', 'other'
   ]);
-  const LOOT_SOURCES = new Set(['manual', 'ocr', 'api']);
+  const LOOT_SOURCES = new Set(['manual', 'ocr', 'api', 'inventory']);
   const PERIOD_DAYS = { weekly: 7, monthly: 30 };
 
   function journalError(message, code) {

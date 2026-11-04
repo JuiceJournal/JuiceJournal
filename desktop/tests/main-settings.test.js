@@ -316,6 +316,7 @@ test('main overlay window is created lazily only when overlay state is visible',
   const context = loadFunctions(['getLanguage', 'buildOverlayState', 'updateOverlayWindow'], {
     store: { get: (key) => (key === 'language' ? 'tr' : undefined) },
     overlayMapResultState: null,
+    overlayInventoryStatus: null,
     overlayStartMapPromptState: null,
     overlayCharacterPromptState: null,
     overlayCharacterState: null,
@@ -374,11 +375,51 @@ test('main overlay window is created lazily only when overlay state is visible',
   assert.equal(context.overlayWindow, null);
 });
 
+// buildOverlayState with a map result on show and an inventory note that may be set; the overlay switch is a parameter.
+function buildOverlayWithInventoryStatus({ overlayOn, inventoryStatus }) {
+  const mapResult = { id: 'result-1', mapName: 'Tower' };
+  const context = loadFunctions(['buildOverlayState'], {
+    overlayInventoryStatus: inventoryStatus,
+    overlayMapResultState: { visible: true, result: mapResult },
+    overlayStartMapPromptState: null,
+    overlayCharacterPromptState: null,
+    overlayCharacterState: null,
+    overlayRuntimeState: null,
+    currentSession: null,
+    isOverlayEnabled: () => overlayOn,
+    deriveMapResultOverlayState: ({ currentOverlayState }) => currentOverlayState,
+    deriveOverlayState: () => ({ visibility: 'hidden' }),
+    getActiveSessionOverlayState: () => null,
+    getLanguage: () => 'en'
+  });
+  return JSON.parse(JSON.stringify(context.buildOverlayState()));
+}
+
+test('main overlay state puts an inventory status over a map result while the overlay is on', () => {
+  const status = { kind: 'saved', primaryLine: 'Inventory noted', secondaryLine: 'Your next map counts from here.' };
+
+  assert.deepEqual(buildOverlayWithInventoryStatus({ overlayOn: true, inventoryStatus: status }), {
+    visibility: 'visible',
+    mode: 'inventory-status',
+    primaryLine: 'Inventory noted',
+    secondaryLine: 'Your next map counts from here.'
+  });
+  // Without a status, the map result shows as before.
+  assert.equal(buildOverlayWithInventoryStatus({ overlayOn: true, inventoryStatus: null }).mode, 'map-result');
+});
+
+test('main overlay state ignores an inventory status while the overlay is off', () => {
+  const status = { kind: 'saved', primaryLine: 'Inventory noted', secondaryLine: '' };
+
+  assert.notEqual(buildOverlayWithInventoryStatus({ overlayOn: false, inventoryStatus: status }).mode, 'inventory-status');
+});
+
 test('main overlay window is not created again while the app quits', () => {
   const calls = [];
   const context = loadFunctions(['buildOverlayState', 'updateOverlayWindow'], {
     getLanguage: () => 'en',
     overlayMapResultState: null,
+    overlayInventoryStatus: null,
     overlayStartMapPromptState: null,
     overlayCharacterPromptState: null,
     overlayCharacterState: null,
@@ -1318,7 +1359,6 @@ test('main app shutdown cleans up main-process resources', () => {
         gameDetectorStopCalls += 1;
       }
     },
-    ocrScanner: null,
     tray: {
       destroy() {
         trayDestroyCalls += 1;

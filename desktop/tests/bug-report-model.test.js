@@ -407,7 +407,7 @@ test('buildBugReportText prints the fixed English layout with no trailing newlin
     'Default leagues: PoE1 private league, PoE2 not set',
     'Online features: off, custom server: no',
     'Client.txt found: yes',
-    'Scan hotkey: F9',
+    'Read inventory hotkey: F9',
     'Notifications: on, sound: off, auto-start session: on',
     'Signed in (local profile): yes',
     'Active session: none',

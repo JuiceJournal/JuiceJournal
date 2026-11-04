@@ -22,6 +22,9 @@ const FINE_OFFSETS_X = [-1, 0, 1];
 const FINE_OFFSETS_Y = [0, 1, 2];
 const SHORTLIST_SIZE = 12;
 const OPEN_SCORE = 0.6;
+// Real inventories hid at most one border in a row and a tooltip-sized box at least three.
+const COVERED_BORDER_RUN = 3;
+const HIDDEN_BORDER_FLANK = 40;
 const OCCUPIED_DEVIATION = 22;
 // A match this close to the best one is the same picture: Greater and Perfect orbs share the base orb's art.
 const SAME_ART_GAP = 0.25;
@@ -31,6 +34,10 @@ const ACCEPT_MARGIN = 1;
 const DIGIT_BRIGHTNESS = 185;
 const TIER_BRIGHTNESS = 170;
 const DIGIT_MAX_DISTANCE = 0.35;
+
+function hasInventoryLayout(poeVersion) {
+  return Object.prototype.hasOwnProperty.call(GRIDS, poeVersion);
+}
 
 function getGridRect(poeVersion, windowRect) {
   const layout = GRIDS[poeVersion];
@@ -106,6 +113,42 @@ function scoreGridLines(image, grid) {
   }
 
   return lines.reduce((sum, value) => sum + value, 0) / lines.length;
+}
+
+// A border is hidden when it does not show and the area around it is dark, as under a tooltip. Bright item art next to
+// a border can drown it out too, but that is not something covering the grid.
+function isCellBorderHidden(image, grid, col, row) {
+  const scale = grid.pitchX / 70.25;
+  const reach = Math.max(1, Math.round(2 * scale));
+  const side = Math.max(2, Math.round(5 * scale));
+  const lineX = Math.round(col * grid.pitchX);
+  let hits = 0;
+  let flanks = 0;
+  let total = 0;
+  for (let t = 0.2; t < 0.85; t += 0.1) {
+    const y = Math.round((row + t) * grid.pitchY);
+    let line = 0;
+    for (let d = -reach; d <= reach; d += 1) line = Math.max(line, luma(image, lineX + d, y));
+    const flank = (luma(image, lineX - side, y) + luma(image, lineX + side, y)) / 2;
+    if (line - flank >= 6 && line < 110) hits += 1;
+    flanks += flank;
+    total += 1;
+  }
+  return hits / total < 0.5 && flanks / total < HIDDEN_BORDER_FLANK;
+}
+
+// The longest run of cell borders hidden in any row. An item's picture can hide the one border inside it, but a tooltip
+// hides many in a row, and the items under it would be missing from the read.
+function longestHiddenBorderRun(image, grid) {
+  let longest = 0;
+  for (let row = 0; row < grid.rows; row += 1) {
+    let run = 0;
+    for (let col = 1; col < grid.cols; col += 1) {
+      run = isCellBorderHidden(image, grid, col, row) ? run + 1 : 0;
+      longest = Math.max(longest, run);
+    }
+  }
+  return longest;
 }
 
 function cropCell(image, grid, col, row) {
@@ -401,12 +444,16 @@ function hashCell(cell) {
 }
 
 /**
- * Reads a grid image into { open, items: { name: quantity } }. `cache` is an optional Map from cell pixels to results;
- * most cells stay the same between reads, so a repeat read costs almost nothing.
+ * Reads a grid image into { open, items: { name: quantity } }, with covered: true and no items when something such as
+ * a tooltip hides part of the grid, since a partial read would look like items leaving and coming back. `cache` is an
+ * optional Map from cell pixels to results; most cells stay the same between reads, so a repeat read costs almost nothing.
  */
 function readInventory(image, grid, art, cache = null) {
   if (scoreGridLines(image, grid) < OPEN_SCORE) {
     return { open: false, items: {} };
+  }
+  if (longestHiddenBorderRun(image, grid) >= COVERED_BORDER_RUN) {
+    return { open: true, covered: true, items: {} };
   }
 
   const items = {};
@@ -435,8 +482,10 @@ module.exports = {
   COARSE_SIZE,
   FINE_ART_SIZE,
   OPEN_SCORE,
+  hasInventoryLayout,
   getGridRect,
   scoreGridLines,
+  longestHiddenBorderRun,
   cropCell,
   isOccupied,
   matchCell,

@@ -725,6 +725,7 @@ test('loot, map exit, session start and stash snapshot events refresh the tracke
         onMapExited: (handler) => { listeners.mapExited = handler; },
         onSessionStarted: (handler) => { listeners.sessionStarted = handler; },
         onSessionEnded: (handler) => { listeners.sessionEnded = handler; },
+        onSessionLootUpdated: () => {},
         onLootAdded: (handler) => { listeners.lootAdded = handler; },
         onNavigate: (handler) => { listeners.navigate = handler; },
         onStashSnapshotTaken: (handler) => { listeners.stashSnapshotTaken = handler; }
@@ -745,7 +746,7 @@ test('loot, map exit, session start and stash snapshot events refresh the tracke
   listeners.mapExited({ mapName: 'Tower', duration: 60, runtimeSession: { mapName: 'Tower' } });
   listeners.sessionStarted({ id: 's1', mapName: 'Tower' });
 
-  // The item count, the profit tile and the Scan Loot outcome cover it.
+  // The item count and the profit tile cover it.
   assert.deepEqual(toasts, []);
   assert.equal(state.currentSession.id, 's1');
   assert.deepEqual(calls, [['runtime', 'Tower'], 'updateActiveSessionUI', 'ensureSessionClock']);
@@ -758,14 +759,11 @@ test('loot, map exit, session start and stash snapshot events refresh the tracke
   assert.equal(listeners.stashSnapshotTaken, undefined);
 });
 
-test('tray actions run the Scan Loot handler and report a failed map start in the window', () => {
+test('tray actions report a failed map start in the window', () => {
   const listeners = {};
   const toasts = [];
-  const scans = [];
-  const scanScreenBtn = { disabled: false };
   const context = loadFunctions(['setupIPCListeners'], {
     state: { currentSession: null },
-    elements: { scanScreenBtn },
     window: {
       t: (key) => key,
       electronAPI: {
@@ -773,24 +771,21 @@ test('tray actions run the Scan Loot handler and report a failed map start in th
         onMapExited: () => {},
         onSessionStarted: () => {},
         onSessionEnded: () => {},
+        onSessionLootUpdated: () => {},
         onLootAdded: () => {},
         onNavigate: () => {},
         onTrayAction: (handler) => { listeners.trayAction = handler; }
       }
     },
-    handleScanScreen: () => scans.push('scan'),
     showToast: (...args) => toasts.push(args)
   });
 
   context.setupIPCListeners();
-  listeners.trayAction('scanLoot');
-  // A scan already running keeps the button busy, so the tray does not start a second one.
-  scanScreenBtn.disabled = true;
+  // The removed Add Loot item sent this; an old value does nothing.
   listeners.trayAction('scanLoot');
   listeners.trayAction('startMapFailed');
   listeners.trayAction('startMapJournalUnreadable');
 
-  assert.deepEqual(scans, ['scan']);
   assert.deepEqual(toasts, [
     ['toast.mapStartFailed', 'toast.tryAgain', 'error'],
     ['toast.mapStartFailed', 'errors.journalUnreadable', 'error']
@@ -819,6 +814,7 @@ test('a new version raises one sticky toast that starts the download', () => {
         onMapExited: () => {},
         onSessionStarted: () => {},
         onSessionEnded: () => {},
+        onSessionLootUpdated: () => {},
         onLootAdded: () => {},
         onNavigate: () => {},
         onAppUpdateStateChanged: (handler) => { listeners.appUpdate = handler; }
@@ -1619,6 +1615,7 @@ test('session-ended events persist completed map results for automatic log exits
         onMapExited: (handler) => { listeners.mapExited = handler; },
         onSessionStarted: (handler) => { listeners.sessionStarted = handler; },
         onSessionEnded: (handler) => { listeners.sessionEnded = handler; },
+        onSessionLootUpdated: () => {},
         onLootAdded: (handler) => { listeners.lootAdded = handler; },
         onNavigate: (handler) => { listeners.navigate = handler; }
       }
@@ -1725,6 +1722,7 @@ function loadSessionEndedListener({ stashState = { lastMapResult: null } } = {})
   const persisted = [];
   const overlayResults = [];
   const mapToasts = [];
+  const refreshes = [];
   const context = loadFunctions([
     'getSessionNumber',
     'getSessionTimestampMs',
@@ -1753,6 +1751,7 @@ function loadSessionEndedListener({ stashState = { lastMapResult: null } } = {})
         onMapExited: (handler) => { listeners.mapExited = handler; },
         onSessionStarted: (handler) => { listeners.sessionStarted = handler; },
         onSessionEnded: (handler) => { listeners.sessionEnded = handler; },
+        onSessionLootUpdated: (handler) => { listeners.sessionLootUpdated = handler; },
         onLootAdded: (handler) => { listeners.lootAdded = handler; },
         onNavigate: (handler) => { listeners.navigate = handler; },
         async showMapResultOverlay(result) {
@@ -1773,11 +1772,11 @@ function loadSessionEndedListener({ stashState = { lastMapResult: null } } = {})
     stopSessionClock: () => {},
     showToast: () => {},
     showMapResultToast: (result) => mapToasts.push(JSON.parse(JSON.stringify(result))),
-    refreshTrackerData: async () => {}
+    refreshTrackerData: async (options) => refreshes.push(JSON.parse(JSON.stringify(options)))
   });
 
   context.setupIPCListeners();
-  return { context, listeners, persisted, overlayResults, mapToasts };
+  return { context, listeners, persisted, overlayResults, mapToasts, refreshes };
 }
 
 function createEndedPoe1Session(overrides = {}) {
@@ -1820,6 +1819,34 @@ test('session-ended events show the map result overlay with the loot recorded in
     mapToasts.map((result) => [result.sessionId, result.netProfit, result.durationSeconds]),
     [['session-1', 42, 240], ['session-2', 0, 180]]
   );
+});
+
+test('a finished map that got its loot from the inventory replaces its result, shows it again and refreshes', async () => {
+  const { listeners, persisted, overlayResults, mapToasts, refreshes } = loadSessionEndedListener();
+
+  // The map ended with nothing counted: a result without profit, waiting for the first read after the map.
+  await listeners.sessionEnded(createEndedPoe1Session({ noLoot: true, lootPending: true }));
+  assert.equal(persisted[0].lootPending, true);
+  assert.equal(persisted[0].noLoot, true);
+  const pendingId = persisted[0].id;
+  refreshes.length = 0;
+
+  await listeners.sessionLootUpdated(createEndedPoe1Session({
+    totalLootChaos: 174,
+    profitChaos: 174,
+    lootEntries: [
+      { itemName: 'Divine Orb', itemType: 'currency', quantity: 1, chaosValue: 150, source: 'inventory' },
+      { itemName: 'Exalted Orb', itemType: 'currency', quantity: 2, chaosValue: 12, source: 'inventory' }
+    ]
+  }));
+
+  // Same id as the pending result, so the store replaces it; it is shown on the overlay and in a toast again.
+  assert.equal(persisted.length, 2);
+  assert.equal(persisted[1].id, pendingId);
+  assert.deepEqual([persisted[1].netProfit, persisted[1].lootItemCount, persisted[1].lootPending], [174, 3, false]);
+  assert.deepEqual(overlayResults.map((result) => result.id), [pendingId, pendingId]);
+  assert.deepEqual(mapToasts.map((result) => [result.id, result.netProfit]), [[pendingId, 0], [pendingId, 174]]);
+  assert.deepEqual(refreshes, [{ includeSessions: true, immediate: true }]);
 });
 
 test('session-ended events leave sessions completed by a stash diff to that result', async () => {
@@ -1866,6 +1893,7 @@ test('prices-updated events give the dashboard views the Divine and Mirror rates
         onMapExited: (handler) => { listeners.mapExited = handler; },
         onSessionStarted: (handler) => { listeners.sessionStarted = handler; },
         onSessionEnded: (handler) => { listeners.sessionEnded = handler; },
+        onSessionLootUpdated: () => {},
         onLootAdded: (handler) => { listeners.lootAdded = handler; },
         onNavigate: (handler) => { listeners.navigate = handler; },
         onPricesUpdated: (handler) => { listeners.pricesUpdated = handler; },
@@ -1994,6 +2022,7 @@ test('poe2 result smoke persists zero-profit map result and projects it into Las
         onMapExited: (handler) => { listeners.mapExited = handler; },
         onSessionStarted: (handler) => { listeners.sessionStarted = handler; },
         onSessionEnded: (handler) => { listeners.sessionEnded = handler; },
+        onSessionLootUpdated: () => {},
         onLootAdded: (handler) => { listeners.lootAdded = handler; },
         onNavigate: (handler) => { listeners.navigate = handler; },
         async saveMapResult(result) {
@@ -4290,7 +4319,6 @@ function createActiveSessionHarness(session, extraState = {}) {
     sessionCard: { dataset: {} },
     startSessionBtn: { classList: toggleFor('start') },
     endSessionBtn: { classList: toggleFor('end') },
-    scanScreenBtn: { classList: toggleFor('scan') },
     sessionBadge: { textContent: '', classList: { toggle: (className, on) => (on ? badgeClasses.add(className) : badgeClasses.delete(className)) } }
   };
   let liveSeconds = 252;
@@ -4345,7 +4373,7 @@ test('a running map shows a live hero, and the 1 s clock only rewrites the elaps
 
   harness.context.updateActiveSessionUI();
   assert.equal(harness.elements.sessionCard.dataset.sessionState, 'active');
-  assert.deepEqual(harness.hidden, { start: true, end: false, scan: false });
+  assert.deepEqual(harness.hidden, { start: true, end: false });
   assert.equal(harness.elements.sessionBadge.textContent, 'dashboard.active');
   assert.ok(harness.badgeClasses.has('is-active'));
   assert.match(harness.html(), /<strong class="session-live-map">Crimson Temple Map<\/strong>/);
@@ -4398,7 +4426,7 @@ test('a run with a cost lists loot and cost, and the idle card goes back to wait
   harness.context.updateActiveSessionUI();
   assert.equal(harness.clockCalls.at(-1), 'stop');
   assert.equal(harness.elements.sessionCard.dataset.sessionState, 'idle');
-  assert.deepEqual(harness.hidden, { start: false, end: true, scan: true });
+  assert.deepEqual(harness.hidden, { start: false, end: true });
   assert.equal(harness.elements.sessionBadge.textContent, 'dashboard.waiting');
   assert.equal(harness.badgeClasses.has('is-active'), false);
   assert.match(harness.html(), /dashboard\.noActiveMap/);
