@@ -159,6 +159,8 @@ const MAIN_PROCESS_TRANSLATIONS = {
     inventoryStatus_unsupported: 'Bu oyunda henuz yok. Envanter okuma simdilik PoE 2 icin.',
     inventoryStatus_notReady: 'Fiyatlar yukleniyor. Birazdan tekrar dene.',
     inventoryStatus_failed: 'Envanter okunamadi. Tekrar dene.',
+    inventoryStatus_resolution: 'Bu cozunurlukte calismiyor. Envanter okuma simdilik 1440p pencere ister.',
+    inventoryStatus_saveFailed: 'Bu mapin lootu kaydedilemedi.',
     mapDuration: '{minutes}dk {seconds}sn',
     mapDurationSeconds: '{seconds}sn',
     autoSessionBody: '{mapName} mapi baslatildi',
@@ -227,6 +229,8 @@ const MAIN_PROCESS_TRANSLATIONS = {
     inventoryStatus_unsupported: 'Not available in this game. Inventory reading is PoE 2 only for now.',
     inventoryStatus_notReady: 'Prices are loading. Try again shortly.',
     inventoryStatus_failed: 'Could not read your inventory. Try again.',
+    inventoryStatus_resolution: 'Not available at this resolution. Inventory reading needs a 1440p window for now.',
+    inventoryStatus_saveFailed: 'Could not save the loot of this map.',
     mapDuration: '{minutes}m {seconds}s',
     mapDurationSeconds: '{seconds}s',
     autoSessionBody: '{mapName} map started',
@@ -3556,7 +3560,7 @@ function createInventoryWatcher() {
     onGain: (sessionId, items, mapCount) => {
       addInventoryLoot(sessionId, items, mapCount).catch((error) => {
         console.warn('Could not add the inventory loot to the map', error);
-        showInventoryStatus('failed');
+        showInventoryStatus('saveFailed');
       });
     },
     onStatus: showInventoryStatus
@@ -3614,7 +3618,7 @@ async function addInventoryLoot(sessionId, items, mapCount = 1) {
   const session = localJournal.getSession(readJournal(), sessionId);
   await withTimeout(loadSessionPrices(session), SESSION_PRICES_WAIT_MS).catch(() => null);
   // Another league's prices would be written into this map's history for good; no price counts as 0.
-  const priced = priceService.league === session.league;
+  const priced = priceService.poeVersion === session.poeVersion && priceService.league === session.league;
   const entries = items.map(({ name, quantity }) => ({
     itemName: name,
     itemType: priceService.getItemType(name),
@@ -3630,6 +3634,10 @@ async function addInventoryLoot(sessionId, items, mapCount = 1) {
   writeJournal(journal);
   if (mainWindow) {
     mainWindow.webContents.send('session-loot-updated', { ...updated, lootMapCount: mapCount });
+  }
+  // With the overlay off the game is in front of the in-app notice, so the result needs a notification of its own.
+  if (!isOverlayEnabled()) {
+    showNotification(updated.mapName || t('unknownMap'), t('mapProfitBody', { value: Math.round(updated.profitChaos) }));
   }
 }
 

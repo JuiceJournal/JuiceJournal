@@ -30,7 +30,7 @@ npm run build:win
 
 ### Envanterden Loot Sayimi
 - Deneysel. Su an yalnizca PoE2; PoE1 envanter yerlesimi henuz olculmedi
-- Yalnizca 2560x1440 cozunurlukte test edildi
+- Yalnizca 1440 piksel yuksekliginde oyun penceresinde calisir, gercek ekran goruntuleriyle dogrulanan tek boyut bu
 - Map oncesinde ve sonrasinda envanterini ac; okuma kendiliginden yapilir ya da `F9` ile
 - Yalnizca fiyati olan yigilabilir itemler sayilir, ekipman sayilmaz
 - Otomatik okuma acikken (Ayarlar > Path of Exile) oyun ondeyken ve map disindayken ekranin kucuk bir bolumunu okur
@@ -136,7 +136,7 @@ Build ciktisi `dist/` klasorunde olusur.
 ## Sorun Giderme
 
 ### Envanter okunmuyor
-- Su an yalnizca PoE2 ve 2560x1440 cozunurluk destekleniyor
+- Su an yalnizca PoE2 ve 1440 piksel yuksekliginde oyun penceresi destekleniyor
 - Okuma sirasinda envanter acik olmali ve oyun ondeki pencere olmali
 - Otomatik okuma Ayarlar > Path of Exile altinda acik olmali
 - Map icindeyken okunmaz; loot map bitince sayilir

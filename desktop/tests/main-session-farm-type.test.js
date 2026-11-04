@@ -894,6 +894,7 @@ function loadInventoryLoot(backend, session, priceService, overrides = {}) {
     ...backend.context,
     sessionPrices: null,
     priceService,
+    isOverlayEnabled: () => true,
     SESSION_PRICES_WAIT_MS: 20,
     SESSION_PRICES_RETRY_MS: 60_000,
     crypto: { randomUUID: () => `loot-${++lootId}` },

@@ -600,7 +600,7 @@ test('main process dialogs use keys that exist in en and tr', () => {
   assert.match(mainSource, /t\(`inventoryStatus_\$\{kind\}`\)/);
   const watcherSource = read(path.join(desktopDir, 'src', 'modules', 'inventoryWatcher.js'));
   const reportedKinds = [...new Set([...watcherSource.matchAll(/onStatus\('([A-Za-z]+)'\)/g)].map((match) => match[1]))].sort();
-  assert.deepEqual(reportedKinds, ['covered', 'failed', 'inMap', 'noBaseline', 'noGain', 'notOpen', 'notReady', 'reading', 'saved', 'unsupported']);
+  assert.deepEqual(reportedKinds, ['covered', 'failed', 'inMap', 'noBaseline', 'noGain', 'notOpen', 'notReady', 'reading', 'resolution', 'saved', 'unsupported']);
   for (const kind of reportedKinds) {
     const key = `inventoryStatus_${kind}`;
     assert.ok(translations.en[key], `Missing en main process string for ${key}`);
@@ -609,7 +609,7 @@ test('main process dialogs use keys that exist in en and tr', () => {
   }
   assert.deepEqual(
     enKeys.filter((name) => name.startsWith('inventoryStatus_')).sort(),
-    reportedKinds.map((kind) => `inventoryStatus_${kind}`).sort()
+    [...reportedKinds, 'saveFailed'].map((kind) => `inventoryStatus_${kind}`).sort()
   );
   assert.ok(translations.en.inventoryStatusTitle);
   assert.notEqual(translations.tr.inventoryStatusTitle, translations.en.inventoryStatusTitle);

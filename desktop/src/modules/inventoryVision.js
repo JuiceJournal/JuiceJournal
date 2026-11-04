@@ -14,6 +14,8 @@ const GRIDS = {
   poe2: { rightOffset: 864 / 1440, top: 787 / 1440, pitchX: 70.25 / 1440, pitchY: 70.1 / 1440, cols: 12, rows: 5 }
 };
 
+const MEASURED_WINDOW_HEIGHTS = new Set([1440]);
+
 const COARSE_SIZE = 16;
 const FINE_SIZE = 64;
 // The game draws art at 97% of a cell, slightly off centre and rounded differently from column to column.
@@ -34,6 +36,11 @@ const ACCEPT_MARGIN = 1;
 const DIGIT_BRIGHTNESS = 185;
 const TIER_BRIGHTNESS = 170;
 const DIGIT_MAX_DISTANCE = 0.35;
+
+// The only window heights the digits and art limits have been checked on with real screenshots.
+function isMeasuredWindow(windowRect) {
+  return MEASURED_WINDOW_HEIGHTS.has(windowRect?.height);
+}
 
 function hasInventoryLayout(poeVersion) {
   return Object.prototype.hasOwnProperty.call(GRIDS, poeVersion);
@@ -135,6 +142,13 @@ function isCellBorderHidden(image, grid, col, row) {
     total += 1;
   }
   return hits / total < 0.5 && flanks / total < HIDDEN_BORDER_FLANK;
+}
+
+// Whether something covers a cell that shows no picture: real empty cells show their borders, a dark tooltip does not.
+function isCellCovered(image, grid, col, row) {
+  const leftHidden = col === 0 || isCellBorderHidden(image, grid, col, row);
+  const rightHidden = col === grid.cols - 1 || isCellBorderHidden(image, grid, col + 1, row);
+  return leftHidden && rightHidden;
 }
 
 // The longest run of cell borders hidden in any row. An item's picture can hide the one border inside it, but a tooltip
@@ -372,15 +386,15 @@ function readDigit(glyph, samples = DIGIT_GLYPHS) {
 // a guess in one read would turn into a false gain or loss against the next.
 function readStackSize(cell) {
   const glyphs = findStackGlyphs(cell);
-  if (glyphs.length === 0) return 1;
+  if (glyphs.length === 0) return { quantity: 1, digits: false };
   let text = '';
   for (const glyph of glyphs) {
     const digit = readDigit(glyph);
-    if (digit === null) return null;
+    if (digit === null) return { quantity: null, digits: true };
     text += digit;
   }
   const value = Number(text);
-  return Number.isInteger(value) && value > 0 ? value : null;
+  return { quantity: Number.isInteger(value) && value > 0 ? value : null, digits: true };
 }
 
 // Bars in the bottom-right corner: none is the base item, II is Greater and III is Perfect.
@@ -392,12 +406,16 @@ function readTierBars(cell) {
   return found.parts.filter((part) => part.maxY - part.minY >= 11 * scale && part.maxX - part.minX <= 6 * scale).length;
 }
 
-// Null when the bars name no item in the group: a wrong tier can be worth hundreds of times more.
+// Null when the bars do not name exactly one item in the group: a wrong tier can be worth hundreds of times more.
 function pickFromSameArt(names, bars) {
-  if (bars === 2) return names.find((name) => /^Greater /i.test(name)) || null;
-  if (bars === 3) return names.find((name) => /^Perfect /i.test(name)) || null;
+  const only = (pattern) => {
+    const found = names.filter((name) => pattern.test(name));
+    return found.length === 1 ? found[0] : null;
+  };
+  if (bars === 2) return only(/^Greater /i);
+  if (bars === 3) return only(/^Perfect /i);
   if (bars !== 0) return null;
-  return names.find((name) => !/^(Greater|Perfect|Lesser) /i.test(name)) || names.find((name) => /^Lesser /i.test(name)) || null;
+  return only(/^(?!Greater |Perfect |Lesser )/i) || only(/^Lesser /i);
 }
 
 // The best art for a cell and how far ahead of the next different picture it is.
@@ -433,7 +451,10 @@ function readCell(cell, art) {
   if (!match || match.score >= ACCEPT_SCORE || match.margin < ACCEPT_MARGIN) return null;
 
   const name = match.names.length > 1 ? pickFromSameArt(match.names, readTierBars(cell)) : match.names[0];
-  return name ? { name, quantity: readStackSize(cell) } : null;
+  if (!name) return null;
+
+  const { quantity, digits } = readStackSize(cell);
+  return quantity === null ? null : { name, quantity, digits };
 }
 
 function hashCell(cell) {
@@ -447,8 +468,8 @@ function hashCell(cell) {
 }
 
 /**
- * Reads a grid image into { open, items: { name: quantity } }, with covered: true and no items when something such as
- * a tooltip hides part of the grid or a stack cannot be read, since a partial read would look like items leaving and
+ * Reads a grid image into { open, items: { name: quantity }, cells }, see inventoryLootModel for the cells. With
+ * covered: true and no items when a tooltip hides much of the grid, since such a read would look like items leaving and
  * coming back. `cache` is an optional Map from cell pixels to results; most cells stay the same between reads, so a
  * repeat read costs almost nothing.
  */
@@ -461,10 +482,15 @@ function readInventory(image, grid, art, cache = null) {
   }
 
   const items = {};
+  const cells = {};
   for (let row = 0; row < grid.rows; row += 1) {
     for (let col = 0; col < grid.cols; col += 1) {
+      const position = `${row},${col}`;
       const cell = cropCell(image, grid, col, row);
-      if (!isOccupied(cell)) continue;
+      if (!isOccupied(cell)) {
+        if (isCellCovered(image, grid, col, row)) cells[position] = { unknown: true };
+        continue;
+      }
 
       const key = cache ? hashCell(cell) : null;
       let read;
@@ -474,21 +500,22 @@ function readInventory(image, grid, art, cache = null) {
         read = readCell(cell, art);
         if (cache) cache.set(key, read);
       }
-      if (read?.quantity === null) {
-        return { open: true, covered: true, items: {} };
-      }
       if (read) {
         items[read.name] = (items[read.name] || 0) + read.quantity;
+        cells[position] = read;
+      } else {
+        cells[position] = { unknown: true };
       }
     }
   }
-  return { open: true, items };
+  return { open: true, items, cells };
 }
 
 module.exports = {
   COARSE_SIZE,
   FINE_ART_SIZE,
   OPEN_SCORE,
+  isMeasuredWindow,
   hasInventoryLayout,
   getGridRect,
   scoreGridLines,

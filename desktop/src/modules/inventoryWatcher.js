@@ -11,6 +11,7 @@
 const {
   getGridRect,
   hasInventoryLayout,
+  isMeasuredWindow,
   readInventory
 } = require('./inventoryVision');
 const {
@@ -26,9 +27,9 @@ const ART_BATCH_SIZE = 40;
 const ART_WAIT_MS = 60_000;
 const CELL_CACHE_LIMIT = 512;
 
-function sameItems(left = {}, right = {}) {
-  const leftNames = Object.keys(left);
-  return leftNames.length === Object.keys(right).length && leftNames.every((name) => left[name] === right[name]);
+// Cells come back in reading order, so an unchanged read gives the same text.
+function sameRead(left, right) {
+  return Boolean(left) && JSON.stringify(left.cells) === JSON.stringify(right.cells);
 }
 
 class InventoryWatcher {
@@ -113,7 +114,7 @@ class InventoryWatcher {
 
   getGrid(game) {
     const gameWindow = this.deps.getGameWindow();
-    return gameWindow && !gameWindow.minimized ? getGridRect(game, gameWindow) : null;
+    return gameWindow && !gameWindow.minimized && isMeasuredWindow(gameWindow) ? getGridRect(game, gameWindow) : null;
   }
 
   readGrid(grid) {
@@ -128,13 +129,16 @@ class InventoryWatcher {
   }
 
   // Applies a read of the open inventory and acts on what it settles.
-  applyRead(characterKey, items, { announce }) {
-    const baseline = this.state.baselines[characterKey];
-    if (!announce && baseline && sameItems(baseline, items) && !this.state.pending && this.state.mapsSinceRead === 0) {
+  applyRead(characterKey, read, { announce }) {
+    const { baselines, pending, mapsSinceRead } = this.state;
+    const nothingNew = sameRead(baselines[characterKey], read)
+      && pending?.characterKey !== characterKey
+      && !mapsSinceRead[characterKey];
+    if (!announce && nothingNew) {
       return;
     }
 
-    const { state, outcome } = applyInventoryRead(this.state, { characterKey, items });
+    const { state, outcome } = applyInventoryRead(this.state, { characterKey, read });
     this.state = state;
 
     if (!outcome) {
@@ -164,11 +168,11 @@ class InventoryWatcher {
     const grid = this.getGrid(game);
     const result = grid ? this.readGrid(grid) : null;
     if (result?.open && !result.covered) {
-      this.applyRead(characterKey, result.items, { announce: false });
+      this.applyRead(characterKey, result, { announce: false });
     }
   }
 
-  // The read hotkey. Status kinds: unsupported, inMap, notReady, failed, notOpen, covered, saved, noBaseline, noGain, reading.
+  // The read hotkey. Status kinds: unsupported, resolution, inMap, notReady, failed, notOpen, covered, saved, noBaseline, noGain, reading.
   readNow() {
     if (!this.syncProfile()) {
       return;
@@ -177,6 +181,11 @@ class InventoryWatcher {
     const game = this.deps.getGame();
     if (!game || !hasInventoryLayout(game)) {
       this.deps.onStatus('unsupported');
+      return;
+    }
+    const gameWindow = this.deps.getGameWindow();
+    if (gameWindow && !gameWindow.minimized && !isMeasuredWindow(gameWindow)) {
+      this.deps.onStatus('resolution');
       return;
     }
     if (this.deps.isInMap()) {
@@ -198,19 +207,22 @@ class InventoryWatcher {
     } else if (result.covered) {
       this.deps.onStatus('covered');
     } else {
-      this.applyRead(characterKey, result.items, { announce: true });
+      this.applyRead(characterKey, result, { announce: true });
     }
   }
 
   mapEntered() {
-    this.state = noteMapEntered(this.state);
+    const characterKey = getCharacterKey(this.deps.getGame(), this.deps.getCharacter());
+    if (characterKey) {
+      this.state = noteMapEntered(this.state, characterKey);
+    }
   }
 
   // Returns whether the finished map can still get its loot from a read.
   sessionEnded(session) {
     const game = session?.poeVersion;
     const characterKey = getCharacterKey(game, this.deps.getCharacter());
-    if (!session?.id || !characterKey || !hasInventoryLayout(game) || !this.syncProfile()) {
+    if (!session?.id || !characterKey || !hasInventoryLayout(game) || !this.syncProfile() || !this.getGrid(game)) {
       return false;
     }
 

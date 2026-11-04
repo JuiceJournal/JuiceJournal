@@ -14,7 +14,15 @@ function loadWatcher(script) {
     if (request === './inventoryVision') {
       return {
         ...realVision,
-        readInventory: (image, grid, art) => script(art)
+        readInventory: (image, grid, art) => {
+          const read = script(art);
+          // Each scripted item sits in a cell of its own.
+          const cells = {};
+          for (const [name, quantity] of Object.entries(read.items)) {
+            cells[name] = { name, quantity, digits: true };
+          }
+          return { ...read, cells };
+        }
       };
     }
     return original.apply(this, arguments);
@@ -40,6 +48,7 @@ function setup(overrides = {}) {
     character: { id: 'c1' },
     pricedComplete: true,
     icons: { 'Exalted Orb': '/icons/exalted.png' },
+    gameWindow: { x: 0, y: 0, width: 2560, height: 1440 },
     ...overrides
   };
   const watcher = new Watcher({
@@ -48,7 +57,7 @@ function setup(overrides = {}) {
     getGame: () => env.game,
     isGameInFront: () => env.inFront,
     isInMap: () => env.inMap,
-    getGameWindow: () => ({ x: 0, y: 0, width: 2560, height: 1440 }),
+    getGameWindow: () => env.gameWindow,
     readScreen: () => {
       log.screenReads += 1;
       return new Uint8Array(4);
@@ -122,6 +131,17 @@ test('a game without a measured layout is left alone', () => {
   assert.equal(log.screenReads, 0);
   assert.deepEqual(log.statuses, ['unsupported']);
   assert.equal(watcher.sessionEnded({ id: 's1', poeVersion: 'poe1' }), false);
+});
+
+test('a window height not checked on real screenshots is left alone and the hotkey says why', () => {
+  const { watcher, log } = setup({ gameWindow: { x: 0, y: 0, width: 1920, height: 1080 } });
+
+  watcher.tick();
+  watcher.readNow();
+
+  assert.equal(log.screenReads, 0);
+  assert.deepEqual(log.statuses, ['resolution']);
+  assert.equal(watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' }), false);
 });
 
 test('reads wait until the priced art is complete, then stop looking for more', () => {

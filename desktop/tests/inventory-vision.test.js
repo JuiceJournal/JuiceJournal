@@ -207,9 +207,10 @@ test('an item picture hiding the border inside it is not mistaken for a tooltip'
   assert.equal(vision.readInventory(image, GRID, []).covered, undefined);
 });
 
-test('a stack whose digits cannot be read makes the whole read count as covered', () => {
+test('a stack whose digits cannot be read is left out as unread, and the rest still reads', () => {
   const image = blankGrid();
   paintCell(image, 0, 0, 1);
+  paintCell(image, 3, 1, 2);
   // Digit-sized, but no digit: a solid white block.
   const startX = Math.round(GRID.pitchX * 0) + 5;
   for (let y = 4; y < 22; y += 1) {
@@ -222,8 +223,11 @@ test('a stack whose digits cannot be read makes the whole read count as covered'
   }
   drawGridLines(image);
 
-  assert.equal(vision.readStackSize(vision.cropCell(image, GRID, 0, 0)), null);
-  assert.deepEqual(vision.readInventory(image, GRID, [makeArt('First Orb', 1)]), { open: true, covered: true, items: {} });
+  assert.equal(vision.readStackSize(vision.cropCell(image, GRID, 0, 0)).quantity, null);
+  const result = vision.readInventory(image, GRID, [makeArt('First Orb', 1), makeArt('Second Orb', 2)]);
+  assert.deepEqual(result.items, { 'Second Orb': 1 });
+  assert.deepEqual(result.cells['0,0'], { unknown: true });
+  assert.equal(result.covered, undefined);
 });
 
 test('cells smaller than the matching size still match, so lower resolutions read', () => {
@@ -256,8 +260,57 @@ test('cells smaller than the matching size still match, so lower resolutions rea
   assert.equal(read.name, 'Second Orb');
 });
 
+test('only measured window heights count as readable', () => {
+  assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 2560, height: 1440 }), true);
+  assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 3440, height: 1440 }), true);
+  assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 1920, height: 1080 }), false);
+  assert.equal(vision.isMeasuredWindow(null), false);
+});
+
+test('a cell read reports its place, its stack and whether digits showed', () => {
+  const image = blankGrid();
+  paintCell(image, 4, 2, 1);
+  paintDigit(image, 4, 2, '3');
+  paintCell(image, 5, 2, 2);
+  drawGridLines(image);
+
+  const { cells } = vision.readInventory(image, GRID, [makeArt('First Orb', 1), makeArt('Second Orb', 2)]);
+
+  assert.deepEqual(cells['2,4'], { name: 'First Orb', quantity: 3, digits: true });
+  assert.deepEqual(cells['2,5'], { name: 'Second Orb', quantity: 1, digits: false });
+  assert.equal(cells['0,0'], undefined);
+});
+
+test('a small dark patch over empty cells marks them unread instead of empty', () => {
+  const image = blankGrid();
+  drawGridLines(image);
+  for (let y = 0; y < Math.round(GRID.pitchY); y += 1) {
+    for (let x = Math.round(GRID.pitchX * 3) - 8; x < Math.round(GRID.pitchX * 4) + 8; x += 1) {
+      const i = (y * image.width + x) * 4;
+      image.data[i] = 6;
+      image.data[i + 1] = 6;
+      image.data[i + 2] = 6;
+    }
+  }
+
+  const result = vision.readInventory(image, GRID, []);
+
+  assert.equal(result.covered, undefined);
+  assert.deepEqual(result.cells['0,3'], { unknown: true });
+  assert.equal(result.cells['1,3'], undefined);
+});
+
 test('tier bars that name nobody in the group leave the cell out rather than guess', () => {
   const library = [makeArt('Greater Regal Orb', 2), makeArt('Perfect Regal Orb', 2), makeArt('Other', 5)];
+  const image = blankGrid();
+  paintCell(image, 0, 0, 2);
+  drawGridLines(image);
+
+  assert.deepEqual(vision.readInventory(image, GRID, library).items, {});
+});
+
+test('two plain names sharing art leave the cell out rather than guess', () => {
+  const library = [makeArt('Regal Orb', 2), makeArt('Royal Orb', 2), makeArt('Other', 5)];
   const image = blankGrid();
   paintCell(image, 0, 0, 2);
   drawGridLines(image);
@@ -279,7 +332,9 @@ test('an empty library reads nothing rather than failing', () => {
   paintCell(image, 1, 1, 2);
   drawGridLines(image);
 
-  assert.deepEqual(vision.readInventory(image, GRID, []), { open: true, items: {} });
+  const result = vision.readInventory(image, GRID, []);
+  assert.equal(result.open, true);
+  assert.deepEqual(result.items, {});
 });
 
 test('every digit is stored and reads back as itself', () => {
@@ -297,7 +352,7 @@ test('multi-digit stacks read left to right', () => {
   paintDigit(image, 2, 2, '7', width + 2);
   drawGridLines(image);
 
-  assert.equal(vision.readStackSize(vision.cropCell(image, GRID, 2, 2)), 47);
+  assert.deepEqual(vision.readStackSize(vision.cropCell(image, GRID, 2, 2)), { quantity: 47, digits: true });
 });
 
 test('tier bars tell items that share art apart', () => {

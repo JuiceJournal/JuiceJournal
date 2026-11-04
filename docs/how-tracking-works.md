@@ -34,13 +34,13 @@ Settings, map results (per profile) and the cached character list are kept in `%
 
 ## Loot: your inventory
 
-Experimental. For now it works for Path of Exile 2 only, because the PoE1 inventory layout has not been measured, and it has been tested only at 2560x1440.
+Experimental. For now it works for Path of Exile 2 only, because the PoE1 inventory layout has not been measured, and only for a game window 1440 pixels tall, the one size checked on real screenshots.
 
 - Open your inventory before a map and again after it. The app reads it by itself, or you press F9 (or Ctrl+Shift+L). The loot of a map is what your inventory gained between the two reads.
 - Only priced stackable items count, not gear.
 - While automatic reading is on (Settings → Path of Exile), the app reads a small part of the screen when the game is in front and you are outside a map. It does not read the game's memory or send input to it.
 - If more than one map passes without a read, the whole gain goes to the last map and its result says how many maps it covers.
-- A read is skipped while something such as a tooltip covers your items.
+- A read is skipped while a tooltip covers your items. Anything the app cannot read for sure counts as no gain, so the total can come out low but should not come out high.
 - Nothing from the screen is saved or sent. The item counts of your last read stay in memory until you close the app, so after a restart open your inventory before the next map, or that map is not counted.
 
 ## Prices: poe.ninja
