@@ -3,6 +3,9 @@
  * Reads the player's inventory whenever it is open outside a map, keeps the last read as the baseline for the next
  * map and settles a finished map on the first read after it. The read hotkey does the same on demand and says why
  * when it cannot.
+ *
+ * Baselines stay in memory on purpose. One saved by an earlier run could predate maps played since, or come from a
+ * different icon library, and either would count items as loot that were already there.
  */
 
 const {
@@ -13,6 +16,7 @@ const {
 const {
   createInventoryLootState,
   getCharacterKey,
+  noteMapEntered,
   markSessionEnded,
   applyInventoryRead
 } = require('./inventoryLootModel');
@@ -41,9 +45,7 @@ class InventoryWatcher {
    * @param {function(string): {complete: boolean, items: Array}} deps.listPricedItems - Priced items as { name, icon }
    * @param {function(string): (string|null)} deps.getIconPath - Local file of an icon URL; a miss starts its download
    * @param {function(string): (object|null)} deps.loadArt - { coarse, fine } pixels of an icon file
-   * @param {function(string): object} deps.loadBaselines
-   * @param {function(string, object): void} deps.saveBaselines
-   * @param {function(string, Array): void} deps.onGain - A finished map's session id and its new items
+   * @param {function(string, Array, number): void} deps.onGain - Session id, its new items and how many maps they cover
    * @param {function(string): void} deps.onStatus - Something the player should be told, see the kinds below
    * @param {function(): number} [deps.now]
    */
@@ -63,7 +65,7 @@ class InventoryWatcher {
     const profileId = this.deps.getProfileId();
     if (profileId !== this.profileId) {
       this.profileId = profileId;
-      this.state = createInventoryLootState(profileId ? this.deps.loadBaselines(profileId) : {});
+      this.state = createInventoryLootState();
     }
     return profileId;
   }
@@ -126,18 +128,14 @@ class InventoryWatcher {
   }
 
   // Applies a read of the open inventory and acts on what it settles.
-  applyRead(game, items, { announce }) {
-    const characterKey = getCharacterKey(game, this.deps.getCharacter());
-    const changed = !sameItems(this.state.baselines[characterKey], items) || !this.state.baselines[characterKey];
-    if (!announce && !changed && !this.state.pending) {
+  applyRead(characterKey, items, { announce }) {
+    const baseline = this.state.baselines[characterKey];
+    if (!announce && baseline && sameItems(baseline, items) && !this.state.pending && this.state.mapsSinceRead === 0) {
       return;
     }
 
     const { state, outcome } = applyInventoryRead(this.state, { characterKey, items });
     this.state = state;
-    if (changed && this.profileId) {
-      this.deps.saveBaselines(this.profileId, state.baselines);
-    }
 
     if (!outcome) {
       if (announce) this.deps.onStatus('saved');
@@ -147,7 +145,7 @@ class InventoryWatcher {
       this.deps.onStatus('noGain');
     } else {
       this.deps.onStatus('reading');
-      this.deps.onGain(outcome.sessionId, outcome.items);
+      this.deps.onGain(outcome.sessionId, outcome.items, outcome.mapCount);
     }
   }
 
@@ -158,14 +156,15 @@ class InventoryWatcher {
     }
 
     const game = this.deps.getGame();
-    if (!game || !hasInventoryLayout(game) || !this.warmArt(game)) {
+    const characterKey = getCharacterKey(game, this.deps.getCharacter());
+    if (!game || !characterKey || !hasInventoryLayout(game) || !this.warmArt(game)) {
       return;
     }
 
     const grid = this.getGrid(game);
     const result = grid ? this.readGrid(grid) : null;
     if (result?.open && !result.covered) {
-      this.applyRead(game, result.items, { announce: false });
+      this.applyRead(characterKey, result.items, { announce: false });
     }
   }
 
@@ -184,7 +183,8 @@ class InventoryWatcher {
       this.deps.onStatus('inMap');
       return;
     }
-    if (!this.warmArt(game)) {
+    const characterKey = getCharacterKey(game, this.deps.getCharacter());
+    if (!characterKey || !this.warmArt(game)) {
       this.deps.onStatus('notReady');
       return;
     }
@@ -198,21 +198,23 @@ class InventoryWatcher {
     } else if (result.covered) {
       this.deps.onStatus('covered');
     } else {
-      this.applyRead(game, result.items, { announce: true });
+      this.applyRead(characterKey, result.items, { announce: true });
     }
+  }
+
+  mapEntered() {
+    this.state = noteMapEntered(this.state);
   }
 
   // Returns whether the finished map can still get its loot from a read.
   sessionEnded(session) {
     const game = session?.poeVersion;
-    if (!session?.id || !hasInventoryLayout(game) || !this.syncProfile()) {
+    const characterKey = getCharacterKey(game, this.deps.getCharacter());
+    if (!session?.id || !characterKey || !hasInventoryLayout(game) || !this.syncProfile()) {
       return false;
     }
 
-    this.state = markSessionEnded(this.state, {
-      sessionId: session.id,
-      characterKey: getCharacterKey(game, this.deps.getCharacter())
-    });
+    this.state = markSessionEnded(this.state, { sessionId: session.id, characterKey });
     return true;
   }
 }

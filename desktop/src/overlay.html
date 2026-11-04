@@ -352,9 +352,29 @@
     [data-farm-type="harvest"] { --farm-color: var(--farm-harvest); }
     [data-farm-type="betrayal"] { --farm-color: var(--farm-betrayal); }
     [data-farm-type="incursion"] { --farm-color: var(--farm-incursion); }
+    [data-farm-type="overseer"] { --farm-color: var(--farm-overseer); }
+    [data-farm-color="green"] { --farm-color: var(--farm-abyss); }
+    [data-farm-color="magenta"] { --farm-color: var(--farm-breach); }
+    [data-farm-color="blue"] { --farm-color: var(--farm-expedition); }
+    [data-farm-color="violet"] { --farm-color: var(--farm-ritual); }
+    [data-farm-color="cyan"] { --farm-color: var(--farm-harbinger); }
+    [data-farm-color="pink"] { --farm-color: var(--farm-essence); }
+    [data-farm-color="silver"] { --farm-color: var(--farm-delirium); }
+    [data-farm-color="lime"] { --farm-color: var(--farm-blight); }
+    [data-farm-color="amber"] { --farm-color: var(--farm-legion); }
+    [data-farm-color="teal"] { --farm-color: var(--farm-harvest); }
+    [data-farm-color="red"] { --farm-color: var(--farm-betrayal); }
+    [data-farm-color="orange"] { --farm-color: var(--farm-incursion); }
 
     .jj-primary-name[data-farm-type],
     .jj-chip[data-farm-type] { color: var(--farm-color); }
+
+    .jj-farm-icon {
+      flex-shrink: 0;
+      margin-right: 5px;
+      vertical-align: -2px;
+      stroke-width: 2;
+    }
 
     /* The farm colour keeps 5.1:1 or more on the raised plate; on the ember tint it drops below 4.5:1. */
     .jj-chip[data-farm-type][aria-pressed="true"] {

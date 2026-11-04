@@ -44,7 +44,14 @@ const localJournal = require('./src/modules/localJournalModel');
 const { deriveMapResultOverlayState } = require('./src/modules/mapResultOverlayModel');
 const { buildFarmPublishPayload } = require('./src/modules/farmPublishPayloadModel');
 const { deriveOverlayState } = require('./src/modules/overlayStateModel');
-const { listFarmTypes } = require('./src/modules/farmTypeModel');
+const {
+  listFarmTypes,
+  isCustomFarmTypeId,
+  normalizeCustomFarmTypes,
+  createCustomFarmType,
+  updateCustomFarmType,
+  deleteCustomFarmType
+} = require('./src/modules/farmTypeModel');
 const {
   DEFAULT_SCAN_HOTKEY,
   DEFAULT_STASH_SCAN_HOTKEY,
@@ -906,8 +913,25 @@ function normalizeStoredFarmTypeId(farmTypeId) {
   return normalized || null;
 }
 
+// Each profile keeps its own farm types, deleted ones included so its past sessions can still show them.
+function getCustomFarmTypesStoreKey(profileId = getActiveProfile()?.id) {
+  return profileId ? `customFarmTypes:${profileId}` : null;
+}
+
+function getStoredCustomFarmTypes() {
+  const storeKey = getCustomFarmTypesStoreKey();
+  return storeKey ? normalizeCustomFarmTypes(store.get(storeKey)) : [];
+}
+
 function getActiveFarmTypeId() {
-  return normalizeStoredFarmTypeId(store.get('activeFarmTypeId'));
+  const farmTypeId = normalizeStoredFarmTypeId(store.get('activeFarmTypeId'));
+  // Every profile shares this key, but a custom farm type belongs to one of them.
+  if (isCustomFarmTypeId(farmTypeId)
+    && !getStoredCustomFarmTypes().some((farmType) => farmType.id === farmTypeId && !farmType.deletedAt)) {
+    return null;
+  }
+
+  return farmTypeId;
 }
 
 function resolveFarmTypeLabel(farmTypeId) {
@@ -916,7 +940,52 @@ function resolveFarmTypeLabel(farmTypeId) {
     return null;
   }
 
+  if (isCustomFarmTypeId(normalized)) {
+    return getStoredCustomFarmTypes().find((farmType) => farmType.id === normalized)?.label || null;
+  }
+
   return listFarmTypes().find((farmType) => farmType.id === normalized)?.label || normalized;
+}
+
+// Map results store the label, so renaming a farm type renames it on them too.
+function renameFarmTypeInMapResults({ id, label }) {
+  const storeKey = getMapResultsStoreKey();
+  const results = getStoredMapResults();
+  if (storeKey && results.some((result) => result?.farmTypeId === id && result.farmType !== label)) {
+    store.set(storeKey, results.map((result) => (result?.farmTypeId === id ? { ...result, farmType: label } : result)));
+  }
+}
+
+function saveCustomFarmType(input) {
+  const details = input && typeof input === 'object' ? input : {};
+  const current = getStoredCustomFarmTypes();
+  const outcome = details.id
+    ? updateCustomFarmType(current, details.id, details)
+    : createCustomFarmType(current, details, { id: `custom-${crypto.randomUUID()}` });
+  if (outcome.error) {
+    return { ok: false, error: outcome.error };
+  }
+
+  store.set(getCustomFarmTypesStoreKey(), outcome.farmTypes);
+  if (details.id) {
+    renameFarmTypeInMapResults(outcome.farmType);
+  }
+  updateOverlayWindow();
+  return { ok: true, farmType: outcome.farmType, farmTypes: outcome.farmTypes };
+}
+
+function removeCustomFarmType(farmTypeId) {
+  const outcome = deleteCustomFarmType(getStoredCustomFarmTypes(), farmTypeId);
+  if (outcome.error) {
+    return { ok: false, error: outcome.error };
+  }
+
+  store.set(getCustomFarmTypesStoreKey(), outcome.farmTypes);
+  if (store.get('activeFarmTypeId') === farmTypeId) {
+    store.set('activeFarmTypeId', null);
+  }
+  updateOverlayWindow();
+  return { ok: true, farmTypes: outcome.farmTypes };
 }
 
 function setActiveFarmTypeId(farmTypeId) {
@@ -1328,6 +1397,7 @@ function buildSessionShutdownMapResult(session = {}, options = {}) {
     accountName: null,
     poeVersion: normalizePoeVersion(session.poeVersion ?? session.poe_version) || 'poe1',
     league: session.league || null,
+    farmTypeId: normalizeStoredFarmTypeId(farmTypeId),
     farmType: resolveFarmTypeLabel(farmTypeId) || session.mapName || session.map_name || 'Unknown farm type',
     durationSeconds,
     inputValue,
@@ -3200,8 +3270,9 @@ function getActiveSessionOverlayState(session = currentSession) {
 }
 
 function buildOverlayState({ character = overlayCharacterState, runtimeSession = overlayRuntimeState } = {}) {
-  // A short note about the inventory read goes over everything else; what it covered shows again when it ends.
-  if (overlayInventoryStatus && isOverlayEnabled()) {
+  // A short note about the inventory read goes over a result card, which shows again when it ends. It never hides a
+  // prompt: those wait for an answer and run on a clock.
+  if (overlayInventoryStatus && isOverlayEnabled() && !overlayStartMapPromptState && !overlayCharacterPromptState) {
     return {
       visibility: 'visible',
       mode: 'inventory-status',
@@ -3303,7 +3374,11 @@ function updateOverlayWindow({ character, runtimeSession } = {}) {
 
   applyOverlayWindowVisibility(overlayState);
   // The raw value, as in the main window: getLanguage folds every language but Turkish to English.
-  overlayWindow.webContents.send('overlay-render-state', { ...overlayState, language: store.get('language') });
+  overlayWindow.webContents.send('overlay-render-state', {
+    ...overlayState,
+    language: store.get('language'),
+    customFarmTypes: getStoredCustomFarmTypes()
+  });
 
   return overlayState;
 }
@@ -3465,10 +3540,6 @@ function loadInventoryArt(iconPath) {
   };
 }
 
-function getInventoryBaselinesStoreKey(profileId) {
-  return `inventoryBaselines:${profileId}`;
-}
-
 function createInventoryWatcher() {
   return new InventoryWatcher({
     isEnabled: () => store.get('inventoryReadEnabled') !== false,
@@ -3482,10 +3553,8 @@ function createInventoryWatcher() {
     listPricedItems: listPricedInventoryItems,
     getIconPath: getInventoryIconPath,
     loadArt: loadInventoryArt,
-    loadBaselines: (profileId) => store.get(getInventoryBaselinesStoreKey(profileId)) || {},
-    saveBaselines: (profileId, baselines) => store.set(getInventoryBaselinesStoreKey(profileId), baselines),
-    onGain: (sessionId, items) => {
-      addInventoryLoot(sessionId, items).catch((error) => {
+    onGain: (sessionId, items, mapCount) => {
+      addInventoryLoot(sessionId, items, mapCount).catch((error) => {
         console.warn('Could not add the inventory loot to the map', error);
         showInventoryStatus('failed');
       });
@@ -3541,15 +3610,17 @@ function showInventoryStatus(kind) {
 }
 
 // A map's inventory loot arrives after it ended, from the first read back outside the map.
-async function addInventoryLoot(sessionId, items) {
+async function addInventoryLoot(sessionId, items, mapCount = 1) {
   const session = localJournal.getSession(readJournal(), sessionId);
   await withTimeout(loadSessionPrices(session), SESSION_PRICES_WAIT_MS).catch(() => null);
+  // Another league's prices would be written into this map's history for good; no price counts as 0.
+  const priced = priceService.league === session.league;
   const entries = items.map(({ name, quantity }) => ({
     itemName: name,
     itemType: priceService.getItemType(name),
     quantity,
-    chaosValue: readLocalChaosPrice(name, session.poeVersion) || 0,
-    divineValue: priceService.getPriceInfo(name)?.divineValue ?? null,
+    chaosValue: priced ? readLocalChaosPrice(name, session.poeVersion) || 0 : 0,
+    divineValue: priced ? priceService.getPriceInfo(name)?.divineValue ?? null : null,
     source: 'inventory'
   }));
   const { journal, session: updated } = localJournal.addLoot(readJournal(), sessionId, entries, {
@@ -3558,7 +3629,7 @@ async function addInventoryLoot(sessionId, items) {
   });
   writeJournal(journal);
   if (mainWindow) {
-    mainWindow.webContents.send('session-loot-updated', updated);
+    mainWindow.webContents.send('session-loot-updated', { ...updated, lootMapCount: mapCount });
   }
 }
 
@@ -3656,6 +3727,7 @@ async function startNewSession(input = {}) {
 }
 
 async function handleMapEntered(data) {
+  inventoryWatcher?.mapEntered();
   publishRuntimeSessionEvent('area_entered', data);
 }
 
@@ -3823,7 +3895,7 @@ async function endCurrentSession(options = {}) {
       session.noLoot = true;
     }
     const inventoryCanSettle = !options.shuttingDown && Boolean(inventoryWatcher?.sessionEnded(session));
-    session.lootPending = Boolean(session.noLoot) && inventoryCanSettle;
+    session.lootPending = Boolean(session.noLoot) && inventoryCanSettle && store.get('inventoryReadEnabled') !== false;
     let duration = '';
     if (durationSeconds) {
       const minutes = Math.floor(durationSeconds / 60);
@@ -4282,9 +4354,9 @@ function getRendererSettings() {
   delete allSettings.localProfiles;
   delete allSettings.activeProfileId;
   // The renderer sees only the signed-in profile's character cache. Map results
-  // reach it per profile through their own IPC.
+  // and custom farm types reach it per profile through their own IPC.
   Object.keys(allSettings)
-    .filter((key) => key.startsWith('lastKnownAccountState:') || key.startsWith('mapResults:') || key.startsWith('inventoryBaselines:'))
+    .filter((key) => key.startsWith('lastKnownAccountState:') || key.startsWith('mapResults:') || key.startsWith('customFarmTypes:'))
     .forEach((key) => delete allSettings[key]);
   const accountStateKey = getAccountStateStoreKey();
   allSettings.lastKnownAccountState = (accountStateKey && store.get(accountStateKey)) || null;
@@ -4482,6 +4554,18 @@ function setupIPC() {
 
   ipcMain.handle('set-active-farm-type', (event, farmTypeId) => {
     return setActiveFarmTypeId(farmTypeId);
+  });
+
+  ipcMain.handle('get-custom-farm-types', () => getStoredCustomFarmTypes());
+
+  ipcMain.handle('save-custom-farm-type', (event, input) => {
+    assertDesktopUserAuthenticated();
+    return saveCustomFarmType(input);
+  });
+
+  ipcMain.handle('delete-custom-farm-type', (event, farmTypeId) => {
+    assertDesktopUserAuthenticated();
+    return removeCustomFarmType(farmTypeId);
   });
 
   // End a session.

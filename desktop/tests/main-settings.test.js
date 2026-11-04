@@ -315,6 +315,7 @@ test('main overlay window is created lazily only when overlay state is visible',
   let derivedLanguage = null;
   const context = loadFunctions(['getLanguage', 'buildOverlayState', 'updateOverlayWindow'], {
     store: { get: (key) => (key === 'language' ? 'tr' : undefined) },
+    getStoredCustomFarmTypes: () => [],
     overlayMapResultState: null,
     overlayInventoryStatus: null,
     overlayStartMapPromptState: null,
@@ -406,6 +407,26 @@ test('main overlay state puts an inventory status over a map result while the ov
   });
   // Without a status, the map result shows as before.
   assert.equal(buildOverlayWithInventoryStatus({ overlayOn: true, inventoryStatus: null }).mode, 'map-result');
+});
+
+test('main overlay state never lets an inventory status hide a prompt that waits for an answer', () => {
+  const context = loadFunctions(['buildOverlayState'], {
+    overlayInventoryStatus: { kind: 'inMap', primaryLine: 'Loot counts when the map ends', secondaryLine: '' },
+    overlayMapResultState: null,
+    overlayStartMapPromptState: { mapName: 'Tower' },
+    overlayCharacterPromptState: null,
+    overlayCharacterState: null,
+    overlayRuntimeState: null,
+    currentSession: null,
+    store: { get: () => undefined },
+    isOverlayEnabled: () => true,
+    getLanguage: () => 'en',
+    getActiveSessionOverlayState: () => null,
+    deriveMapResultOverlayState: () => ({ visible: false }),
+    deriveOverlayState: ({ startMapPrompt }) => ({ visibility: 'visible', mode: startMapPrompt ? 'start-map-prompt' : 'runtime' })
+  });
+
+  assert.equal(context.buildOverlayState().mode, 'start-map-prompt');
 });
 
 test('main overlay state ignores an inventory status while the overlay is off', () => {

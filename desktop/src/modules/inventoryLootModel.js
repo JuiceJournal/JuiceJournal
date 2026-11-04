@@ -6,12 +6,14 @@
  * stash and then found again would look like no gain at all.
  */
 
-function createInventoryLootState(baselines = {}) {
-  return { baselines: { ...baselines }, pending: null };
+function createInventoryLootState() {
+  return { baselines: {}, pending: null, mapsSinceRead: 0 };
 }
 
+// Null until the character is known: another character's inventory would count as this one's loot.
 function getCharacterKey(poeVersion, character) {
-  return `${poeVersion}:${character?.id || character?.name || 'unknown'}`;
+  const identity = character?.id || character?.name;
+  return identity ? `${poeVersion}:${identity}` : null;
 }
 
 // Items only count when there are more of them than before. Fewer means they were used or stashed, not looted.
@@ -21,8 +23,12 @@ function diffInventory(before = {}, after = {}) {
     .filter((item) => item.quantity > 0);
 }
 
-// A map ended: its loot is the difference the next read shows. A second map ending first takes over the wait, so a
-// read after two maps goes to the newer one.
+function noteMapEntered(state) {
+  return { ...state, mapsSinceRead: state.mapsSinceRead + 1 };
+}
+
+// A map ended: its loot is the difference the next read shows. A newer map ending first takes over the wait, so a read
+// after several maps goes to the newest one and says how many maps it covers.
 function markSessionEnded(state, { sessionId, characterKey }) {
   return {
     ...state,
@@ -32,20 +38,26 @@ function markSessionEnded(state, { sessionId, characterKey }) {
 
 /**
  * Applies an inventory read and returns { state, outcome }. Outcome is null when the read only refreshes the baseline,
- * { type: 'gain', sessionId, items } when it settles a finished map, and { type: 'noBaseline', sessionId } when that
- * map started before any read, so its loot cannot be told from what was already carried.
+ * { type: 'gain', sessionId, items, mapCount } when it settles a finished map, and { type: 'noBaseline', sessionId } when
+ * that map started before any read, so its loot cannot be told from what was already carried.
  */
 function applyInventoryRead(state, { characterKey, items }) {
   const baselines = { ...state.baselines, [characterKey]: items };
+  const next = { baselines, pending: null, mapsSinceRead: 0 };
   const { pending } = state;
   if (!pending || pending.characterKey !== characterKey) {
-    return { state: { baselines, pending: null }, outcome: null };
+    return { state: next, outcome: null };
   }
 
   return {
-    state: { baselines, pending: null },
+    state: next,
     outcome: pending.baseline
-      ? { type: 'gain', sessionId: pending.sessionId, items: diffInventory(pending.baseline, items) }
+      ? {
+        type: 'gain',
+        sessionId: pending.sessionId,
+        items: diffInventory(pending.baseline, items),
+        mapCount: Math.max(1, state.mapsSinceRead)
+      }
       : { type: 'noBaseline', sessionId: pending.sessionId }
   };
 }
@@ -54,6 +66,7 @@ module.exports = {
   createInventoryLootState,
   getCharacterKey,
   diffInventory,
+  noteMapEntered,
   markSessionEnded,
   applyInventoryRead
 };

@@ -39,7 +39,9 @@ Experimental. For now it works for Path of Exile 2 only, because the PoE1 invent
 - Open your inventory before a map and again after it. The app reads it by itself, or you press F9 (or Ctrl+Shift+L). The loot of a map is what your inventory gained between the two reads.
 - Only priced stackable items count, not gear.
 - While automatic reading is on (Settings → Path of Exile), the app reads a small part of the screen when the game is in front and you are outside a map. It does not read the game's memory or send input to it.
-- Nothing from the screen is saved or sent. The app keeps only the item counts of your last read, on this PC.
+- If more than one map passes without a read, the whole gain goes to the last map and its result says how many maps it covers.
+- A read is skipped while something such as a tooltip covers your items.
+- Nothing from the screen is saved or sent. The item counts of your last read stay in memory until you close the app, so after a restart open your inventory before the next map, or that map is not counted.
 
 ## Prices: poe.ninja
 
@@ -47,7 +49,7 @@ Item values come from [poe.ninja](https://poe.ninja). The app asks for prices by
 
 ## Profit
 
-- **Path of Exile 1:** the intended source is a stash comparison: snapshots of your stash before and after a session. Snapshots need the `account:stashes` API scope, and the built-in sign-in only asks for `account:characters`, so the stash tracker is turned off and the app sends no stash requests. Profit is the value of the loot counted from your inventory after the map.
+- **Path of Exile 1:** the intended source is a stash comparison: snapshots of your stash before and after a session. Snapshots need the `account:stashes` API scope, and the built-in sign-in only asks for `account:characters`, so the stash tracker is turned off and the app sends no stash requests. Inventory reading does not cover PoE1 yet, so PoE1 maps have no loot source for now.
 - **Path of Exile 2:** GGG offers no stash API for PoE2. Profit is the value of the loot counted from your inventory after the map, priced from poe.ninja's currency exchange (see [Prices](#prices-poeninja)).
 
 The session keeps this profit however it ends: as you leave the map, with the End button, or when you quit the app. Each completed session is added to your map results and, if the overlay is on, shown as a result card in the overlay (not while the app is quitting).

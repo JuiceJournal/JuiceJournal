@@ -21,17 +21,17 @@ Inspired by [TLI Tracker](https://github.com/Giboork/TLI-tracker-translated) fro
 | In-game overlay | Run status, a "start session?" prompt on map entry, a character picker after Play and a result card when a session ends. Off by default (Settings) |
 | Local journal | Sessions, loot and map results per Path of Exile account, stored on your PC |
 | Path of Exile sign-in | Official OAuth sign-in on your PC; only reads your character list |
-| Farm types and profit tiers | Tag runs by league content; results are labelled by profit tier |
+| Farm types and profit tiers | Tag runs by league content or your own farm types with a color and icon; results are labelled by profit tier |
 | Languages | English and Turkish. German, French, Spanish, Italian, Portuguese (Brazil) and Russian are only partly translated; Japanese, Korean and Chinese can be selected but show English |
 | Loot from your inventory | Experimental. Path of Exile 2 only for now (the PoE1 inventory layout has not been measured), and tested only at 2560x1440. Open your inventory before and after a map: the app reads it by itself, or press F9 (or Ctrl+Shift+L). It counts only priced stackable items, not gear, and prices them with [poe.ninja](https://poe.ninja); in PoE2 only currency exchange items have a price. When automatic reading is on (Settings → Path of Exile), it reads a small part of the screen while the game is in front and you are outside a map. Nothing from the screen is saved or sent |
 
-**Profit is limited for now.** Profit is the value of the loot counted from your inventory after a map. Stash comparison, the reliable source for PoE1, needs the `account:stashes` API scope, which the built-in sign-in does not request yet, so the stash tracker is off; GGG offers no stash API for PoE2. Details: [How tracking works](docs/how-tracking-works.md).
+**Profit is limited for now.** In Path of Exile 2, profit is the value of the loot counted from your inventory after a map. Path of Exile 1 has no loot source yet. Stash comparison, the reliable source for PoE1, needs the `account:stashes` API scope, which the built-in sign-in does not request yet, so the stash tracker is off; GGG offers no stash API for PoE2. Details: [How tracking works](docs/how-tracking-works.md).
 
 ## Privacy and data
 
 Juice Journal has no accounts and no servers of its own. Your data is stored under `%APPDATA%\Juice Journal\`:
 
-- `config.json`: settings, your signed-in profile, map results, the item counts of your last inventory read, the cached character list, a short activity log (sign-ins, session starts and ends) and the GGG token (encrypted with Windows data protection)
+- `config.json`: settings, your signed-in profile, map results, your custom farm types, the cached character list, a short activity log (sign-ins, session starts and ends) and the GGG token (encrypted with Windows data protection)
 - `profiles/<id>/journal.json`: your sessions and loot
 - `icon-cache/`: downloaded item icons
 - `logs/errors.jsonl`: recent app errors and warnings (at most 128 KB), with names, paths and tokens removed where possible
@@ -43,7 +43,7 @@ Settings → Data shows this folder and its total size. **Open folder** opens it
 
 If `journal.json` cannot be read (for example after it was edited by hand), the Dashboard and Sessions say so and nothing is deleted. **Start a new journal** renames it to `journal.broken-<date>-<time>.json` in the same folder after you confirm and starts an empty journal. The sessions and loot in the old file stay in it but do not show in the app; saved map results stay.
 
-Reading your inventory keeps only the item counts of the last read. The screen image itself is not saved or sent.
+Reading your inventory keeps the item counts of the last read in memory until you close the app. The screen image itself is not saved or sent.
 
 **Report a bug** (Settings → About, or **Report a problem** under *Having trouble signing in?* on the sign-in screen) builds a short text report on your PC: app and system versions, a settings summary without paths or addresses, local data sizes, the newest 20 entries of the error log and the type and time of the newest 10 activity log entries. It never adds account or character names, file paths, tokens, the server address or anything from your journal, and it tries to remove names, paths and tokens from error messages, so check the text before you post it. Nothing is sent: you copy the report and paste it into a public GitHub issue yourself. Windows clipboard history or cloud clipboard sync may keep the copied text.
 

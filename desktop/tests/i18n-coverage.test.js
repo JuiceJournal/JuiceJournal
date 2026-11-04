@@ -671,3 +671,27 @@ test('web locale maps expose the full english key set through i18n composition',
     assert.deepEqual(missing, [], `Missing web keys in locale ${localeCode}: ${missing.join(', ')}`);
   }
 });
+
+test('custom farm type strings exist in en and in ASCII Turkish, for every colour and icon', () => {
+  const translations = loadDesktopTranslations();
+  const { CUSTOM_FARM_TYPE_COLORS, CUSTOM_FARM_TYPE_ICONS } = require('../src/modules/farmTypeModel');
+  const appSource = read(path.join(desktopDir, 'src', 'app.js'));
+  const html = read(path.join(desktopDir, 'src', 'index.html'));
+  const staticKeys = [...`${appSource}\n${html}`.matchAll(/customFarm\.[A-Za-z]+/g)].map(([key]) => key);
+  const keys = [
+    ...new Set(staticKeys),
+    ...CUSTOM_FARM_TYPE_COLORS.map((color) => `customFarm.color.${color}`),
+    ...CUSTOM_FARM_TYPE_ICONS.map((icon) => `customFarm.icon.${icon}`)
+  ];
+
+  assert.ok(staticKeys.length > 15, String(staticKeys.length));
+  const sameInBothLanguages = new Set(['customFarm.icon.farm-tablet']);
+  for (const key of keys) {
+    assert.ok(translations.en[key], `Missing en string for ${key}`);
+    assert.ok(translations.tr[key], `Missing tr string for ${key}`);
+    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
+    if (!sameInBothLanguages.has(key)) {
+      assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
+    }
+  }
+});

@@ -37,21 +37,24 @@ function createElement(tagName = 'span') {
     append(...nodes) { element.children.push(...nodes); },
     appendChild(node) { element.children.push(node); return node; },
     prepend(...nodes) { element.children.unshift(...nodes); },
+    insertAdjacentHTML(position, html) { element.insertedHTML = [position, html]; },
+    querySelectorAll: () => [],
     remove() { element.removed = true; }
   };
   return element;
 }
 
 // Runs overlay.js against a fake card and fake timers, so the test controls when the clock ticks.
-function loadOverlay() {
-  const elements = Object.fromEntries(ELEMENT_SELECTORS.map((selector) => [selector, createElement()]));
+function loadOverlay({ extraSelectors = [], farmTypeModel = null } = {}) {
+  const elements = Object.fromEntries([...ELEMENT_SELECTORS, ...extraSelectors].map((selector) => [selector, createElement()]));
   const intervals = new Map();
   let nextTimerId = 1;
   const clock = { now: 0 };
   const window = {
     overlayStateModel,
     profitCurrencyModel: require('../src/modules/profitCurrencyModel'),
-    profitTierModel: require('../src/modules/profitTierModel')
+    profitTierModel: require('../src/modules/profitTierModel'),
+    ...(farmTypeModel ? { farmTypeModel } : {})
   };
   const context = vm.createContext({
     window,
@@ -76,6 +79,7 @@ function loadOverlay() {
 
   return {
     window,
+    elements,
     renderState: window.JuiceOverlay.renderState,
     card: elements['[data-overlay-state]'],
     kicker: elements['[data-overlay-kicker-label]'],
@@ -311,6 +315,16 @@ test('the result card of a map still waiting for its inventory loot asks for the
   assert.equal(overlay.secondary.textContent, 'Lootu saymak icin envanterini ac');
 });
 
+test('a result whose loot covers several maps says how many', () => {
+  const overlay = loadOverlay();
+
+  renderResult(overlay, { netProfit: 10, lootItemCount: 3, lootMapCount: 2, topOutputs: [] });
+  assert.equal(overlay.secondary.textContent, '3 items counted · 2 maps');
+
+  renderResult(overlay, { netProfit: 10, lootItemCount: 3, lootMapCount: 1, topOutputs: [] });
+  assert.equal(overlay.secondary.textContent, '3 items counted');
+});
+
 test('the inventory status mode shows its note under an Inventory kicker with nothing else', () => {
   const overlay = loadOverlay();
 
@@ -368,4 +382,70 @@ test('a prompt counts down to closing on its own', () => {
   overlay.clock.now = now + 2000;
   overlay.tick();
   assert.equal(overlay.meta.textContent, 'closes in 5s');
+});
+
+const CUSTOM_FARM_ID = 'custom-3f2b8f6e-0000-4000-8000-000000000001';
+const CUSTOM_FARM = { id: CUSTOM_FARM_ID, label: 'Boss Tablets', color: 'amber', icon: 'farm-tablet', poeVersions: ['poe2'] };
+
+test('the overlay result card shows a custom farm type in its colour and icon, also after it was deleted', (t) => {
+  const farmTypeModel = require('../src/modules/farmTypeModel');
+  t.after(() => farmTypeModel.setCustomFarmTypes([]));
+  const overlay = loadOverlay({ farmTypeModel });
+  const render = (customFarmTypes) => overlay.renderState({
+    visibility: 'visible',
+    mode: 'map-result',
+    customFarmTypes,
+    mapResult: { visible: true, result: { farmTypeId: CUSTOM_FARM_ID, farmType: 'Boss Tablets', netProfit: 40, profitCurrencyRates: RATES } }
+  });
+
+  render([CUSTOM_FARM]);
+  let [name] = overlay.primary.children;
+  assert.equal(name.textContent, 'Boss Tablets');
+  assert.equal(name.getAttribute('data-farm-type'), CUSTOM_FARM_ID);
+  assert.equal(name.getAttribute('data-farm-color'), 'amber');
+  assert.match(name.insertedHTML[1], /assets\/icons\.svg#farm-tablet/);
+
+  render([{ ...CUSTOM_FARM, deletedAt: '2026-11-04T10:00:00.000Z' }]);
+  [name] = overlay.primary.children;
+  assert.equal(name.textContent, 'Boss Tablets');
+  assert.equal(name.getAttribute('data-farm-color'), 'amber');
+
+  // Signed out, the same stored result has nothing to look its colour up in.
+  render([]);
+  [name] = overlay.primary.children;
+  assert.equal(name.textContent, 'Boss Tablets');
+  assert.equal(name.getAttribute('data-farm-color'), null);
+});
+
+test('the overlay result card shows a farm type name that matches an object property as written', () => {
+  const overlay = loadOverlay();
+
+  overlay.renderState({ visibility: 'visible', mode: 'map-result', mapResult: { visible: true, result: { farmType: 'constructor', netProfit: 40, profitCurrencyRates: RATES } } });
+
+  assert.equal(overlay.primary.children[0].textContent, 'constructor');
+});
+
+test('the overlay start prompt offers a custom farm type as a coloured chip with its icon', (t) => {
+  const farmTypeModel = require('../src/modules/farmTypeModel');
+  t.after(() => farmTypeModel.setCustomFarmTypes([]));
+  const overlay = loadOverlay({
+    farmTypeModel,
+    extraSelectors: ['[data-overlay-start-form]', '[data-overlay-start-farm-types]']
+  });
+
+  overlay.renderState({
+    visibility: 'visible',
+    mode: 'start-map-prompt',
+    customFarmTypes: [CUSTOM_FARM],
+    startMapPrompt: {
+      mapName: 'Burial Chambers',
+      farmTypeId: CUSTOM_FARM_ID,
+      farmTypeOptions: [{ id: CUSTOM_FARM_ID, label: 'Boss <Tablets>' }, { id: 'ritual', label: 'Ritual' }]
+    }
+  });
+
+  const chips = overlay.elements['[data-overlay-start-farm-types]'].innerHTML;
+  assert.match(chips, new RegExp(`data-farm-type-id="${CUSTOM_FARM_ID}" data-farm-type="${CUSTOM_FARM_ID}" data-farm-color="amber" aria-pressed="true">`));
+  assert.match(chips, /assets\/icons\.svg#farm-tablet"\/><\/svg>Boss &lt;Tablets&gt;<\/button>/);
+  assert.match(chips, /data-farm-type-id="ritual" data-farm-type="ritual" aria-pressed="false">Ritual<\/button>/);
 });

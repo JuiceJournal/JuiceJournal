@@ -207,6 +207,73 @@ test('an item picture hiding the border inside it is not mistaken for a tooltip'
   assert.equal(vision.readInventory(image, GRID, []).covered, undefined);
 });
 
+test('a stack whose digits cannot be read makes the whole read count as covered', () => {
+  const image = blankGrid();
+  paintCell(image, 0, 0, 1);
+  // Digit-sized, but no digit: a solid white block.
+  const startX = Math.round(GRID.pitchX * 0) + 5;
+  for (let y = 4; y < 22; y += 1) {
+    for (let x = startX; x < startX + 13; x += 1) {
+      const i = (y * image.width + x) * 4;
+      image.data[i] = 255;
+      image.data[i + 1] = 255;
+      image.data[i + 2] = 255;
+    }
+  }
+  drawGridLines(image);
+
+  assert.equal(vision.readStackSize(vision.cropCell(image, GRID, 0, 0)), null);
+  assert.deepEqual(vision.readInventory(image, GRID, [makeArt('First Orb', 1)]), { open: true, covered: true, items: {} });
+});
+
+test('cells smaller than the matching size still match, so lower resolutions read', () => {
+  const small = vision.getGridRect('poe2', { x: 0, y: 0, width: 1920, height: 1080 });
+  const width = small.width;
+  const height = small.height;
+  const data = new Uint8Array(width * height * 4);
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = CELL_BACKGROUND[0];
+    data[i + 1] = CELL_BACKGROUND[1];
+    data[i + 2] = CELL_BACKGROUND[2];
+    data[i + 3] = 255;
+  }
+  const image = { data, width, height };
+  const cellSize = Math.round(small.pitchX);
+  const artSize = Math.round(small.pitchX * 0.97);
+  const pixels = makeArtPixels(artSize, 2);
+  for (let y = 0; y < artSize; y += 1) {
+    for (let x = 0; x < artSize; x += 1) {
+      const to = ((y + 1) * width + cellSize + x) * 4;
+      const from = (y * artSize + x) * 4;
+      data[to] = pixels[from];
+      data[to + 1] = pixels[from + 1];
+      data[to + 2] = pixels[from + 2];
+    }
+  }
+
+  const read = vision.readCell(vision.cropCell(image, small, 1, 0), [makeArt('First Orb', 1), makeArt('Second Orb', 2)]);
+
+  assert.equal(read.name, 'Second Orb');
+});
+
+test('tier bars that name nobody in the group leave the cell out rather than guess', () => {
+  const library = [makeArt('Greater Regal Orb', 2), makeArt('Perfect Regal Orb', 2), makeArt('Other', 5)];
+  const image = blankGrid();
+  paintCell(image, 0, 0, 2);
+  drawGridLines(image);
+
+  assert.deepEqual(vision.readInventory(image, GRID, library).items, {});
+});
+
+test('a group whose lowest tier is Lesser reads that one without bars', () => {
+  const library = [makeArt('Lesser Jeweller Orb', 2), makeArt('Greater Jeweller Orb', 2), makeArt('Other', 5)];
+  const image = blankGrid();
+  paintCell(image, 0, 0, 2);
+  drawGridLines(image);
+
+  assert.deepEqual(vision.readInventory(image, GRID, library).items, { 'Lesser Jeweller Orb': 1 });
+});
+
 test('an empty library reads nothing rather than failing', () => {
   const image = blankGrid();
   paintCell(image, 1, 1, 2);

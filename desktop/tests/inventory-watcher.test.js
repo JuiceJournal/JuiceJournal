@@ -27,7 +27,7 @@ function loadWatcher(script) {
 }
 
 function setup(overrides = {}) {
-  const log = { statuses: [], gains: [], saved: [], artLoads: 0, screenReads: 0 };
+  const log = { statuses: [], gains: [], artLoads: 0, screenReads: 0 };
   let read = { open: true, items: {} };
   const Watcher = loadWatcher(() => read);
   const env = {
@@ -37,7 +37,6 @@ function setup(overrides = {}) {
     game: 'poe2',
     enabled: true,
     profileId: 'p1',
-    baselines: {},
     character: { id: 'c1' },
     pricedComplete: true,
     icons: { 'Exalted Orb': '/icons/exalted.png' },
@@ -64,46 +63,50 @@ function setup(overrides = {}) {
       log.artLoads += 1;
       return { coarse: new Uint8Array(0), fine: new Uint8Array(0) };
     },
-    loadBaselines: () => env.baselines,
-    saveBaselines: (profileId, baselines) => log.saved.push({ profileId, baselines }),
-    onGain: (sessionId, items) => log.gains.push({ sessionId, items }),
+    onGain: (sessionId, items, mapCount) => log.gains.push({ sessionId, items, mapCount }),
     onStatus: (kind) => log.statuses.push(kind),
     now: () => env.now
   });
   return { watcher, log, env, setRead: (next) => { read = next; } };
 }
 
-test('a map is settled by the first automatic read after it, against the last read before it', () => {
-  const { watcher, log, setRead } = setup();
+function readBaseline(context, items) {
+  context.setRead({ open: true, items });
+  context.watcher.tick();
+}
 
-  setRead({ open: true, items: { 'Exalted Orb': 5 } });
-  watcher.tick();
-  setRead({ open: true, items: {} });
-  watcher.tick();
+test('a map is settled by the first automatic read after it, against the last read before it', () => {
+  const context = setup();
+  const { watcher, log, setRead } = context;
+
+  readBaseline(context, { 'Exalted Orb': 5 });
+  readBaseline(context, {});
+  watcher.mapEntered();
   assert.equal(watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' }), true);
   setRead({ open: true, items: { 'Exalted Orb': 2 } });
   watcher.tick();
 
-  assert.deepEqual(log.gains, [{ sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }] }]);
+  assert.deepEqual(log.gains, [{ sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }], mapCount: 1 }]);
   assert.deepEqual(log.statuses, ['reading']);
 });
 
 test('a closed inventory neither settles a map nor changes the baseline', () => {
-  const { watcher, log, setRead } = setup({ baselines: { 'poe2:c1': { 'Exalted Orb': 1 } } });
+  const context = setup();
+  const { watcher, log, setRead } = context;
 
+  readBaseline(context, { 'Exalted Orb': 1 });
   watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' });
   setRead({ open: false, items: {} });
   watcher.tick();
   assert.deepEqual(log.gains, []);
-  assert.deepEqual(log.saved, []);
 
   setRead({ open: true, items: { 'Exalted Orb': 3 } });
   watcher.tick();
   assert.deepEqual(log.gains[0].items, [{ name: 'Exalted Orb', quantity: 2 }]);
 });
 
-test('nothing reads the screen in a map, with the game behind, when off or when signed out', () => {
-  for (const blocked of [{ inMap: true }, { inFront: false }, { enabled: false }, { profileId: null }]) {
+test('nothing reads the screen in a map, with the game behind, when off, signed out or with no character', () => {
+  for (const blocked of [{ inMap: true }, { inFront: false }, { enabled: false }, { profileId: null }, { character: null }]) {
     const { watcher, log } = setup(blocked);
     watcher.tick();
     assert.equal(log.screenReads, 0, JSON.stringify(blocked));
@@ -153,51 +156,67 @@ test('an icon that never arrives stops holding reads back after the wait', () =>
   assert.equal(log.screenReads, 1);
 });
 
-test('the baseline is saved only when it changes', () => {
-  const { watcher, log, setRead } = setup();
+test('a map after a sign-out and back has no baseline from before', () => {
+  const context = setup();
+  const { watcher, log, env, setRead } = context;
 
-  setRead({ open: true, items: { 'Exalted Orb': 5 } });
-  watcher.tick();
-  watcher.tick();
-
-  assert.equal(log.saved.length, 1);
-  assert.deepEqual(log.saved[0], { profileId: 'p1', baselines: { 'poe2:c1': { 'Exalted Orb': 5 } } });
-});
-
-test('an empty first read is still saved as a baseline', () => {
-  const { watcher, log } = setup();
-
-  watcher.tick();
-
-  assert.deepEqual(log.saved[0].baselines, { 'poe2:c1': {} });
-});
-
-test('a saved baseline survives a restart and belongs to its profile', () => {
-  const { watcher, log, env, setRead } = setup({ baselines: { 'poe2:c1': { 'Exalted Orb': 5 } } });
-
-  watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' });
-  setRead({ open: true, items: { 'Exalted Orb': 6 } });
-  watcher.tick();
-  assert.deepEqual(log.gains[0].items, [{ name: 'Exalted Orb', quantity: 1 }]);
-
+  readBaseline(context, { 'Exalted Orb': 5 });
   env.profileId = 'p2';
-  env.baselines = {};
   watcher.sessionEnded({ id: 's2', poeVersion: 'poe2' });
   setRead({ open: true, items: { 'Exalted Orb': 9 } });
   watcher.tick();
-  assert.equal(log.gains.length, 1);
-  assert.deepEqual(log.statuses.at(-1), 'noBaseline');
+
+  assert.deepEqual(log.gains, []);
+  assert.deepEqual(log.statuses, ['noBaseline']);
+});
+
+test('a read after several maps reports how many it covers', () => {
+  const context = setup();
+  const { watcher, log, setRead } = context;
+
+  readBaseline(context, {});
+  watcher.mapEntered();
+  watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' });
+  watcher.mapEntered();
+  watcher.sessionEnded({ id: 's2', poeVersion: 'poe2' });
+  setRead({ open: true, items: { 'Exalted Orb': 2 } });
+  watcher.tick();
+
+  assert.deepEqual(log.gains, [{ sessionId: 's2', items: [{ name: 'Exalted Orb', quantity: 2 }], mapCount: 2 }]);
+});
+
+test('an unchanged read after a map without a session still clears the count of maps', () => {
+  const context = setup();
+  const { watcher, log, setRead } = context;
+
+  readBaseline(context, { 'Exalted Orb': 1 });
+  watcher.mapEntered();
+  readBaseline(context, { 'Exalted Orb': 1 });
+  watcher.mapEntered();
+  watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' });
+  setRead({ open: true, items: { 'Exalted Orb': 2 } });
+  watcher.tick();
+
+  assert.equal(log.gains[0].mapCount, 1);
 });
 
 test('a map with no change reports that no loot was found', () => {
-  const { watcher, log, setRead } = setup({ baselines: { 'poe2:c1': { 'Exalted Orb': 5 } } });
+  const context = setup();
+  const { watcher, log, setRead } = context;
 
+  readBaseline(context, { 'Exalted Orb': 5 });
   watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' });
   setRead({ open: true, items: { 'Exalted Orb': 5 } });
   watcher.tick();
 
   assert.deepEqual(log.gains, []);
   assert.deepEqual(log.statuses, ['noGain']);
+});
+
+test('a map ended with no known character cannot be settled', () => {
+  const { watcher } = setup({ character: null });
+
+  assert.equal(watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' }), false);
 });
 
 test('the hotkey explains itself in every state', () => {
@@ -208,6 +227,10 @@ test('the hotkey explains itself in every state', () => {
   const loading = setup({ pricedComplete: false });
   loading.watcher.readNow();
   assert.deepEqual(loading.log.statuses, ['notReady']);
+
+  const noCharacter = setup({ character: null });
+  noCharacter.watcher.readNow();
+  assert.deepEqual(noCharacter.log.statuses, ['notReady']);
 
   const closed = setup();
   closed.setRead({ open: false, items: {} });
@@ -221,32 +244,36 @@ test('the hotkey explains itself in every state', () => {
 });
 
 test('the hotkey settles a finished map like an automatic read does', () => {
-  const { watcher, log, setRead } = setup({ enabled: false, baselines: { 'poe2:c1': {} } });
+  const context = setup({ enabled: false });
+  const { watcher, log, setRead } = context;
 
+  setRead({ open: true, items: {} });
+  watcher.readNow();
   watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' });
   setRead({ open: true, items: { 'Exalted Orb': 2 } });
   watcher.tick();
   assert.deepEqual(log.gains, []);
 
   watcher.readNow();
-  assert.deepEqual(log.gains, [{ sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }] }]);
+  assert.deepEqual(log.gains, [{ sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }], mapCount: 1 }]);
 });
 
 test('a read with part of the grid covered neither settles a map nor changes the baseline', () => {
-  const { watcher, log, setRead } = setup({ baselines: { 'poe2:c1': { 'Exalted Orb': 5 } } });
+  const context = setup();
+  const { watcher, log, setRead } = context;
 
+  readBaseline(context, { 'Exalted Orb': 5 });
   watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' });
   setRead({ open: true, covered: true, items: {} });
   watcher.tick();
   assert.deepEqual(log.gains, []);
-  assert.deepEqual(log.saved, []);
 
   watcher.readNow();
   assert.deepEqual(log.statuses, ['covered']);
 
   setRead({ open: true, items: { 'Exalted Orb': 7 } });
   watcher.tick();
-  assert.deepEqual(log.gains, [{ sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }] }]);
+  assert.deepEqual(log.gains, [{ sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }], mapCount: 1 }]);
 });
 
 test('a screen that cannot be read says so', () => {

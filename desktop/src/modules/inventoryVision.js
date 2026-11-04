@@ -177,27 +177,29 @@ function isOccupied(cell) {
   return Math.sqrt(Math.max(0, squares / count - mean * mean)) > OCCUPIED_DEVIATION;
 }
 
-// Area average, so a cell reads the same however the game's resolution rounds its size.
+// Area average, so a cell reads the same however the game's resolution rounds its size. Every target pixel covers at
+// least one source pixel, also when the cell is smaller than the target.
 function downscale(cell, size) {
   const out = new Float32Array(size * size * 3);
-  const weights = new Float32Array(size * size);
-  for (let y = 0; y < cell.height; y += 1) {
-    const targetY = Math.min(size - 1, Math.floor((y / cell.height) * size));
-    for (let x = 0; x < cell.width; x += 1) {
-      const targetX = Math.min(size - 1, Math.floor((x / cell.width) * size));
-      const from = (y * cell.width + x) * 4;
-      const to = targetY * size + targetX;
-      out[to * 3] += cell.data[from];
-      out[to * 3 + 1] += cell.data[from + 1];
-      out[to * 3 + 2] += cell.data[from + 2];
-      weights[to] += 1;
-    }
-  }
-  for (let i = 0; i < weights.length; i += 1) {
-    if (weights[i] > 0) {
-      out[i * 3] /= weights[i];
-      out[i * 3 + 1] /= weights[i];
-      out[i * 3 + 2] /= weights[i];
+  for (let targetY = 0; targetY < size; targetY += 1) {
+    const fromY = Math.floor((targetY * cell.height) / size);
+    const toY = Math.max(fromY + 1, Math.ceil(((targetY + 1) * cell.height) / size));
+    for (let targetX = 0; targetX < size; targetX += 1) {
+      const fromX = Math.floor((targetX * cell.width) / size);
+      const toX = Math.max(fromX + 1, Math.ceil(((targetX + 1) * cell.width) / size));
+      const to = (targetY * size + targetX) * 3;
+      for (let y = fromY; y < toY; y += 1) {
+        for (let x = fromX; x < toX; x += 1) {
+          const from = (y * cell.width + x) * 4;
+          out[to] += cell.data[from];
+          out[to + 1] += cell.data[from + 1];
+          out[to + 2] += cell.data[from + 2];
+        }
+      }
+      const count = (toY - fromY) * (toX - fromX);
+      out[to] /= count;
+      out[to + 1] /= count;
+      out[to + 2] /= count;
     }
   }
   return out;
@@ -366,19 +368,19 @@ function readDigit(glyph, samples = DIGIT_GLYPHS) {
   return best && best.distance <= DIGIT_MAX_DISTANCE ? best.digit : null;
 }
 
-// Stack size from the corner digits. Items without digits are single items; digits that cannot be read count as one
-// too, so a misread can only undercount.
+// Stack size from the corner digits; items without digits are single items. Null means digits that cannot be read:
+// a guess in one read would turn into a false gain or loss against the next.
 function readStackSize(cell) {
   const glyphs = findStackGlyphs(cell);
   if (glyphs.length === 0) return 1;
   let text = '';
   for (const glyph of glyphs) {
     const digit = readDigit(glyph);
-    if (digit === null) return 1;
+    if (digit === null) return null;
     text += digit;
   }
   const value = Number(text);
-  return Number.isInteger(value) && value > 0 ? value : 1;
+  return Number.isInteger(value) && value > 0 ? value : null;
 }
 
 // Bars in the bottom-right corner: none is the base item, II is Greater and III is Perfect.
@@ -390,9 +392,12 @@ function readTierBars(cell) {
   return found.parts.filter((part) => part.maxY - part.minY >= 11 * scale && part.maxX - part.minX <= 6 * scale).length;
 }
 
+// Null when the bars name no item in the group: a wrong tier can be worth hundreds of times more.
 function pickFromSameArt(names, bars) {
-  const wanted = bars === 2 ? /^Greater /i : bars === 3 ? /^Perfect /i : /^(?!Greater |Perfect |Lesser )/i;
-  return names.find((name) => wanted.test(name)) || names[0];
+  if (bars === 2) return names.find((name) => /^Greater /i.test(name)) || null;
+  if (bars === 3) return names.find((name) => /^Perfect /i.test(name)) || null;
+  if (bars !== 0) return null;
+  return names.find((name) => !/^(Greater|Perfect|Lesser) /i.test(name)) || names.find((name) => /^Lesser /i.test(name)) || null;
 }
 
 // The best art for a cell and how far ahead of the next different picture it is.
@@ -427,10 +432,8 @@ function readCell(cell, art) {
   const match = matchCell(cell, art);
   if (!match || match.score >= ACCEPT_SCORE || match.margin < ACCEPT_MARGIN) return null;
 
-  return {
-    name: match.names.length > 1 ? pickFromSameArt(match.names, readTierBars(cell)) : match.names[0],
-    quantity: readStackSize(cell)
-  };
+  const name = match.names.length > 1 ? pickFromSameArt(match.names, readTierBars(cell)) : match.names[0];
+  return name ? { name, quantity: readStackSize(cell) } : null;
 }
 
 function hashCell(cell) {
@@ -445,8 +448,9 @@ function hashCell(cell) {
 
 /**
  * Reads a grid image into { open, items: { name: quantity } }, with covered: true and no items when something such as
- * a tooltip hides part of the grid, since a partial read would look like items leaving and coming back. `cache` is an
- * optional Map from cell pixels to results; most cells stay the same between reads, so a repeat read costs almost nothing.
+ * a tooltip hides part of the grid or a stack cannot be read, since a partial read would look like items leaving and
+ * coming back. `cache` is an optional Map from cell pixels to results; most cells stay the same between reads, so a
+ * repeat read costs almost nothing.
  */
 function readInventory(image, grid, art, cache = null) {
   if (scoreGridLines(image, grid) < OPEN_SCORE) {
@@ -469,6 +473,9 @@ function readInventory(image, grid, art, cache = null) {
       } else {
         read = readCell(cell, art);
         if (cache) cache.set(key, read);
+      }
+      if (read?.quantity === null) {
+        return { open: true, covered: true, items: {} };
       }
       if (read) {
         items[read.name] = (items[read.name] || 0) + read.quantity;

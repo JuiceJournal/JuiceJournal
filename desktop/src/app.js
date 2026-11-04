@@ -47,7 +47,10 @@ const state = {
   mapSessionPromptActive: false,
   farmType: window.farmTypeModel
     ? window.farmTypeModel.createFarmTypeState()
-    : { selectedFarmTypeId: null }
+    : { selectedFarmTypeId: null },
+  // Settings > Path of Exile: the custom farm type in the open form (null for a new one), and the row asking to confirm a delete.
+  customFarmEditingId: null,
+  customFarmDeletingId: null
 };
 
 const ERROR_MESSAGE_KEY_MAP = {
@@ -182,6 +185,18 @@ const elements = {
   activeSession: document.getElementById('active-session'),
   sessionFarmTypeSelect: document.getElementById('session-farm-type-select'),
   clearFarmTypeBtn: document.getElementById('clear-farm-type-btn'),
+  manageFarmTypesBtn: document.getElementById('manage-farm-types-btn'),
+  customFarmGroup: document.getElementById('custom-farm-types-group'),
+  customFarmList: document.getElementById('custom-farm-list'),
+  customFarmAddBtn: document.getElementById('custom-farm-add-btn'),
+  customFarmForm: document.getElementById('custom-farm-form'),
+  customFarmFormTitle: document.getElementById('custom-farm-form-title'),
+  customFarmName: document.getElementById('custom-farm-name'),
+  customFarmColors: document.getElementById('custom-farm-colors'),
+  customFarmIcons: document.getElementById('custom-farm-icons'),
+  customFarmPreview: document.getElementById('custom-farm-preview'),
+  customFarmError: document.getElementById('custom-farm-error'),
+  customFarmCancelBtn: document.getElementById('custom-farm-cancel-btn'),
   startSessionBtn: document.getElementById('start-session-btn'),
   endSessionBtn: document.getElementById('end-session-btn'),
   todaySessions: document.getElementById('today-sessions'),
@@ -818,9 +833,29 @@ function getFarmTypeIdFor(value) {
   return typeof resolveFarmTypeId === 'function' ? resolveFarmTypeId(value) : null;
 }
 
+// A player's own farm type also names its palette colour and icon. Both come from the model's fixed lists.
+function describeFarmTypeFor(value) {
+  const describeFarmType = window.farmTypeModel?.describeFarmType;
+  return typeof describeFarmType === 'function' ? describeFarmType(value) : null;
+}
+
 function farmTypeAttr(value) {
   const farmTypeId = getFarmTypeIdFor(value);
-  return farmTypeId ? ` data-farm-type="${farmTypeId}"` : '';
+  if (!farmTypeId) {
+    return '';
+  }
+
+  const color = describeFarmTypeFor(value)?.color;
+  return ` data-farm-type="${farmTypeId}"${color ? ` data-farm-color="${color}"` : ''}`;
+}
+
+function farmIconHTML(icon, { size = 14, className = 'icon farm-type-icon' } = {}) {
+  return `<svg class="${className}" width="${size}" height="${size}" aria-hidden="true"><use href="assets/icons.svg#${icon}"/></svg>`;
+}
+
+function farmTypeIconHTML(value) {
+  const icon = describeFarmTypeFor(value)?.icon;
+  return icon ? farmIconHTML(icon) : '';
 }
 
 function applyFarmType(element, value) {
@@ -833,6 +868,17 @@ function applyFarmType(element, value) {
     element.dataset.farmType = farmTypeId;
   } else {
     delete element.dataset.farmType;
+  }
+
+  const farmType = describeFarmTypeFor(value);
+  if (farmType?.color) {
+    element.dataset.farmColor = farmType.color;
+  } else {
+    delete element.dataset.farmColor;
+  }
+  // Callers set the text first, which also clears the icon of the previous result.
+  if (farmType?.icon) {
+    element.insertAdjacentHTML('afterbegin', farmTypeIconHTML(value));
   }
 }
 
@@ -1500,7 +1546,7 @@ function renderFarmTypeSelector() {
 
   elements.sessionFarmTypeSelect.innerHTML = [
     `<option value="" data-i18n="dashboard.noFarmType">${escapeHTML(window.t('dashboard.noFarmType'))}</option>`,
-    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType.id) : ''}>${escapeHTML(farmType.label)}</option>`)
+    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType.id) : ''}>${typeof farmTypeIconHTML === 'function' ? farmTypeIconHTML(farmType.id) : ''}${escapeHTML(farmType.label)}</option>`)
   ].join('');
   elements.sessionFarmTypeSelect.value = selectedFarmTypeId;
   elements.sessionFarmTypeSelect.disabled = hasActiveSession;
@@ -1528,6 +1574,222 @@ async function handleFarmTypeSelectionClear() {
     await window.electronAPI.setActiveFarmType(null);
   }
   renderFarmTypeSelector();
+}
+
+async function loadCustomFarmTypes() {
+  if (!window.electronAPI?.getCustomFarmTypes) {
+    return;
+  }
+
+  const farmTypes = await window.electronAPI.getCustomFarmTypes().catch(() => []);
+  getFarmTypeModel().setCustomFarmTypes(farmTypes);
+  closeCustomFarmForm();
+  renderCustomFarmTypes();
+}
+
+function listOwnFarmTypes() {
+  const { listFarmTypes, isCustomFarmTypeId } = getFarmTypeModel();
+  return listFarmTypes().filter((farmType) => isCustomFarmTypeId(farmType.id));
+}
+
+const CUSTOM_FARM_ERROR_KEYS = {
+  LABEL_REQUIRED: 'customFarm.errorNameRequired',
+  LABEL_TOO_LONG: 'customFarm.errorNameTooLong',
+  LABEL_TAKEN: 'customFarm.errorNameTaken',
+  GAME_REQUIRED: 'customFarm.errorGameRequired',
+  LIMIT_REACHED: 'customFarm.errorLimit'
+};
+
+function renderCustomFarmTypes() {
+  if (!elements.customFarmList) {
+    return;
+  }
+
+  const { CUSTOM_FARM_TYPE_LIMIT } = getFarmTypeModel();
+  const farmTypes = listOwnFarmTypes();
+  elements.customFarmList.innerHTML = farmTypes.length
+    ? farmTypes.map((farmType) => {
+      const games = farmType.poeVersions.map((version) => (version === 'poe2' ? 'PoE 2' : 'PoE 1')).join(' · ');
+      const id = escapeHTML(farmType.id);
+      const actions = state.customFarmDeletingId === farmType.id
+        ? `<span class="custom-farm-confirm">${escapeHTML(window.t('customFarm.deleteConfirm', { name: farmType.label }))}</span>
+           <button type="button" class="btn btn-danger btn-small" data-custom-farm-action="confirm-delete" data-custom-farm-id="${id}">${escapeHTML(window.t('customFarm.delete'))}</button>
+           <button type="button" class="btn btn-ghost btn-small" data-custom-farm-action="keep" data-custom-farm-id="${id}">${escapeHTML(window.t('customFarm.keep'))}</button>`
+        : `<button type="button" class="btn btn-secondary btn-small" data-custom-farm-action="edit" data-custom-farm-id="${id}">${escapeHTML(window.t('customFarm.edit'))}</button>
+           <button type="button" class="btn btn-ghost btn-small" data-custom-farm-action="delete" data-custom-farm-id="${id}">${escapeHTML(window.t('customFarm.delete'))}</button>`;
+      return `
+        <div class="custom-farm-row">
+          <span class="custom-farm-name"${farmTypeAttr(farmType.id)}>${farmTypeIconHTML(farmType.id)}${escapeHTML(farmType.label)}</span>
+          <span class="custom-farm-games">${games}</span>
+          <div class="custom-farm-row-actions">${actions}</div>
+        </div>
+      `;
+    }).join('')
+    : `<p class="custom-farm-empty">${escapeHTML(window.t('customFarm.empty'))}</p>`;
+
+  if (elements.customFarmAddBtn) {
+    elements.customFarmAddBtn.disabled = farmTypes.length >= CUSTOM_FARM_TYPE_LIMIT;
+  }
+  renderCustomFarmPicker();
+}
+
+// The radio buttons keep what is selected when the language redraws their names.
+function renderCustomFarmPicker() {
+  if (!elements.customFarmColors || !elements.customFarmIcons) {
+    return;
+  }
+
+  const { CUSTOM_FARM_TYPE_COLORS, CUSTOM_FARM_TYPE_ICONS } = getFarmTypeModel();
+  const color = getCustomFarmPickedValue('custom-farm-color') || CUSTOM_FARM_TYPE_COLORS[0];
+  const icon = getCustomFarmPickedValue('custom-farm-icon') || CUSTOM_FARM_TYPE_ICONS[0];
+  elements.customFarmColors.innerHTML = CUSTOM_FARM_TYPE_COLORS.map((entry) => (
+    `<label class="custom-farm-option custom-farm-swatch" data-farm-color="${entry}" title="${window.t(`customFarm.color.${entry}`)}"><input type="radio" name="custom-farm-color" value="${entry}" aria-label="${window.t(`customFarm.color.${entry}`)}"${entry === color ? ' checked' : ''}><span class="custom-farm-option-face"></span></label>`
+  )).join('');
+  elements.customFarmIcons.innerHTML = CUSTOM_FARM_TYPE_ICONS.map((entry) => (
+    `<label class="custom-farm-option" title="${window.t(`customFarm.icon.${entry}`)}"><input type="radio" name="custom-farm-icon" value="${entry}" aria-label="${window.t(`customFarm.icon.${entry}`)}"${entry === icon ? ' checked' : ''}><span class="custom-farm-option-face">${farmIconHTML(entry, { size: 18, className: 'icon' })}</span></label>`
+  )).join('');
+  if (elements.customFarmFormTitle) {
+    elements.customFarmFormTitle.textContent = window.t(state.customFarmEditingId ? 'customFarm.editTitle' : 'customFarm.add');
+  }
+  renderCustomFarmPreview();
+}
+
+function getCustomFarmPickedValue(name) {
+  return elements.customFarmForm?.querySelector(`input[name="${name}"]:checked`)?.value || '';
+}
+
+function renderCustomFarmPreview() {
+  if (!elements.customFarmPreview) {
+    return;
+  }
+
+  const name = String(elements.customFarmName?.value || '').trim() || window.t('customFarm.previewName');
+  const icon = getCustomFarmPickedValue('custom-farm-icon');
+  elements.customFarmPreview.dataset.farmColor = getCustomFarmPickedValue('custom-farm-color');
+  elements.customFarmPreview.innerHTML = `${icon ? farmIconHTML(icon) : ''}${escapeHTML(name)}`;
+}
+
+function setCustomFarmError(key) {
+  if (!elements.customFarmError) {
+    return;
+  }
+
+  elements.customFarmError.hidden = !key;
+  elements.customFarmError.textContent = key ? window.t(key) : '';
+}
+
+function openCustomFarmForm(farmTypeId = null) {
+  if (!elements.customFarmForm) {
+    return;
+  }
+
+  const { CUSTOM_FARM_TYPE_COLORS, CUSTOM_FARM_TYPE_ICONS, CUSTOM_FARM_TYPE_LABEL_MAX_LENGTH, getFarmTypeById } = getFarmTypeModel();
+  const farmType = farmTypeId ? getFarmTypeById(farmTypeId) : null;
+  state.customFarmEditingId = farmType?.id || null;
+  state.customFarmDeletingId = null;
+  renderCustomFarmTypes();
+
+  const color = farmType?.color || CUSTOM_FARM_TYPE_COLORS[0];
+  const icon = farmType?.icon || CUSTOM_FARM_TYPE_ICONS[0];
+  const games = farmType?.poeVersions || [getFarmTypePoeVersion()];
+  elements.customFarmForm.querySelectorAll('input[name="custom-farm-color"]').forEach((input) => { input.checked = input.value === color; });
+  elements.customFarmForm.querySelectorAll('input[name="custom-farm-icon"]').forEach((input) => { input.checked = input.value === icon; });
+  elements.customFarmForm.querySelectorAll('input[name="custom-farm-game"]').forEach((input) => { input.checked = games.includes(input.value); });
+  elements.customFarmName.maxLength = CUSTOM_FARM_TYPE_LABEL_MAX_LENGTH;
+  elements.customFarmName.value = farmType?.label || '';
+  setCustomFarmError(null);
+  renderCustomFarmPreview();
+  elements.customFarmForm.hidden = false;
+  elements.customFarmName.focus();
+}
+
+function closeCustomFarmForm() {
+  state.customFarmEditingId = null;
+  state.customFarmDeletingId = null;
+  if (elements.customFarmForm) {
+    elements.customFarmForm.hidden = true;
+  }
+}
+
+// Draws everything that names a farm type again, after the list changed.
+async function applyCustomFarmTypes(farmTypes) {
+  getFarmTypeModel().setCustomFarmTypes(farmTypes);
+  // A deleted farm type, or one taken off this game, cannot stay selected.
+  await syncFarmTypeSelectionForVersion();
+  renderFarmTypeSelector();
+  renderCustomFarmTypes();
+  updateActiveSessionUI();
+  // A rename reaches the stored results too, so they are read again.
+  await loadMapResultHistory();
+}
+
+async function handleCustomFarmSubmit(event) {
+  event.preventDefault();
+  setCustomFarmError(null);
+
+  const input = {
+    label: elements.customFarmName.value,
+    color: getCustomFarmPickedValue('custom-farm-color'),
+    icon: getCustomFarmPickedValue('custom-farm-icon'),
+    poeVersions: [...elements.customFarmForm.querySelectorAll('input[name="custom-farm-game"]:checked')].map((box) => box.value)
+  };
+  if (state.customFarmEditingId) {
+    input.id = state.customFarmEditingId;
+  }
+
+  let result = null;
+  try {
+    result = await window.electronAPI.saveCustomFarmType(input);
+  } catch (error) {
+    console.error('Unable to save the custom farm type', error);
+  }
+  if (!result?.ok) {
+    setCustomFarmError(CUSTOM_FARM_ERROR_KEYS[result?.error] || 'customFarm.errorSaveFailed');
+    return;
+  }
+
+  closeCustomFarmForm();
+  await applyCustomFarmTypes(result.farmTypes);
+}
+
+async function handleCustomFarmListClick(event) {
+  const button = event.target.closest('[data-custom-farm-action]');
+  if (!button) {
+    return;
+  }
+
+  const farmTypeId = button.dataset.customFarmId;
+  const action = button.dataset.customFarmAction;
+  if (action === 'edit') {
+    openCustomFarmForm(farmTypeId);
+  } else if (action === 'delete' || action === 'keep') {
+    state.customFarmDeletingId = action === 'delete' ? farmTypeId : null;
+    renderCustomFarmTypes();
+  } else if (action === 'confirm-delete') {
+    let result = null;
+    try {
+      result = await window.electronAPI.deleteCustomFarmType(farmTypeId);
+    } catch (error) {
+      console.error('Unable to delete the custom farm type', error);
+    }
+    if (!result?.ok) {
+      showToast(window.t('customFarm.errorDeleteFailed'), '', 'error');
+      return;
+    }
+
+    // The form may still be open on the farm type that just went.
+    if (state.customFarmEditingId === farmTypeId) {
+      closeCustomFarmForm();
+    }
+    state.customFarmDeletingId = null;
+    await applyCustomFarmTypes(result.farmTypes);
+  }
+}
+
+function openCustomFarmSettings() {
+  navigateTo('settings');
+  showSettingsTab('poe');
+  elements.customFarmGroup?.scrollIntoView({ block: 'start' });
 }
 
 async function loadActiveFarmTypeSelection() {
@@ -1570,6 +1832,8 @@ async function init() {
   // Ayarlari yukle
   await loadSettings();
   await refreshOnlineAccount();
+  // Before the selection: a custom farm type counts as supported only once its list has loaded.
+  await loadCustomFarmTypes();
   await loadActiveFarmTypeSelection();
   populateStrategyPresets();
 
@@ -2286,6 +2550,19 @@ function setupEventListeners() {
   if (elements.clearFarmTypeBtn) {
     elements.clearFarmTypeBtn.addEventListener('click', handleFarmTypeSelectionClear);
   }
+  if (elements.manageFarmTypesBtn) {
+    elements.manageFarmTypesBtn.addEventListener('click', openCustomFarmSettings);
+  }
+  if (elements.customFarmForm) {
+    elements.customFarmAddBtn?.addEventListener('click', () => openCustomFarmForm());
+    elements.customFarmCancelBtn?.addEventListener('click', () => {
+      closeCustomFarmForm();
+      renderCustomFarmTypes();
+    });
+    elements.customFarmForm.addEventListener('submit', handleCustomFarmSubmit);
+    elements.customFarmForm.addEventListener('input', renderCustomFarmPreview);
+    elements.customFarmList?.addEventListener('click', handleCustomFarmListClick);
+  }
 
   // Sessions filter
   elements.sessionFilter.addEventListener('change', loadSessions);
@@ -2496,7 +2773,8 @@ function setupIPCListeners() {
     const mapResult = await persistCompletedSessionMapResult(session);
     if (mapResult && typeof window.electronAPI.showMapResultOverlay === 'function') {
       try {
-        await window.electronAPI.showMapResultOverlay(mapResult);
+        // Only the card says loot is still to be counted: a kept result would say so for good.
+        await window.electronAPI.showMapResultOverlay({ ...mapResult, lootPending: Boolean(session?.lootPending) });
       } catch (error) {
         console.warn('Failed to show map result overlay', error);
       }
@@ -2956,6 +3234,12 @@ async function handlePoeOAuthLogin() {
       if (elements.settingsPage?.classList.contains('active') && elements.settingsAboutTab?.classList.contains('active')) {
         void loadBugReportPreview(bugReportViews.about);
       }
+      // Custom farm types belong to the profile that just signed in; the selection may have been another profile's.
+      if (typeof loadCustomFarmTypes === 'function') {
+        await loadCustomFarmTypes();
+        await loadActiveFarmTypeSelection();
+        renderFarmTypeSelector();
+      }
       await loadMapResultHistory();
       void syncPoeDeviceConnection();
       await refreshTrackerData();
@@ -2993,6 +3277,11 @@ async function handleLogout() {
 // without the sign-out call: main signed out already, and a second sign-out would write the activity log it cleared.
 function showSignedOutWindow() {
   state.currentUser = null;
+  if (typeof loadCustomFarmTypes === 'function') {
+    window.farmTypeModel?.setCustomFarmTypes?.([]);
+    closeCustomFarmForm();
+    renderCustomFarmTypes();
+  }
   state.deviceCharactersByGame = {};
   state.poeDeviceConnected = false;
   state.poeStashAccess = false;
@@ -3089,6 +3378,9 @@ function applyLocalizedChrome() {
   // The activity log is drawn by JS as well, and now sits on the Data tab next to translated headings.
   if (typeof renderAuditTrail === 'function') {
     renderAuditTrail();
+  }
+  if (typeof renderCustomFarmTypes === 'function') {
+    renderCustomFarmTypes();
   }
   // An open Currency page draws its rail, rows and status line in JS, so they follow the new language from state.
   if (typeof isPageActive === 'function' && isPageActive('currency')) {
@@ -3434,7 +3726,7 @@ function getSelectedTrackerContext() {
 
 function deriveCurrentMapResult(profitReport = null) {
   const { deriveMapResult } = getMapResultModel();
-  const { listFarmTypes } = getFarmTypeModel();
+  const { listFarmTypes, getFarmTypeById } = getFarmTypeModel();
   const capturedContext = stashState.mapResultContext || {};
   const hasCapturedContext = Boolean(stashState.mapResultContext);
   const selectedFarmTypeId = capturedContext.farmTypeId
@@ -3442,7 +3734,9 @@ function deriveCurrentMapResult(profitReport = null) {
     || state.currentSession?.mapType
     || state.farmType?.selectedFarmTypeId
     || null;
-  const farmType = listFarmTypes().find((entry) => entry.id === selectedFarmTypeId) || null;
+  const farmType = typeof getFarmTypeById === 'function'
+    ? getFarmTypeById(selectedFarmTypeId, { includeDeleted: true })
+    : (listFarmTypes().find((entry) => entry.id === selectedFarmTypeId) || null);
   const trackerContext = getSelectedTrackerContext();
   const characterSummary = hasCapturedContext
     ? (capturedContext.characterSummary || (capturedContext.league ? { league: capturedContext.league } : null))
@@ -3511,8 +3805,13 @@ function getCompletedSessionFarmTypeLabel(session = {}) {
     || 'poe1';
   const farmTypeModel = getFarmTypeModel();
   const farmType = typeof farmTypeModel.getFarmTypeById === 'function'
-    ? (farmTypeModel.getFarmTypeById(farmTypeId, { poeVersion }) || farmTypeModel.getFarmTypeById(farmTypeId))
+    ? (farmTypeModel.getFarmTypeById(farmTypeId, { poeVersion }) || farmTypeModel.getFarmTypeById(farmTypeId, { includeDeleted: true }))
     : farmTypeModel.listFarmTypes().find((entry) => entry.id === farmTypeId);
+
+  // A custom farm type this profile no longer knows has no name to show, and its id means nothing to a player.
+  if (!farmType && farmTypeModel.isCustomFarmTypeId?.(farmTypeId)) {
+    return null;
+  }
 
   return farmType?.label || farmTypeId || 'No farm type';
 }
@@ -3550,6 +3849,9 @@ function createCompletedSessionMapResult(session = {}) {
     poeVersion,
     league,
     mapName: session.mapName || session.map_name || 'Unknown Map',
+    farmTypeId: session.farmTypeId
+      || session.mapType
+      || (typeof getFarmTypeIdFor === 'function' ? getFarmTypeIdFor(getCompletedSessionFarmTypeLabel(session)) : null),
     farmType: getCompletedSessionFarmTypeLabel(session),
     durationSeconds,
     inputValue: costChaos,
@@ -3560,7 +3862,7 @@ function createCompletedSessionMapResult(session = {}) {
     topOutputs: getScannedTopOutputs(lootEntries),
     lootItemCount: lootEntries.reduce((sum, loot) => sum + (parseInt(loot.quantity || 1, 10) || 1), 0),
     noLoot: Boolean(session.noLoot),
-    lootPending: Boolean(session.lootPending),
+    lootMapCount: session.lootMapCount > 1 ? session.lootMapCount : undefined,
     // The run's Divine and Mirror rates, as stash-diff results keep them: the overlay tiers the run by them.
     profitCurrencyRates: typeof getProfitCurrencyRates === 'function'
       ? getProfitCurrencyRates(poeVersion, league)
@@ -3825,7 +4127,7 @@ function renderLatestMapResult() {
   // Map results store the English 'No farm type' fallback, so it is translated when shown.
   elements.lastMapResultFarmType.textContent = !latest.farmType ? window.t('dashboard.unknownFarmType') : latest.farmType === 'No farm type' ? window.t('dashboard.noFarmType') : latest.farmType;
   if (typeof applyFarmType === 'function') {
-    applyFarmType(elements.lastMapResultFarmType, latest.farmType);
+    applyFarmType(elements.lastMapResultFarmType, latest.farmTypeId || latest.farmType);
   }
   elements.lastMapResultDuration.textContent = formatDuration(latest.durationSeconds || 0);
   // The latest result is the biggest number on the dashboard: signed, in its tier colour, with the tier's meme badge.
@@ -3969,7 +4271,7 @@ function renderMapResultHistory() {
     return `
       <article class="map-result-history-item" data-result-id="${escapeHTML(result?.id || '')}">
         <div class="map-result-history-main">
-          <strong${typeof farmTypeAttr === 'function' ? farmTypeAttr(result?.farmType) : ''}>${escapeHTML(result?.farmType || window.t('dashboard.unknownFarmType'))}</strong>
+          <strong${typeof farmTypeAttr === 'function' ? farmTypeAttr(result?.farmTypeId || result?.farmType) : ''}>${typeof farmTypeIconHTML === 'function' ? farmTypeIconHTML(result?.farmTypeId || result?.farmType) : ''}${escapeHTML(result?.farmType || window.t('dashboard.unknownFarmType'))}</strong>
           <span>${formatDuration(Number(result?.durationSeconds || 0))}</span>
           <span class="map-result-publish-state" data-publish-state="${escapeHTML(result?.publishState || 'local')}">${escapeHTML(publishLabel)}</span>
           ${typeof profitMemeHTML === 'function' ? profitMemeHTML(profitTier) : ''}
@@ -4251,7 +4553,7 @@ function populateMapSessionFarmTypes(selectedFarmTypeId = '', options = {}) {
 
   elements.mapSessionFarmTypeSelect.innerHTML = [
     `<option value="" data-i18n="dashboard.noFarmType">${escapeHTML(window.t('dashboard.noFarmType'))}</option>`,
-    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType.id) : ''}>${escapeHTML(farmType.label)}</option>`)
+    ...farmTypes.map((farmType) => `<option value="${escapeHTML(farmType.id)}"${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmType.id) : ''}>${typeof farmTypeIconHTML === 'function' ? farmTypeIconHTML(farmType.id) : ''}${escapeHTML(farmType.label)}</option>`)
   ].join('');
   elements.mapSessionFarmTypeSelect.value = normalizedSelection;
 
@@ -4669,7 +4971,7 @@ function updateActiveSessionUI() {
         <span class="session-live-dot" aria-hidden="true"></span>
         <strong class="session-live-map">${escapeHTML(session.mapName || window.t('misc.unknownMap'))}</strong>
         ${session.mapTier ? `<span class="session-live-chip">T${escapeHTML(session.mapTier)}</span>` : ''}
-        ${farmTypeId ? `<span class="session-live-farm"${farmTypeAttr(farmTypeId)}>${escapeHTML(getSessionFarmTypeLabel(session))}</span>` : ''}
+        ${farmTypeId ? `<span class="session-live-farm"${farmTypeAttr(farmTypeId)}>${typeof farmTypeIconHTML === 'function' ? farmTypeIconHTML(farmTypeId) : ''}${escapeHTML(getSessionFarmTypeLabel(session))}</span>` : ''}
       </div>
       <div class="session-live-tiles">
         <div class="session-live-tile">
@@ -4771,8 +5073,13 @@ function getSessionFarmTypeLabel(session = {}) {
   const poeVersion = getSessionPoeVersion(session);
   const farmTypeModel = getFarmTypeModel();
   const farmType = typeof farmTypeModel.getFarmTypeById === 'function'
-    ? (farmTypeModel.getFarmTypeById(farmTypeId, { poeVersion }) || farmTypeModel.getFarmTypeById(farmTypeId))
+    ? (farmTypeModel.getFarmTypeById(farmTypeId, { poeVersion }) || farmTypeModel.getFarmTypeById(farmTypeId, { includeDeleted: true }))
     : farmTypeModel.listFarmTypes().find((entry) => entry.id === farmTypeId);
+
+  // A custom farm type this profile no longer knows has no name to show, and its id means nothing to a player.
+  if (!farmType && farmTypeModel.isCustomFarmTypeId?.(farmTypeId)) {
+    return window.t('dashboard.unknownFarmType');
+  }
 
   return farmType?.label || farmTypeId;
 }
@@ -4843,7 +5150,10 @@ function populateFarmingHubFarmOptions() {
 
   const previousValue = select.value || 'all';
   const versionFilter = getFilterValue(elements.farmingHubVersionFilter);
-  const farmTypes = getFarmTypeModel().listFarmTypes(versionFilter === 'all' ? {} : { poeVersion: versionFilter });
+  const { listFarmTypes, isCustomFarmTypeId } = getFarmTypeModel();
+  // The hub is public, so a player's own farm type is not offered as a filter sent to the server.
+  const farmTypes = listFarmTypes(versionFilter === 'all' ? {} : { poeVersion: versionFilter })
+    .filter((farmType) => !isCustomFarmTypeId?.(farmType.id));
   const runFarmTypes = state.farmingHubRuns.map((run) => run.farmType).filter(Boolean);
   const optionLabels = [...new Set([...farmTypes.map((farmType) => farmType.label), ...runFarmTypes])];
 
@@ -5100,7 +5410,7 @@ function renderSessionsList() {
         : 0);
     const poeVersion = getSessionPoeVersion(session);
     const farmTypeId = getSessionFarmTypeId(session);
-    const contextLabel = `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(session.league || 'Standard')} / <span${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmTypeId) : ''}>${escapeHTML(getSessionFarmTypeLabel(session))}</span>`;
+    const contextLabel = `${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(session.league || 'Standard')} / <span${typeof farmTypeAttr === 'function' ? farmTypeAttr(farmTypeId) : ''}>${typeof farmTypeIconHTML === 'function' ? farmTypeIconHTML(farmTypeId) : ''}${escapeHTML(getSessionFarmTypeLabel(session))}</span>`;
     const isActive = session.status === 'active';
     const duration = isActive
       ? formatDuration(getLiveDuration(session))

@@ -18,13 +18,24 @@ test('every sprite icon reference resolves to a symbol in icons.svg', () => {
   }
 });
 
+test('every icon a player can pick for a custom farm type is in the sprite', () => {
+  const symbols = new Set([...sprite.matchAll(/<symbol id="([^"]+)"/g)].map((match) => match[1]));
+  const { CUSTOM_FARM_TYPE_ICONS } = require('../src/modules/farmTypeModel');
+
+  assert.equal(CUSTOM_FARM_TYPE_ICONS.length, 16);
+  for (const id of CUSTOM_FARM_TYPE_ICONS) {
+    assert.ok(symbols.has(id), `Missing sprite symbol #${id}`);
+  }
+});
+
 test('renderer icons come from the sprite instead of inline paths', () => {
   // Window caption buttons mirror the OS controls and stay inline.
   const withoutCaptionButtons = indexHtml.replace(/<div class="window-controls">[\s\S]*?<\/div>/, '');
 
   for (const source of [withoutCaptionButtons, appJs]) {
     for (const svg of source.match(/<svg[\s\S]*?<\/svg>/g) || []) {
-      assert.match(svg, /<use href="assets\/icons\.svg#[\w-]+"\/>/, svg.slice(0, 80));
+      // A template id is the custom farm type icon helper; the test below checks every id it can receive.
+      assert.match(svg, /<use href="assets\/icons\.svg#(?:[\w-]+|\$\{icon\})"\/>/, svg.slice(0, 80));
     }
   }
 });

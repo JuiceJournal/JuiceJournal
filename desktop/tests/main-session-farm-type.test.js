@@ -579,7 +579,7 @@ test('main tells the window only when a map ended with nothing counted or read f
 });
 
 // endCurrentSession over a watcher stub; answers the session it sent to the window and the sessions the watcher saw.
-async function endMapWithWatcher({ canSettle, lootEntries = [], options = {}, watcher } = {}) {
+async function endMapWithWatcher({ canSettle, lootEntries = [], options = {}, watcher, automaticReading = true } = {}) {
   const backend = createJournalBackend();
   const active = backend.start({ mapName: 'Channel', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-1');
   backend.journal.sessions[0].lootEntries = lootEntries;
@@ -594,6 +594,7 @@ async function endMapWithWatcher({ canSettle, lootEntries = [], options = {}, wa
         return canSettle;
       }
     } : watcher,
+    store: { get: (key) => (key === 'inventoryReadEnabled' ? automaticReading : undefined) },
     appendAuditTrail() {},
     showNotification() {},
     t: (key) => key,
@@ -619,6 +620,8 @@ test('main marks a no-loot map as waiting for its loot only when the inventory w
   assert.equal(withLoot.session.lootPending, false);
   const withStash = await endMapWithWatcher({ canSettle: true, options: { totalLootChaos: 0, profitChaos: 0 } });
   assert.equal(withStash.session.lootPending, false);
+  // With automatic reading off, opening the inventory counts nothing, so the card must not say it does.
+  assert.equal((await endMapWithWatcher({ canSettle: true, automaticReading: false })).session.lootPending, false);
 });
 
 test('main does not wait for inventory loot while the app is shutting down', async () => {
@@ -816,6 +819,7 @@ test('main shutdown finalizer keeps the loot recorded in a PoE1 session without 
     currentSession: session,
     calculateSessionProfitFromPersistedSnapshots: async () => null,
     listFarmTypes: () => [{ id: 'breach', label: 'Breach' }],
+    isCustomFarmTypeId: () => false,
     getActiveFarmTypeId: () => 'breach',
     saveMapResultHistory(result) {
       calls.push(['saveMapResultHistory', JSON.parse(JSON.stringify(result))]);
@@ -923,6 +927,20 @@ test('main prices inventory loot from poe.ninja for the session game and league'
     ['Exalted Orb', 12, 'inventory']
   ]);
   assert.equal(stored.totalLootChaos, 48);
+});
+
+test('main inventory loot is recorded unpriced rather than at another league\'s prices', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z', league: 'Standard' }, 'session-other-league');
+  const priceService = createFakePriceService({ hang: true });
+  priceService.league = 'Some Other League';
+  const context = loadInventoryLoot(backend, session, priceService);
+
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
+
+  assert.deepEqual(backend.journal.sessions[0].lootEntries.map((loot) => [loot.itemName, loot.chaosValue]), [
+    ['Exalted Orb', 0]
+  ]);
 });
 
 test('main inventory loot is recorded unpriced when poe.ninja does not answer in time', async () => {
@@ -1476,6 +1494,7 @@ test('main shutdown finalizer closes a session without loot at zero when stash p
       throw new Error('snapshot timeout');
     },
     listFarmTypes: () => [{ id: 'breach', label: 'Breach' }],
+    isCustomFarmTypeId: () => false,
     getActiveFarmTypeId: () => 'breach',
     saveMapResultHistory(result) {
       calls.push(['saveMapResultHistory', JSON.parse(JSON.stringify(result))]);
@@ -1556,6 +1575,7 @@ test('main shutdown finalizer stores calculated persisted profit before closing'
       }
     }),
     listFarmTypes: () => [{ id: 'breach', label: 'Breach' }],
+    isCustomFarmTypeId: () => false,
     getActiveFarmTypeId: () => 'breach',
     saveMapResultHistory(result) {
       calls.push(['saveMapResultHistory', JSON.parse(JSON.stringify(result))]);
@@ -1694,8 +1714,10 @@ test('a map exit that cannot end the map in an unreadable journal leaves no unha
 test('map-enter handler publishes runtime state and leaves session start to the renderer prompt', async () => {
   const startCalls = [];
   const runtimeCalls = [];
+  let mapsEntered = 0;
   const context = loadFunctions(['handleMapEntered'], {
     currentSession: null,
+    inventoryWatcher: { mapEntered: () => { mapsEntered += 1; } },
     startNewSession(input) {
       startCalls.push({ ...input });
       throw new Error('main process should not auto-start sessions on map enter');
@@ -1712,6 +1734,7 @@ test('map-enter handler publishes runtime state and leaves session start to the 
 
   assert.deepEqual(startCalls, []);
   assert.deepEqual(runtimeCalls, [['area_entered', { mapName: 'Crimson Temple', mapTier: 16 }]]);
+  assert.equal(mapsEntered, 1);
 });
 
 test('the sync queue an older version left on disk is removed at startup', () => {
@@ -2097,3 +2120,187 @@ test('the shared character cache moves once to the profile of its account', () =
   load(orphan).migrateSharedAccountStateCache();
   assert.deepEqual(Object.keys(orphan.data).filter((key) => key.startsWith('lastKnownAccountState')), []);
 });
+
+const farmTypeModel = require('../src/modules/farmTypeModel');
+
+const CUSTOM_FARM_FUNCTIONS = [
+  'getActiveProfile',
+  'normalizeStoredFarmTypeId',
+  'getCustomFarmTypesStoreKey',
+  'getStoredCustomFarmTypes',
+  'getActiveFarmTypeId',
+  'setActiveFarmTypeId',
+  'resolveFarmTypeLabel',
+  'getMapResultsStoreKey',
+  'getStoredMapResults',
+  'renameFarmTypeInMapResults',
+  'saveCustomFarmType',
+  'removeCustomFarmType'
+];
+
+// A store that survives a restart: each load of main's functions reads what the last one wrote, as JSON.
+function createCustomFarmHarness(initial = {}) {
+  const disk = {
+    text: JSON.stringify({
+      localProfiles: { 'profile-1': { id: 'profile-1' }, 'profile-2': { id: 'profile-2' } },
+      activeProfileId: 'profile-1',
+      ...initial
+    })
+  };
+  const store = {
+    get: (key) => JSON.parse(disk.text)[key],
+    set(key, value) {
+      disk.text = JSON.stringify({ ...JSON.parse(disk.text), [key]: value });
+    }
+  };
+  const overlayUpdates = [];
+  const start = () => loadFunctions(CUSTOM_FARM_FUNCTIONS, {
+    store,
+    crypto: { randomUUID: () => `0000-${Math.random().toString(16).slice(2, 10)}` },
+    listFarmTypes: farmTypeModel.listFarmTypes,
+    isCustomFarmTypeId: farmTypeModel.isCustomFarmTypeId,
+    normalizeCustomFarmTypes: farmTypeModel.normalizeCustomFarmTypes,
+    createCustomFarmType: farmTypeModel.createCustomFarmType,
+    updateCustomFarmType: farmTypeModel.updateCustomFarmType,
+    deleteCustomFarmType: farmTypeModel.deleteCustomFarmType,
+    updateOverlayWindow() {
+      overlayUpdates.push(true);
+    }
+  });
+  return { store, start, overlayUpdates };
+}
+
+const NEW_FARM = { label: 'Boss Tablets', color: 'amber', icon: 'farm-tablet', poeVersions: ['poe2'] };
+
+test('a custom farm type is saved for the signed-in profile only and survives a restart', () => {
+  const { store, start, overlayUpdates } = createCustomFarmHarness();
+  const context = start();
+
+  const saved = context.saveCustomFarmType(NEW_FARM);
+  assert.equal(saved.ok, true);
+  assert.match(saved.farmType.id, /^custom-/);
+  assert.equal(overlayUpdates.length, 1);
+
+  // The other profile on this PC does not see it, and it comes back for the first one.
+  store.set('activeProfileId', 'profile-2');
+  assert.deepEqual(plainJson(context.getStoredCustomFarmTypes()), []);
+  assert.equal(context.saveCustomFarmType({ ...NEW_FARM, label: 'Boss Tablets' }).ok, true);
+  assert.equal(context.getStoredCustomFarmTypes().length, 1);
+  store.set('activeProfileId', 'profile-1');
+
+  const restarted = start();
+  assert.deepEqual(plainJson(restarted.getStoredCustomFarmTypes()), [plainJson(saved.farmType)]);
+  assert.equal(restarted.resolveFarmTypeLabel(saved.farmType.id), 'Boss Tablets');
+
+  store.set('activeProfileId', null);
+  assert.deepEqual(plainJson(restarted.getStoredCustomFarmTypes()), []);
+});
+
+test('a refused custom farm type writes nothing and reports its code', () => {
+  const { store, start, overlayUpdates } = createCustomFarmHarness();
+  const context = start();
+
+  assert.deepEqual(plainJson(context.saveCustomFarmType({ ...NEW_FARM, label: 'Ritual' })), { ok: false, error: 'LABEL_TAKEN' });
+  assert.deepEqual(plainJson(context.saveCustomFarmType(null)), { ok: false, error: 'LABEL_REQUIRED' });
+  assert.deepEqual(plainJson(context.saveCustomFarmType({ ...NEW_FARM, id: 'custom-unknown' })), { ok: false, error: 'NOT_FOUND' });
+  assert.deepEqual(plainJson(context.removeCustomFarmType('custom-unknown')), { ok: false, error: 'NOT_FOUND' });
+  assert.equal(store.get('customFarmTypes:profile-1'), undefined);
+  assert.equal(overlayUpdates.length, 0);
+});
+
+test('renaming a custom farm type renames it on stored map results, and leaves others alone', () => {
+  const { store, start } = createCustomFarmHarness();
+  const context = start();
+  const { farmType } = context.saveCustomFarmType(NEW_FARM);
+  store.set('mapResults:profile-1', [
+    { id: 'a', farmTypeId: farmType.id, farmType: 'Boss Tablets' },
+    { id: 'b', farmTypeId: 'ritual', farmType: 'Ritual' },
+    { id: 'c', farmType: 'Abyss' }
+  ]);
+  store.set('mapResults:profile-2', [{ id: 'd', farmTypeId: farmType.id, farmType: 'Boss Tablets' }]);
+
+  const edited = context.saveCustomFarmType({ ...NEW_FARM, id: farmType.id, label: 'Overseer Juice', color: 'red' });
+
+  assert.equal(edited.ok, true);
+  assert.equal(edited.farmType.id, farmType.id);
+  assert.deepEqual(store.get('mapResults:profile-1').map((result) => result.farmType), ['Overseer Juice', 'Ritual', 'Abyss']);
+  assert.equal(store.get('mapResults:profile-2')[0].farmType, 'Boss Tablets');
+  assert.equal(context.resolveFarmTypeLabel(farmType.id), 'Overseer Juice');
+});
+
+test('deleting a custom farm type clears it as the active one and keeps its name for past sessions', () => {
+  const { store, start } = createCustomFarmHarness();
+  const context = start();
+  const { farmType } = context.saveCustomFarmType(NEW_FARM);
+  context.setActiveFarmTypeId(farmType.id);
+  assert.equal(context.getActiveFarmTypeId(), farmType.id);
+
+  const removed = context.removeCustomFarmType(farmType.id);
+
+  assert.equal(removed.ok, true);
+  assert.equal(store.get('activeFarmTypeId'), null);
+  assert.equal(context.getActiveFarmTypeId(), null);
+  assert.equal(context.resolveFarmTypeLabel(farmType.id), 'Boss Tablets');
+  assert.equal(start().resolveFarmTypeLabel(farmType.id), 'Boss Tablets');
+});
+
+test('another profile does not inherit the active custom farm type, and built-in ones stay shared', () => {
+  const { store, start } = createCustomFarmHarness();
+  const context = start();
+  const { farmType } = context.saveCustomFarmType(NEW_FARM);
+  context.setActiveFarmTypeId(farmType.id);
+
+  store.set('activeProfileId', 'profile-2');
+  assert.equal(context.getActiveFarmTypeId(), null);
+  // A session of this profile cannot name a type it does not have; the caller falls back from a null label.
+  assert.equal(context.resolveFarmTypeLabel(farmType.id), null);
+
+  store.set('activeProfileId', 'profile-1');
+  assert.equal(context.getActiveFarmTypeId(), farmType.id);
+
+  context.setActiveFarmTypeId('ritual');
+  store.set('activeProfileId', 'profile-2');
+  assert.equal(context.getActiveFarmTypeId(), 'ritual');
+  assert.equal(context.resolveFarmTypeLabel('ritual'), 'Ritual');
+});
+
+test('renderer settings never carry any profile\'s custom farm types', () => {
+  const store = createMemoryStore({
+    language: 'en',
+    localProfiles: { 'profile-1': { id: 'profile-1' } },
+    activeProfileId: 'profile-1',
+    'customFarmTypes:profile-1': [{ id: 'custom-a' }],
+    'customFarmTypes:profile-2': [{ id: 'custom-b' }]
+  });
+  store.store = store.data;
+  const context = loadFunctions(['getActiveProfile', 'getAccountStateStoreKey', 'getRendererSettings'], {
+    store,
+    DEFAULT_SCAN_HOTKEY: 'F9',
+    DEFAULT_STASH_SCAN_HOTKEY: 'CommandOrControl+Shift+L'
+  });
+
+  assert.deepEqual(Object.keys(context.getRendererSettings()).filter((key) => key.startsWith('customFarmTypes')), []);
+});
+
+test('the map result recorded when a session ends without the renderer keeps the custom farm type id', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+
+  assert.match(source, /farmTypeId: normalizeStoredFarmTypeId\(farmTypeId\),\s+farmType: resolveFarmTypeLabel\(farmTypeId\)/);
+});
+
+test('custom farm types reach the renderer through checked IPC and the overlay through its state', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
+
+  assert.match(source, /ipcMain\.handle\('get-custom-farm-types', \(\) => getStoredCustomFarmTypes\(\)\)/);
+  assert.match(source, /ipcMain\.handle\('save-custom-farm-type', \(event, input\) => \{\s+assertDesktopUserAuthenticated\(\);/);
+  assert.match(source, /ipcMain\.handle\('delete-custom-farm-type', \(event, farmTypeId\) => \{\s+assertDesktopUserAuthenticated\(\);/);
+  assert.match(source, /customFarmTypes: getStoredCustomFarmTypes\(\)/);
+  assert.match(preload, /getCustomFarmTypes: \(\) => ipcRenderer\.invoke\('get-custom-farm-types'\)/);
+  assert.match(preload, /saveCustomFarmType: \(input\) => ipcRenderer\.invoke\('save-custom-farm-type', input\)/);
+  assert.match(preload, /deleteCustomFarmType: \(farmTypeId\) => ipcRenderer\.invoke\('delete-custom-farm-type', farmTypeId\)/);
+});
+
+function plainJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
