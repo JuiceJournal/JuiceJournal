@@ -1406,7 +1406,8 @@ test('every category tab shows its bundled art or our line icon in a slot, never
     },
     poe2: {
       currency: 'chaos', fragment: 'fragment', essence: 'essence', rune: 'rune', gem: 'uncut-gem',
-      soul_core: 'soul-core', idol: 'idol', expedition: 'expedition'
+      soul_core: 'soul-core', idol: 'idol', expedition: 'expedition', omen: 'omen', abyssal_bone: 'abyssal-bone',
+      catalyst: 'catalyst', liquid_emotion: 'liquid-emotion', verisium: 'verisium'
     }
   };
   // All is our layers icon; the tabs that are no game category, or have no current art, get our chest.
@@ -1414,7 +1415,7 @@ test('every category tab shows its bundled art or our line icon in a slot, never
     poe1: { '': 'layers', incubator: 'chest', rune: 'chest', base_type: 'chest', other: 'chest' },
     poe2: { '': 'layers', ultimatum: 'chest', vaal: 'chest', other: 'chest' }
   };
-  for (const [poeVersion, tabCount] of [['poe1', 20], ['poe2', 12]]) {
+  for (const [poeVersion, tabCount] of [['poe1', 20], ['poe2', 17]]) {
     const tabs = renderCategoryRail(poeVersion).match(/<button [\s\S]*?<\/button>/g) || [];
     assert.equal(tabs.length, tabCount, poeVersion);
 
@@ -1561,7 +1562,25 @@ test('price types read as their localized tab label, never as the raw snake_case
     assert.equal(context.getCurrencyTypeLabel('rune', poeVersion), poeVersion === 'poe1' ? 'category.runegraft' : 'category.rune');
     assert.equal(context.getCurrencyTypeLabel('vaal', poeVersion), 'category.vaal');
     assert.equal(context.getCurrencyTypeLabel('lineage_support_gem', poeVersion), 'Lineage Support Gem');
+    assert.equal(context.getCurrencyTypeLabel('omen', poeVersion), 'category.omen');
+    assert.equal(context.getCurrencyTypeLabel('catalyst', poeVersion), 'category.catalyst');
+    assert.equal(context.getCurrencyTypeLabel('abyssal_bone', poeVersion), 'category.abyssalBone');
+    assert.equal(context.getCurrencyTypeLabel('liquid_emotion', poeVersion), 'category.liquidEmotion');
+    assert.equal(context.getCurrencyTypeLabel('verisium', poeVersion), 'category.verisium');
   }
+});
+
+test('a PoE 2 row with no art of its own falls back to its PoE 2 category art, and PoE 1 keeps its own', () => {
+  const { resolveCurrencyRowArt } = loadCurrencyHelpers({ poeVersion: 'poe2' });
+  const bundledFor = (itemType, poeVersion) => resolveCurrencyRowArt({ itemType }, poeVersion).bundled;
+
+  assert.equal(bundledFor('omen', 'poe2'), 'assets/currency/poe2/omen.png');
+  assert.equal(bundledFor('catalyst', 'poe2'), 'assets/currency/poe2/catalyst.png');
+  assert.equal(bundledFor('abyssal_bone', 'poe2'), 'assets/currency/poe2/abyssal-bone.png');
+  assert.equal(bundledFor('liquid_emotion', 'poe2'), 'assets/currency/poe2/liquid-emotion.png');
+  assert.equal(bundledFor('verisium', 'poe2'), 'assets/currency/poe2/verisium.png');
+  assert.equal(bundledFor('omen', 'poe1'), 'assets/currency/poe1/omen.png');
+  assert.equal(bundledFor('catalyst', 'poe1'), 'assets/currency/poe1/catalyst.png');
 });
 
 test('remote art loads from the game CDN and nowhere else', () => {

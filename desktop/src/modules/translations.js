@@ -580,6 +580,9 @@ window.Translations = {
     'category.idol': 'Idol',
     'category.expedition': 'Expedition',
     'category.ultimatum': 'Ultimatum',
+    'category.abyssalBone': 'Abyssal Bone',
+    'category.liquidEmotion': 'Liquid Emotion',
+    'category.verisium': 'Verisium',
     'category.baseType': 'Base Type',
     'category.other': 'Diger',
 
@@ -1550,6 +1553,9 @@ window.Translations = {
     'category.idol': 'Idol',
     'category.expedition': 'Expedition',
     'category.ultimatum': 'Ultimatum',
+    'category.abyssalBone': 'Abyssal Bone',
+    'category.liquidEmotion': 'Liquid Emotion',
+    'category.verisium': 'Verisium',
     'category.baseType': 'Base Type',
     'category.other': 'Other',
 

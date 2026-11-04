@@ -9,7 +9,8 @@ const POE1_ITEMS = {
   Incubator: 4, Vial: 2, BlightedMap: 3, BlightRavagedMap: 2, UniqueRelic: 2, Wombgift: 2, BaseType: 5
 };
 const POE2 = {
-  Currency: 80, Fragments: 25, UncutGems: 30, SoulCores: 30, Idols: 20, Runes: 35, Essences: 25, Expedition: 10, Ultimatum: 10, Vaal: 5
+  Currency: 80, Fragments: 25, UncutGems: 30, SoulCores: 30, Idols: 20, Runes: 35, Essences: 25, Expedition: 10, Ultimatum: 10, Vaal: 5,
+  Ritual: 20, Abyss: 10, Breach: 15, Delirium: 15, Verisium: 15, LineageSupportGems: 35
 };
 // Lines per overview as live poe.ninja sent them on 2026-11-01 (42 requests, 11.3 MB of JSON, 4696 distinct names in
 // PoE1; 421 in PoE2). Gems and base types list every variant of a name, so a name repeats.
@@ -24,7 +25,9 @@ const LIVE_POE1_ITEMS = {
   BaseType: 8998
 };
 const LIVE_POE2 = {
-  Currency: 50, Fragments: 26, UncutGems: 42, SoulCores: 52, Idols: 35, Runes: 131, Essences: 67, Expedition: 18, Ultimatum: 0, Vaal: 0
+  Currency: 50, Fragments: 26, UncutGems: 42, SoulCores: 52, Idols: 35, Runes: 131, Essences: 67, Expedition: 18, Ultimatum: 0, Vaal: 0,
+  // Read since 2026-11-04, at that day's sizes.
+  Ritual: 39, Abyss: 15, Breach: 28, Delirium: 26, Verisium: 24, LineageSupportGems: 75
 };
 const LIVE_DISTINCT_NAMES = { SkillGem: 810, BaseType: 829, ClusterJewel: 400, ForbiddenJewel: 170, UniqueArmour: 450, UniqueWeapon: 270, UniqueAccessory: 185, UniqueJewel: 85 };
 

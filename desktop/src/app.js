@@ -1828,6 +1828,11 @@ const CURRENCY_IMAGE_VARIANTS = {
     'soul-core': 'assets/currency/poe2/soul-core.png',
     expedition: 'assets/currency/poe2/expedition.png',
     idol: 'assets/currency/poe2/idol.png',
+    omen: 'assets/currency/poe2/omen.png',
+    'abyssal-bone': 'assets/currency/poe2/abyssal-bone.png',
+    catalyst: 'assets/currency/poe2/catalyst.png',
+    'liquid-emotion': 'assets/currency/poe2/liquid-emotion.png',
+    verisium: 'assets/currency/poe2/verisium.png',
   }
 };
 
@@ -7459,6 +7464,11 @@ const POE2_CATEGORY_TYPES = [
   { value: 'soul_core', labelKey: 'category.soulCore', label: 'Soul Core', icon: 'soul-core' },
   { value: 'idol', labelKey: 'category.idol', label: 'Idol', icon: 'idol' },
   { value: 'expedition', labelKey: 'category.expedition', label: 'Expedition', icon: 'expedition' },
+  { value: 'omen', labelKey: 'category.omen', label: 'Omen', icon: 'omen' },
+  { value: 'abyssal_bone', labelKey: 'category.abyssalBone', label: 'Abyssal Bone', icon: 'abyssal-bone' },
+  { value: 'catalyst', labelKey: 'category.catalyst', label: 'Catalyst', icon: 'catalyst' },
+  { value: 'liquid_emotion', labelKey: 'category.liquidEmotion', label: 'Liquid Emotion', icon: 'liquid-emotion' },
+  { value: 'verisium', labelKey: 'category.verisium', label: 'Verisium', icon: 'verisium' },
   { value: 'ultimatum', labelKey: 'category.ultimatum', label: 'Ultimatum', icon: null, glyph: 'chest' },
   { value: 'vaal', labelKey: 'category.vaal', label: 'Vaal', icon: null, glyph: 'chest' },
   { value: 'other', labelKey: 'category.other', label: 'Other', icon: null, glyph: 'chest' },
