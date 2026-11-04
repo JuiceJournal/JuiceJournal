@@ -930,6 +930,23 @@ test('main prices inventory loot from poe.ninja for the session game and league'
   assert.equal(stored.totalLootChaos, 48);
 });
 
+test('main inventory loot raises a notification only while the overlay cannot show it', async () => {
+  for (const overlayOn of [true, false]) {
+    const backend = createJournalBackend();
+    const session = backend.start({ mapName: 'Channel', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-notice');
+    const context = loadInventoryLoot(backend, session, createFakePriceService());
+    const notices = [];
+    context.isOverlayEnabled = () => overlayOn;
+    context.showNotification = (title, body) => notices.push([title, body]);
+    context.t = (key) => key;
+
+    await context.addInventoryLoot(session.id, EXALTED_GAIN);
+
+    assert.equal(notices.length, overlayOn ? 0 : 1);
+    if (!overlayOn) assert.equal(notices[0][0], 'Channel');
+  }
+});
+
 test('main inventory loot is recorded unpriced rather than at another league\'s prices', async () => {
   const backend = createJournalBackend();
   const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z', league: 'Standard' }, 'session-other-league');

@@ -34,7 +34,7 @@ Settings, map results (per profile) and the cached character list are kept in `%
 
 ## Loot: your inventory
 
-Experimental. For now it works for Path of Exile 2 only, because the PoE1 inventory layout has not been measured, and only for a game window 1440 pixels tall, the one size checked on real screenshots.
+Experimental. For now it works for Path of Exile 2 only, because the PoE1 inventory layout has not been measured, and only for a game window 1440 pixels tall, checked on real screenshots at 2560x1440.
 
 - Open your inventory before a map and again after it. The app reads it by itself, or you press F9 (or Ctrl+Shift+L). The loot of a map is what your inventory gained between the two reads.
 - Only priced stackable items count, not gear.

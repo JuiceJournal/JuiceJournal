@@ -112,6 +112,13 @@ class InventoryWatcher {
     return this.art.sealed;
   }
 
+  // A window that is there and shown, at a size reading has not been checked on. Not finding it is not that: the lookup
+  // can miss for a moment, and the game can be minimized.
+  isWindowUnmeasured() {
+    const gameWindow = this.deps.getGameWindow();
+    return Boolean(gameWindow) && !gameWindow.minimized && !isMeasuredWindow(gameWindow);
+  }
+
   getGrid(game) {
     const gameWindow = this.deps.getGameWindow();
     return gameWindow && !gameWindow.minimized && isMeasuredWindow(gameWindow) ? getGridRect(game, gameWindow) : null;
@@ -183,8 +190,7 @@ class InventoryWatcher {
       this.deps.onStatus('unsupported');
       return;
     }
-    const gameWindow = this.deps.getGameWindow();
-    if (gameWindow && !gameWindow.minimized && !isMeasuredWindow(gameWindow)) {
+    if (this.isWindowUnmeasured()) {
       this.deps.onStatus('resolution');
       return;
     }
@@ -222,7 +228,7 @@ class InventoryWatcher {
   sessionEnded(session) {
     const game = session?.poeVersion;
     const characterKey = getCharacterKey(game, this.deps.getCharacter());
-    if (!session?.id || !characterKey || !hasInventoryLayout(game) || !this.syncProfile() || !this.getGrid(game)) {
+    if (!session?.id || !characterKey || !hasInventoryLayout(game) || !this.syncProfile() || this.isWindowUnmeasured()) {
       return false;
     }
 

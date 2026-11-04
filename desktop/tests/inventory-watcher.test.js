@@ -144,6 +144,22 @@ test('a window height not checked on real screenshots is left alone and the hotk
   assert.equal(watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' }), false);
 });
 
+test('a map can still be settled when the window lookup misses at its end or the game is minimized', () => {
+  for (const gameWindow of [null, { x: 0, y: 0, width: 2560, height: 1440, minimized: true }]) {
+    const context = setup();
+    const { watcher, log, env, setRead } = context;
+
+    readBaseline(context, {});
+    env.gameWindow = gameWindow;
+    assert.equal(watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' }), true);
+
+    env.gameWindow = { x: 0, y: 0, width: 2560, height: 1440 };
+    setRead({ open: true, items: { 'Exalted Orb': 2 } });
+    watcher.tick();
+    assert.deepEqual(log.gains, [{ sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }], mapCount: 1 }]);
+  }
+});
+
 test('reads wait until the priced art is complete, then stop looking for more', () => {
   const { watcher, log, env, setRead } = setup({ pricedComplete: false });
   setRead({ open: true, items: { 'Exalted Orb': 5 } });

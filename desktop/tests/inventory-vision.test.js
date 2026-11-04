@@ -318,6 +318,15 @@ test('two plain names sharing art leave the cell out rather than guess', () => {
   assert.deepEqual(vision.readInventory(image, GRID, library).items, {});
 });
 
+test('two plain names and a Lesser one still leave the cell out', () => {
+  const library = [makeArt('Regal Orb', 2), makeArt('Royal Orb', 2), makeArt('Lesser Regal Orb', 2), makeArt('Other', 5)];
+  const image = blankGrid();
+  paintCell(image, 0, 0, 2);
+  drawGridLines(image);
+
+  assert.deepEqual(vision.readInventory(image, GRID, library).items, {});
+});
+
 test('a group whose lowest tier is Lesser reads that one without bars', () => {
   const library = [makeArt('Lesser Jeweller Orb', 2), makeArt('Greater Jeweller Orb', 2), makeArt('Other', 5)];
   const image = blankGrid();

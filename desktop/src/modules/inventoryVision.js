@@ -415,7 +415,9 @@ function pickFromSameArt(names, bars) {
   if (bars === 2) return only(/^Greater /i);
   if (bars === 3) return only(/^Perfect /i);
   if (bars !== 0) return null;
-  return only(/^(?!Greater |Perfect |Lesser )/i) || only(/^Lesser /i);
+  return names.some((name) => /^(?!Greater |Perfect |Lesser )/i.test(name))
+    ? only(/^(?!Greater |Perfect |Lesser )/i)
+    : only(/^Lesser /i);
 }
 
 // The best art for a cell and how far ahead of the next different picture it is.
