@@ -23,8 +23,9 @@ const {
 } = require('./inventoryLootModel');
 
 const ART_BATCH_SIZE = 40;
-// With no new icon for this long, reading starts without the rest, so a failed download cannot hold it back for good.
-const ART_WAIT_MS = 60_000;
+// With no new icon for this long, reading starts without the rest, so a failed download does not keep the player
+// waiting. An icon that arrives later still joins the library.
+const ART_WAIT_MS = 15_000;
 const CELL_CACHE_LIMIT = 512;
 
 // Cells come back in reading order, so an unchanged read gives the same text.

@@ -223,7 +223,11 @@ test('an icon that never arrives stops holding reads back after the wait', () =>
   watcher.tick();
   assert.equal(log.screenReads, 0);
 
-  env.now = 60_000;
+  env.now = 14_999;
+  watcher.tick();
+  assert.equal(log.screenReads, 0);
+
+  env.now = 15_000;
   watcher.tick();
   assert.equal(log.screenReads, 1);
 });
