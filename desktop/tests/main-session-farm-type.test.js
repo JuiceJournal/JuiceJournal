@@ -952,13 +952,25 @@ test('main inventory loot is recorded unpriced rather than at another league\'s 
   const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z', league: 'Standard' }, 'session-other-league');
   const priceService = createFakePriceService({ hang: true });
   priceService.league = 'Some Other League';
+  priceService.prices.set('Exalted Orb', { chaosValue: 99, icon: 'https://example.test/other-league.png' });
   const context = loadInventoryLoot(backend, session, priceService);
 
   await context.addInventoryLoot(session.id, EXALTED_GAIN);
 
-  assert.deepEqual(backend.journal.sessions[0].lootEntries.map((loot) => [loot.itemName, loot.chaosValue]), [
-    ['Exalted Orb', 0]
+  assert.deepEqual(backend.journal.sessions[0].lootEntries.map((loot) => [loot.itemName, loot.chaosValue, loot.icon]), [
+    ['Exalted Orb', 0, undefined]
   ]);
+});
+
+test('main inventory loot keeps the art poe.ninja lists for the item', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ poeVersion: 'poe2', league: 'Fate of the Vaal', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-art');
+  const priceService = createFakePriceService({ prices: { 'Exalted Orb': { chaosValue: 12, icon: 'https://example.test/exalted.png' } } });
+  const context = loadInventoryLoot(backend, session, priceService);
+
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
+
+  assert.equal(backend.journal.sessions[0].lootEntries[0].icon, 'https://example.test/exalted.png');
 });
 
 test('main inventory loot is recorded unpriced when poe.ninja does not answer in time', async () => {

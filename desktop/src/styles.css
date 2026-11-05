@@ -1626,6 +1626,24 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   color: var(--text-muted);
 }
 
+/* Where a row is read by its art, the art nearly fills a larger slot. */
+.currency-td-item .item-slot,
+.map-result-history-drop .item-slot {
+  --slot-size: 40px;
+}
+
+.currency-td-item .item-slot > img,
+.map-result-history-drop .item-slot > img {
+  width: 88%;
+  height: 88%;
+}
+
+.currency-td-item .item-slot > .icon,
+.map-result-history-drop .item-slot > .icon {
+  width: 22px;
+  height: 22px;
+}
+
 /* The stack count sits in the slot's corner, as in the game's inventory. */
 .item-slot .stack {
   position: absolute;
@@ -1803,9 +1821,9 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 .map-result-history-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 10rem;
   align-items: center;
-  justify-content: space-between;
   gap: 1rem;
   padding: 0.9rem 1rem;
   border: 1px solid var(--border);
@@ -1855,13 +1873,47 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 .map-result-history-meta {
+  grid-column: 3;
   align-items: flex-end;
   text-align: right;
-  flex-shrink: 0;
 }
 
 .map-result-history-meta .map-result-history-profit {
   color: var(--profit-tier-color, var(--text-bright));
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+/* A result without a profit keeps a label-sized note where the number would be. */
+.map-result-history-profit .profit-unavailable {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.map-result-history-drop {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.map-result-history-drop-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.map-result-history-drop-text strong {
+  overflow: hidden;
+  color: var(--text-bright);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .map-result-publish-btn {
@@ -3513,13 +3565,13 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 .currency-th-change .currency-sort { justify-content: flex-end; }
 
 .currency-table td {
-  padding: 0.2rem 0.6rem;
+  padding: 0.15rem 0.6rem;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 
 .currency-row {
-  height: 36px;
+  height: 46px;
   cursor: pointer;
   transition: var(--transition);
 }
@@ -3539,10 +3591,6 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   align-items: center;
   gap: 0.6rem;
   min-width: 0;
-}
-
-.currency-td-item .item-slot {
-  --slot-size: 28px;
 }
 
 .currency-item-text {
@@ -3689,7 +3737,7 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   font-size: 0.72rem;
 }
 
-.currency-row--placeholder { height: 36px; }
+.currency-row--placeholder { height: 46px; }
 
 .currency-bar {
   display: inline-block;
@@ -4221,10 +4269,11 @@ option::checkmark {
     width: 100%;
   }
   .map-result-history-item {
-    flex-direction: column;
-    align-items: flex-start;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
   }
   .map-result-history-meta {
+    grid-column: auto;
     align-items: flex-start;
     text-align: left;
   }

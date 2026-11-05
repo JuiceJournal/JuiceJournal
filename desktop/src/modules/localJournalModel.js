@@ -171,6 +171,7 @@
       }
 
       const divineValue = Number(entry.divineValue);
+      const icon = normalizeOptionalText(entry.icon, 500);
       return {
         id: createId(),
         sessionId,
@@ -180,6 +181,7 @@
         chaosValue: Math.max(0, toNumber(entry.chaosValue)),
         divineValue: Number.isFinite(divineValue) && divineValue >= 0 ? divineValue : null,
         source: LOOT_SOURCES.has(entry.source) ? entry.source : 'manual',
+        ...(icon ? { icon } : {}),
         createdAt: timestamp,
         updatedAt: timestamp
       };

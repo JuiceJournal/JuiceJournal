@@ -2163,11 +2163,14 @@ function getLocalItemIconPath(itemName, poeVersion = 'poe1') {
 }
 
 // An in-game style item slot: the art as content (never recoloured), the stack count in its corner.
-function itemSlotHTML(itemName, poeVersion, { small = false, quantity = 1, fallback = 'chest' } = {}) {
+function itemSlotHTML(itemName, poeVersion, { small = false, quantity = 1, fallback = 'chest', iconUrl = '' } = {}) {
   const src = getLocalItemIconPath(itemName, poeVersion);
   let art = '';
   if (src) {
     art = `<img src="${src}" alt="" draggable="false">`;
+  } else if (iconUrl) {
+    // applyCachedItemIcons points it at the icon-cache copy or the remote art.
+    art = `<img data-icon-url="${escapeHTML(iconUrl)}" alt="" draggable="false">`;
   } else if (fallback === 'chest') {
     art = '<svg class="icon" width="16" height="16" aria-hidden="true"><use href="assets/icons.svg#chest"/></svg>';
   }
@@ -3883,6 +3886,7 @@ function getScannedTopOutputs(lootEntries = []) {
     const entry = byItem.get(key) || { label, quantityDelta: 0, valueDelta: 0, currencyCode: 'chaos' };
     entry.quantityDelta += quantity;
     entry.valueDelta += (parseFloat(loot.chaosValue || 0) || 0) * quantity;
+    if (loot.icon && !entry.icon) entry.icon = loot.icon;
     byItem.set(key, entry);
   }
 
@@ -4214,6 +4218,22 @@ function canPublishMapResult(result = {}) {
     && result.publishState !== 'published';
 }
 
+// A run's most valuable drop, as the game's inventory shows it, with what it was worth.
+function mapResultTopDropHTML(result = {}) {
+  const drop = Array.isArray(result?.topOutputs) ? result.topOutputs[0] : null;
+  if (!drop?.label) {
+    return '';
+  }
+
+  const label = escapeHTML(drop.label);
+  const slot = itemSlotHTML(drop.label, result.poeVersion || state.settings?.poeVersion || 'poe1', {
+    quantity: Number(drop.quantityDelta) || 1,
+    iconUrl: drop.icon || ''
+  });
+  const value = formatMapResultProfitHTML({ netProfit: drop.valueDelta, poeVersion: result.poeVersion }, 18);
+  return `<div class="map-result-history-drop" title="${label}">${slot}<span class="map-result-history-drop-text"><strong>${label}</strong>${value}</span></div>`;
+}
+
 function renderMapResultHistory() {
   if (!elements.mapResultFilter || !elements.mapResultHistory) {
     return;
@@ -4276,8 +4296,9 @@ function renderMapResultHistory() {
           <span class="map-result-publish-state" data-publish-state="${escapeHTML(result?.publishState || 'local')}">${escapeHTML(publishLabel)}</span>
           ${typeof profitMemeHTML === 'function' ? profitMemeHTML(profitTier) : ''}
         </div>
+        ${typeof mapResultTopDropHTML === 'function' ? mapResultTopDropHTML(result) : ''}
         <div class="map-result-history-meta">
-          <span class="map-result-history-profit"${profitTier ? ` data-profit-tier="${profitTier}"` : ''}>${formatMapResultProfitHTML(result, 14)}</span>
+          <span class="map-result-history-profit"${profitTier ? ` data-profit-tier="${profitTier}"` : ''}>${formatMapResultProfitHTML(result, 24)}</span>
           <span>${escapeHTML(result?.createdAt ? timeAgo(result.createdAt) : window.t('time.justNow'))}</span>
           <button type="button" class="map-result-publish-btn" data-result-id="${escapeHTML(result?.id || result?.localRunId || '')}" ${publishable ? '' : 'disabled'}>
             ${escapeHTML(window.t(result?.publishState === 'published' ? 'mapResult.shared' : 'mapResult.share'))}
@@ -4286,6 +4307,9 @@ function renderMapResultHistory() {
       </article>
     `;
   }).join('');
+  if (typeof applyCachedItemIcons === 'function') {
+    applyCachedItemIcons(elements.mapResultHistory);
+  }
 }
 
 function findMapResultById(resultId) {
@@ -7802,7 +7826,7 @@ const currencyState = {
   // bottom } (the rows by list index and the two spacers), null when every price has its row.
   sorted: [],
   rowWindow: null,
-  rowHeight: 37,
+  rowHeight: 47,
   detailHeight: 0
 };
 
