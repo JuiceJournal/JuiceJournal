@@ -139,6 +139,28 @@
     };
   }
 
+  // A run's most valuable drops, grouped by item, in the shape stash-diff results use. Names differ in case between
+  // sources, so "Divine orb" and "Divine Orb" are one item, named as first seen.
+  function getTopLootOutputs(lootEntries = []) {
+    const byItem = new Map();
+    for (const loot of lootEntries) {
+      const label = String(loot?.itemName || '').trim().replace(/\s+/g, ' ');
+      if (!label) continue;
+      const key = label.toLowerCase();
+      const quantity = parseInt(loot.quantity || 1, 10) || 1;
+      const entry = byItem.get(key) || { label, quantityDelta: 0, valueDelta: 0, currencyCode: 'chaos' };
+      entry.quantityDelta += quantity;
+      entry.valueDelta += (parseFloat(loot.chaosValue || 0) || 0) * quantity;
+      if (loot.icon && !entry.icon) entry.icon = loot.icon;
+      byItem.set(key, entry);
+    }
+
+    return [...byItem.values()]
+      .filter((entry) => entry.valueDelta > 0)
+      .sort((a, b) => b.valueDelta - a.valueDelta)
+      .slice(0, 3);
+  }
+
   function appendMapResult(existingResults = [], nextResult, { maxResults = 100 } = {}) {
     return [nextResult, ...existingResults]
       .filter(Boolean)
@@ -163,6 +185,7 @@
   return {
     appendMapResult,
     filterMapResults,
+    getTopLootOutputs,
     normalizeMapResultForLedger
   };
 });
