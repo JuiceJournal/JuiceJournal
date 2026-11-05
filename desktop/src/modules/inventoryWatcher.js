@@ -23,7 +23,7 @@ const {
 } = require('./inventoryLootModel');
 
 const ART_BATCH_SIZE = 40;
-// Icons that still have not arrived by then are left out, so a slow download cannot hold reading back for good.
+// With no new icon for this long, reading starts without the rest, so a failed download cannot hold it back for good.
 const ART_WAIT_MS = 60_000;
 const CELL_CACHE_LIMIT = 512;
 
@@ -58,7 +58,7 @@ class InventoryWatcher {
   }
 
   resetArt(game) {
-    this.art = { game, items: new Map(), list: [], sealed: false, startedAt: null };
+    this.art = { game, items: new Map(), list: [], queue: null, ready: false, lastProgressAt: 0 };
     this.cellCache = new Map();
   }
 
@@ -71,45 +71,46 @@ class InventoryWatcher {
     return profileId;
   }
 
-  // Loads priced art a little at a time, then seals the library. Reads wait for that: an item missing from the library
-  // would be missing from the baseline too, and would look like loot once its icon arrived.
+  // Loads priced art a little at a time. Reads wait until nothing is left but icons that stopped arriving; those keep
+  // being tried, and one that arrives later joins the library. The wait runs from the last icon loaded, since this only
+  // runs with the game in front, and time spent away from it says nothing about the downloads.
   warmArt(game) {
     if (this.art.game !== game) {
       this.resetArt(game);
     }
-    if (this.art.sealed) {
-      return true;
+    if (!this.art.queue) {
+      const { complete, items } = this.deps.listPricedItems(game);
+      if (!complete) {
+        return false;
+      }
+      this.art.queue = items.filter((item) => item.icon);
+      this.art.lastProgressAt = this.deps.now();
     }
-
-    const { complete, items } = this.deps.listPricedItems(game);
-    if (!complete) {
-      return false;
-    }
-    this.art.startedAt ??= this.deps.now();
 
     let loaded = 0;
-    let waiting = 0;
-    for (const item of items) {
-      if (!item.icon || this.art.items.has(item.name)) continue;
-      if (loaded >= ART_BATCH_SIZE) {
-        waiting += 1;
-        continue;
-      }
-      const iconPath = this.deps.getIconPath(item.icon);
+    const remaining = [];
+    for (const item of this.art.queue) {
+      const iconPath = loaded < ART_BATCH_SIZE ? this.deps.getIconPath(item.icon) : null;
       if (!iconPath) {
-        waiting += 1;
+        remaining.push(item);
         continue;
       }
       const art = this.deps.loadArt(iconPath);
       loaded += 1;
       if (art) this.art.items.set(item.name, { name: item.name, ...art });
     }
+    this.art.queue = remaining;
 
-    if (waiting === 0 || this.deps.now() - this.art.startedAt >= ART_WAIT_MS) {
+    if (loaded > 0) {
       this.art.list = [...this.art.items.values()];
-      this.art.sealed = true;
+      this.art.lastProgressAt = this.deps.now();
+      // A cell read without this art has to be read again. It cannot become false loot: unread cells count no gain.
+      this.cellCache.clear();
     }
-    return this.art.sealed;
+    if (remaining.length === 0 || this.deps.now() - this.art.lastProgressAt >= ART_WAIT_MS) {
+      this.art.ready = true;
+    }
+    return this.art.ready;
   }
 
   // A window that is there and shown, at a size reading has not been checked on. Not finding it is not that: the lookup

@@ -65,9 +65,9 @@ function setup(overrides = {}) {
     getCharacter: () => env.character,
     listPricedItems: () => ({
       complete: env.pricedComplete,
-      items: [{ name: 'Exalted Orb', icon: 'exalted-url' }, { name: 'No Art', icon: null }]
+      items: env.pricedItems || [{ name: 'Exalted Orb', icon: 'exalted-url' }, { name: 'No Art', icon: null }]
     }),
-    getIconPath: () => env.icons['Exalted Orb'],
+    getIconPath: (url) => (env.iconFor ? env.iconFor(url) : env.icons['Exalted Orb']),
     loadArt: () => {
       log.artLoads += 1;
       return { coarse: new Uint8Array(0), fine: new Uint8Array(0) };
@@ -179,6 +179,42 @@ test('reads wait until the priced art is complete, then stop looking for more', 
 
   watcher.tick();
   assert.equal(log.artLoads, 1);
+});
+
+test('time away from the game does not end loading with most of the art still to load', () => {
+  const pricedItems = Array.from({ length: 100 }, (_, index) => ({ name: `Item ${index}`, icon: `url-${index}` }));
+  const { watcher, log, env } = setup({ pricedItems, iconFor: (url) => `/icons/${url}.png` });
+
+  watcher.tick();
+  assert.equal(log.screenReads, 0);
+
+  // The player looks away for over a minute, then comes back to the game.
+  env.now = 90_000;
+  watcher.tick();
+  assert.equal(log.screenReads, 0, 'read with only part of the art loaded');
+
+  watcher.tick();
+  assert.equal(watcher.art.items.size, 100);
+  assert.equal(log.screenReads, 1);
+});
+
+test('an icon that arrives after reading started still joins the library', () => {
+  const pricedItems = [{ name: 'Early', icon: 'early' }, { name: 'Late', icon: 'late' }];
+  const available = new Set(['early']);
+  const { watcher, log, env } = setup({ pricedItems, iconFor: (url) => (available.has(url) ? `/icons/${url}.png` : null) });
+
+  watcher.tick();
+  env.now = 60_000;
+  watcher.tick();
+  assert.equal(log.screenReads, 1);
+  assert.equal(watcher.art.items.size, 1);
+
+  available.add('late');
+  watcher.cellCache.set(1, null);
+  watcher.tick();
+  assert.equal(watcher.art.items.size, 2);
+  assert.equal(watcher.art.list.length, 2);
+  assert.equal(watcher.cellCache.size, 0, 'a cell read without the new art has to be read again');
 });
 
 test('an icon that never arrives stops holding reads back after the wait', () => {
