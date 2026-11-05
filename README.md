@@ -23,9 +23,9 @@ Inspired by [TLI Tracker](https://github.com/Giboork/TLI-tracker-translated) fro
 | Path of Exile sign-in | Official OAuth sign-in on your PC; only reads your character list |
 | Farm types and profit tiers | Tag runs by league content or your own farm types with a color and icon; results are labelled by profit tier |
 | Languages | English and Turkish. German, French, Spanish, Italian, Portuguese (Brazil) and Russian are only partly translated; Japanese, Korean and Chinese can be selected but show English |
-| OCR loot scan | Experimental, during an active session with the game window in front: F9 or Ctrl+Shift+L takes a screenshot of your screen and reads loot names from it. The loot is priced with [poe.ninja](https://poe.ninja); in PoE2 only currency exchange items have a price |
+| Loot from your inventory | Experimental. Path of Exile 2 only for now (the PoE1 inventory layout has not been measured), and only for a game window 1440 pixels tall, checked on real screenshots at 2560x1440. Open your inventory before and after a map: the app reads it by itself, or press F9 (or Ctrl+Shift+L). It counts only priced stackable items, not gear, and prices them with [poe.ninja](https://poe.ninja); in PoE2 only currency exchange items have a price. When automatic reading is on (Settings → Path of Exile), it reads a small part of the screen while the game is in front and you are outside a map. Nothing from the screen is saved or sent |
 
-**Profit is limited for now.** Profit is the value of the loot the experimental OCR scan adds to a session. Stash comparison, the reliable source for PoE1, needs the `account:stashes` API scope, which the built-in sign-in does not request yet, so the stash tracker is off; GGG offers no stash API for PoE2. Details: [How tracking works](docs/how-tracking-works.md).
+**Profit is limited for now.** In Path of Exile 2, profit is the value of the loot counted from your inventory after a map. Path of Exile 1 has no loot source yet. Stash comparison, the reliable source for PoE1, needs the `account:stashes` API scope, which the built-in sign-in does not request yet, so the stash tracker is off; GGG offers no stash API for PoE2. Details: [How tracking works](docs/how-tracking-works.md).
 
 ## Privacy and data
 
@@ -34,17 +34,16 @@ Juice Journal has no accounts and no servers of its own. Your data is stored und
 - `config.json`: settings, your signed-in profile, map results, your custom farm types, the cached character list, a short activity log (sign-ins, session starts and ends) and the GGG token (encrypted with Windows data protection)
 - `profiles/<id>/journal.json`: your sessions and loot
 - `icon-cache/`: downloaded item icons
-- `ocr-cache/`: the OCR language data (`eng.traineddata`), downloaded on the first scan
 - `logs/errors.jsonl`: recent app errors and warnings (at most 128 KB), with names, paths and tokens removed where possible
 - `Cache`, `GPUCache` and other folders that Electron creates for the app window
 
 Settings → Data shows this folder and its total size. **Open folder** opens it in File Explorer. **Clear logs** deletes the activity log and the error log after you confirm; your sessions, loot, map results and settings stay. Diagnostics files you exported and reports you copied are not changed.
 
-**Delete everything** asks you to tick a box and confirm, then removes `profiles/` (journals that cannot be read and `journal.broken-*` files included), `icon-cache/`, `ocr-cache/` and `logs/` for every account, resets `config.json` to the defaults except the language (map results, the activity log, the character list and the saved sign-ins go with it), clears the cache and storage in the Electron folders (the folders stay) and restarts the app at the sign-in screen. Runs you shared and stash snapshots on an online server stay there, the GGG and server sign-ins are removed from this PC but not revoked (you can revoke the GGG one on pathofexile.com), and diagnostics files you exported and reports you copied are not touched.
+**Delete everything** asks you to tick a box and confirm, then removes `profiles/` (journals that cannot be read and `journal.broken-*` files included), `icon-cache/`, `ocr-cache/` (left by older versions) and `logs/` for every account, resets `config.json` to the defaults except the language (map results, the activity log, the character list and the saved sign-ins go with it), clears the cache and storage in the Electron folders (the folders stay) and restarts the app at the sign-in screen. Runs you shared and stash snapshots on an online server stay there, the GGG and server sign-ins are removed from this PC but not revoked (you can revoke the GGG one on pathofexile.com), and diagnostics files you exported and reports you copied are not touched.
 
 If `journal.json` cannot be read (for example after it was edited by hand), the Dashboard and Sessions say so and nothing is deleted. **Start a new journal** renames it to `journal.broken-<date>-<time>.json` in the same folder after you confirm and starts an empty journal. The sessions and loot in the old file stay in it but do not show in the app; saved map results stay.
 
-The OCR scan's screenshot is processed on your PC and is not uploaded.
+Reading your inventory keeps the item counts of the last read in memory until you close the app. The screen image itself is not saved or sent.
 
 **Report a bug** (Settings → About, or **Report a problem** under *Having trouble signing in?* on the sign-in screen) builds a short text report on your PC: app and system versions, a settings summary without paths or addresses, local data sizes, the newest 20 entries of the error log and the type and time of the newest 10 activity log entries. It never adds account or character names, file paths, tokens, the server address or anything from your journal, and it tries to remove names, paths and tokens from error messages, so check the text before you post it. Nothing is sent: you copy the report and paste it into a public GitHub issue yourself. Windows clipboard history or cloud clipboard sync may keep the copied text.
 
@@ -55,7 +54,6 @@ The app talks to these hosts only:
 | `www.pathofexile.com`, `api.pathofexile.com` | Sign-in and your character list |
 | `poe.ninja` | Item prices (league and category only) |
 | `web.poecdn.com` | Item icons |
-| `cdn.jsdelivr.net` | OCR language data, first scan only |
 | GitHub | Checking for and downloading updates, installed builds only. When you press **Copy and open GitHub issue**, your browser opens the new-issue page with only the app version and a short environment line (Windows and Electron versions, game, language, online on/off) in the address; the app itself sends nothing there |
 | The server address in Settings → Online (default `http://localhost:3001`, your own PC) | Only after you turn on online features there: the Farming Hub list and the server sign-in. Once signed in to the server, also sharing runs and the server's stash snapshots when the device has no Path of Exile connection. Online features are off by default, and while they are off nothing is sent to this address |
 
@@ -63,7 +61,7 @@ There is no telemetry and there are no ads.
 
 ## Fair play
 
-Juice Journal reads the game's log file and uses the official Path of Exile API. To find the game and place the overlay, it also checks the Windows process list and the game window's position. During a session it checks which window is in front, so it can hold the OCR hotkeys only while the game is.
+Juice Journal reads the game's log file and uses the official Path of Exile API. To find the game and place the overlay, it also checks the Windows process list and the game window's position. It checks which window is in front, so it can hold the inventory read hotkeys only while the game is. To count your loot it also reads a small part of the screen (the inventory area) while the game is in front and you are outside a map, if automatic reading is on.
 
 - It does **not** inject into the game, hook it or read its memory.
 - It does **not** send keys or mouse input to the game.
@@ -88,7 +86,7 @@ Good to know:
 
 - You must sign in with your Path of Exile account (**Sign in with Path of Exile**) before you can use the app. It uses local port `34127`, which must be free.
 - If the log file was not found, set the `Client.txt` path in Settings. Turn on the overlay there too.
-- The OCR scan hotkeys, F9 and Ctrl+Shift+L, are only held while a session runs and the game window is in front (for the whole session if the app cannot read which window is in front); the game does not receive those two keys then. Change them in Settings → Hotkeys.
+- The inventory read hotkeys, F9 and Ctrl+Shift+L, are only held while you are signed in and the game window is in front (they are released if the app cannot read which window is in front); the game does not receive those two keys then. Change them in Settings → Hotkeys.
 - Closing the window keeps the app running in the tray.
 - Settings → Data shows where your local data is stored. To delete that folder by hand, quit from the tray first (right-click the tray icon, then **Quit**); deleting `%APPDATA%\Juice Journal\` removes all of your local data.
 

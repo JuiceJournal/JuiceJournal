@@ -199,9 +199,6 @@ const elements = {
   customFarmCancelBtn: document.getElementById('custom-farm-cancel-btn'),
   startSessionBtn: document.getElementById('start-session-btn'),
   endSessionBtn: document.getElementById('end-session-btn'),
-  scanScreenBtn: document.getElementById('scan-screen-btn'),
-  scanScreenLabel: document.getElementById('scan-screen-label'),
-  scanHotkeyBadge: document.getElementById('scan-hotkey-badge'),
   todaySessions: document.getElementById('today-sessions'),
   todayProfit: document.getElementById('today-profit'),
   todayAvg: document.getElementById('today-avg'),
@@ -252,6 +249,7 @@ const elements = {
   poePath: document.getElementById('poe-path'),
   autoStartSession: document.getElementById('auto-start-session'),
   overlayEnabled: document.getElementById('overlay-enabled'),
+  inventoryReadEnabled: document.getElementById('inventory-read-enabled'),
   enableNotifications: document.getElementById('enable-notifications'),
   soundNotifications: document.getElementById('sound-notifications'),
   defaultLeague: document.getElementById('default-league'),
@@ -1912,13 +1910,12 @@ function applySettingsDraftToDom(settingsDraft = {}) {
   if (elements.poePath) elements.poePath.value = completeSettingsDraft.poePath || '';
   if (elements.autoStartSession) elements.autoStartSession.checked = Boolean(completeSettingsDraft.autoStartSession);
   if (elements.overlayEnabled) elements.overlayEnabled.checked = completeSettingsDraft.overlayEnabled === true;
+  if (elements.inventoryReadEnabled) elements.inventoryReadEnabled.checked = completeSettingsDraft.inventoryReadEnabled !== false;
   if (elements.enableNotifications) elements.enableNotifications.checked = completeSettingsDraft.notifications !== false;
   if (elements.soundNotifications) elements.soundNotifications.checked = Boolean(completeSettingsDraft.soundNotifications);
   if (elements.scanHotkey) elements.scanHotkey.value = completeSettingsDraft.scanHotkey;
   if (elements.stashScanHotkey) elements.stashScanHotkey.value = completeSettingsDraft.stashScanHotkey;
   syncHotkeyDisplays();
-  // The dashboard badge follows the applied scan hotkey, not captures that are not saved yet.
-  syncHotkeyFieldDisplay(elements.scanHotkey, elements.scanHotkeyBadge);
   if (elements.globalLanguage) elements.globalLanguage.value = completeSettingsDraft.language || 'en';
   if (elements.defaultLeague || elements.defaultLeagueSelect) {
     const leagueKey = getLeagueSettingKey(getSettingsLeagueVersion());
@@ -2151,7 +2148,7 @@ const LOCAL_ITEM_ICON_KEYS = {
 };
 
 function getLocalItemIconPath(itemName, poeVersion = 'poe1') {
-  // OCR keeps the casing it read ("Divine orb"), and prices match names case-insensitively, so icons do too.
+  // Prices match names case-insensitively, so icons do too.
   const wanted = String(itemName || '').trim().replace(/\s+/g, ' ').toLowerCase();
   const name = Object.keys(LOCAL_ITEM_ICON_KEYS).find((candidate) => candidate.toLowerCase() === wanted);
   const key = name ? LOCAL_ITEM_ICON_KEYS[name] : null;
@@ -2567,9 +2564,6 @@ function setupEventListeners() {
     elements.customFarmList?.addEventListener('click', handleCustomFarmListClick);
   }
 
-  // Loot
-  elements.scanScreenBtn.addEventListener('click', handleScanScreen);
-
   // Sessions filter
   elements.sessionFilter.addEventListener('change', loadSessions);
   if (elements.sessionVersionFilter) elements.sessionVersionFilter.addEventListener('change', renderSessionsList);
@@ -2779,7 +2773,8 @@ function setupIPCListeners() {
     const mapResult = await persistCompletedSessionMapResult(session);
     if (mapResult && typeof window.electronAPI.showMapResultOverlay === 'function') {
       try {
-        await window.electronAPI.showMapResultOverlay(mapResult);
+        // Only the card says loot is still to be counted: a kept result would say so for good.
+        await window.electronAPI.showMapResultOverlay({ ...mapResult, lootPending: Boolean(session?.lootPending) });
       } catch (error) {
         console.warn('Failed to show map result overlay', error);
       }
@@ -2794,6 +2789,20 @@ function setupIPCListeners() {
       durationSeconds: getCompletedSessionDurationSeconds(session || {})
     });
     // The journal and the map result are written by now, so the numbers need not wait out the coalescing timer.
+    await refreshTrackerData({ includeSessions: true, immediate: true });
+  });
+
+  // A finished map got its loot from the first inventory read after it: the result it showed is replaced.
+  window.electronAPI.onSessionLootUpdated(async (session) => {
+    const mapResult = await persistCompletedSessionMapResult(session);
+    if (mapResult) {
+      try {
+        await window.electronAPI.showMapResultOverlay(mapResult);
+      } catch (error) {
+        console.warn('Failed to show map result overlay', error);
+      }
+      showMapResultToast(mapResult);
+    }
     await refreshTrackerData({ includeSessions: true, immediate: true });
   });
 
@@ -2879,12 +2888,10 @@ function setupIPCListeners() {
     navigateTo(page);
   });
 
-  // The tray's Add Loot and Start New Map bring this window to the front, so their outcome shows here.
+  // The tray's Start New Map brings this window to the front, so its outcome shows here.
   if (window.electronAPI.onTrayAction) {
     window.electronAPI.onTrayAction((action) => {
-      if (action === 'scanLoot' && !elements.scanScreenBtn.disabled) {
-        handleScanScreen();
-      } else if (action === 'startMapFailed') {
+      if (action === 'startMapFailed') {
         showToast(window.t('toast.mapStartFailed'), window.t('toast.tryAgain'), 'error');
       } else if (action === 'startMapJournalUnreadable') {
         showToast(window.t('toast.mapStartFailed'), window.t('errors.journalUnreadable'), 'error');
@@ -3855,6 +3862,7 @@ function createCompletedSessionMapResult(session = {}) {
     topOutputs: getScannedTopOutputs(lootEntries),
     lootItemCount: lootEntries.reduce((sum, loot) => sum + (parseInt(loot.quantity || 1, 10) || 1), 0),
     noLoot: Boolean(session.noLoot),
+    lootMapCount: session.lootMapCount > 1 ? session.lootMapCount : undefined,
     // The run's Divine and Mirror rates, as stash-diff results keep them: the overlay tiers the run by them.
     profitCurrencyRates: typeof getProfitCurrencyRates === 'function'
       ? getProfitCurrencyRates(poeVersion, league)
@@ -3863,8 +3871,8 @@ function createCompletedSessionMapResult(session = {}) {
   };
 }
 
-// An OCR run's most valuable drops, grouped by item, in the shape stash-diff results use. OCR keeps the casing it
-// read, so "Divine orb" and "Divine Orb" are one item, named as first seen.
+// A run's most valuable drops, grouped by item, in the shape stash-diff results use. Names differ in case between
+// sources, so "Divine orb" and "Divine Orb" are one item, named as first seen.
 function getScannedTopOutputs(lootEntries = []) {
   const byItem = new Map();
   for (const loot of lootEntries) {
@@ -4910,7 +4918,6 @@ function updateActiveSessionUI() {
   }
   elements.startSessionBtn.classList.toggle('hidden', Boolean(session));
   elements.endSessionBtn.classList.toggle('hidden', !session);
-  elements.scanScreenBtn?.classList.toggle('hidden', !session);
   if (elements.sessionBadge) {
     elements.sessionBadge.textContent = window.t(session ? 'dashboard.active' : 'dashboard.waiting');
     elements.sessionBadge.classList.toggle('is-active', Boolean(session));
@@ -5003,43 +5010,6 @@ function updateActiveSessionClock() {
   const elapsed = elements.activeSession?.querySelector?.('[data-live="elapsed"]');
   if (elapsed && state.currentSession) {
     elapsed.textContent = formatElapsedClock(getLiveDuration(state.currentSession));
-  }
-}
-
-/**
- * Ekrani tara
- */
-async function handleScanScreen() {
-  if (!state.currentSession) {
-    showToast(window.t('dashboard.noActiveMap'), window.t('toast.noSession'), 'warning');
-    return;
-  }
-
-  // Only the label changes; setting the button's textContent would drop its icon.
-  elements.scanScreenBtn.disabled = true;
-  elements.scanScreenLabel.textContent = window.t('dashboard.scanning');
-
-  try {
-    // Main answers with the number of items it added, or why it added none.
-    const result = await window.electronAPI.scanScreen();
-    if (result?.count > 0) {
-      const countKey = result.count === 1 ? 'toast.lootAddedBodyOne' : 'toast.lootAddedBody';
-      showToast(window.t(countKey, { count: result.count }), '', 'success');
-    } else if (result?.reason === 'noItems') {
-      showToast(window.t('toast.scanNothingFound'), window.t('toast.scanNothingFoundHint'), 'warning');
-    } else if (result?.reason === 'noSession') {
-      showToast(window.t('dashboard.noActiveMap'), window.t('toast.noSession'), 'warning');
-    } else if (result?.reason === 'journalUnreadable') {
-      showToast(window.t('toast.scanFailed'), window.t('errors.journalUnreadable'), 'error');
-      void loadJournalStatus();
-    } else {
-      showToast(window.t('toast.scanFailed'), window.t('toast.tryAgain'), 'error');
-    }
-  } catch (error) {
-    showToast(window.t('toast.scanFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
-  } finally {
-    elements.scanScreenBtn.disabled = false;
-    elements.scanScreenLabel.textContent = window.t('dashboard.scanScreen');
   }
 }
 
@@ -5617,6 +5587,7 @@ async function handleSaveSettings() {
     poePath: elements.poePath.value,
     autoStartSession: elements.autoStartSession.checked,
     overlayEnabled: elements.overlayEnabled ? elements.overlayEnabled.checked : false,
+    inventoryReadEnabled: elements.inventoryReadEnabled ? elements.inventoryReadEnabled.checked : true,
     notifications: elements.enableNotifications.checked,
     soundNotifications: elements.soundNotifications ? elements.soundNotifications.checked : false,
     language: elements.globalLanguage ? elements.globalLanguage.value : 'en',
@@ -6427,7 +6398,7 @@ async function hydratePoe1StashSnapshotsForSession(session = state.currentSessio
   }
 }
 
-// Without stash totals the journal values the session from the loot recorded in it (OCR scan or manual), and
+// Without stash totals the journal values the session from the loot recorded in it (read from the inventory or manual), and
 // the session-ended event records and shows that result. A failed end is said here with main's reason, because main's
 // OS notice is only for a window in the background.
 async function completePoe1SessionWithoutStashProfit(session = state.currentSession, error = null) {

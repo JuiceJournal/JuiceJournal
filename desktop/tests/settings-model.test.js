@@ -67,6 +67,7 @@ test('reset defaults does not mutate authenticated header state', () => {
     poePath: '',
     autoStartSession: true,
     overlayEnabled: false,
+    inventoryReadEnabled: true,
     notifications: true,
     soundNotifications: false,
     language: 'en',

@@ -335,8 +335,7 @@ test('desktop notice keys have their own ASCII Turkish strings', () => {
     'stash.syncPricesFirst', 'stash.syncPricesFirstHint', 'stash.snapshotTakenTitle', 'stash.snapshotTaken',
     'stash.snapshotFailed', 'stash.profitFailed', 'stash.baselineFailedTitle', 'stash.baselineFailed', 'stash.readingStash',
     'stash.staleSnapshotTitle', 'stash.staleSnapshot', 'stash.completedWithoutStashTitle', 'stash.completedWithoutStash',
-    'currency.syncRestrictedTitle', 'currency.syncRestricted', 'currency.syncFailed',
-    'toast.noSession', 'toast.scanNothingFound', 'toast.scanNothingFoundHint', 'toast.scanFailed'
+    'currency.syncRestrictedTitle', 'currency.syncRestricted', 'currency.syncFailed'
   ];
 
   for (const key of newKeys) {
@@ -592,11 +591,28 @@ test('main process dialogs use keys that exist in en and tr', () => {
   for (const [, key] of mainSource.matchAll(/[^\w.]t\(\s*'([A-Za-z0-9]+)'/g)) {
     assert.ok(translations.en[key], `Missing main process string for ${key}`);
   }
-  // Keys are never built at runtime: the only t( without a string literal is the definition.
+  // Keys are never built at runtime, with one exception: the definition and the inventory status note, whose kinds
+  // are checked below against the kinds the inventory watcher can report.
   assert.deepEqual(
     [...mainSource.matchAll(/[^\w.]t\(\s*[^'\s]/g)].map((match) => mainSource.slice(match.index + 1, match.index + 19)),
-    ['t(key, values = {}']
+    ['t(key, values = {}', 't(`inventoryStatus']
   );
+  assert.match(mainSource, /t\(`inventoryStatus_\$\{kind\}`\)/);
+  const watcherSource = read(path.join(desktopDir, 'src', 'modules', 'inventoryWatcher.js'));
+  const reportedKinds = [...new Set([...watcherSource.matchAll(/onStatus\('([A-Za-z]+)'\)/g)].map((match) => match[1]))].sort();
+  assert.deepEqual(reportedKinds, ['covered', 'failed', 'inMap', 'noBaseline', 'noGain', 'notOpen', 'notReady', 'reading', 'resolution', 'saved', 'unsupported']);
+  for (const kind of reportedKinds) {
+    const key = `inventoryStatus_${kind}`;
+    assert.ok(translations.en[key], `Missing en main process string for ${key}`);
+    assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
+    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
+  }
+  assert.deepEqual(
+    enKeys.filter((name) => name.startsWith('inventoryStatus_')).sort(),
+    [...reportedKinds, 'saveFailed'].map((kind) => `inventoryStatus_${kind}`).sort()
+  );
+  assert.ok(translations.en.inventoryStatusTitle);
+  assert.notEqual(translations.tr.inventoryStatusTitle, translations.en.inventoryStatusTitle);
   for (const key of enKeys.filter((name) => name.startsWith('data'))) {
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
     assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
@@ -616,9 +632,16 @@ test('main process dialogs use keys that exist in en and tr', () => {
     assert.equal(translations.en[key], undefined, `en still defines ${key}`);
     assert.equal(translations.tr[key], undefined, `tr still defines ${key}`);
   }
+  // The screen scan is gone with its tray item and notices.
   for (const key of [
-    'scanNoMapTitle', 'noActiveSession', 'scanFailedTitle', 'screenCaptureFailed', 'scanNothingTitle', 'scanNoItems',
-    'lootScanFailed', 'sessionStartFailed', 'sessionEndFailed', 'notificationTryAgain', 'mapProfitBody', 'mapLossBody',
+    'trayAddLoot', 'notificationLootAdded', 'lootAddedBody', 'scanNoMapTitle', 'noActiveSession', 'scanFailedTitle',
+    'screenCaptureFailed', 'scanNothingTitle', 'scanNoItems', 'lootScanFailed'
+  ]) {
+    assert.equal(translations.en[key], undefined, `en still defines ${key}`);
+    assert.equal(translations.tr[key], undefined, `tr still defines ${key}`);
+  }
+  for (const key of [
+    'sessionStartFailed', 'sessionEndFailed', 'notificationTryAgain', 'mapProfitBody', 'mapLossBody',
     'mapDuration', 'mapDurationSeconds', 'mapNoLootBody', 'promptMessage', 'promptDetail', 'promptEndConfirm',
     'promptEndMessage', 'promptEndDetail', 'journalUnreadableBody'
   ]) {

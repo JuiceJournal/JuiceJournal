@@ -251,10 +251,12 @@
       result.noLoot ? null : createProfitValue(result.netProfit, rates, poeVersion),
       getFarmTypeId(result.farmTypeId || result.farmType)
     );
+    var lootLine = topOutput
+      ? (topOutput.label || '') + ' ' + formatSignedProfit(topOutput.valueDelta, rates)
+      : (itemCount ? root.t(itemCount === 1 ? 'overlay.itemScanned' : 'overlay.itemsScanned', { count: itemCount }) : root.t(result.lootPending ? 'overlay.openInventoryForLoot' : 'overlay.noLootScanned'));
+    var lootMapCount = parseInt(result.lootMapCount, 10) || 0;
     setSecondary(
-      topOutput
-        ? (topOutput.label || '') + ' ' + formatSignedProfit(topOutput.valueDelta, rates)
-        : (itemCount ? root.t(itemCount === 1 ? 'overlay.itemScanned' : 'overlay.itemsScanned', { count: itemCount }) : root.t('overlay.noLootScanned')),
+      lootMapCount > 1 ? lootLine + ' · ' + root.t('overlay.lootFromMaps', { count: lootMapCount }) : lootLine,
       localIcon || cachedIconSources[iconUrl]
     );
     if (iconUrl) {
@@ -270,6 +272,14 @@
     if (!model || typeof model.getProfitTier !== 'function' || result.profitUnavailable || result.noLoot) return '';
     var rates = result.profitCurrencyRates || result.currencyRates || (state.mapResult && state.mapResult.profitCurrencyRates) || {};
     return model.getProfitTier(result.netProfit, rates);
+  }
+
+  /* ── Mode: Inventory Status ── */
+  function renderInventoryStatusMode(state) {
+    setText(el.kickerLabel, root.t('overlay.inventory'));
+    setPrimary(state.primaryLine || '');
+    setSecondary(state.secondaryLine || '');
+    setText(el.meta, '');
   }
 
   /* ── Mode: Start Map Prompt ── */
@@ -401,6 +411,8 @@
       renderStartMapPrompt(state);
     } else if (mode === 'character-prompt') {
       renderCharacterPrompt(state);
+    } else if (mode === 'inventory-status') {
+      renderInventoryStatusMode(state);
     } else {
       renderRuntimeMode(state);
     }

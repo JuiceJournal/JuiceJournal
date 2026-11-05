@@ -334,9 +334,9 @@ test('tray smoke: Start New Map keeps the running map on Cancel and ends it, wit
 
     await answerNextDialog(0);
     await clickTrayItem(electronApp, 'Start New Map');
-    await expect(page.locator('.toast--result .toast-message')).toContainText('No loot scanned');
+    await expect(page.locator('.toast--result .toast-message')).toContainText('No loot counted');
     await expect(page.locator('.toast--result .toast-value')).toHaveCount(0);
-    await expect(overlay.locator('[data-overlay-secondary]')).toHaveText('No loot scanned');
+    await expect(overlay.locator('[data-overlay-secondary]')).toHaveText('No loot counted');
     await expect(overlay.locator('.jj-value')).toHaveCount(0);
     await expect.poll(sessionStatuses).toEqual(['active', 'completed']);
     await expect(page.locator('#end-session-btn')).toBeVisible();

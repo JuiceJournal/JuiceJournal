@@ -349,7 +349,7 @@ class PriceService {
    * @param {boolean} [options.full] - Sync ALL types (slow, many API calls)
    */
   async syncPrices(league, options = {}) {
-    // Filled apart and swapped in at the end, so readers such as OCR pricing never see a half-filled list.
+    // Filled apart and swapped in at the end, so readers such as inventory loot pricing never see a half-filled list.
     const prices = new Map();
     const syncedTypes = new Set();
     const generation = this.cacheGeneration;
@@ -677,6 +677,15 @@ class PriceService {
 
     const entry = this.priceMap.get(key);
     return entry?.chaosValue || 0;
+  }
+
+  listItems() {
+    return [...this.priceMap.values()].map(({ name, icon }) => ({ name, icon }));
+  }
+
+  // The journal's item type for a priced item.
+  getItemType(itemName) {
+    return NINJA_ITEM_TYPES[this.getPriceInfo(itemName)?.category] || 'other';
   }
 
   /**

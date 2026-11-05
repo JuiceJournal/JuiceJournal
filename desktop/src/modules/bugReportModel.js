@@ -392,7 +392,7 @@ function buildBugReportText({ generatedAt, app, os, settings, signedIn, sessionA
     `Default leagues: PoE1 ${formatLeague(settings.defaultLeaguePoe1)}, PoE2 ${formatLeague(settings.defaultLeaguePoe2)}`,
     `Online features: ${onOff(settings.onlineEnabled)}, custom server: ${yesNo(settings.customServer)}`,
     `Client.txt found: ${yesNo(settings.clientTxtFound)}`,
-    `Scan hotkey: ${settings.scanHotkey}`,
+    `Read inventory hotkey: ${settings.scanHotkey}`,
     `Notifications: ${onOff(settings.notifications)}, sound: ${onOff(settings.soundNotifications)}, `
       + `auto-start session: ${onOff(settings.autoStartSession)}`,
     `Signed in (local profile): ${yesNo(signedIn)}`,

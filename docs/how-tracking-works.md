@@ -1,6 +1,6 @@
 # How tracking works
 
-Juice Journal tracks your farming from the game's log file, the official Path of Exile API and poe.ninja prices. It does not inject into the game, hook it or read its memory. Apart from the log file, it only looks up the game's process and window (to find the log file and place the overlay), checks during a session which window is in front (to hold the OCR hotkeys only while the game is) and, when you press an OCR hotkey, takes a screenshot of your screen.
+Juice Journal tracks your farming from the game's log file, the official Path of Exile API and poe.ninja prices. It does not inject into the game, hook it or read its memory. Apart from the log file, it only looks up the game's process and window (to find the log file and place the overlay), checks which window is in front (to hold the inventory read hotkeys only while the game is) and reads a small part of your screen to count your inventory (see [Loot: your inventory](#loot-your-inventory)).
 
 ## Maps and sessions: `Client.txt`
 
@@ -32,14 +32,25 @@ Sessions and their loot entries are written to a journal file per signed-in prof
 
 Settings, map results (per profile) and the cached character list are kept in `%APPDATA%\Juice Journal\config.json`. Nothing in the journal is uploaded anywhere. Settings → Data shows the `%APPDATA%\Juice Journal\` folder and opens it in File Explorer. **Delete everything** there removes every profile's journal, the map results, the settings except the language, the saved sign-ins, the logs and the caches from this PC and restarts the app; runs you shared to an online server stay there.
 
+## Loot: your inventory
+
+Experimental. For now it works for Path of Exile 2 only, because the PoE1 inventory layout has not been measured, and only for a game window 1440 pixels tall, checked on real screenshots at 2560x1440.
+
+- Open your inventory before a map and again after it. The app reads it by itself, or you press F9 (or Ctrl+Shift+L). The loot of a map is what your inventory gained between the two reads.
+- Only priced stackable items count, not gear.
+- While automatic reading is on (Settings → Path of Exile), the app reads a small part of the screen when the game is in front and you are outside a map. It does not read the game's memory or send input to it.
+- If more than one map passes without a read, the whole gain goes to the last map and its result says how many maps it covers.
+- A read is skipped while a tooltip covers your items. Anything the app cannot read for sure counts as no gain, so the total can come out low but should not come out high.
+- Nothing from the screen is saved or sent. The item counts of your last read stay in memory until you close the app, so after a restart open your inventory before the next map, or that map is not counted.
+
 ## Prices: poe.ninja
 
-Item values come from [poe.ninja](https://poe.ninja). The app asks for prices by league and item category only. Prices for a session's game and league are loaded when the session starts (or at the first OCR scan after a restart) and kept in memory until you switch game or league or restart the app. An OCR scan waits up to 5 seconds for them; loot without a price counts as 0, and if poe.ninja could not be reached the app tries again after 5 minutes. For PoE2 the app loads only poe.ninja's currency exchange prices, so other PoE2 items are valued at 0. Item icons are downloaded from `web.poecdn.com` the first time they are shown and cached on disk (up to 64 MB).
+Item values come from [poe.ninja](https://poe.ninja). The app asks for prices by league and item category only. Prices for a session's game and league are loaded when the session starts (or when the first inventory loot is counted after a restart) and kept in memory until you switch game or league or restart the app. Counting inventory loot waits up to 5 seconds for them; loot without a price counts as 0, and if poe.ninja could not be reached the app tries again after 5 minutes. For PoE2 the app loads only poe.ninja's currency exchange prices, so other PoE2 items are valued at 0. Item icons are downloaded from `web.poecdn.com` the first time they are shown and cached on disk (up to 64 MB).
 
 ## Profit
 
-- **Path of Exile 1:** the intended source is a stash comparison: snapshots of your stash before and after a session. Snapshots need the `account:stashes` API scope, and the built-in sign-in only asks for `account:characters`, so the stash tracker is turned off and the app sends no stash requests. Profit is the value of the loot the experimental OCR scan adds to the session.
-- **Path of Exile 2:** GGG offers no stash API for PoE2. Profit is the value of the loot the OCR scan adds to the session, priced from poe.ninja's currency exchange (see [Prices](#prices-poeninja)).
+- **Path of Exile 1:** the intended source is a stash comparison: snapshots of your stash before and after a session. Snapshots need the `account:stashes` API scope, and the built-in sign-in only asks for `account:characters`, so the stash tracker is turned off and the app sends no stash requests. Inventory reading does not cover PoE1 yet, so PoE1 maps have no loot source for now.
+- **Path of Exile 2:** GGG offers no stash API for PoE2. Profit is the value of the loot counted from your inventory after the map, priced from poe.ninja's currency exchange (see [Prices](#prices-poeninja)).
 
 The session keeps this profit however it ends: as you leave the map, with the End button, or when you quit the app. Each completed session is added to your map results and, if the overlay is on, shown as a result card in the overlay (not while the app is quitting).
 

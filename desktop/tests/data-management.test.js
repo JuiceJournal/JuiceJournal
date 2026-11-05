@@ -1158,6 +1158,7 @@ test('after Clear logs, the next read of an unreadable journal is logged again',
   assert.deepEqual(warnings(), [[UNREADABLE_WARNING], [UNREADABLE_WARNING]]);
 });
 
+// ocr-cache is left by older installs, which read loot with OCR.
 const DELETED_FOLDERS = ['profiles', 'icon-cache', 'price-snapshots', 'ocr-cache', 'logs', 'Partitions'];
 // No maxRetries: rm repeats those at every folder level, so main tries the whole folder again instead.
 const RM_OPTIONS = { recursive: true, force: true };
@@ -1181,7 +1182,7 @@ const DELETE_ALL_EVENTS = [
   'logParser.stop',
   'gameDetector.stop',
   'handleLogout',
-  'ocr.terminate',
+  'priceSnapshots.stop',
   ...DELETED_FOLDERS.map((folder) => `rm ${folder}`),
   'store.clear',
   'store.set language',
@@ -1206,7 +1207,7 @@ function loadDeleteAll(t, { functions = [], settings = {}, overrides = {} } = {}
   const state = {
     userDataPath: userData,
     rm: (target, options) => fs.promises.rm(target, options),
-    terminate: async () => { },
+    stopPriceSnapshots: async () => { },
     clearCache: async () => { },
     clearStorageData: async () => { }
   };
@@ -1300,11 +1301,12 @@ function loadDeleteAll(t, { functions = [], settings = {}, overrides = {} } = {}
       },
       logParser,
       gameDetector: { stop: record('gameDetector.stop'), start: record('gameDetector.start') },
-      ocrScanner: {
-        terminate: () => {
-          events.push('ocr.terminate');
-          return state.terminate();
-        }
+      priceSnapshots: {
+        stop: () => {
+          events.push('priceSnapshots.stop');
+          return state.stopPriceSnapshots();
+        },
+        resume() {}
       },
       setupLogParser: record('setupLogParser'),
       handleLogout: record('handleLogout'),
@@ -1382,15 +1384,15 @@ test('Delete everything runs as the one data action and answers busy meanwhile',
 test('Delete everything stops the writers and signs out before its first wait, then deletes, resets and restarts', async (t) => {
   const { context, events, spies, state, calls, errorLogState } = loadDeleteAll(t);
   errorLogState.recent.set('main|error|first failure', { at: Date.now(), repeats: 2 });
-  let finishTerminate;
-  state.terminate = () => new Promise((resolve) => {
-    finishTerminate = resolve;
+  let finishStop;
+  state.stopPriceSnapshots = () => new Promise((resolve) => {
+    finishStop = resolve;
   });
 
   const deleting = context.deleteAllLocalData();
   // Nothing awaited yet: a quit or a tray action from here on finds no run to end.
-  assert.deepEqual(events, DELETE_ALL_EVENTS.slice(0, DELETE_ALL_EVENTS.indexOf('ocr.terminate') + 1));
-  finishTerminate();
+  assert.deepEqual(events, DELETE_ALL_EVENTS.slice(0, DELETE_ALL_EVENTS.indexOf('priceSnapshots.stop') + 1));
+  finishStop();
   assert.deepEqual(plain(await deleting), { deleted: true });
 
   assert.deepEqual(events, DELETE_ALL_EVENTS);
@@ -1742,7 +1744,7 @@ test('a failed delete answers with its steps when the log parser cannot start, a
   const parserRunning = loadDeleteAll(t);
   parserRunning.state.clearStorageData = failBrowserData;
   // A game check that was already under way started a parser again after the stop.
-  parserRunning.state.terminate = async () => {
+  parserRunning.state.stopPriceSnapshots = async () => {
     parserRunning.logParser.isRunning = true;
   };
   assert.deepEqual(plain(await parserRunning.context.deleteAllLocalData()), { deleted: false, reason: 'failed', failed: ['browserData'] });

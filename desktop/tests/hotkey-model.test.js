@@ -100,22 +100,23 @@ test('hotkey model formats accelerators for human-friendly display', () => {
   );
 });
 
-test('hotkey model enables the OCR hotkeys only during a session with the game window in front', () => {
+test('hotkey model holds the read hotkeys only while signed in with the game window in front', () => {
   const shouldEnableScanHotkeys = getHotkeyModelExport('shouldEnableScanHotkeys');
   const gameProcessIds = [4120, 7788];
 
-  assert.equal(shouldEnableScanHotkeys({ hasActiveSession: true, foregroundProcessId: 7788, gameProcessIds }), true);
-  assert.equal(shouldEnableScanHotkeys({ hasActiveSession: false, foregroundProcessId: 7788, gameProcessIds }), false);
-  assert.equal(shouldEnableScanHotkeys({ hasActiveSession: true, foregroundProcessId: 900, gameProcessIds }), false);
-  assert.equal(shouldEnableScanHotkeys({ hasActiveSession: true, foregroundProcessId: 0, gameProcessIds }), false);
-  assert.equal(shouldEnableScanHotkeys({ hasActiveSession: true, foregroundProcessId: 7788, gameProcessIds: [] }), false);
-  assert.equal(shouldEnableScanHotkeys({ hasActiveSession: true, foregroundProcessId: 7788, gameProcessIds: ['7788'] }), true);
+  assert.equal(shouldEnableScanHotkeys({ enabled: true, foregroundProcessId: 7788, gameProcessIds }), true);
+  assert.equal(shouldEnableScanHotkeys({ enabled: false, foregroundProcessId: 7788, gameProcessIds }), false);
+  assert.equal(shouldEnableScanHotkeys({ enabled: true, foregroundProcessId: 900, gameProcessIds }), false);
+  assert.equal(shouldEnableScanHotkeys({ enabled: true, foregroundProcessId: 0, gameProcessIds }), false);
+  assert.equal(shouldEnableScanHotkeys({ enabled: true, foregroundProcessId: 7788, gameProcessIds: [] }), false);
+  assert.equal(shouldEnableScanHotkeys({ enabled: true, foregroundProcessId: 7788, gameProcessIds: ['7788'] }), true);
 });
 
-test('hotkey model falls back to the session alone when the foreground window cannot be read', () => {
+test('hotkey model releases the read hotkeys when the foreground window cannot be read', () => {
   const shouldEnableScanHotkeys = getHotkeyModelExport('shouldEnableScanHotkeys');
 
-  assert.equal(shouldEnableScanHotkeys({ hasActiveSession: true, foregroundProcessId: null, gameProcessIds: [] }), true);
-  assert.equal(shouldEnableScanHotkeys({ hasActiveSession: false, foregroundProcessId: null, gameProcessIds: [] }), false);
+  assert.equal(shouldEnableScanHotkeys({ enabled: true, foregroundProcessId: null, gameProcessIds: [4120] }), false);
+  assert.equal(shouldEnableScanHotkeys({ enabled: true, foregroundProcessId: undefined, gameProcessIds: [4120] }), false);
+  assert.equal(shouldEnableScanHotkeys({ enabled: false, foregroundProcessId: null, gameProcessIds: [] }), false);
   assert.equal(shouldEnableScanHotkeys(), false);
 });

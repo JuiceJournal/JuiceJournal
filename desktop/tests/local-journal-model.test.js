@@ -98,6 +98,36 @@ test('addLoot stores entries newest first and recalculates totals', () => {
   assert.equal(getSession(second.journal, 'session-1').totalLootChaos, 157.5);
 });
 
+test('addLoot accepts the inventory source and still reads the older ones, and falls back to manual for others', () => {
+  const { journal } = startedJournal();
+  const { lootEntries } = addLoot(journal, 'session-1', ['inventory', 'ocr', 'api', 'manual', 'made-up'].map((source, index) => ({
+    itemName: `Item ${index}`,
+    source
+  })), { createId: idFactory('loot'), now: NOW });
+
+  assert.deepEqual(lootEntries.map((loot) => loot.source), ['inventory', 'ocr', 'api', 'manual', 'manual']);
+});
+
+test('addLoot on an ended session adds the loot, recalculates the totals and keeps it completed', () => {
+  const { journal } = startedJournal({ costChaos: 10 });
+  const ended = endSession(journal, 'session-1', { endedAt: '2026-10-21T11:55:00.000Z' }, { now: NOW });
+  assert.equal(ended.session.status, 'completed');
+  assert.deepEqual([ended.session.totalLootChaos, ended.session.profitChaos], [0, -10]);
+
+  const counted = addLoot(ended.journal, 'session-1', [
+    { itemName: 'Divine Orb', itemType: 'currency', quantity: 1, chaosValue: 150, source: 'inventory' },
+    { itemName: 'Exalted Orb', itemType: 'currency', quantity: 2, chaosValue: 12, source: 'inventory' }
+  ], { createId: idFactory('loot'), now: new Date('2026-10-21T12:30:00.000Z') });
+
+  assert.equal(counted.session.status, 'completed');
+  assert.equal(counted.session.endedAt, '2026-10-21T11:55:00.000Z');
+  assert.equal(counted.session.durationSec, ended.session.durationSec);
+  assert.equal(counted.session.totalLootChaos, 174);
+  assert.equal(counted.session.profitChaos, 164);
+  assert.equal(counted.session.updatedAt, '2026-10-21T12:30:00.000Z');
+  assert.equal(getSession(counted.journal, 'session-1').totalLootChaos, 174);
+});
+
 test('addLoot keeps the item types of the PoE 2 Currency tabs', () => {
   const { journal } = startedJournal();
   const itemTypes = ['omen', 'catalyst', 'abyssal_bone', 'liquid_emotion', 'verisium'];

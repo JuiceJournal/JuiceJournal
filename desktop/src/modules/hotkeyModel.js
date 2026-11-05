@@ -184,16 +184,11 @@
     };
   }
 
-  // The OCR hotkeys are only held while a session runs and the game window has focus, so other apps and
-  // the game itself get those keys the rest of the time. A null foreground pid means it could not be read;
-  // the session alone decides then.
-  function shouldEnableScanHotkeys({ hasActiveSession, foregroundProcessId, gameProcessIds = [] } = {}) {
-    if (!hasActiveSession) {
+  // The read hotkeys are only held while the game window has focus, so other apps get those keys the rest of the
+  // time. A foreground pid that could not be read means the game cannot be told to be in front.
+  function shouldEnableScanHotkeys({ enabled, foregroundProcessId, gameProcessIds = [] } = {}) {
+    if (!enabled || foregroundProcessId === null || foregroundProcessId === undefined) {
       return false;
-    }
-
-    if (foregroundProcessId === null || foregroundProcessId === undefined) {
-      return true;
     }
 
     return gameProcessIds.some((processId) => Number(processId) === foregroundProcessId);

@@ -32,7 +32,7 @@ const VALID_JOURNAL = JSON.stringify({
 const SEEDED_FOLDERS = ['profiles', 'icon-cache', 'ocr-cache', 'logs', 'Partitions'];
 // conf's clear() writes back only the defaults that are not null, and main sets the language again.
 const KEPT_CONFIG_KEYS = [
-  'apiUrl', 'auditTrail', 'autoStartSession', 'language', 'localProfiles', 'notifications', 'onlineEnabled',
+  'apiUrl', 'auditTrail', 'autoStartSession', 'inventoryReadEnabled', 'language', 'localProfiles', 'notifications', 'onlineEnabled',
   'overlayEnabled', 'poePath', 'poeVersion', 'scanHotkey', 'soundNotifications', 'stashScanHotkey', 'strategyPresets'
 ];
 // The sign-ins, the active profile and every profile's map results and character list.

@@ -1,7 +1,8 @@
 /**
  * Win32 Probe Module
  * Polling-only Windows queries used for game detection: the process list, a process's image path, the
- * client rectangle of its game window and which process owns the foreground window. No hooks, no
+ * client rectangle of its game window, which process owns the foreground window and the pixels of a small screen
+ * area, read the way a screenshot tool reads them. No hooks, no
  * injection, no keyboard or mouse input and no access to another process's
  * memory; the only process handle opened is PROCESS_QUERY_LIMITED_INFORMATION, closed right away.
  *
@@ -18,6 +19,9 @@ const PROCESSENTRY32W_EXE_OFFSET = 44;
 const MAX_PATH_CHARS = 260;
 const MAX_IMAGE_PATH_CHARS = 32768;
 const MAX_WINDOWS_PER_CLASS = 64;
+const SRCCOPY = 0x00CC0020;
+const DIB_RGB_COLORS = 0;
+const BITMAPINFOHEADER_SIZE = 40;
 
 let api = null;
 let loadError = null;
@@ -37,6 +41,7 @@ function loadApi() {
     const koffi = require('koffi');
     const user32 = koffi.load('user32.dll');
     const kernel32 = koffi.load('kernel32.dll');
+    const gdi32 = koffi.load('gdi32.dll');
     koffi.struct('JJ_RECT', { left: 'int32_t', top: 'int32_t', right: 'int32_t', bottom: 'int32_t' });
     koffi.struct('JJ_POINT', { x: 'int32_t', y: 'int32_t' });
 
@@ -54,7 +59,16 @@ function loadApi() {
       IsWindowVisible: user32.func('int32_t __stdcall IsWindowVisible(intptr_t hwnd)'),
       IsIconic: user32.func('int32_t __stdcall IsIconic(intptr_t hwnd)'),
       GetClientRect: user32.func('int32_t __stdcall GetClientRect(intptr_t hwnd, _Out_ JJ_RECT *rect)'),
-      ClientToScreen: user32.func('int32_t __stdcall ClientToScreen(intptr_t hwnd, _Inout_ JJ_POINT *point)')
+      ClientToScreen: user32.func('int32_t __stdcall ClientToScreen(intptr_t hwnd, _Inout_ JJ_POINT *point)'),
+      GetDC: user32.func('intptr_t __stdcall GetDC(intptr_t hwnd)'),
+      ReleaseDC: user32.func('int32_t __stdcall ReleaseDC(intptr_t hwnd, intptr_t dc)'),
+      CreateCompatibleDC: gdi32.func('intptr_t __stdcall CreateCompatibleDC(intptr_t dc)'),
+      CreateCompatibleBitmap: gdi32.func('intptr_t __stdcall CreateCompatibleBitmap(intptr_t dc, int32_t width, int32_t height)'),
+      SelectObject: gdi32.func('intptr_t __stdcall SelectObject(intptr_t dc, intptr_t object)'),
+      DeleteObject: gdi32.func('int32_t __stdcall DeleteObject(intptr_t object)'),
+      DeleteDC: gdi32.func('int32_t __stdcall DeleteDC(intptr_t dc)'),
+      BitBlt: gdi32.func('int32_t __stdcall BitBlt(intptr_t target, int32_t x, int32_t y, int32_t width, int32_t height, intptr_t source, int32_t sourceX, int32_t sourceY, uint32_t operation)'),
+      GetDIBits: gdi32.func('int32_t __stdcall GetDIBits(intptr_t dc, intptr_t bitmap, uint32_t start, uint32_t lines, void *bits, void *info, uint32_t usage)')
     };
   } catch (error) {
     loadError = error;
@@ -196,7 +210,52 @@ function getForegroundProcessId() {
   return owner[0];
 }
 
+/**
+ * BGRA pixels of a screen area in screen pixels, top row first, or null when it cannot be read. Takes a few
+ * milliseconds, where a full capture of every monitor takes hundreds.
+ */
+function readScreenRegion(x, y, width, height) {
+  const win = loadApi();
+  if (!win) {
+    return null;
+  }
+
+  const screenDc = win.GetDC(0);
+  if (!screenDc) {
+    return null;
+  }
+
+  const memoryDc = win.CreateCompatibleDC(screenDc);
+  const bitmap = win.CreateCompatibleBitmap(screenDc, width, height);
+  try {
+    if (!memoryDc || !bitmap) {
+      return null;
+    }
+
+    const previous = win.SelectObject(memoryDc, bitmap);
+    const copied = win.BitBlt(memoryDc, 0, 0, width, height, screenDc, x, y, SRCCOPY);
+    win.SelectObject(memoryDc, previous);
+    if (!copied) {
+      return null;
+    }
+
+    const header = Buffer.alloc(BITMAPINFOHEADER_SIZE);
+    header.writeUInt32LE(BITMAPINFOHEADER_SIZE, 0);
+    header.writeInt32LE(width, 4);
+    header.writeInt32LE(-height, 8); // Negative height: top row first.
+    header.writeUInt16LE(1, 12);
+    header.writeUInt16LE(32, 14);
+    const pixels = Buffer.alloc(width * height * 4);
+    return win.GetDIBits(memoryDc, bitmap, 0, height, pixels, header, DIB_RGB_COLORS) === height ? pixels : null;
+  } finally {
+    if (bitmap) win.DeleteObject(bitmap);
+    if (memoryDc) win.DeleteDC(memoryDc);
+    win.ReleaseDC(0, screenDc);
+  }
+}
+
 module.exports = {
+  readScreenRegion,
   isAvailable,
   getLoadError,
   scanProcesses,

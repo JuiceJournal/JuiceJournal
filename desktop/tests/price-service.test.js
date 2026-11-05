@@ -69,6 +69,47 @@ test('poe1 exchange data is indexed with chaos and divine values', () => {
   assert.equal(service.getPriceInfo('Mirror of Kalandra').icon, 'https://web.poecdn.com/mirror.png');
 });
 
+test('price service lists its priced items with their icons and gives each its journal item type', () => {
+  const service = new PriceService();
+  service.setPoeVersion('poe1');
+  assert.deepEqual(service.listItems(), []);
+
+  service._indexCurrencyData({
+    core: { primary: 'chaos', rates: { divine: 1 / 300 } },
+    items: [
+      { id: 'divine', name: 'Divine Orb', image: '/divine.png' },
+      { id: 'mirror', name: 'Mirror of Kalandra', image: '/mirror.png' }
+    ],
+    lines: [
+      { id: 'divine', primaryValue: 300 },
+      { id: 'mirror', primaryValue: 360000 }
+    ]
+  }, 'Currency');
+
+  assert.deepEqual(
+    service.listItems().sort((left, right) => left.name.localeCompare(right.name)),
+    [
+      { name: 'Divine Orb', icon: 'https://web.poecdn.com/divine.png' },
+      { name: 'Mirror of Kalandra', icon: 'https://web.poecdn.com/mirror.png' }
+    ]
+  );
+  assert.equal(service.getItemType('Divine Orb'), 'currency');
+  // Names match the way prices do, ignoring case.
+  assert.equal(service.getItemType('divine orb'), 'currency');
+  assert.equal(service.getItemType('Not Priced'), 'other');
+  assert.equal(service.getItemType(''), 'other');
+});
+
+test('price service gives an item of another poe.ninja category that category as its journal item type', () => {
+  const service = new PriceService();
+  service.setPoeVersion('poe1');
+  service.priceMap.set('breach scarab', { name: 'Breach Scarab', category: 'scarab', chaosValue: 5, icon: null });
+  service.priceMap.set('mystery thing', { name: 'Mystery Thing', category: 'not-a-category', chaosValue: 1, icon: null });
+
+  assert.equal(service.getItemType('Breach Scarab'), 'scarab');
+  assert.equal(service.getItemType('Mystery Thing'), 'other');
+});
+
 test('poe1 currency indexing derives stable divine values from the current Divine Orb rate', () => {
   const service = new PriceService();
   service.setPoeVersion('poe1');

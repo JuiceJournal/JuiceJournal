@@ -154,6 +154,8 @@ function loadFunctions(functionNames, contextOverrides = {}) {
     console: {
       log() {}
     },
+    // Ending a map asks the inventory watcher whether it can count the map's loot; most tests have none.
+    ...(functionNames.includes('endCurrentSession') ? { inventoryWatcher: null } : {}),
     ...contextOverrides
   });
 
@@ -552,7 +554,7 @@ test('main map end notification names the map and reads the profit or loss with 
   assert.deepEqual(await endMap({ endedAt: '2026-05-06T11:59:00.000Z' }), [['Channel', 'mapNoLootBody']]);
 });
 
-test('main tells the window only when a map ended with nothing scanned or read from the stash', async () => {
+test('main tells the window only when a map ended with nothing counted or read from the stash', async () => {
   const endMap = async (options, lootEntries = []) => {
     const backend = createJournalBackend();
     const active = backend.start({ mapName: 'Channel', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-1');
@@ -576,7 +578,61 @@ test('main tells the window only when a map ended with nothing scanned or read f
   assert.equal(await endMap({}, [{ itemName: 'Unpriced Item', quantity: 1, chaosValue: 0 }]), undefined);
 });
 
-test('main map end notification keeps a profit of 0 when the map has scanned loot without a price', async () => {
+// endCurrentSession over a watcher stub; answers the session it sent to the window and the sessions the watcher saw.
+async function endMapWithWatcher({ canSettle, lootEntries = [], options = {}, watcher, automaticReading = true } = {}) {
+  const backend = createJournalBackend();
+  const active = backend.start({ mapName: 'Channel', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-1');
+  backend.journal.sessions[0].lootEntries = lootEntries;
+  const sent = [];
+  const seen = [];
+  const context = loadFunctions(['endCurrentSession'], {
+    ...backend.context,
+    currentSession: active,
+    inventoryWatcher: watcher === undefined ? {
+      sessionEnded(session) {
+        seen.push(session.id);
+        return canSettle;
+      }
+    } : watcher,
+    store: { get: (key) => (key === 'inventoryReadEnabled' ? automaticReading : undefined) },
+    appendAuditTrail() {},
+    showNotification() {},
+    t: (key) => key,
+    updateOverlayWindow() {},
+    mainWindow: { webContents: { send: (channel, session) => sent.push(session) } }
+  });
+  await context.endCurrentSession({ endedAt: '2026-05-06T12:05:30.000Z', ...options });
+  return { session: sent[0], seen };
+}
+
+test('main marks a no-loot map as waiting for its loot only when the inventory watcher can settle it', async () => {
+  const settled = await endMapWithWatcher({ canSettle: true });
+  assert.equal(settled.session.noLoot, true);
+  assert.equal(settled.session.lootPending, true);
+  assert.deepEqual(settled.seen, ['session-1']);
+
+  // The watcher cannot read this game or has no baseline: the map stays a plain no-loot result.
+  assert.equal((await endMapWithWatcher({ canSettle: false })).session.lootPending, false);
+  // No watcher at all.
+  assert.equal((await endMapWithWatcher({ watcher: null })).session.lootPending, false);
+  // A map that already has loot or a stash result is not waiting for anything.
+  const withLoot = await endMapWithWatcher({ canSettle: true, lootEntries: [{ itemName: 'Divine Orb', quantity: 1, chaosValue: 150 }] });
+  assert.equal(withLoot.session.lootPending, false);
+  const withStash = await endMapWithWatcher({ canSettle: true, options: { totalLootChaos: 0, profitChaos: 0 } });
+  assert.equal(withStash.session.lootPending, false);
+  // With automatic reading off, opening the inventory counts nothing, so the card must not say it does.
+  assert.equal((await endMapWithWatcher({ canSettle: true, automaticReading: false })).session.lootPending, false);
+});
+
+test('main does not wait for inventory loot while the app is shutting down', async () => {
+  const shutdown = await endMapWithWatcher({ canSettle: true, options: { shuttingDown: true } });
+
+  assert.equal(shutdown.session.noLoot, true);
+  assert.equal(shutdown.session.lootPending, false);
+  assert.deepEqual(shutdown.seen, []);
+});
+
+test('main map end notification keeps a profit of 0 when the map has counted loot without a price', async () => {
   const backend = createJournalBackend();
   const active = backend.start({ mapName: 'Channel', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-1');
   backend.journal.sessions[0].lootEntries = [{ itemName: 'Unpriced Item', quantity: 1, chaosValue: 0 }];
@@ -793,7 +849,7 @@ test('main shutdown finalizer keeps the loot recorded in a PoE1 session without 
   assert.equal(calls[0][1].id, `map-result-session-shutdown-3-${Date.parse('2026-05-06T12:04:00.000Z')}`);
 });
 
-// A price service whose queued sync loads `prices` (or nothing, or never finishes) for the OCR scan tests.
+// A price service whose queued sync loads `prices` (or nothing, or never finishes) for the inventory loot tests.
 function createFakePriceService({ prices = { 'Exalted Orb': 12 }, hang = false, fullySynced = true } = {}) {
   return {
     poeVersion: 'poe1',
@@ -808,7 +864,7 @@ function createFakePriceService({ prices = { 'Exalted Orb': 12 }, hang = false, 
       this.poeVersion = poeVersion;
       this.league = league;
       this.fullySynced = fullySynced;
-      this.prices = new Map(Object.entries(prices).map(([name, chaosValue]) => [name, { chaosValue }]));
+      this.prices = new Map(Object.entries(prices).map(([name, price]) => [name, typeof price === 'object' ? price : { chaosValue: price }]));
       return { itemCount: this.prices.size };
     },
     getStatus() {
@@ -816,11 +872,16 @@ function createFakePriceService({ prices = { 'Exalted Orb': 12 }, hang = false, 
     },
     getPriceInfo(itemName) {
       return this.prices.get(itemName) || null;
+    },
+    getItemType() {
+      return 'currency';
     }
   };
 }
 
-function loadOcrScan(backend, session, priceService, overrides = {}) {
+const EXALTED_GAIN = [{ name: 'Exalted Orb', quantity: 2 }];
+
+function loadInventoryLoot(backend, session, priceService, overrides = {}) {
   let lootId = 0;
   return loadFunctions([
     'normalizePositiveRate',
@@ -828,24 +889,15 @@ function loadOcrScan(backend, session, priceService, overrides = {}) {
     'withTimeout',
     'notifyPricesUpdated',
     'loadSessionPrices',
-    'addLootToCurrentSession',
-    'captureAndScan'
+    'addInventoryLoot'
   ], {
     ...backend.context,
-    currentSession: session,
     sessionPrices: null,
     priceService,
+    isOverlayEnabled: () => true,
     SESSION_PRICES_WAIT_MS: 20,
     SESSION_PRICES_RETRY_MS: 60_000,
     crypto: { randomUUID: () => `loot-${++lootId}` },
-    screen: { getPrimaryDisplay: () => ({ size: { width: 1920, height: 1080 } }) },
-    require: () => ({
-      desktopCapturer: { getSources: async () => [{ thumbnail: { toPNG: () => 'png' } }] }
-    }),
-    prepareOCRImage: (image) => image,
-    ocrScanner: { scanImage: async () => [{ itemName: 'Exalted Orb', quantity: 2, itemType: 'currency' }] },
-    showNotification() {},
-    t: (key) => key,
     mainWindow: null,
     console: { log() {}, warn() {} },
     setTimeout,
@@ -854,7 +906,7 @@ function loadOcrScan(backend, session, priceService, overrides = {}) {
   });
 }
 
-test('main prices OCR loot from poe.ninja for the session game and league', async () => {
+test('main prices inventory loot from poe.ninja for the session game and league', async () => {
   const backend = createJournalBackend();
   const session = backend.start({
     poeVersion: 'poe2',
@@ -863,84 +915,115 @@ test('main prices OCR loot from poe.ninja for the session game and league', asyn
   }, 'session-poe2');
   const priceService = createFakePriceService();
   const syncCalls = priceService.syncCalls;
-  const context = loadOcrScan(backend, session, priceService);
+  const context = loadInventoryLoot(backend, session, priceService);
 
-  await context.captureAndScan();
-  await context.captureAndScan();
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
 
-  // One full price load for the session's game and league, reused by the second scan.
+  // One full price load for the session's game and league, reused by the second read.
   assert.deepEqual(syncCalls, [['poe2', 'Fate of the Vaal', true]]);
   const stored = backend.journal.sessions[0];
   assert.deepEqual(stored.lootEntries.map((loot) => [loot.itemName, loot.chaosValue, loot.source]), [
-    ['Exalted Orb', 12, 'ocr'],
-    ['Exalted Orb', 12, 'ocr']
+    ['Exalted Orb', 12, 'inventory'],
+    ['Exalted Orb', 12, 'inventory']
   ]);
   assert.equal(stored.totalLootChaos, 48);
 });
 
-test('main OCR scan records loot unpriced when poe.ninja does not answer in time', async () => {
-  const backend = createJournalBackend();
-  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-slow');
-  const context = loadOcrScan(backend, session, createFakePriceService({ hang: true }));
+test('main inventory loot raises a notification only while the overlay cannot show it', async () => {
+  for (const overlayOn of [true, false]) {
+    const backend = createJournalBackend();
+    const session = backend.start({ mapName: 'Channel', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-notice');
+    const context = loadInventoryLoot(backend, session, createFakePriceService());
+    const notices = [];
+    context.isOverlayEnabled = () => overlayOn;
+    context.showNotification = (title, body) => notices.push([title, body]);
+    context.t = (key) => key;
 
-  await context.captureAndScan();
+    await context.addInventoryLoot(session.id, EXALTED_GAIN);
+
+    assert.equal(notices.length, overlayOn ? 0 : 1);
+    if (!overlayOn) assert.equal(notices[0][0], 'Channel');
+  }
+});
+
+test('main inventory loot is recorded unpriced rather than at another league\'s prices', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z', league: 'Standard' }, 'session-other-league');
+  const priceService = createFakePriceService({ hang: true });
+  priceService.league = 'Some Other League';
+  const context = loadInventoryLoot(backend, session, priceService);
+
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
 
   assert.deepEqual(backend.journal.sessions[0].lootEntries.map((loot) => [loot.itemName, loot.chaosValue]), [
     ['Exalted Orb', 0]
   ]);
 });
 
-test('main OCR scan waits before asking poe.ninja again after a load found no prices', async () => {
+test('main inventory loot is recorded unpriced when poe.ninja does not answer in time', async () => {
+  const backend = createJournalBackend();
+  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-slow');
+  const context = loadInventoryLoot(backend, session, createFakePriceService({ hang: true }));
+
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
+
+  assert.deepEqual(backend.journal.sessions[0].lootEntries.map((loot) => [loot.itemName, loot.chaosValue]), [
+    ['Exalted Orb', 0]
+  ]);
+});
+
+test('main inventory loot waits before asking poe.ninja again after a load found no prices', async () => {
   const backend = createJournalBackend();
   const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-offline');
   const priceService = createFakePriceService({ prices: {} });
-  const context = loadOcrScan(backend, session, priceService);
+  const context = loadInventoryLoot(backend, session, priceService);
 
-  await context.captureAndScan();
-  await context.captureAndScan();
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
 
   assert.equal(priceService.syncCalls.length, 1);
   assert.equal(backend.journal.sessions[0].lootEntries.length, 2);
 });
 
-test('main OCR scan asks again, after the wait, when a load left only part of the prices', async () => {
+test('main inventory loot asks again, after the wait, when a load left only part of the prices', async () => {
   const backend = createJournalBackend();
   const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-partial');
   const priceService = createFakePriceService({ fullySynced: false });
-  const context = loadOcrScan(backend, session, priceService);
+  const context = loadInventoryLoot(backend, session, priceService);
 
-  await context.captureAndScan();
-  await context.captureAndScan();
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
   assert.equal(priceService.syncCalls.length, 1);
 
   context.sessionPrices.retryAt = 0;
-  await context.captureAndScan();
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
   assert.equal(priceService.syncCalls.length, 2);
 });
 
-test('main OCR scan reloads prices that a game switch cleared', async () => {
+test('main inventory loot reloads prices that a game switch cleared', async () => {
   const backend = createJournalBackend();
   const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-switch');
   const priceService = createFakePriceService();
-  const context = loadOcrScan(backend, session, priceService);
+  const context = loadInventoryLoot(backend, session, priceService);
 
-  await context.captureAndScan();
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
   priceService.prices = new Map();
-  await context.captureAndScan();
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
 
   assert.equal(priceService.syncCalls.length, 2);
   assert.deepEqual(backend.journal.sessions[0].lootEntries.map((loot) => loot.chaosValue), [12, 12]);
 });
 
-test('main OCR scan reloads the session league after the Currency page synced another one', async () => {
+test('main inventory loot reloads the session league after the Currency page synced another one', async () => {
   const backend = createJournalBackend();
   const session = backend.start({ league: 'Mirage', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-league');
   const priceService = createFakePriceService();
-  const context = loadOcrScan(backend, session, priceService);
+  const context = loadInventoryLoot(backend, session, priceService);
 
-  await context.captureAndScan();
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
   priceService.league = 'Standard';
-  await context.captureAndScan();
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
 
   assert.deepEqual(priceService.syncCalls.map(([, league]) => league), ['Mirage', 'Mirage']);
 });
@@ -1127,77 +1210,134 @@ test('main cache-only Currency reload lists the loaded league at once', async ()
   assert.deepEqual(JSON.parse(JSON.stringify(result.rates)), { divineChaos: 150, mirrorChaos: null });
 });
 
-test('main OCR scan does not add loot to a session that ended while it read the screen', async () => {
+// Ends the session in the in-memory journal, the way a map's end does before its loot is counted.
+function endSessionInBackend(backend, sessionId, endedAt = '2026-05-06T12:05:00.000Z') {
+  const ended = localJournal.endSession(backend.journal, sessionId, { endedAt }, { now: new Date(endedAt) });
+  backend.journal = ended.journal;
+  return ended.session;
+}
+
+test('main adds inventory loot to a finished session, priced, as source inventory, and tells the window', async () => {
   const backend = createJournalBackend();
-  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-ended-mid-scan');
-  const notifications = [];
-  const context = loadOcrScan(backend, session, createFakePriceService(), {
-    ocrScanner: {
-      async scanImage() {
-        context.currentSession = null;
-        return [{ itemName: 'Exalted Orb', quantity: 2, itemType: 'currency' }];
-      }
-    },
-    showNotification: (title, body) => notifications.push([title, body])
+  const started = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-finished');
+  const finished = endSessionInBackend(backend, started.id);
+  assert.equal(finished.status, 'completed');
+  assert.equal(finished.totalLootChaos, 0);
+  const sent = [];
+  const priceService = createFakePriceService({ prices: { 'Exalted Orb': 12, 'Divine Orb': { chaosValue: 150, divineValue: 1 } } });
+  const context = loadInventoryLoot(backend, finished, priceService, {
+    mainWindow: { webContents: { send: (channel, data) => sent.push([channel, JSON.parse(JSON.stringify(data))]) } }
   });
 
-  const result = await context.captureAndScan();
+  await context.addInventoryLoot('session-finished', [
+    { name: 'Exalted Orb', quantity: 2 },
+    { name: 'Divine Orb', quantity: 1 }
+  ]);
 
-  assert.deepEqual(backend.journal.sessions[0].lootEntries, []);
-  assert.deepEqual(notifications, [['scanNoMapTitle', 'noActiveSession']]);
-  assert.deepEqual(JSON.parse(JSON.stringify(result)), { reason: 'noSession' });
+  const stored = backend.journal.sessions[0];
+  assert.deepEqual(
+    stored.lootEntries.map((loot) => [loot.itemName, loot.itemType, loot.quantity, loot.chaosValue, loot.source]).sort(),
+    [['Divine Orb', 'currency', 1, 150, 'inventory'], ['Exalted Orb', 'currency', 2, 12, 'inventory']]
+  );
+  assert.equal(stored.status, 'completed');
+  assert.equal(stored.totalLootChaos, 174);
+  assert.equal(stored.profitChaos, 174);
+  assert.deepEqual(sent.map(([channel]) => channel), ['prices-updated', 'session-loot-updated']);
+  const updatedSession = sent[1][1];
+  assert.equal(updatedSession.id, 'session-finished');
+  assert.equal(updatedSession.totalLootChaos, 174);
+  assert.equal(updatedSession.lootEntries.length, 2);
 });
 
-test('main OCR scan answers the Scan Loot button with the item count or the reason it added none', async () => {
+test('main adds inventory loot without a price as 0 and as other when the item is unknown', async () => {
   const backend = createJournalBackend();
-  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-scan-outcome');
-  const scan = async (overrides = {}) => {
-    const notifications = [];
-    const context = loadOcrScan(backend, session, createFakePriceService(), {
-      showNotification: (title, body) => notifications.push([title, body]),
-      ...overrides
-    });
-    const result = await context.captureAndScan();
-    return { result: JSON.parse(JSON.stringify(result)), notifications };
-  };
+  const started = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-unpriced');
+  const finished = endSessionInBackend(backend, started.id);
+  const priceService = createFakePriceService({ prices: {} });
+  priceService.getItemType = () => 'other';
+  const context = loadInventoryLoot(backend, finished, priceService);
 
-  const added = await scan();
-  assert.deepEqual(added.result, { count: 1 });
-  assert.deepEqual(added.notifications.map(([title]) => title), ['notificationLootAdded']);
+  await context.addInventoryLoot('session-unpriced', [{ name: 'Mystery Stack', quantity: 3 }]);
 
-  assert.deepEqual(await scan({ ocrScanner: { scanImage: async () => [] } }), {
-    result: { reason: 'noItems' },
-    notifications: [['scanNothingTitle', 'scanNoItems']]
-  });
-  assert.deepEqual(await scan({ require: () => ({ desktopCapturer: { getSources: async () => [] } }) }), {
-    result: { reason: 'captureFailed' },
-    notifications: [['scanFailedTitle', 'screenCaptureFailed']]
-  });
-  assert.deepEqual(await scan({ ocrScanner: { scanImage: async () => { throw new Error('OCR worker crashed'); } } }), {
-    result: { reason: 'failed' },
-    notifications: [['scanFailedTitle', 'lootScanFailed']]
-  });
-  assert.deepEqual(await scan({ currentSession: null }), {
-    result: { reason: 'noSession' },
-    notifications: [['scanNoMapTitle', 'noActiveSession']]
-  });
-  // Only the first scan added loot.
-  assert.equal(backend.journal.sessions[0].lootEntries.length, 1);
+  const [loot] = backend.journal.sessions[0].lootEntries;
+  assert.deepEqual([loot.itemName, loot.itemType, loot.quantity, loot.chaosValue, loot.source], [
+    'Mystery Stack', 'other', 3, 0, 'inventory'
+  ]);
 });
 
-test('main OCR scan answers that the journal cannot be read when it cannot add the loot', async () => {
+test('main inventory loot is not added when the journal cannot be read', async () => {
   const backend = createJournalBackend();
-  const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-scan-unreadable');
-  const notifications = [];
-  const context = loadOcrScan(backend, session, createFakePriceService(), {
+  const started = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-unreadable');
+  const finished = endSessionInBackend(backend, started.id);
+  let written = 0;
+  const context = loadInventoryLoot(backend, finished, createFakePriceService(), {
     readJournal() {
       throw journalUnreadableError();
     },
-    showNotification: (title, body) => notifications.push([title, body])
+    writeJournal() {
+      written += 1;
+    }
   });
 
-  assert.deepEqual(JSON.parse(JSON.stringify(await context.captureAndScan())), { reason: 'journalUnreadable' });
-  assert.deepEqual(notifications, [['scanFailedTitle', 'journalUnreadableBody']]);
+  await assert.rejects(context.addInventoryLoot('session-unreadable', EXALTED_GAIN), /JOURNAL_UNREADABLE|journal/i);
+  assert.equal(written, 0);
+});
+
+// showInventoryStatus over the overlay and notification stubs; the overlay timer is a recorded fake.
+function loadInventoryStatus({ overlayOn }) {
+  const calls = { notifications: [], overlayUpdates: 0, timers: [] };
+  const context = loadFunctions(['showInventoryStatus'], {
+    INVENTORY_READING_CARD_MS: 1_200,
+    INVENTORY_STATUS_CARD_MS: 4_000,
+    overlayInventoryStatus: null,
+    overlayInventoryStatusTimer: null,
+    isOverlayEnabled: () => overlayOn,
+    t: (key) => key,
+    showNotification: (title, body) => calls.notifications.push([title, body]),
+    updateOverlayWindow() {
+      calls.overlayUpdates += 1;
+    },
+    setTimeout(callback, delay) {
+      calls.timers.push({ callback, delay });
+      return calls.timers.length;
+    },
+    clearTimeout() {}
+  });
+  return { context, calls };
+}
+
+test('main tells an inventory status by OS notification when the overlay is off, except for reading', () => {
+  const { context, calls } = loadInventoryStatus({ overlayOn: false });
+
+  context.showInventoryStatus('reading');
+  context.showInventoryStatus('notOpen');
+  context.showInventoryStatus('saved');
+
+  assert.deepEqual(calls.notifications, [
+    ['inventoryStatusTitle', 'inventoryStatus_notOpen'],
+    ['inventoryStatusTitle', 'inventoryStatus_saved']
+  ]);
+  assert.equal(calls.overlayUpdates, 0);
+  assert.deepEqual(calls.timers, []);
+  assert.equal(context.overlayInventoryStatus, null);
+});
+
+test('main shows an inventory status as a timed overlay card when the overlay is on, and no notification', () => {
+  const { context, calls } = loadInventoryStatus({ overlayOn: true });
+
+  context.showInventoryStatus('reading');
+  assert.deepEqual(JSON.parse(JSON.stringify(context.overlayInventoryStatus)), { kind: 'reading', primaryLine: 'inventoryStatus_reading', secondaryLine: '' });
+  context.showInventoryStatus('noGain');
+  assert.deepEqual(JSON.parse(JSON.stringify(context.overlayInventoryStatus)), { kind: 'noGain', primaryLine: 'inventoryStatus_noGain', secondaryLine: '' });
+
+  assert.deepEqual(calls.notifications, []);
+  assert.deepEqual(calls.timers.map(({ delay }) => delay), [1_200, 4_000]);
+  assert.equal(calls.overlayUpdates, 2);
+
+  // The card goes when its time is up, and the overlay shows what it covered again.
+  calls.timers[1].callback();
+  assert.equal(context.overlayInventoryStatus, null);
+  assert.equal(calls.overlayUpdates, 3);
 });
 
 test('main sends OS notifications only while the main window is not in front', () => {
@@ -1234,7 +1374,7 @@ test('main sends OS notifications only while the main window is not in front', (
   assert.deepEqual(notify(windowState({ focused: false }), false), []);
 });
 
-test('the tray Add Loot and Start New Map report in the window they bring to the front', async () => {
+test('the tray has no Add Loot item, and Start New Map reports in the window it brings to the front', async () => {
   let template = [];
   let startFails = false;
   const sent = [];
@@ -1258,21 +1398,20 @@ test('the tray Add Loot and Start New Map report in the window they bring to the
         throw new Error('journal write failed');
       }
     },
-    captureAndScan: () => assert.fail('the tray scan runs through the Scan Loot handler'),
     app: {}
   });
 
   context.refreshTrayMenu();
   const item = (label) => template.find((entry) => entry.label?.startsWith(label));
-  item('trayAddLoot').click();
+  assert.equal(item('trayAddLoot'), undefined);
   item('trayNewSession').click();
   startFails = true;
   item('trayNewSession').click();
   await new Promise((resolve) => setImmediate(resolve));
 
   // The window is in front, where OS notifications are held back, so the renderer shows the outcome.
-  assert.deepEqual(shownPages, ['dashboard', 'dashboard', 'dashboard']);
-  assert.deepEqual(sent, [['tray-action', 'scanLoot'], ['tray-action', 'startMapFailed']]);
+  assert.deepEqual(shownPages, ['dashboard', 'dashboard']);
+  assert.deepEqual(sent, [['tray-action', 'startMapFailed']]);
 });
 
 test('the tray Start New Map tells the window when the journal cannot be read', async () => {
@@ -1323,15 +1462,15 @@ test('main tells the main window when the session prices have loaded', async () 
     startedAt: '2026-05-06T12:00:00.000Z'
   }, 'session-prices-updated');
   const sent = [];
-  const context = loadOcrScan(backend, session, createFakePriceService(), {
+  const context = loadInventoryLoot(backend, session, createFakePriceService(), {
     mainWindow: { webContents: { send: (channel, data) => sent.push([channel, data]) } }
   });
 
-  await context.captureAndScan();
-  await context.captureAndScan();
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
 
-  // Once for the load, before the loot it priced; the second scan reuses the loaded prices.
-  assert.deepEqual(sent.map(([channel]) => channel), ['prices-updated', 'loot-added', 'loot-added']);
+  // Once for the load, before the loot it priced; the second read reuses the loaded prices.
+  assert.deepEqual(sent.map(([channel]) => channel), ['prices-updated', 'session-loot-updated', 'session-loot-updated']);
   assert.deepEqual(JSON.parse(JSON.stringify(sent[0][1])), {
     poeVersion: 'poe2',
     league: 'Fate of the Vaal',
@@ -1343,13 +1482,13 @@ test('main does not announce a session price load that found no prices', async (
   const backend = createJournalBackend();
   const session = backend.start({ startedAt: '2026-05-06T12:00:00.000Z' }, 'session-no-prices');
   const sent = [];
-  const context = loadOcrScan(backend, session, createFakePriceService({ prices: {} }), {
+  const context = loadInventoryLoot(backend, session, createFakePriceService({ prices: {} }), {
     mainWindow: { webContents: { send: (channel) => sent.push(channel) } }
   });
 
-  await context.captureAndScan();
+  await context.addInventoryLoot(session.id, EXALTED_GAIN);
 
-  assert.deepEqual(sent, ['loot-added']);
+  assert.deepEqual(sent, ['session-loot-updated']);
 });
 
 test('main shutdown finalizer closes a session without loot at zero when stash profit is unavailable', async () => {
@@ -1593,8 +1732,10 @@ test('a map exit that cannot end the map in an unreadable journal leaves no unha
 test('map-enter handler publishes runtime state and leaves session start to the renderer prompt', async () => {
   const startCalls = [];
   const runtimeCalls = [];
+  let mapsEntered = 0;
   const context = loadFunctions(['handleMapEntered'], {
     currentSession: null,
+    inventoryWatcher: { mapEntered: () => { mapsEntered += 1; } },
     startNewSession(input) {
       startCalls.push({ ...input });
       throw new Error('main process should not auto-start sessions on map enter');
@@ -1611,6 +1752,7 @@ test('map-enter handler publishes runtime state and leaves session start to the 
 
   assert.deepEqual(startCalls, []);
   assert.deepEqual(runtimeCalls, [['area_entered', { mapName: 'Crimson Temple', mapTier: 16 }]]);
+  assert.equal(mapsEntered, 1);
 });
 
 test('the sync queue an older version left on disk is removed at startup', () => {

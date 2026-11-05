@@ -192,6 +192,7 @@ function createHotkeyField(initialValue = '') {
 test('main hotkeys register stored accelerators instead of hardcoded defaults', () => {
   const registrations = [];
   let unregisterAllCalls = 0;
+  const inventoryReads = [];
   const context = loadFunctions(mainJsPath, ['registerHotkeySet', 'registerGlobalShortcuts'], {
     globalShortcut: {
       unregisterAll() {
@@ -206,7 +207,9 @@ test('main hotkeys register stored accelerators instead of hardcoded defaults', 
       scanHotkey: 'Alt+F10',
       stashScanHotkey: 'CommandOrControl+Shift+K'
     }),
-    captureAndScan() {}
+    handleInventoryHotkey() {
+      inventoryReads.push('read');
+    }
   });
 
   context.registerGlobalShortcuts();
@@ -218,6 +221,9 @@ test('main hotkeys register stored accelerators instead of hardcoded defaults', 
   );
   assert.equal(typeof registrations[0].handler, 'function');
   assert.equal(typeof registrations[1].handler, 'function');
+  // Both keys do the same thing: read the inventory now.
+  registrations.forEach(({ handler }) => handler());
+  assert.deepEqual(inventoryReads, ['read', 'read']);
 });
 
 test('main hotkeys roll back to existing registrations when a new shortcut cannot be registered', () => {
@@ -237,7 +243,7 @@ test('main hotkeys roll back to existing registrations when a new shortcut canno
         ? { scanHotkey: 'Alt+F10', stashScanHotkey: 'CommandOrControl+Shift+K' }
         : { scanHotkey: 'F9', stashScanHotkey: 'CommandOrControl+Shift+L' }
     ),
-    captureAndScan() {}
+    handleInventoryHotkey() {}
   });
 
   assert.throws(
@@ -259,7 +265,7 @@ test('main hotkeys roll back to existing registrations when a new shortcut canno
   ]);
 });
 
-test('hotkey registration from the OCR gate warns instead of throwing', () => {
+test('hotkey registration from the hotkey gate warns instead of throwing', () => {
   const warnings = [];
   const context = loadFunctions(mainJsPath, ['tryRegisterGlobalShortcuts'], {
     registerGlobalShortcuts() {
@@ -278,9 +284,13 @@ test('hotkey registration from the OCR gate warns instead of throwing', () => {
 
 function loadScanHotkeyGate(overrides = {}) {
   const operations = [];
-  const context = loadFunctions(mainJsPath, ['syncScanHotkeys'], {
+  const context = loadFunctions(mainJsPath, ['syncScanHotkeys', 'getGameProcessIds'], {
     shouldEnableScanHotkeys: require('../src/modules/hotkeyModel').shouldEnableScanHotkeys,
-    currentSession: { id: 'session-1' },
+    getActiveProfile: () => context.activeProfile,
+    activeProfile: { id: 'profile-1' },
+    tickInventoryWatcher() {
+      operations.push(['tick']);
+    },
     scanHotkeysActive: false,
     win32Probe: {
       getForegroundProcessId() {
@@ -306,7 +316,7 @@ function loadScanHotkeyGate(overrides = {}) {
   return { context, operations };
 }
 
-test('OCR hotkeys are registered while the game has focus and released on alt-tab', () => {
+test('read hotkeys are registered while the game has focus and released on alt-tab', () => {
   const { context, operations } = loadScanHotkeyGate();
 
   context.syncScanHotkeys();
@@ -314,39 +324,63 @@ test('OCR hotkeys are registered while the game has focus and released on alt-ta
   context.foregroundProcessId = 9000;
   context.syncScanHotkeys();
 
-  assert.deepEqual(operations.filter(([name]) => name !== 'getForegroundProcessId'), [
+  assert.deepEqual(operations.filter(([name]) => !['getForegroundProcessId', 'tick'].includes(name)), [
     ['register'],
     ['unregisterAll']
   ]);
   assert.equal(context.scanHotkeysActive, false);
 });
 
-test('OCR hotkeys are released when the session ends and the foreground is not read without a session', () => {
+test('read hotkeys need no running map, only a signed-in profile with the game in front', () => {
+  const { context, operations } = loadScanHotkeyGate({ currentSession: null });
+
+  context.syncScanHotkeys();
+
+  assert.deepEqual(operations.filter(([name]) => name === 'register'), [['register']]);
+  assert.equal(context.scanHotkeysActive, true);
+});
+
+test('read hotkeys are released on sign-out and the foreground is not read while signed out', () => {
   const { context, operations } = loadScanHotkeyGate();
 
   context.syncScanHotkeys();
-  context.currentSession = null;
+  context.activeProfile = null;
   operations.length = 0;
   context.syncScanHotkeys();
   context.syncScanHotkeys();
 
-  assert.deepEqual(operations, [['unregisterAll']]);
+  assert.deepEqual(operations, [['tick'], ['unregisterAll'], ['tick']]);
+  assert.equal(context.scanHotkeysActive, false);
 });
 
-test('OCR hotkeys follow the session alone when the foreground window cannot be read', () => {
+test('read hotkeys are released when the foreground window cannot be read', () => {
   const { context, operations } = loadScanHotkeyGate({
     win32Probe: {
       getForegroundProcessId() {
         throw new Error('user32 unavailable');
       }
-    },
-    gameDetector: null
+    }
   });
 
   context.syncScanHotkeys();
+  assert.deepEqual(operations.filter(([name]) => name !== 'tick'), []);
+  assert.equal(context.scanHotkeysActive, false);
 
-  assert.deepEqual(operations, [['register']]);
-  assert.equal(context.scanHotkeysActive, true);
+  // Held before the read failed: released, not kept.
+  context.scanHotkeysActive = true;
+  operations.length = 0;
+  context.syncScanHotkeys();
+  assert.deepEqual(operations, [['tick'], ['unregisterAll']]);
+  assert.equal(context.scanHotkeysActive, false);
+});
+
+test('the hotkey gate lets the inventory watcher tick on every pass', () => {
+  const { context, operations } = loadScanHotkeyGate();
+
+  context.syncScanHotkeys();
+  context.syncScanHotkeys();
+
+  assert.equal(operations.filter(([name]) => name === 'tick').length, 2);
 });
 
 test('saving hotkeys outside the game releases them again after the registration check', () => {
@@ -642,7 +676,6 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
     globalLanguage: { value: 'en' },
     scanHotkey,
     scanHotkeyDisplay: { textContent: '' },
-    scanHotkeyBadge: { textContent: '' },
     stashScanHotkey,
     stashScanHotkeyDisplay: { textContent: '' },
     defaultLeague: { value: 'Standard' },
@@ -709,7 +742,6 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
   assert.equal(scanHotkey.value, 'F9');
   assert.equal(stashScanHotkey.value, 'Ctrl+Shift+L');
   assert.equal(elements.stashScanHotkeyDisplay.textContent, 'Ctrl+Shift+L');
-  assert.equal(elements.scanHotkeyBadge.textContent, 'F9');
 
   context.setupHotkeyCaptureFields();
   const keydownEvent = {
@@ -729,14 +761,10 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
   assert.equal(keydownEvent.prevented, true);
   assert.equal(scanHotkey.value, 'Ctrl+Shift+K');
   assert.equal(elements.scanHotkeyDisplay.textContent, 'Ctrl+Shift+K');
-  // The dashboard badge shows the saved hotkey, not an unsaved capture.
-  assert.equal(elements.scanHotkeyBadge.textContent, 'F9');
   assert.equal(elements.onlineEnabled.checked, false);
   elements.onlineEnabled.checked = true;
 
   await context.handleSaveSettings();
-
-  assert.equal(elements.scanHotkeyBadge.textContent, 'Ctrl+Shift+K');
 
   assert.equal(savedSettings.length, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(savedSettings[0])), {
@@ -745,6 +773,7 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
     poePath: '',
     autoStartSession: true,
     overlayEnabled: false,
+    inventoryReadEnabled: true,
     notifications: true,
     soundNotifications: false,
     language: 'en',
@@ -755,117 +784,27 @@ test('renderer displays friendly hotkey labels, captures input, and saves normal
   });
 });
 
-test('renderer scan button swaps only its label while scanning, so the icon survives', async () => {
-  const buttonTextWrites = [];
-  const duringScan = [];
-  const scanScreenBtn = {
-    disabled: false,
-    set textContent(value) {
-      buttonTextWrites.push(value);
-    }
-  };
-  const scanScreenLabel = { textContent: 'dashboard.scanScreen' };
-  const toasts = [];
-  const context = loadFunctions(appJsPath, ['handleScanScreen'], {
-    state: { currentSession: { id: 'session-1' } },
-    elements: { scanScreenBtn, scanScreenLabel },
-    window: {
-      t: (key) => key,
-      electronAPI: {
-        async scanScreen() {
-          duringScan.push([scanScreenBtn.disabled, scanScreenLabel.textContent]);
-          return { count: 3 };
-        }
-      }
-    },
-    showToast: (...args) => toasts.push(args),
-    getUserFacingErrorMessage: (error) => error.message
-  });
-
-  await context.handleScanScreen();
-
-  assert.deepEqual(buttonTextWrites, []);
-  assert.deepEqual(duringScan, [[true, 'dashboard.scanning']]);
-  assert.equal(scanScreenBtn.disabled, false);
-  assert.equal(scanScreenLabel.textContent, 'dashboard.scanScreen');
-  assert.deepEqual(toasts, [['toast.lootAddedBody', '', 'success']]);
-});
-
-test('renderer Scan Loot shows the one outcome main reports for the scan', async () => {
-  let journalChecks = 0;
-  const scanWith = async (scanScreen, currentSession = { id: 'session-1' }) => {
-    const toasts = [];
-    const scanScreenBtn = { disabled: false };
-    const scanScreenLabel = { textContent: 'dashboard.scanScreen' };
-    const context = loadFunctions(appJsPath, ['handleScanScreen'], {
-      state: { currentSession },
-      elements: { scanScreenBtn, scanScreenLabel },
-      window: {
-        t: (key, values = {}) => (values.count === undefined ? key : `${key}|${values.count}`),
-        electronAPI: { scanScreen }
-      },
-      showToast: (...args) => toasts.push(args),
-      getUserFacingErrorMessage: (error, fallbackKey) => fallbackKey,
-      loadJournalStatus: async () => {
-        journalChecks += 1;
-      }
-    });
-    await context.handleScanScreen();
-    assert.equal(scanScreenBtn.disabled, false);
-    assert.equal(scanScreenLabel.textContent, 'dashboard.scanScreen');
-    return toasts;
-  };
-
-  assert.deepEqual(await scanWith(async () => ({ count: 1 })), [['toast.lootAddedBodyOne|1', '', 'success']]);
-  assert.deepEqual(await scanWith(async () => ({ count: 3 })), [['toast.lootAddedBody|3', '', 'success']]);
-  assert.deepEqual(
-    await scanWith(async () => ({ reason: 'noItems' })),
-    [['toast.scanNothingFound', 'toast.scanNothingFoundHint', 'warning']]
-  );
-  assert.deepEqual(
-    await scanWith(async () => ({ reason: 'noSession' })),
-    [['dashboard.noActiveMap', 'toast.noSession', 'warning']]
-  );
-  assert.equal(journalChecks, 0);
-  // The loot could not go into the journal; the notice with Start a new journal is checked again as well.
-  assert.deepEqual(
-    await scanWith(async () => ({ reason: 'journalUnreadable' })),
-    [['toast.scanFailed', 'errors.journalUnreadable', 'error']]
-  );
-  assert.equal(journalChecks, 1);
-  assert.deepEqual(await scanWith(async () => undefined), [['toast.scanFailed', 'toast.tryAgain', 'error']]);
-  assert.deepEqual(
-    await scanWith(async () => ({ reason: 'captureFailed' })),
-    [['toast.scanFailed', 'toast.tryAgain', 'error']]
-  );
-  assert.deepEqual(await scanWith(async () => {
-    throw new Error('IPC channel closed');
-  }), [['toast.scanFailed', 'toast.tryAgain', 'error']]);
-  // Without a running map the button asks for one and does not scan.
-  assert.deepEqual(
-    await scanWith(async () => assert.fail('scanned without a map'), null),
-    [['dashboard.noActiveMap', 'toast.noSession', 'warning']]
-  );
-  assert.equal(journalChecks, 1);
-});
-
-test('dashboard scan button sits next to End Map with the real hotkey, a label slot and no fallback wording', () => {
+test('dashboard has no scan button: End Map is the last action and its labels read from the inventory', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.html'), 'utf8');
   const actions = html.match(/<div class="session-actions">([\s\S]*?)\n\s*<\/div>/)[1];
-  assert.match(actions, /id="end-session-btn"[\s\S]*id="scan-screen-btn"/);
-  assert.match(
-    actions,
-    /<button id="scan-screen-btn" class="btn btn-primary hidden">\s*<svg[^>]*><use href="assets\/icons\.svg#scan"\/><\/svg>\s*<span class="btn-label" id="scan-screen-label" data-i18n="dashboard\.scanScreen">[^<]*<\/span>\s*<kbd class="btn-kbd" id="scan-hotkey-badge">/
-  );
-  assert.doesNotMatch(html, /quick-loot-card/);
+  assert.match(actions, /id="start-session-btn"[\s\S]*id="end-session-btn"/);
+  assert.doesNotMatch(html, /id="scan-(?!hotkey)|btn-kbd|quick-loot-card/);
 
   const context = vm.createContext({ window: {}, document: { querySelectorAll: () => [] } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'translations.js'), 'utf8'), context);
   const { en, tr } = context.window.Translations;
-  assert.equal(en['dashboard.scanScreen'], 'Scan Loot');
   for (const dictionary of [en, tr]) {
-    for (const key of ['dashboard.quickLoot', 'dashboard.scanHint', 'dashboard.scanScreen']) {
-      assert.doesNotMatch(dictionary[key], /fallback/i, key);
+    assert.deepEqual(Object.keys(dictionary).filter((key) => /^dashboard\.(quickLoot|scan)/.test(key)), []);
+  }
+  assert.equal(en['settings.scanHotkey'], 'Read Inventory');
+  assert.equal(en['settings.stashScanHotkey'], 'Read Inventory (second key)');
+  assert.equal(tr['settings.scanHotkey'], 'Envanteri Oku');
+  assert.equal(tr['settings.stashScanHotkey'], 'Envanteri Oku (ikinci tus)');
+  for (const dictionary of [en, tr]) {
+    for (const key of ['settings.scanHotkey', 'settings.scanHotkeyDesc', 'settings.stashScanHotkey', 'settings.stashScanHotkeyDesc',
+      'dashboard.noLootHint', 'login.featureScanTitle', 'login.featureScanBody', 'overlay.noLootScanned',
+      'overlay.itemScanned', 'overlay.itemsScanned', 'toast.mapNoLoot', 'settings.dataFolderDesc']) {
+      assert.doesNotMatch(dictionary[key], /\bscan|\bocr|\btara(ma|n|di)/i, key);
     }
   }
 });

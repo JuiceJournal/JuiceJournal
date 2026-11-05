@@ -12,6 +12,7 @@
     poePath: '',
     autoStartSession: true,
     overlayEnabled: false,
+    inventoryReadEnabled: true,
     notifications: true,
     soundNotifications: false,
     language: 'en',

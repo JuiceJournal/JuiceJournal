@@ -54,7 +54,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Loot islemleri
   addLoot: (data) => ipcRenderer.invoke('add-loot', data),
-  scanScreen: () => ipcRenderer.invoke('scan-screen'),
   getRecentLoot: (params) => ipcRenderer.invoke('get-recent-loot', params),
   getAuditTrail: () => ipcRenderer.invoke('get-audit-trail'),
   exportDiagnostics: (mode) => ipcRenderer.invoke('export-diagnostics', mode),
@@ -116,6 +115,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onSessionStarted: (callback) => {
     ipcRenderer.on('session-started', (event, data) => callback(data));
   },
+  onSessionLootUpdated: (callback) => {
+    ipcRenderer.on('session-loot-updated', (event, data) => callback(data));
+  },
   onSessionEnded: (callback) => {
     ipcRenderer.on('session-ended', (event, data) => callback(data));
   },
@@ -170,7 +172,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Dinleyicileri temizle (sadece izin verilen kanallar)
   removeAllListeners: (channel) => {
     const ALLOWED_CHANNELS = [
-      'map-entered', 'map-exited', 'session-started', 'session-ended',
+      'map-entered', 'map-exited', 'session-started', 'session-ended', 'session-loot-updated',
       'loot-added',
       'audit-trail-updated', 'navigate', 'tray-action', 'stash-snapshot-taken',
       'profit-calculated', 'prices-updated', 'game-version-changed', 'game-closed',
