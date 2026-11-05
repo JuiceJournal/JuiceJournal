@@ -108,6 +108,19 @@ test('addLoot accepts the inventory source and still reads the older ones, and f
   assert.deepEqual(lootEntries.map((loot) => loot.source), ['inventory', 'ocr', 'api', 'manual', 'manual']);
 });
 
+test('addLoot keeps the art of an item that has one', () => {
+  const { journal } = startedJournal();
+  const { lootEntries } = addLoot(journal, 'session-1', [
+    { itemName: 'Omen of Light', icon: ' https://example.test/omen.png ' },
+    { itemName: 'Exalted Orb', icon: null },
+    { itemName: 'Chaos Orb' }
+  ], { createId: idFactory('loot'), now: NOW });
+
+  assert.equal(lootEntries[0].icon, 'https://example.test/omen.png');
+  assert.equal('icon' in lootEntries[1], false);
+  assert.equal('icon' in lootEntries[2], false);
+});
+
 test('addLoot on an ended session adds the loot, recalculates the totals and keeps it completed', () => {
   const { journal } = startedJournal({ costChaos: 10 });
   const ended = endSession(journal, 'session-1', { endedAt: '2026-10-21T11:55:00.000Z' }, { now: NOW });

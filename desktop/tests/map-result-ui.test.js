@@ -2626,6 +2626,92 @@ test('renderer map result history keeps persisted ordering and populates farm-ty
   );
 });
 
+function renderMapResultHistoryWith(mapResults, overrides = {}) {
+  const elements = {
+    mapResultFilter: { value: '', innerHTML: '' },
+    mapResultHistory: { innerHTML: '' }
+  };
+  const iconContainers = [];
+  const context = loadFunctions(['itemSlotHTML', 'mapResultTopDropHTML', 'formatMapResultProfitHTML', 'renderMapResultHistory'], {
+    elements,
+    state: { settings: { poeVersion: 'poe1' }, mapResults },
+    escapeHTML: (value) => String(value).replace(/</g, '&lt;').replace(/"/g, '&quot;'),
+    formatDuration: (seconds) => `duration:${seconds}`,
+    currencyHTML: (value, type, iconSize, poeVersion) => `profit:${value}:${type}:${iconSize}:${poeVersion}`,
+    timeAgo: (value) => `ago:${value}`,
+    getLocalItemIconPath: (name, poeVersion) => (name === 'Divine Orb' ? `assets/currency/${poeVersion}/divine.png` : ''),
+    getMapResultStoreModel: () => ({ filterMapResults: (results) => results }),
+    applyCachedItemIcons: (container) => iconContainers.push(container),
+    ...overrides
+  });
+
+  context.renderMapResultHistory();
+  return { html: elements.mapResultHistory.innerHTML, iconContainers, elements };
+}
+
+const HISTORY_RESULT = { id: 'run', farmType: 'Abyss', durationSeconds: 728, netProfit: 127, poeVersion: 'poe2', createdAt: '2026-11-05T10:00:00.000Z' };
+
+test('renderer map result history shows the total large enough to read its unit', () => {
+  const { html } = renderMapResultHistoryWith([{ ...HISTORY_RESULT }]);
+
+  assert.match(html, /map-result-history-profit[^>]*>profit:127:chaos:24:poe2</);
+});
+
+test('renderer map result history shows the top drop with bundled art, its stack and its worth', () => {
+  const { html } = renderMapResultHistoryWith([{
+    ...HISTORY_RESULT,
+    topOutputs: [
+      { label: 'Divine Orb', quantityDelta: 3, valueDelta: 600, icon: 'https://example.test/divine.png' },
+      { label: 'Exalted Orb', quantityDelta: 1, valueDelta: 10 }
+    ]
+  }]);
+
+  assert.match(html, /<div class="map-result-history-drop" title="Divine Orb"><span class="item-slot"><img src="assets\/currency\/poe2\/divine\.png" alt="" draggable="false"><span class="stack">3<\/span><\/span>/);
+  assert.match(html, /<strong>Divine Orb<\/strong>profit:600:chaos:18:poe2/);
+  assert.doesNotMatch(html, /Exalted Orb/);
+  assert.doesNotMatch(html, /data-icon-url/);
+});
+
+test('renderer map result history resolves art it has no bundled copy of through the icon cache', () => {
+  const { html, iconContainers, elements } = renderMapResultHistoryWith([{
+    ...HISTORY_RESULT,
+    topOutputs: [{ label: 'Omen of Light', quantityDelta: 1, valueDelta: 900, icon: 'https://example.test/omen.png?a="b' }]
+  }]);
+
+  assert.match(html, /<span class="item-slot"><img data-icon-url="https:\/\/example\.test\/omen\.png\?a=&quot;b" alt="" draggable="false"><\/span>/);
+  assert.deepEqual(iconContainers, [elements.mapResultHistory]);
+});
+
+test('renderer map result history shows the chest for a drop with no art and no drop for a run without one', () => {
+  const noArt = renderMapResultHistoryWith([{
+    ...HISTORY_RESULT,
+    topOutputs: [{ label: '<b>Odd item</b>', quantityDelta: 2, valueDelta: 5 }]
+  }]).html;
+  assert.match(noArt, /<span class="item-slot"><svg[^>]*><use href="assets\/icons\.svg#chest"\/><\/svg><span class="stack">2<\/span><\/span>/);
+  assert.match(noArt, /<strong>&lt;b>Odd item&lt;\/b><\/strong>/);
+  assert.doesNotMatch(noArt, /<b>Odd item/);
+
+  for (const topOutputs of [[], undefined, [{ label: '' }]]) {
+    const { html } = renderMapResultHistoryWith([{ ...HISTORY_RESULT, topOutputs }]);
+    assert.doesNotMatch(html, /map-result-history-drop/);
+  }
+});
+
+test('a scanned run keeps the art of its top drops', () => {
+  const context = loadFunctions(['getScannedTopOutputs']);
+
+  const top = context.getScannedTopOutputs([
+    { itemName: 'Omen of Light', quantity: 1, chaosValue: 900 },
+    { itemName: 'omen of light', quantity: 2, chaosValue: 900, icon: 'https://example.test/omen.png' },
+    { itemName: 'Exalted Orb', quantity: 1, chaosValue: 10 }
+  ]);
+
+  assert.deepEqual(JSON.parse(JSON.stringify(top)), [
+    { label: 'Omen of Light', quantityDelta: 3, valueDelta: 2700, currencyCode: 'chaos', icon: 'https://example.test/omen.png' },
+    { label: 'Exalted Orb', quantityDelta: 1, valueDelta: 10, currencyCode: 'chaos' }
+  ]);
+});
+
 test('renderer map result history applies the selected farm-type filter through the store model', () => {
   const filterCalls = [];
   const elements = {

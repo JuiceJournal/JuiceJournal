@@ -3625,6 +3625,7 @@ async function addInventoryLoot(sessionId, items, mapCount = 1) {
     quantity,
     chaosValue: priced ? readLocalChaosPrice(name, session.poeVersion) || 0 : 0,
     divineValue: priced ? priceService.getPriceInfo(name)?.divineValue ?? null : null,
+    icon: priced ? priceService.getPriceInfo(name)?.icon : null,
     source: 'inventory'
   }));
   const { journal, session: updated } = localJournal.addLoot(readJournal(), sessionId, entries, {
