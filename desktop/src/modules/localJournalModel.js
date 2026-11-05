@@ -15,6 +15,7 @@
   ]);
   const LOOT_SOURCES = new Set(['manual', 'ocr', 'api', 'inventory']);
   const PERIOD_DAYS = { weekly: 7, monthly: 30 };
+  const MAX_LOOT_QUANTITY = 1000000;
 
   function journalError(message, code) {
     return Object.assign(new Error(message), { code });
@@ -200,6 +201,62 @@
     return { journal: replaceSession(current, updated), lootEntries, session: updated };
   }
 
+  // The totals follow the loot only while they were derived from it. A PoE 1 stash diff passes its own totals to
+  // endSession; those stay as stored. Its profit counts stash losses, so the profit has to match the loot as well.
+  function retotalSession(session, nextLoot, timestamp) {
+    const storedTotal = toNumber(session.totalLootChaos);
+    const totalsFollowLoot = Math.abs(storedTotal - sumLootChaos(session.lootEntries || [])) <= 0.01
+      && Math.abs(toNumber(session.profitChaos) - (storedTotal - toNumber(session.costChaos))) <= 0.01;
+    const updated = { ...session, lootEntries: nextLoot, updatedAt: timestamp };
+    if (totalsFollowLoot) {
+      updated.totalLootChaos = sumLootChaos(nextLoot);
+      updated.profitChaos = updated.totalLootChaos - toNumber(session.costChaos);
+    }
+    return { session: updated, totalsFollowLoot };
+  }
+
+  // Entries saved before loot had ids have none, so only a real id string can name one.
+  function requireLootEntry(session, lootId) {
+    const index = typeof lootId === 'string' && lootId
+      ? (session.lootEntries || []).findIndex((loot) => loot.id === lootId)
+      : -1;
+    if (index === -1) {
+      throw journalError('Loot entry not found', 'LOOT_NOT_FOUND');
+    }
+    return index;
+  }
+
+  function updateLoot(journal, sessionId, lootId, changes = {}, { now }) {
+    const current = normalizeJournal(journal);
+    const session = requireSession(current, sessionId);
+    const index = requireLootEntry(session, lootId);
+    // Typed text must be digits only, so "1e3" or "0x10" is not read as a number.
+    const raw = changes?.quantity;
+    const text = typeof raw === 'string' ? raw.trim() : '';
+    const quantityNumber = typeof raw === 'number' ? raw : (/^\d+$/.test(text) ? Number(text) : NaN);
+    if (!Number.isInteger(quantityNumber) || quantityNumber < 1 || quantityNumber > MAX_LOOT_QUANTITY) {
+      throw journalError('Quantity must be a whole number from 1 to 1000000', 'LOOT_QUANTITY_INVALID');
+    }
+
+    const timestamp = now.toISOString();
+    const lootEntry = { ...session.lootEntries[index], quantity: quantityNumber, updatedAt: timestamp };
+    const nextLoot = session.lootEntries.map((loot, lootIndex) => (lootIndex === index ? lootEntry : loot));
+    const { session: updated, totalsFollowLoot } = retotalSession(session, nextLoot, timestamp);
+
+    return { journal: replaceSession(current, updated), session: updated, lootEntry, totalsFollowLoot };
+  }
+
+  function deleteLoot(journal, sessionId, lootId, { now }) {
+    const current = normalizeJournal(journal);
+    const session = requireSession(current, sessionId);
+    const index = requireLootEntry(session, lootId);
+    const lootEntry = session.lootEntries[index];
+    const nextLoot = session.lootEntries.filter((loot, lootIndex) => lootIndex !== index);
+    const { session: updated, totalsFollowLoot } = retotalSession(session, nextLoot, now.toISOString());
+
+    return { journal: replaceSession(current, updated), session: updated, lootEntry, totalsFollowLoot };
+  }
+
   function listSessions(journal, params = {}) {
     const limit = clampInteger(params.limit, 20, 1, 100);
     const offset = clampInteger(params.offset, 0, 0, Number.MAX_SAFE_INTEGER);
@@ -282,6 +339,7 @@
 
   return {
     addLoot,
+    deleteLoot,
     endSession,
     getActiveSession,
     getPersonalStats,
@@ -290,6 +348,7 @@
     listSessions,
     normalizeJournal,
     startSession,
+    updateLoot,
     updateSession
   };
 });

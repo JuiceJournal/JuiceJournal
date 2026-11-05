@@ -1737,6 +1737,7 @@ function loadSessionEndedListener({ stashState = { lastMapResult: null } } = {})
     'isDisplayableMapResult',
     'setupIPCListeners'
   ], {
+    getMapResultStoreModel: () => require('../src/modules/mapResultStoreModel.js'),
     state: {
       currentSession: { id: 'session-1' },
       settings: { poeVersion: 'poe1' },
@@ -1913,7 +1914,7 @@ test('prices-updated events give the dashboard views the Divine and Mirror rates
     renderSessionsList: () => renders.push('sessionsList'),
     updateActiveSessionUI: () => renders.push('activeSession'),
     renderRecentLoot: () => renders.push('recentLoot'),
-    renderSessionDrawer: (options) => renders.push(`sessionDrawer:keepForm=${options?.keepForm}`),
+    redrawSessionLoot: () => renders.push('sessionDrawer:redraw'),
     loadDashboardStats: async () => renders.push('dashboardStats'),
     isPageActive: () => false
   });
@@ -1929,7 +1930,7 @@ test('prices-updated events give the dashboard views the Divine and Mirror rates
   assert.deepEqual(rateRequests, [{ poeVersion: 'poe1', league: 'Mirage', cacheOnly: true }]);
   assert.equal(context.getProfitTierFor(200, 'poe1', { league: 'Mirage' }), 'rare');
   assert.deepEqual(renders, [
-    'latestMapResult', 'mapResultHistory', 'sessionsList', 'activeSession', 'recentLoot', 'sessionDrawer:keepForm=true', 'dashboardStats'
+    'latestMapResult', 'mapResultHistory', 'sessionsList', 'activeSession', 'recentLoot', 'sessionDrawer:redraw', 'dashboardStats'
   ]);
 });
 
@@ -2017,6 +2018,7 @@ test('poe2 result smoke persists zero-profit map result and projects it into Las
     'renderLatestMapResult',
     'setupIPCListeners'
   ], {
+    getMapResultStoreModel: () => require('../src/modules/mapResultStoreModel.js'),
     elements,
     state,
     window: {
@@ -2698,7 +2700,9 @@ test('renderer map result history shows the chest for a drop with no art and no 
 });
 
 test('a scanned run keeps the art of its top drops', () => {
-  const context = loadFunctions(['getScannedTopOutputs']);
+  const context = loadFunctions(['getScannedTopOutputs'], {
+    getMapResultStoreModel: () => require('../src/modules/mapResultStoreModel.js')
+  });
 
   const top = context.getScannedTopOutputs([
     { itemName: 'Omen of Light', quantity: 1, chaosValue: 900 },
@@ -4312,7 +4316,7 @@ test('the run drawer leads with profit, counts loot by quantity and lists loot b
     sessionDrawerLoot: { innerHTML: '' }
   };
   elements.sessionDrawerNotes = { value: '' };
-  const context = createProfitDisplayContext(['getLocalItemIconPath', 'itemSlotHTML', 'getMapResultProfitTier', 'profitMemeHTML', 'renderSessionDrawer'], {
+  const context = createProfitDisplayContext(['getLocalItemIconPath', 'itemSlotHTML', 'getMapResultProfitTier', 'profitMemeHTML', 'sortSessionLoot', 'renderSessionDrawer'], {
     elements,
     PROFIT_MEME_LABELS: { bricked: 'Bricked', pog: 'Pog', juiced: 'Juiced', mirror: 'Mirror tier' },
     buildSessionAnalytics: () => [{ label: 'Currency', totalValue: 300, quantity: 3, entries: 1 }],

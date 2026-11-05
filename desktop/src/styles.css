@@ -2642,7 +2642,8 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 .session-drawer-input,
-.session-drawer-textarea {
+.session-drawer-textarea,
+.session-drawer-loot-qty {
   width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border);
@@ -2660,7 +2661,8 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 .session-drawer-input:focus,
-.session-drawer-textarea:focus {
+.session-drawer-textarea:focus,
+.session-drawer-loot-qty:focus {
   outline: none;
   border-color: var(--border-gold);
   box-shadow: 0 0 0 3px rgb(var(--brass-rgb) / 0.1);
@@ -2746,6 +2748,12 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   color: var(--text-bright);
 }
 
+.session-drawer-section-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .session-drawer-count {
   color: var(--gold-light);
   font-family: var(--font);
@@ -2776,6 +2784,10 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 .session-drawer-loot-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-bright);
   font-size: 0.85rem;
   font-weight: 600;
@@ -2787,10 +2799,67 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   font-size: 0.74rem;
 }
 
+/* A set width lines the values, and the quantity boxes before them, up from row to row. */
 .session-drawer-loot-value {
   flex-shrink: 0;
+  min-width: 4.5rem;
   font-family: var(--font);
   font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Edit mode: a quantity box before the value and a remove button after it, kept on the row's line. */
+/* Typing or the arrow keys set the number; a spinner would take the room seven digits need. */
+.session-drawer-loot-qty {
+  flex: 0 0 4.5rem;
+  width: 4.5rem;
+  padding: 0.4rem 0.5rem;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+
+.session-drawer-loot-qty::-webkit-inner-spin-button,
+.session-drawer-loot-qty::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.session-drawer-loot-remove {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--bevel-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.session-drawer-loot-remove:focus-visible,
+.session-drawer-section-tools .btn:focus-visible {
+  outline: 2px solid var(--border-gold);
+  outline-offset: 2px;
+}
+
+.session-drawer-loot-remove:disabled,
+.session-drawer-loot-qty:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.session-drawer-loot-remove.is-armed {
+  width: auto;
+  padding: 0 0.6rem;
+  background: var(--red-dim);
+  color: var(--red);
+  box-shadow: inset 0 0 0 1px rgb(var(--loss-rgb) / 0.4);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.session-drawer-loot-remove.is-armed:hover:not(:disabled) {
+  background: rgb(var(--loss-rgb) / 0.2);
+  color: var(--red);
 }
 
 /* ==================== SETTINGS PAGE ==================== */

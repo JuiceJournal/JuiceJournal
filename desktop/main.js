@@ -39,7 +39,7 @@ const {
   clearRuntimeSessionState,
   cloneRuntimeSessionState
 } = require('./src/modules/runtimeSessionModel');
-const { appendMapResult, normalizeMapResultForLedger } = require('./src/modules/mapResultStoreModel');
+const { appendMapResult, getTopLootOutputs, normalizeMapResultForLedger } = require('./src/modules/mapResultStoreModel');
 const localJournal = require('./src/modules/localJournalModel');
 const { deriveMapResultOverlayState } = require('./src/modules/mapResultOverlayModel');
 const { buildFarmPublishPayload } = require('./src/modules/farmPublishPayloadModel');
@@ -1158,6 +1158,54 @@ function getStoredMapResults() {
 
   const results = store.get(storeKey);
   return Array.isArray(results) ? results : [];
+}
+
+// A finished map's saved result follows its loot: the values the loot produced are recomputed in place, so its
+// place in the history and its publish state stay.
+function updateSessionMapResult(session) {
+  const storeKey = getMapResultsStoreKey();
+  if (!storeKey || !session?.id) {
+    return;
+  }
+
+  const resultId = `map-result-${session.id}-${Date.parse(session.endedAt)}`;
+  const results = getStoredMapResults();
+  const index = results.findIndex((result) => result?.id === resultId);
+  if (index === -1) {
+    return;
+  }
+
+  const lootEntries = Array.isArray(session.lootEntries) ? session.lootEntries : [];
+  const netProfit = Number(session.profitChaos) || 0;
+  // The stored profit, top items and status are dropped so the ledger normalizer derives them from the new values.
+  const { profitChaos, topLootItems, calculationStatus, ...stored } = results[index];
+  const nextResult = normalizeMapResultForLedger({
+    ...stored,
+    outputValue: Number(session.totalLootChaos) || 0,
+    netProfit,
+    profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral',
+    topOutputs: getTopLootOutputs(lootEntries),
+    lootItemCount: lootEntries.reduce((sum, loot) => sum + (parseInt(loot.quantity || 1, 10) || 1), 0)
+  });
+  store.set(storeKey, results.map((result, resultIndex) => (resultIndex === index ? nextResult : result)));
+}
+
+// Fixes one loot entry of a run, active or finished, and keeps main's copies of the run in step.
+function editSessionLoot(sessionId, lootId, { quantity, remove = false } = {}) {
+  const now = new Date();
+  const { journal, session, totalsFollowLoot } = remove
+    ? localJournal.deleteLoot(readJournal(), sessionId, lootId, { now })
+    : localJournal.updateLoot(readJournal(), sessionId, lootId, { quantity }, { now });
+  writeJournal(journal);
+  if (currentSession?.id === session.id) {
+    currentSession = session;
+  }
+  // A stash diff's totals do not come from the loot, and a shutdown saves that result under this run's id too, so
+  // only a result the loot produced is recomputed.
+  if (session.status !== 'active' && totalsFollowLoot) {
+    updateSessionMapResult(session);
+  }
+  return session;
 }
 
 function saveMapResultHistory(result) {
@@ -4606,6 +4654,22 @@ function setupIPC() {
       return session;
     } catch (error) {
       throw toRendererError(error, 'Failed to update session details');
+    }
+  });
+
+  ipcMain.handle('update-loot', async (event, sessionId, lootId, changes = {}) => {
+    try {
+      return editSessionLoot(sessionId, lootId, { quantity: changes?.quantity });
+    } catch (error) {
+      throw toRendererError(error, 'Failed to update loot');
+    }
+  });
+
+  ipcMain.handle('delete-loot', async (event, sessionId, lootId) => {
+    try {
+      return editSessionLoot(sessionId, lootId, { remove: true });
+    } catch (error) {
+      throw toRendererError(error, 'Failed to remove loot');
     }
   });
 

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 
 const {
   addLoot,
+  deleteLoot,
   endSession,
   getActiveSession,
   getPersonalStats,
@@ -10,6 +11,7 @@ const {
   listRecentLoot,
   listSessions,
   startSession,
+  updateLoot,
   updateSession
 } = require('../src/modules/localJournalModel');
 
@@ -274,4 +276,104 @@ test('getPersonalStats sums completed sessions started today in the selected con
   assert.equal(stats.summary.avgProfitPerHour, 30);
   assert.equal(otherLeague.summary.totalSessions, 0);
   assert.equal(otherLeague.summary.avgProfitPerMap, 0);
+});
+
+function lootJournal({ end = false } = {}) {
+  const started = startedJournal({ costChaos: 10 });
+  const added = addLoot(started.journal, 'session-1', [
+    { itemName: 'Divine Orb', chaosValue: 100, quantity: 2 },
+    { itemName: 'Chaos Orb', chaosValue: 1, quantity: 5 }
+  ], { createId: idFactory('loot'), now: NOW });
+  if (!end) return added;
+  const ended = endSession(added.journal, 'session-1', {}, { now: new Date('2026-10-21T12:30:00.000Z') });
+  return { journal: ended.journal, session: ended.session };
+}
+
+test('updateLoot changes the quantity and the totals of an active and a completed session', () => {
+  const later = new Date('2026-10-21T13:00:00.000Z');
+  for (const end of [false, true]) {
+    const { journal, session } = lootJournal({ end });
+    const [first] = session.lootEntries;
+    const result = updateLoot(journal, 'session-1', first.id, { quantity: '3' }, { now: later });
+
+    assert.equal(result.lootEntry.quantity, 3);
+    assert.equal(result.lootEntry.updatedAt, later.toISOString());
+    assert.equal(result.session.totalLootChaos, 3 * first.chaosValue + 5);
+    assert.equal(result.session.profitChaos, result.session.totalLootChaos - 10);
+    assert.equal(result.session.updatedAt, later.toISOString());
+    assert.equal(result.session.status, end ? 'completed' : 'active');
+    assert.deepEqual(result.session.lootEntries.map((loot) => loot.id), session.lootEntries.map((loot) => loot.id));
+    assert.deepEqual(getSession(result.journal, 'session-1'), result.session);
+  }
+});
+
+test('updateLoot rejects quantities that are not whole numbers from 1 to 1000000 and unknown ids', () => {
+  const { journal, session } = lootJournal();
+  const id = session.lootEntries[0].id;
+  for (const quantity of [0, -1, 2.5, 'x', '', 1000001, NaN, null, undefined, '2.5', '1e3', '0x10', true, ' ']) {
+    assert.throws(() => updateLoot(journal, 'session-1', id, { quantity }, { now: NOW }), { code: 'LOOT_QUANTITY_INVALID' }, String(quantity));
+  }
+  assert.throws(() => updateLoot(journal, 'session-1', id, undefined, { now: NOW }), { code: 'LOOT_QUANTITY_INVALID' });
+  assert.equal(updateLoot(journal, 'session-1', id, { quantity: 1000000 }, { now: NOW }).lootEntry.quantity, 1000000);
+  assert.equal(updateLoot(journal, 'session-1', id, { quantity: ' 12 ' }, { now: NOW }).lootEntry.quantity, 12);
+  assert.throws(() => updateLoot(journal, 'session-1', 'nope', { quantity: 2 }, { now: NOW }), { code: 'LOOT_NOT_FOUND' });
+  assert.throws(() => updateLoot(journal, 'missing', id, { quantity: 2 }, { now: NOW }), { code: 'SESSION_NOT_FOUND' });
+});
+
+test('deleteLoot removes the entry and retotals the session', () => {
+  for (const end of [false, true]) {
+    const { journal, session } = lootJournal({ end });
+    const [first, second] = session.lootEntries;
+    const result = deleteLoot(journal, 'session-1', first.id, { now: NOW });
+
+    assert.deepEqual(result.lootEntry, first);
+    assert.deepEqual(result.session.lootEntries, [second]);
+    assert.equal(result.session.totalLootChaos, 5);
+    assert.equal(result.session.profitChaos, -5);
+    assert.equal(result.session.status, end ? 'completed' : 'active');
+    assert.throws(() => deleteLoot(result.journal, 'session-1', first.id, { now: NOW }), { code: 'LOOT_NOT_FOUND' });
+    assert.throws(() => deleteLoot(journal, 'missing', first.id, { now: NOW }), { code: 'SESSION_NOT_FOUND' });
+  }
+});
+
+test('updateLoot and deleteLoot keep totals that did not come from the loot, such as stash-diff totals', () => {
+  const { journal, session } = lootJournal();
+  const ended = endSession(journal, 'session-1', { totalLootChaos: 500, profitChaos: 490 }, { now: NOW });
+  const [first] = session.lootEntries;
+
+  for (const result of [
+    updateLoot(ended.journal, 'session-1', first.id, { quantity: 9 }, { now: NOW }),
+    deleteLoot(ended.journal, 'session-1', first.id, { now: NOW })
+  ]) {
+    assert.equal(result.session.totalLootChaos, 500);
+    assert.equal(result.session.profitChaos, 490);
+    assert.equal(result.session.status, 'completed');
+    assert.equal(result.totalsFollowLoot, false);
+  }
+  assert.equal(updateLoot(journal, 'session-1', first.id, { quantity: 9 }, { now: NOW }).totalsFollowLoot, true);
+});
+
+test('stash totals equal to the loot sum still stay when their profit is not the loot\'s', () => {
+  const { journal, session } = lootJournal();
+  // The loot sums to 205, but the stash diff lost value elsewhere, so its profit is not 205 - 10.
+  const ended = endSession(journal, 'session-1', { totalLootChaos: 205, profitChaos: -50 }, { now: NOW });
+  const [first] = session.lootEntries;
+
+  const { session: updated, totalsFollowLoot } = updateLoot(ended.journal, 'session-1', first.id, { quantity: 1 }, { now: NOW });
+
+  assert.equal(totalsFollowLoot, false);
+  assert.equal(updated.totalLootChaos, 205);
+  assert.equal(updated.profitChaos, -50);
+});
+
+test('only an id string names a loot entry, so entries without an id cannot be edited by a missing one', () => {
+  const started = startedJournal();
+  const journal = {
+    sessions: [{ ...started.session, lootEntries: [{ itemName: 'Old Scroll', quantity: 1, chaosValue: 1 }] }]
+  };
+
+  for (const lootId of [undefined, null, '', 0]) {
+    assert.throws(() => deleteLoot(journal, 'session-1', lootId, { now: NOW }), { code: 'LOOT_NOT_FOUND' }, String(lootId));
+    assert.throws(() => updateLoot(journal, 'session-1', lootId, { quantity: 2 }, { now: NOW }), { code: 'LOOT_NOT_FOUND' }, String(lootId));
+  }
 });

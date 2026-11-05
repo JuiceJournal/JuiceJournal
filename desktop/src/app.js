@@ -41,6 +41,13 @@ const state = {
   appUpdateToast: null,
   capabilities: null,
   selectedSession: null,
+  // Run drawer loot editing: the mode, the row whose remove button is armed (with its disarm timer), the row in flight,
+  // and whether the rows are being rebuilt.
+  sessionLootEditing: false,
+  sessionLootArmedId: null,
+  sessionLootArmTimer: null,
+  sessionLootBusyId: null,
+  sessionLootRedrawing: false,
   auditTrail: [],
   // True while main says the signed-in profile's journal cannot be read; Dashboard and Sessions show the notice.
   journalUnreadable: false,
@@ -234,6 +241,7 @@ const elements = {
   sessionDrawerAnalytics: document.getElementById('session-drawer-analytics'),
   sessionDrawerLoot: document.getElementById('session-drawer-loot'),
   sessionDrawerLootCount: document.getElementById('session-drawer-loot-count'),
+  sessionDrawerLootEdit: document.getElementById('session-drawer-loot-edit'),
 
   // Farming Hub
   farmingHubList: document.getElementById('farming-hub-list'),
@@ -2576,6 +2584,12 @@ function setupEventListeners() {
   if (elements.sessionDrawerClose) elements.sessionDrawerClose.addEventListener('click', closeSessionDrawer);
   if (elements.sessionDrawerBackdrop) elements.sessionDrawerBackdrop.addEventListener('click', closeSessionDrawer);
   if (elements.sessionDrawerSave) elements.sessionDrawerSave.addEventListener('click', handleSessionMetadataSave);
+  if (elements.sessionDrawerLootEdit) elements.sessionDrawerLootEdit.addEventListener('click', handleSessionLootEditToggle);
+  if (elements.sessionDrawerLoot) {
+    elements.sessionDrawerLoot.addEventListener('click', handleSessionLootClick);
+    elements.sessionDrawerLoot.addEventListener('keydown', handleSessionLootKeydown);
+    elements.sessionDrawerLoot.addEventListener('focusout', handleSessionLootChange);
+  }
   if (elements.farmingHubVersionFilter) elements.farmingHubVersionFilter.addEventListener('change', loadFarmingHubRuns);
   if (elements.farmingHubLeagueFilter) elements.farmingHubLeagueFilter.addEventListener('change', loadFarmingHubRuns);
   if (elements.farmingHubFarmFilter) elements.farmingHubFarmFilter.addEventListener('change', loadFarmingHubRuns);
@@ -2725,11 +2739,7 @@ function setupEventListeners() {
   if (winMin) winMin.addEventListener('click', () => window.electronAPI.windowMinimize());
   if (winMax) winMax.addEventListener('click', () => window.electronAPI.windowMaximize());
   if (winClose) winClose.addEventListener('click', () => window.electronAPI.windowClose());
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && state.selectedSession) {
-      closeSessionDrawer();
-    }
-  });
+  document.addEventListener('keydown', handleSessionDrawerKeydown);
   // An open dropdown gets its keys first: Escape closes only the list, not the modal or drawer behind it, and a
   // list whose options were rebuilt while open takes the focus back.
   window.addEventListener('keydown', (event) => {
@@ -3876,24 +3886,9 @@ function createCompletedSessionMapResult(session = {}) {
 
 // A run's most valuable drops, grouped by item, in the shape stash-diff results use. Names differ in case between
 // sources, so "Divine orb" and "Divine Orb" are one item, named as first seen.
+// The grouping lives in mapResultStoreModel, so main can recompute a finished run's result from the same code.
 function getScannedTopOutputs(lootEntries = []) {
-  const byItem = new Map();
-  for (const loot of lootEntries) {
-    const label = String(loot?.itemName || '').trim().replace(/\s+/g, ' ');
-    if (!label) continue;
-    const key = label.toLowerCase();
-    const quantity = parseInt(loot.quantity || 1, 10) || 1;
-    const entry = byItem.get(key) || { label, quantityDelta: 0, valueDelta: 0, currencyCode: 'chaos' };
-    entry.quantityDelta += quantity;
-    entry.valueDelta += (parseFloat(loot.chaosValue || 0) || 0) * quantity;
-    if (loot.icon && !entry.icon) entry.icon = loot.icon;
-    byItem.set(key, entry);
-  }
-
-  return [...byItem.values()]
-    .filter((entry) => entry.valueDelta > 0)
-    .sort((a, b) => b.valueDelta - a.valueDelta)
-    .slice(0, 3);
+  return getMapResultStoreModel().getTopLootOutputs(lootEntries);
 }
 
 function normalizeCompletedSessionPoeVersion(value) {
@@ -6642,6 +6637,8 @@ function getUserFacingErrorMessage(error, fallbackKey = 'toast.unexpectedError')
 async function openSessionDrawer(sessionId) {
   if (!elements.sessionDrawer || !sessionId) return;
 
+  resetSessionLootEditing();
+
   elements.sessionDrawer.classList.remove('hidden');
   elements.sessionDrawer.setAttribute('aria-hidden', 'false');
   elements.sessionDrawerTitle.textContent = window.t('sessions.detailKicker');
@@ -7490,7 +7487,7 @@ async function handlePricesUpdated({ poeVersion, league, itemCount } = {}) {
   updateActiveSessionUI();
   renderRecentLoot();
   if (state.selectedSession) {
-    renderSessionDrawer({ keepForm: true });
+    redrawSessionLoot();
   }
   // An open Currency page lists the new prices. The reload is cache-only: when another sync has replaced main's list
   // since this event, it keeps the table as it is rather than start a poe.ninja sync. After the page's own Sync this
@@ -7505,6 +7502,7 @@ async function handlePricesUpdated({ poeVersion, league, itemCount } = {}) {
 
 function closeSessionDrawer() {
   state.selectedSession = null;
+  resetSessionLootEditing();
   if (!elements.sessionDrawer) return;
   elements.sessionDrawer.classList.add('hidden');
   elements.sessionDrawer.setAttribute('aria-hidden', 'true');
@@ -7546,6 +7544,15 @@ function renderSessionDrawer({ keepForm = false } = {}) {
 
   elements.sessionDrawerTitle.textContent = session.mapName || window.t('misc.unknownMap');
   elements.sessionDrawerLootCount.textContent = String(lootQuantity);
+  // Only entries with an id can be edited; runs saved before ids existed stay read-only.
+  const hasEditableLoot = lootEntries.some((loot) => loot.id);
+  if (!hasEditableLoot) state.sessionLootEditing = false;
+  const lootEditing = Boolean(state.sessionLootEditing);
+  if (elements.sessionDrawerLootEdit) {
+    // The label says what a click does next, so the button carries no pressed state as well.
+    elements.sessionDrawerLootEdit.classList.toggle('hidden', !hasEditableLoot);
+    elements.sessionDrawerLootEdit.textContent = window.t(lootEditing ? 'sessions.lootEditDone' : 'sessions.lootEdit');
+  }
   // Profit leads the run; the rest is a compact fact list, so the loot stays above the fold.
   elements.sessionDrawerSummary.innerHTML = `
     <div class="session-drawer-hero">
@@ -7613,26 +7620,219 @@ function renderSessionDrawer({ keepForm = false } = {}) {
     return;
   }
 
-  elements.sessionDrawerLoot.innerHTML = lootEntries
-    .slice()
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+  elements.sessionDrawerLoot.innerHTML = sortSessionLoot(lootEntries)
     .map((loot) => {
       const quantity = parseInt(loot.quantity || 1, 10) || 1;
       const totalValue = (parseFloat(loot.chaosValue || 0) * quantity) || 0;
       const typeLabel = loot.itemType ? escapeHTML(loot.itemType.replace(/_/g, ' ')) : '-';
       const lootTier = typeof getProfitTierFor === 'function' ? getProfitTierFor(totalValue, poeVersion, rateOptions) : 'normal';
+      // Escaped once here: the item name goes into the aria-labels through t() as well as into the row.
+      const itemLabel = escapeHTML(loot.itemName || window.t('misc.unknownItem'));
+      const lootIdAttr = loot.id ? ` data-loot-id="${escapeHTML(loot.id)}"` : '';
+      const editable = lootEditing && Boolean(loot.id);
+      const disabledAttr = editable && state.sessionLootBusyId === loot.id ? ' disabled' : '';
+      const armed = editable && state.sessionLootArmedId === loot.id;
+      const quantityInput = editable
+        ? `<input type="number" class="session-drawer-loot-qty" min="1" max="1000000" step="1" inputmode="numeric" value="${quantity}"${lootIdAttr} aria-label="${window.t('sessions.lootQuantityAria', { item: itemLabel })}"${disabledAttr}>`
+        : '';
+      const removeButton = editable
+        ? `<button type="button" class="btn-icon session-drawer-loot-remove${armed ? ' is-armed' : ''}"${lootIdAttr} aria-label="${window.t(armed ? 'sessions.lootRemoveConfirmAria' : 'sessions.lootRemoveAria', { item: itemLabel })}"${disabledAttr}>${armed ? window.t('sessions.lootRemoveConfirm') : '<svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#trash"/></svg>'}</button>`
+        : '';
       return `
-        <article class="session-drawer-loot-item">
+        <article class="session-drawer-loot-item"${lootIdAttr}>
           ${itemSlotHTML(loot.itemName, poeVersion, { small: true, quantity, fallback: 'empty' })}
           <div class="session-drawer-loot-main">
-            <span class="session-drawer-loot-name">${escapeHTML(loot.itemName || window.t('misc.unknownItem'))}</span>
+            <span class="session-drawer-loot-name">${itemLabel}</span>
             <div class="session-drawer-loot-meta">${typeLabel} · ${loot.createdAt ? timeAgo(loot.createdAt) : '-'}</div>
           </div>
+          ${quantityInput}
           <div class="session-drawer-loot-value" data-profit-tier="${lootTier}">${formatProfit(totalValue, 14, poeVersion, rateOptions)}</div>
+          ${removeButton}
         </article>
       `;
     })
     .join('');
+}
+
+function sortSessionLoot(lootEntries) {
+  return lootEntries.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function clearSessionLootArm() {
+  clearTimeout(state.sessionLootArmTimer);
+  state.sessionLootArmTimer = null;
+  state.sessionLootArmedId = null;
+}
+
+function resetSessionLootEditing() {
+  clearSessionLootArm();
+  state.sessionLootEditing = false;
+  state.sessionLootBusyId = null;
+}
+
+// A redraw replaces the rows, so the control the player was on is found again by its loot id. A box keeps what was
+// typed in it, as a price update can redraw while the player types.
+function getFocusedSessionLootControl(node = document.activeElement) {
+  if (!node || !elements.sessionDrawerLoot.contains(node) || !node.dataset?.lootId) return null;
+  return node.classList.contains('session-drawer-loot-remove')
+    ? { kind: 'remove', lootId: node.dataset.lootId }
+    : { kind: 'qty', lootId: node.dataset.lootId, value: node.value };
+}
+
+function focusSessionLootControl(target) {
+  if (!target) return;
+  let node = null;
+  if (target.kind === 'toggle') {
+    // With no editable entry left the toggle is hidden, so focus goes to the drawer's close button.
+    node = elements.sessionDrawerLootEdit?.classList.contains('hidden') ? elements.sessionDrawerClose : elements.sessionDrawerLootEdit;
+  } else {
+    const selector = target.kind === 'remove' ? '.session-drawer-loot-remove' : '.session-drawer-loot-qty';
+    node = [...elements.sessionDrawerLoot.querySelectorAll(selector)].find((control) => control.dataset.lootId === target.lootId);
+  }
+  if (!node) return;
+  if (target.kind === 'qty' && target.value !== undefined) node.value = target.value;
+  if (!node.disabled) node.focus();
+}
+
+// Locks one row while main writes it. The rows stay in place, so a click on another row still lands.
+function lockSessionLootRow(lootId) {
+  for (const selector of ['.session-drawer-loot-qty', '.session-drawer-loot-remove']) {
+    elements.sessionDrawerLoot.querySelectorAll(selector).forEach((control) => {
+      if (control.dataset.lootId === lootId) control.disabled = true;
+    });
+  }
+}
+
+function redrawSessionLoot(focus = getFocusedSessionLootControl()) {
+  // Chromium fires focusout on a focused box the rebuild removes; that is not the player committing it.
+  state.sessionLootRedrawing = true;
+  try {
+    renderSessionDrawer({ keepForm: true });
+  } finally {
+    state.sessionLootRedrawing = false;
+  }
+  focusSessionLootControl(focus);
+}
+
+function parseSessionLootQuantity(value) {
+  const text = String(value ?? '').trim();
+  if (!/^\d+$/.test(text)) return null;
+  const quantity = Number(text);
+  return quantity >= 1 && quantity <= 1000000 ? quantity : null;
+}
+
+function handleSessionLootEditToggle() {
+  state.sessionLootEditing = !state.sessionLootEditing;
+  clearSessionLootArm();
+  redrawSessionLoot();
+}
+
+// Escape first backs out of an armed remove; only then does it close the drawer.
+function handleSessionDrawerKeydown(event) {
+  if (event.key !== 'Escape' || !state.selectedSession) return;
+  if (state.sessionLootArmedId) {
+    clearSessionLootArm();
+    redrawSessionLoot();
+    return;
+  }
+  closeSessionDrawer();
+}
+
+function armSessionLootRemove(lootId) {
+  clearSessionLootArm();
+  state.sessionLootArmedId = lootId;
+  // The second click has four seconds; after that the row goes back to its trash icon.
+  state.sessionLootArmTimer = setTimeout(() => {
+    state.sessionLootArmTimer = null;
+    if (state.sessionLootArmedId !== lootId) return;
+    state.sessionLootArmedId = null;
+    redrawSessionLoot();
+  }, 4000);
+  redrawSessionLoot({ kind: 'remove', lootId });
+}
+
+function handleSessionLootClick(event) {
+  const button = event.target?.closest?.('.session-drawer-loot-remove');
+  const lootId = button?.dataset?.lootId;
+  // While another row saves, the click waits: the row stays armed for a second click once that save is done.
+  if (!lootId || button.disabled || state.sessionLootBusyId) return;
+  if (state.sessionLootArmedId !== lootId) {
+    armSessionLootRemove(lootId);
+    return;
+  }
+  clearSessionLootArm();
+  changeSessionLoot(lootId, { remove: true });
+}
+
+// A box commits on Enter or when focus leaves it, not on each arrow-key step.
+function handleSessionLootKeydown(event) {
+  if (event.key !== 'Enter' || !event.target?.closest?.('.session-drawer-loot-qty')) return;
+  event.preventDefault();
+  handleSessionLootChange(event);
+}
+
+function handleSessionLootChange(event) {
+  const input = event.target?.closest?.('.session-drawer-loot-qty');
+  const lootId = input?.dataset?.lootId;
+  // The row being saved locks its box, and that can move focus out of it; that is not a new commit. Nor is a rebuild.
+  if (!lootId || lootId === state.sessionLootBusyId || (event.type === 'focusout' && state.sessionLootRedrawing)) return;
+  const entry = (state.selectedSession?.lootEntries || []).find((loot) => loot.id === lootId);
+  const oldQuantity = parseInt(entry?.quantity || 1, 10) || 1;
+  const quantity = parseSessionLootQuantity(input.value);
+  // While another row saves, this one cannot, so it shows its stored quantity again rather than an unsaved one.
+  if (quantity === null || quantity === oldQuantity || state.sessionLootBusyId) {
+    input.value = String(oldQuantity);
+    return;
+  }
+  // Focus leaving a box commits it; the control focus moved to gets it back once the rows are redrawn.
+  const focus = getFocusedSessionLootControl(event.type === 'focusout' ? event.relatedTarget : input);
+  changeSessionLoot(lootId, { quantity }, focus);
+}
+
+async function changeSessionLoot(lootId, { quantity, remove = false } = {}, focusBefore = getFocusedSessionLootControl()) {
+  const session = state.selectedSession;
+  if (!session?.id || state.sessionLootBusyId) return;
+
+  const entries = Array.isArray(session.lootEntries) ? session.lootEntries : [];
+  const item = entries.find((loot) => loot.id === lootId)?.itemName || window.t('misc.unknownItem');
+
+  clearSessionLootArm();
+  state.sessionLootBusyId = lootId;
+  lockSessionLootRow(lootId);
+
+  let succeeded = false;
+  try {
+    const updated = remove
+      ? await window.electronAPI.deleteLoot(session.id, lootId)
+      : await window.electronAPI.updateLoot(session.id, lootId, { quantity });
+    succeeded = true;
+    // The player may have opened another run while main was writing.
+    if (state.selectedSession?.id === session.id) state.selectedSession = updated;
+  } catch (error) {
+    showToast(window.t('toast.lootUpdateError'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
+  } finally {
+    state.sessionLootBusyId = null;
+  }
+
+  // Focus goes back to where the player has it now, or had it when this started.
+  let focus = getFocusedSessionLootControl() || focusBefore;
+  if (succeeded && remove && (!focus || focus.lootId === lootId)) {
+    // The row is gone: focus moves to the next row's remove button, else the previous one's, else the toggle.
+    const ids = sortSessionLoot(entries).filter((loot) => loot.id).map((loot) => loot.id);
+    const index = ids.indexOf(lootId);
+    const neighbour = ids[index + 1] || ids[index - 1];
+    focus = neighbour ? { kind: 'remove', lootId: neighbour } : { kind: 'toggle' };
+  } else if (!succeeded && focus?.lootId === lootId) {
+    // A failed change shows the stored values again, so the box drops what was typed.
+    focus = { kind: focus.kind, lootId };
+  }
+  redrawSessionLoot(focus);
+  if (!succeeded) return;
+
+  announceStatus(remove
+    ? window.t('sessions.lootRemoved', { item })
+    : window.t('sessions.lootQuantityChanged', { item, count: quantity }));
+  await refreshTrackerData({ includeSessions: true, immediate: true });
 }
 
 async function handleSessionMetadataSave() {

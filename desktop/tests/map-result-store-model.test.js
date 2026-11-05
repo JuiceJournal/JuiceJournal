@@ -364,6 +364,7 @@ test('renderer creates a completed map result directly from an ended session', (
     'getScannedTopOutputs',
     'createCompletedSessionMapResult'
   ], {
+    getMapResultStoreModel: () => require('../src/modules/mapResultStoreModel.js'),
     state: {
       account: {
         summary: { id: 'char-1', name: 'JaylenBaliston' },
@@ -429,6 +430,7 @@ test('renderer keeps the Divine and Mirror rates on a completed session result s
     'getScannedTopOutputs',
     'createCompletedSessionMapResult'
   ], {
+    getMapResultStoreModel: () => require('../src/modules/mapResultStoreModel.js'),
     state: {
       account: {},
       settings: { poeVersion: 'poe2' },
@@ -483,6 +485,7 @@ test('ending a PoE1 map session routes through stash diff completion instead of 
     'isActiveSessionPoe1',
     'handleEndSession'
   ], {
+    getMapResultStoreModel: () => require('../src/modules/mapResultStoreModel.js'),
     state,
     elements: { endSessionBtn: {} },
     isStashTrackingEnabled: () => true,
@@ -1205,7 +1208,9 @@ test('desktop preload exposes the prices-updated subscription', () => {
 });
 
 test('an OCR run keeps its three most valuable drops, grouped by item, for the overlay result card', () => {
-  const context = loadFunctions(['getScannedTopOutputs']);
+  const context = loadFunctions(['getScannedTopOutputs'], {
+    getMapResultStoreModel: () => require('../src/modules/mapResultStoreModel.js')
+  });
   const topOutputs = context.getScannedTopOutputs([
     { itemName: 'Chaos Orb', quantity: 30, chaosValue: 1 },
     { itemName: 'Divine Orb', quantity: 1, chaosValue: 150 },
@@ -1223,4 +1228,24 @@ test('an OCR run keeps its three most valuable drops, grouped by item, for the o
     { label: 'Ambush Scarab', quantityDelta: 1, valueDelta: 8, currencyCode: 'chaos' }
   ]);
   assert.deepEqual(JSON.parse(JSON.stringify(context.getScannedTopOutputs())), []);
+});
+
+test('getTopLootOutputs groups by item, keeps the first icon, drops worthless items and keeps the top three', () => {
+  const { getTopLootOutputs } = loadStoreModel();
+
+  assert.deepEqual(getTopLootOutputs(), []);
+  assert.deepEqual(getTopLootOutputs([
+    { itemName: 'Divine  Orb ', chaosValue: 100, quantity: 1 },
+    { itemName: 'divine orb', chaosValue: 100, quantity: 2, icon: 'divine.png' },
+    { itemName: 'Chaos Orb', chaosValue: 1, quantity: 10, icon: 'chaos.png' },
+    { itemName: 'Exalted Orb', chaosValue: 20, quantity: 1 },
+    { itemName: 'Alch Orb', chaosValue: 0.5, quantity: 1 },
+    { itemName: 'Scroll', chaosValue: 0, quantity: 50 },
+    { itemName: '   ', chaosValue: 99 },
+    { itemName: 'Mirror Shard', chaosValue: 5 }
+  ]), [
+    { label: 'Divine Orb', quantityDelta: 3, valueDelta: 300, currencyCode: 'chaos', icon: 'divine.png' },
+    { label: 'Exalted Orb', quantityDelta: 1, valueDelta: 20, currencyCode: 'chaos' },
+    { label: 'Chaos Orb', quantityDelta: 10, valueDelta: 10, currencyCode: 'chaos', icon: 'chaos.png' }
+  ]);
 });
