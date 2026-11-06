@@ -2309,19 +2309,134 @@ function normalizeSafeImageSrc(src) {
   }
 }
 
+// Remote art already found in the icon cache, by URL. A list that redraws, such as the run drawer while it is edited,
+// shows that art at once instead of blanking it until main answers.
+const cachedItemIconSources = new Map();
+
 // Points each <img data-icon-url> at its local icon-cache copy when there is one, else at the remote art.
 async function applyCachedItemIcons(container) {
   const images = [...container.querySelectorAll('img[data-icon-url]')];
-  const urls = [...new Set(images.map((img) => img.dataset.iconUrl))];
+  const pending = images.filter((img) => {
+    const known = cachedItemIconSources.get(img.dataset.iconUrl);
+    if (known) img.src = known;
+    return !known;
+  });
+  const urls = [...new Set(pending.map((img) => img.dataset.iconUrl))];
   let cached = {};
   if (urls.length > 0 && typeof window.electronAPI?.resolveCachedIcons === 'function') {
     cached = await window.electronAPI.resolveCachedIcons(urls).catch(() => ({})) || {};
   }
 
-  images.forEach((img) => {
+  pending.forEach((img) => {
     const cachedSrc = String(cached[img.dataset.iconUrl] || '');
-    img.src = cachedSrc.startsWith('file:') ? cachedSrc : normalizeSafeImageSrc(img.dataset.iconUrl);
+    if (cachedSrc.startsWith('file:')) {
+      // Only a local copy is remembered: remote art may be cached later and should then come from disk.
+      cachedItemIconSources.set(img.dataset.iconUrl, cachedSrc);
+      img.src = cachedSrc;
+    } else {
+      img.src = normalizeSafeImageSrc(img.dataset.iconUrl);
+    }
   });
+}
+
+// Art main looked up for loot rows that carry none, per game and lowercase name; '' is a name main has no art for.
+const lootArtCache = { poe1: new Map(), poe2: new Map() };
+// Names main is being asked about, per game, with the answer to wait on.
+const lootArtAsking = { poe1: new Map(), poe2: new Map() };
+const LOOT_ART_ASK_SIZE = 200;
+// Goes up when prices update: an answer to an ask from before then may come from the old list, so its misses are dropped.
+let lootArtGeneration = 0;
+
+function lootArtKey(itemName) {
+  return String(itemName || '').trim().toLowerCase();
+}
+
+// The art a loot row shows beyond the bundled art: the one stored with it, else what main looked up, else none.
+function lootArtUrl(loot, poeVersion) {
+  if (loot?.icon) {
+    return loot.icon;
+  }
+  return lootArtCache[poeVersion === 'poe2' ? 'poe2' : 'poe1'].get(lootArtKey(loot?.itemName)) || '';
+}
+
+// Asks main once for the names that have no bundled art and no answer yet, and calls redraw when it brought art.
+// A name another view already asked for is waited on instead, so every view that shows it redraws.
+async function ensureLootArt(names, poeVersion, redraw) {
+  const game = poeVersion === 'poe2' ? 'poe2' : 'poe1';
+  const cache = lootArtCache[game];
+  const asking = lootArtAsking[game];
+  const getItemIcons = window.electronAPI?.getItemIcons;
+  if (typeof getItemIcons !== 'function') {
+    return;
+  }
+
+  const wanted = new Map();
+  const waiting = new Map();
+  for (const name of names) {
+    const key = lootArtKey(name);
+    if (!key || wanted.has(key) || waiting.has(key) || cache.has(key) || getLocalItemIconPath(name, game)) {
+      continue;
+    }
+    if (asking.has(key)) {
+      waiting.set(key, asking.get(key));
+    } else {
+      wanted.set(key, String(name));
+    }
+  }
+
+  const asks = [...wanted];
+  const answers = [];
+  const generation = lootArtGeneration;
+  for (let start = 0; start < asks.length; start += LOOT_ART_ASK_SIZE) {
+    const chunk = asks.slice(start, start + LOOT_ART_ASK_SIZE);
+    // The ask starts on the next microtask, so its names are marked as asked before anything can settle it.
+    const answer = Promise.resolve().then(async () => {
+      let icons = null;
+      try {
+        icons = await getItemIcons.call(window.electronAPI, chunk.map(([, name]) => name), game);
+      } catch {
+        // Not cached, so a later draw asks again.
+      }
+      chunk.forEach(([key, name]) => {
+        if (asking.get(key) === answer) {
+          asking.delete(key);
+        }
+        const icon = icons && typeof icons[name] === 'string' ? icons[name] : '';
+        if (icons && (icon || generation === lootArtGeneration)) {
+          cache.set(key, icon);
+        }
+      });
+    });
+    chunk.forEach(([key]) => asking.set(key, answer));
+    answers.push(answer);
+  }
+
+  await Promise.all([...answers, ...waiting.values()]);
+  if ([...wanted.keys(), ...waiting.keys()].some((key) => cache.get(key)) && typeof redraw === 'function') {
+    redraw();
+  }
+}
+
+// For rows from different games: asks per game.
+function ensureLootArtForRows(rows, redraw) {
+  ['poe1', 'poe2'].forEach((game) => {
+    const names = rows.filter((row) => row.poeVersion === game).map((row) => row.name);
+    if (names.length) {
+      ensureLootArt(names, game, redraw);
+    }
+  });
+}
+
+// Art found after a price sync shows, so the names main had no art for are asked again.
+function clearLootArtMisses() {
+  lootArtGeneration += 1;
+  Object.values(lootArtCache).forEach((cache) => {
+    cache.forEach((icon, key) => {
+      if (!icon) cache.delete(key);
+    });
+  });
+  // Asks already on their way answer from the old list; the next draw asks again.
+  Object.values(lootArtAsking).forEach((asking) => asking.clear());
 }
 
 function createCurrencyValueElement(value, type = 'chaos', iconSize = 18, poeVersion = state.settings.poeVersion || 'poe1', options = {}) {
@@ -4237,7 +4352,7 @@ function mapResultTopDropHTML(result = {}) {
   const label = escapeHTML(drop.label);
   const slot = itemSlotHTML(drop.label, result.poeVersion || state.settings?.poeVersion || 'poe1', {
     quantity: Number(drop.quantityDelta) || 1,
-    iconUrl: drop.icon || ''
+    iconUrl: lootArtUrl({ itemName: drop.label, icon: drop.icon }, result.poeVersion || state.settings?.poeVersion || 'poe1')
   });
   const value = formatMapResultProfitHTML({ netProfit: drop.valueDelta, poeVersion: result.poeVersion }, 18);
   return `<div class="map-result-history-drop" title="${label}">${slot}<span class="map-result-history-drop-text"><strong>${label}</strong>${value}</span></div>`;
@@ -4319,6 +4434,13 @@ function renderMapResultHistory() {
   if (typeof applyCachedItemIcons === 'function') {
     applyCachedItemIcons(elements.mapResultHistory);
   }
+  ensureLootArtForRows(
+    filteredResults.filter((result) => result?.topOutputs?.[0]?.label && !result.topOutputs[0].icon).map((result) => ({
+      name: result.topOutputs[0].label,
+      poeVersion: result.poeVersion || state.settings?.poeVersion || 'poe1'
+    })),
+    renderMapResultHistory
+  );
 }
 
 function findMapResultById(resultId) {
@@ -5652,7 +5774,7 @@ function renderRecentLoot() {
 
     return `
       <article class="recent-loot-item">
-        ${itemSlotHTML(loot.itemName, poeVersion, { quantity })}
+        ${itemSlotHTML(loot.itemName, poeVersion, { quantity, iconUrl: lootArtUrl(loot, poeVersion) })}
         <div class="recent-loot-main">
           <span class="recent-loot-name">${escapeHTML(loot.itemName || window.t('misc.unknownItem'))}</span>
           <div class="recent-loot-meta">${escapeHTML(session.mapName || window.t('misc.unknownMap'))} · ${timeAgo(loot.createdAt)}</div>
@@ -5661,6 +5783,14 @@ function renderRecentLoot() {
       </article>
     `;
   }).join('');
+  applyCachedItemIcons(elements.recentLootList);
+  ensureLootArtForRows(
+    state.recentLoot.filter((loot) => !loot.icon).map((loot) => ({
+      name: loot.itemName,
+      poeVersion: loot.session?.poeVersion || state.settings.poeVersion || 'poe1'
+    })),
+    renderRecentLoot
+  );
 }
 
 /**
@@ -7566,6 +7696,7 @@ function renderPriceItemCount(count) {
 
 async function handlePricesUpdated({ poeVersion, league, itemCount } = {}) {
   renderPriceItemCount(itemCount);
+  clearLootArtMisses();
   await refreshProfitCurrencyRates(poeVersion || state.settings.poeVersion || 'poe1', league, { cacheOnly: true });
   renderLatestMapResult();
   renderMapResultHistory();
@@ -7726,7 +7857,7 @@ function renderSessionDrawer({ keepForm = false } = {}) {
         : '';
       return `
         <article class="session-drawer-loot-item"${lootIdAttr}>
-          ${itemSlotHTML(loot.itemName, poeVersion, { small: true, quantity, fallback: 'empty' })}
+          ${itemSlotHTML(loot.itemName, poeVersion, { small: true, quantity, fallback: 'empty', iconUrl: lootArtUrl(loot, poeVersion) })}
           <div class="session-drawer-loot-main">
             <span class="session-drawer-loot-name">${itemLabel}</span>
             <div class="session-drawer-loot-meta">${typeLabel} · ${loot.createdAt ? timeAgo(loot.createdAt) : '-'}</div>
@@ -7738,6 +7869,13 @@ function renderSessionDrawer({ keepForm = false } = {}) {
       `;
     })
     .join('');
+  applyCachedItemIcons(elements.sessionDrawerLoot);
+  ensureLootArt(
+    lootEntries.filter((loot) => !loot.icon).map((loot) => loot.itemName),
+    poeVersion,
+    // Through redrawSessionLoot, so the focus and what was typed in a quantity box survive.
+    () => { if (state.selectedSession?.id === session.id) redrawSessionLoot(); }
+  );
 }
 
 function sortSessionLoot(lootEntries) {

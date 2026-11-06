@@ -154,6 +154,12 @@ function loadFunctions(functionNames, contextOverrides = {}) {
   const context = vm.createContext({
     console,
     window: { t: (key) => key },
+    // Loot art lookups are tested on their own; these tests draw without them.
+    lootArtUrl: (loot) => loot?.icon || '',
+    ensureLootArt() {},
+    ensureLootArtForRows() {},
+    clearLootArtMisses() {},
+    applyCachedItemIcons() {},
     ...contextOverrides
   });
 
@@ -2650,7 +2656,7 @@ function renderMapResultHistoryWith(mapResults, overrides = {}) {
   });
 
   context.renderMapResultHistory();
-  return { html: elements.mapResultHistory.innerHTML, iconContainers, elements };
+  return { html: elements.mapResultHistory.innerHTML, iconContainers, elements, context };
 }
 
 const HISTORY_RESULT = { id: 'run', farmType: 'Abyss', durationSeconds: 728, netProfit: 127, poeVersion: 'poe2', createdAt: '2026-11-05T10:00:00.000Z' };
@@ -4794,4 +4800,92 @@ test('every palette colour has its token mapping in both windows, and the picker
   }
   assert.match(html, /id="settings-poe"[\s\S]*id="custom-farm-types-group"[\s\S]*id="settings-hotkeys"/);
   assert.match(html, /id="manage-farm-types-btn"/);
+});
+
+test('renderer map result history shows the looked-up art for a top drop that has none stored', () => {
+  const art = { 'Omen of Light': 'https://example.test/omen.png' };
+  const { html, iconContainers, elements } = renderMapResultHistoryWith([{
+    ...HISTORY_RESULT,
+    topOutputs: [{ label: 'Omen of Light', quantityDelta: 1, valueDelta: 900 }]
+  }], { lootArtUrl: (loot) => loot.icon || art[loot.itemName] || '' });
+
+  assert.match(html, /<img data-icon-url="https:\/\/example\.test\/omen\.png" alt="" draggable="false">/);
+  assert.deepEqual(iconContainers, [elements.mapResultHistory]);
+});
+
+test('renderer map result history asks for the art of top drops without stored art, by game, and redraws itself', () => {
+  const asked = [];
+  const { context } = renderMapResultHistoryWith([
+    { ...HISTORY_RESULT, id: 'r1', topOutputs: [{ label: 'No Icon', quantityDelta: 1, valueDelta: 5 }] },
+    { ...HISTORY_RESULT, id: 'r2', poeVersion: 'poe1', topOutputs: [{ label: 'Has Icon', quantityDelta: 1, valueDelta: 5, icon: 'https://example.test/a.png' }] },
+    { ...HISTORY_RESULT, id: 'r3', poeVersion: undefined, topOutputs: [{ label: 'Default Game', quantityDelta: 1, valueDelta: 5 }] },
+    { ...HISTORY_RESULT, id: 'r4', topOutputs: [] }
+  ], { ensureLootArtForRows: (rows, redraw) => asked.push([rows, redraw]) });
+
+  assert.equal(asked.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(asked[0][0])), [
+    { name: 'No Icon', poeVersion: 'poe2' },
+    { name: 'Default Game', poeVersion: 'poe1' }
+  ]);
+  assert.equal(asked[0][1], context.renderMapResultHistory);
+});
+
+test('recent loot rows use the stored art, then the looked-up art, and ask for the rest by game', () => {
+  const slots = [];
+  const asked = [];
+  const art = { 'Looked Up': 'https://example.test/looked.png' };
+  const elements = { recentLootList: { innerHTML: '' } };
+  const iconContainers = [];
+  const context = createProfitDisplayContext(['renderRecentLoot'], {
+    elements,
+    escapeHTML: (value) => String(value),
+    timeAgo: () => '1m ago',
+    itemSlotHTML: (itemName, poeVersion, options) => { slots.push([itemName, poeVersion, options.iconUrl]); return '<span class="item-slot"></span>'; },
+    lootArtUrl: (loot) => loot.icon || art[loot.itemName] || '',
+    applyCachedItemIcons: (container) => iconContainers.push(container),
+    ensureLootArtForRows: (rows, redraw) => asked.push([rows, redraw]),
+    state: {
+      currentUser: { id: 'profile-1' },
+      recentLoot: [
+        { itemName: 'Stored', quantity: 1, chaosValue: 1, icon: 'https://example.test/stored.png', session: { poeVersion: 'poe1', league: 'Standard', mapName: 'A' } },
+        { itemName: 'Looked Up', quantity: 1, chaosValue: 1, session: { poeVersion: 'poe1', league: 'Standard', mapName: 'A' } },
+        { itemName: 'Nothing', quantity: 1, chaosValue: 1, session: { poeVersion: 'poe2', league: 'Standard', mapName: 'B' } }
+      ]
+    }
+  });
+
+  context.renderRecentLoot();
+
+  assert.deepEqual(slots, [
+    ['Stored', 'poe1', 'https://example.test/stored.png'],
+    ['Looked Up', 'poe1', 'https://example.test/looked.png'],
+    ['Nothing', 'poe2', '']
+  ]);
+  assert.deepEqual(iconContainers, [elements.recentLootList]);
+  assert.equal(asked.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(asked[0][0])), [
+    { name: 'Looked Up', poeVersion: 'poe1' },
+    { name: 'Nothing', poeVersion: 'poe2' }
+  ]);
+  assert.equal(asked[0][1], context.renderRecentLoot);
+});
+
+test('a price update forgets the names that had no art before it redraws the views', async () => {
+  const order = [];
+  const context = loadFunctions(['handlePricesUpdated'], {
+    state: { settings: { poeVersion: 'poe1' }, currentUser: null },
+    isPageActive: () => false,
+    renderPriceItemCount() {},
+    clearLootArtMisses: () => order.push('clearMisses'),
+    refreshProfitCurrencyRates: async () => null,
+    renderLatestMapResult() {},
+    renderMapResultHistory: () => order.push('history'),
+    renderSessionsList() {},
+    updateActiveSessionUI() {},
+    renderRecentLoot: () => order.push('recentLoot')
+  });
+
+  await context.handlePricesUpdated({ poeVersion: 'poe1', league: 'Mirage', itemCount: 10 });
+
+  assert.deepEqual(order, ['clearMisses', 'history', 'recentLoot']);
 });
