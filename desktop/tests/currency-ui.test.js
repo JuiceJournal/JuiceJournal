@@ -137,7 +137,7 @@ test('currency page uses an integrated left market category list', () => {
   assert.match(indexHtml, /class="currency-market-layout"/);
   assert.match(indexHtml, /class="currency-type-panel"/);
   assert.match(indexHtml, /id="currency-type-filter" class="currency-type-tabs"/);
-  assert.match(stylesCss, /\.currency-market-layout\s*\{[\s\S]*grid-template-columns:\s*172px minmax\(0,\s*1fr\)/);
+  assert.match(stylesCss, /\.currency-market-layout\s*\{[\s\S]*grid-template-columns:\s*212px minmax\(0,\s*1fr\)/);
   assert.match(stylesCss, /\.currency-type-tabs\s*\{[\s\S]*overflow-y:\s*auto/);
   assert.doesNotMatch(getCssRule('.currency-type-panel'), /background:/);
 });
@@ -1437,7 +1437,9 @@ test('every category tab shows its bundled art or our line icon in a slot, never
       assert.match(tab, /<span class="currency-tab-label">category\.\w+<\/span><span class="currency-tab-count"><\/span><\/button>$/, where);
     }
   }
-  assert.match(getCssRule('.currency-tab-slot'), /--slot-size:\s*20px;/);
+  // The tabs read at the list's scale: a 26px slot whose art fills most of it.
+  assert.match(getCssRule('.currency-tab-slot'), /--slot-size:\s*26px;/);
+  assert.match(getCssRule('.currency-tab-slot > img'), /width:\s*88%;\s*height:\s*88%;/);
 });
 
 test('rail tabs count the listed prices of their type, and a tab with none is dimmed', () => {
