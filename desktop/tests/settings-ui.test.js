@@ -1525,6 +1525,97 @@ test('renderer keeps prior settings state and shows an error when settings save 
   assert.deepEqual(savedToasts, [['toast.settingsError', 'toast.tryAgain', 'error']]);
 });
 
+function loadSaveSettingsContext({ setSettings, getUserFacingErrorMessage, t = (key) => key }) {
+  const calls = [];
+  const record = (name) => (...args) => {
+    calls.push([name, ...args]);
+  };
+  const context = loadFunctions([
+    'getActiveLeagueControlType',
+    'getActiveLeagueFieldElement',
+    'getActiveLeagueFieldValue',
+    'handleSaveSettings'
+  ], {
+    elements: {
+      apiUrl: { value: 'http://localhost:3001' },
+      poePath: { value: 'C:/New/Client.txt' },
+      autoStartSession: { checked: false },
+      enableNotifications: { checked: false },
+      soundNotifications: { checked: true },
+      globalLanguage: { value: 'en' },
+      scanHotkey: { value: 'F9' },
+      stashScanHotkey: { value: 'Ctrl+Shift+L' },
+      defaultLeague: { value: 'Mercenaries', hidden: false, disabled: false },
+      defaultLeagueSelect: { value: 'Mercenaries', hidden: true, disabled: true },
+      saveSettingsBtn: { id: 'save' }
+    },
+    document: { querySelector: () => null },
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe1', league: 'Standard' }),
+    getHotkeyModel: () => ({
+      validateHotkeys: (hotkeys) => ({
+        scanHotkey: hotkeys.scanHotkey,
+        stashScanHotkey: hotkeys.stashScanHotkey
+      })
+    }),
+    normalizePoeVersion: (value) => value,
+    getSettingsLeagueVersion: () => 'poe1',
+    getLeagueSettingKey: () => 'defaultLeaguePoe1',
+    window: { electronAPI: { setSettings }, t },
+    state: {
+      settings: { apiUrl: 'http://localhost:3001', poePath: 'C:/Old/Client.txt', poeVersion: 'poe1' },
+      currentUser: null
+    },
+    activeLeagueInputState: { dirty: true, version: 'poe1' },
+    applySettingsDraftToDom: record('applySettingsDraftToDom'),
+    updateActiveLeagueFieldContext: record('updateActiveLeagueFieldContext'),
+    refreshOnlineAccount: record('refreshOnlineAccount'),
+    refreshTrackerData: record('refreshTrackerData'),
+    markButtonSaved: record('markButtonSaved'),
+    showToast: record('showToast'),
+    getUserFacingErrorMessage
+  });
+  return { context, calls };
+}
+
+test('renderer leaves the form and the stored state alone when the online prompt was declined', async () => {
+  const { context, calls } = loadSaveSettingsContext({
+    setSettings: async () => ({ canceled: true }),
+    getUserFacingErrorMessage: (error, fallbackKey) => fallbackKey
+  });
+
+  await context.handleSaveSettings();
+
+  assert.deepEqual(calls, []);
+  assert.equal(context.state.settings.poePath, 'C:/Old/Client.txt');
+  assert.equal(context.activeLeagueInputState.dirty, true);
+});
+
+test('renderer shows the Client.txt path error copy when main rejects the path', async () => {
+  const errorHelpers = loadErrorHelpers();
+  const translationsContext = vm.createContext({ window: {} });
+  vm.runInContext(fs.readFileSync(translationsJsPath, 'utf8'), translationsContext);
+  const english = translationsContext.window.Translations.en;
+  errorHelpers.window.t = (key) => english[key] ?? key;
+  const { context, calls } = loadSaveSettingsContext({
+    setSettings: async () => {
+      throw new Error('Invalid Client.txt path');
+    },
+    getUserFacingErrorMessage: errorHelpers.getUserFacingErrorMessage,
+    t: (key) => english[key] ?? key
+  });
+
+  await context.handleSaveSettings();
+
+  assert.deepEqual(calls, [[
+    'showToast',
+    english['toast.settingsError'],
+    'Check the Client.txt path in Settings. It must be a .txt file on a local drive, not a network share.',
+    'error'
+  ]]);
+  assert.equal(english['errors.invalidPoePath'], calls[0][2]);
+  assert.equal(context.state.settings.poePath, 'C:/Old/Client.txt');
+});
+
 test('renderer saves nothing and shows the error copy, not the raw text, when the hotkeys do not validate', async () => {
   const savedToasts = [];
   const saves = [];

@@ -386,3 +386,17 @@ test('the Data tab writes the path and the size as text', () => {
   // The journal notice is static markup; only its hidden class and the announcer line change.
   assert.doesNotMatch(getFunctionBody(appJs, 'setJournalUnreadable'), /innerHTML/);
 });
+
+test('packaged builds turn off the Electron fuses that let the app run as Node, and keep the asar the fuses check', () => {
+  const { build } = JSON.parse(fs.readFileSync(path.join(desktopRoot, 'package.json'), 'utf8'));
+
+  assert.deepEqual(build.electronFuses, {
+    runAsNode: false,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    enableEmbeddedAsarIntegrityValidation: true,
+    onlyLoadAppFromAsar: true
+  });
+  // onlyLoadAppFromAsar and the integrity check would stop a packaged app that ships its files unpacked.
+  assert.notEqual(build.asar, false);
+});

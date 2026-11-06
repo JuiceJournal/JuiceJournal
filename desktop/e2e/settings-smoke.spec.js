@@ -510,7 +510,24 @@ test('settings smoke: launches desktop app and shows core settings controls', as
     expect(backend.requests).toEqual([]);
 
     // The Save button would also send the smoke server's random port, which settings reject, so only the switch is set.
-    await page.evaluate(() => window.electronAPI.setSettings({ onlineEnabled: true }));
+    await electronApp.evaluate(() => {
+      globalThis.__e2eMessageBoxes = [];
+      globalThis.__e2eMessageBoxResponse = 1;
+    });
+    expect(await page.evaluate(() => window.electronAPI.setSettings({ onlineEnabled: true }))).toEqual({ canceled: true });
+    const onlineBoxes = await electronApp.evaluate(() => globalThis.__e2eMessageBoxes);
+    expect(onlineBoxes).toHaveLength(1);
+    expect(onlineBoxes[0]).toMatchObject({
+      type: 'warning',
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+      buttons: ['Allow', 'Cancel'],
+      message: `Send data to ${new URL(backend.baseUrl).origin}?`
+    });
+    expect((await page.evaluate(() => window.electronAPI.getSettings())).onlineEnabled).toBe(false);
+    await electronApp.evaluate(() => { globalThis.__e2eMessageBoxResponse = 0; });
+    expect(await page.evaluate(() => window.electronAPI.setSettings({ onlineEnabled: true }))).toBe(true);
     await page.reload();
     await expect(page.locator('#username')).toHaveText(SMOKE_USER.username);
     await expect(page.locator('#online-enabled')).toBeChecked();
