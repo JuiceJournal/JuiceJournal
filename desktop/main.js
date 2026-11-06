@@ -75,6 +75,9 @@ const MAP_RESULT_OVERLAY_DURATION_MS = 10_000;
 const INVENTORY_POLL_MS = 1_000;
 const INVENTORY_READING_CARD_MS = 1_200;
 const INVENTORY_STATUS_CARD_MS = 4_000;
+// The hint to open the inventory once waits for a calm hideout, then stays up long enough to be read and acted on.
+const INVENTORY_FIRST_READ_CARD_MS = 20_000;
+const FIRST_READ_NUDGE_DEBOUNCE_MS = 3_000;
 // Inventory loot waits this long for poe.ninja prices; loot without a price counts as 0.
 const SESSION_PRICES_WAIT_MS = 5_000;
 const SESSION_PRICES_RETRY_MS = 5 * 60_000;
@@ -156,6 +159,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     mapLossBody: 'Zarar {value}c',
     mapNoLootBody: 'Loot sayilmadi',
     inventoryStatusTitle: 'Envanter',
+    inventoryStatus_firstRead: 'Envanterini bir kez ac. I tusuna bas, sonraki map sayilsin.',
     inventoryStatus_reading: 'Envanter okunuyor...',
     inventoryStatus_saved: 'Envanter kaydedildi. Sonraki map buradan sayilir.',
     inventoryStatus_noGain: 'Yeni loot bulunamadi.',
@@ -226,6 +230,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     mapLossBody: 'Loss {value}c',
     mapNoLootBody: 'No loot counted',
     inventoryStatusTitle: 'Inventory',
+    inventoryStatus_firstRead: 'Open your inventory once. Press I, so your next map counts.',
     inventoryStatus_reading: 'Reading your inventory...',
     inventoryStatus_saved: 'Inventory noted. Your next map counts from here.',
     inventoryStatus_noGain: 'No new loot found.',
@@ -444,6 +449,10 @@ let overlayRuntimeState = null;
 let overlayMapResultState = null;
 let overlayInventoryStatus = null;
 let overlayInventoryStatusTimer = null;
+// The first-read hint: the character it is being timed for, when it was first reported and last reported, and the
+// characters it has been shown for in this run.
+let firstReadNudge = { characterKey: null, firstAt: 0, lastAt: 0 };
+const firstReadNudgeShown = new Set();
 let inventoryWatcher = null;
 // What the last inventory read came to, for the Dashboard's status line. Kept per profile, in memory only.
 let inventoryReadStatus = { kind: 'none', at: null, profileId: null };
@@ -3613,6 +3622,7 @@ function createInventoryWatcher() {
     getGame: () => (gameDetector ? gameDetector.getDetectedGame() : null),
     isGameInFront: isGameWindowInFront,
     isInMap: () => Boolean(logParser?.currentMap),
+    isInMapHub: () => Boolean(logParser?.isInMapHub?.()),
     getGameWindow: getGameWindowRect,
     readScreen: (x, y, width, height) => win32Probe.readScreenRegion(x, y, width, height),
     getCharacter: () => overlayCharacterState,
@@ -3628,11 +3638,17 @@ function createInventoryWatcher() {
     },
     onStatus: showInventoryStatus,
     // A gain is recorded when its loot is saved, which is what the line reports.
-    onRead: (kind) => {
+    onRead: (kind, details = {}) => {
       if (kind === 'resolution' || kind === 'measured') {
         setInventoryReadBlocked(kind === 'resolution');
+      } else if (kind === 'needsBaseline') {
+        maybeShowFirstReadNudge(details.characterKey);
       } else if (kind !== 'gain') {
         noteInventoryRead(kind);
+        // The hint asked for this read, so it gives way to the note that it worked.
+        if (kind === 'saved' && overlayInventoryStatus?.kind === 'firstRead') {
+          showInventoryStatus('saved');
+        }
       }
     }
   });
@@ -3666,7 +3682,7 @@ function handleInventoryHotkey() {
 function showInventoryStatus(kind) {
   const text = t(`inventoryStatus_${kind}`);
   if (!isOverlayEnabled()) {
-    if (kind !== 'reading') {
+    if (kind !== 'reading' && kind !== 'firstRead') {
       showNotification(t('inventoryStatusTitle'), text);
     }
     return;
@@ -3680,8 +3696,35 @@ function showInventoryStatus(kind) {
     overlayInventoryStatusTimer = null;
     overlayInventoryStatus = null;
     updateOverlayWindow();
-  }, kind === 'reading' ? INVENTORY_READING_CARD_MS : INVENTORY_STATUS_CARD_MS);
+  }, kind === 'reading' ? INVENTORY_READING_CARD_MS : (kind === 'firstRead' ? INVENTORY_FIRST_READ_CARD_MS : INVENTORY_STATUS_CARD_MS));
   updateOverlayWindow();
+}
+
+// Called on every watcher tick that finds a character with no baseline in a hideout. Shows the hint once the report
+// has held for a few seconds, so a loading screen does not flash it, and once per character per run.
+function maybeShowFirstReadNudge(characterKey, now = Date.now()) {
+  const blocked = !characterKey
+    || firstReadNudgeShown.has(characterKey)
+    || !isOverlayEnabled()
+    || overlayStartMapPromptState
+    || overlayCharacterPromptState
+    || (overlayMapResultState?.visible && overlayMapResultState.result);
+  if (blocked) {
+    firstReadNudge = { characterKey: null, firstAt: 0, lastAt: 0 };
+    return;
+  }
+
+  // Reports come every second while the condition holds; a longer gap means it stopped, so the wait starts over.
+  if (firstReadNudge.characterKey !== characterKey || now - firstReadNudge.lastAt > FIRST_READ_NUDGE_DEBOUNCE_MS) {
+    firstReadNudge = { characterKey, firstAt: now, lastAt: now };
+    return;
+  }
+  firstReadNudge.lastAt = now;
+  if (now - firstReadNudge.firstAt >= FIRST_READ_NUDGE_DEBOUNCE_MS) {
+    firstReadNudgeShown.add(characterKey);
+    firstReadNudge = { characterKey: null, firstAt: 0, lastAt: 0 };
+    showInventoryStatus('firstRead');
+  }
 }
 
 // Records the outcome of an inventory read and tells the main window.
@@ -3847,6 +3890,12 @@ async function startNewSession(input = {}) {
 
 async function handleMapEntered(data) {
   inventoryWatcher?.mapEntered();
+  if (overlayInventoryStatus?.kind === 'firstRead') {
+    clearTimeout(overlayInventoryStatusTimer);
+    overlayInventoryStatusTimer = null;
+    overlayInventoryStatus = null;
+    updateOverlayWindow();
+  }
   publishRuntimeSessionEvent('area_entered', data);
 }
 
@@ -4014,7 +4063,10 @@ async function endCurrentSession(options = {}) {
       session.noLoot = true;
     }
     const inventoryCanSettle = !options.shuttingDown && Boolean(inventoryWatcher?.sessionEnded(session));
-    session.lootPending = Boolean(session.noLoot) && inventoryCanSettle && store.get('inventoryReadEnabled') !== false;
+    const waitingOnRead = Boolean(session.noLoot) && inventoryCanSettle && store.get('inventoryReadEnabled') !== false;
+    // With no baseline there is nothing to count this map against, however the player opens the inventory later.
+    session.lootUncounted = waitingOnRead && !inventoryWatcher.hasBaseline(session.poeVersion);
+    session.lootPending = waitingOnRead && !session.lootUncounted;
     let duration = '';
     if (durationSeconds) {
       const minutes = Math.floor(durationSeconds / 60);

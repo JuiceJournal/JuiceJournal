@@ -1832,6 +1832,7 @@ test('a finished map that got its loot from the inventory replaces its result, s
   // Only the card says the loot is still to be counted: a kept result would say so for good.
   assert.equal(persisted[0].lootPending, undefined);
   assert.equal(overlayResults[0].lootPending, true);
+  assert.equal(overlayResults[0].lootUncounted, false);
   const pendingId = persisted[0].id;
   refreshes.length = 0;
 
@@ -4235,6 +4236,7 @@ test('recent loot empty state shows the chest in a slot, not the mascot or game 
   const elements = { recentLootList: { innerHTML: '' } };
   const context = createProfitDisplayContext(['emptyStateHTML', 'renderRecentLoot'], {
     elements,
+    getResolvedLeagueVersion: () => 'poe1',
     state: { currentUser: null, recentLoot: [] }
   });
 
@@ -4250,6 +4252,68 @@ test('recent loot empty state shows the chest in a slot, not the mascot or game 
   elements.recentLootList.innerHTML = '';
   context.renderRecentLoot();
   assert.equal(elements.recentLootList.innerHTML, signedOut);
+});
+
+test('recent loot explains how loot is counted for a signed-in PoE 2 profile without loot', () => {
+  const elements = { recentLootList: { innerHTML: '' } };
+  const context = createProfitDisplayContext(['emptyStateHTML', 'renderRecentLoot'], {
+    elements,
+    escapeHTML: (value) => String(value),
+    getResolvedLeagueVersion: () => 'poe2',
+    state: { currentUser: { id: 'profile-1' }, recentLoot: [] }
+  });
+
+  context.renderRecentLoot();
+  const html = elements.recentLootList.innerHTML;
+  assert.match(html, /class="loot-guide-title">dashboard\.lootGuideTitle</);
+  const steps = [...html.matchAll(/<li>[\s\S]*?<\/li>/g)].map((match) => match[0]);
+  assert.equal(steps.length, 3);
+  steps.forEach((step, index) => {
+    const n = index + 1;
+    assert.match(step, new RegExp(`<span class="loot-guide-num" aria-hidden="true">${n}</span>`));
+    assert.match(step, new RegExp(`<strong>dashboard\\.lootGuideStep${n}Lead</strong> dashboard\\.lootGuideStep${n}Rest`));
+  });
+  assert.match(html, /<ol class="loot-guide-steps">/);
+  assert.doesNotMatch(html, /dashboard\.noLoot/);
+
+  // PoE 1 keeps the one-line hint.
+  context.getResolvedLeagueVersion = () => 'poe1';
+  context.renderRecentLoot();
+  assert.match(elements.recentLootList.innerHTML, /dashboard\.noLootHint/);
+  assert.doesNotMatch(elements.recentLootList.innerHTML, /loot-guide/);
+
+  // Signed out keeps it too, whatever the game.
+  context.getResolvedLeagueVersion = () => 'poe2';
+  context.state.currentUser = null;
+  context.renderRecentLoot();
+  assert.match(elements.recentLootList.innerHTML, /dashboard\.noLootHint/);
+  assert.doesNotMatch(elements.recentLootList.innerHTML, /loot-guide/);
+
+  // With reading off the inventory counts nothing, so there is nothing to guide.
+  context.state.currentUser = { id: 'profile-1' };
+  context.state.inventoryReadStatus = { kind: 'off' };
+  context.renderRecentLoot();
+  assert.doesNotMatch(elements.recentLootList.innerHTML, /loot-guide/);
+});
+
+test('recent loot list replaces the guide once loot exists', () => {
+  const elements = { recentLootList: { innerHTML: '' } };
+  const context = createProfitDisplayContext(['renderRecentLoot'], {
+    elements,
+    escapeHTML: (value) => String(value),
+    itemSlotHTML: () => '<span class="item-slot"></span>',
+    timeAgo: () => '1m ago',
+    getResolvedLeagueVersion: () => 'poe2',
+    state: {
+      currentUser: { id: 'profile-1' },
+      settings: { poeVersion: 'poe2' },
+      recentLoot: [{ itemName: 'Divine Orb', itemType: 'currency', quantity: 1, chaosValue: 150, session: { poeVersion: 'poe2', league: 'Standard', mapName: 'Burial Chambers', startedAt: new Date().toISOString() } }]
+    }
+  });
+
+  context.renderRecentLoot();
+  assert.match(elements.recentLootList.innerHTML, /recent-loot-item/);
+  assert.doesNotMatch(elements.recentLootList.innerHTML, /loot-guide/);
 });
 
 test('loadRecentLoot dims the list instead of writing a loading line', async () => {

@@ -41,6 +41,7 @@ function setup(overrides = {}) {
   const env = {
     now: 0,
     inMap: false,
+    inMapHub: true,
     inFront: true,
     game: 'poe2',
     enabled: true,
@@ -57,6 +58,7 @@ function setup(overrides = {}) {
     getGame: () => env.game,
     isGameInFront: () => env.inFront,
     isInMap: () => env.inMap,
+    isInMapHub: () => env.inMapHub,
     getGameWindow: () => env.gameWindow,
     readScreen: () => {
       log.screenReads += 1;
@@ -444,4 +446,61 @@ test('a watcher built without onRead still works', () => {
   const watcher = new Watcher({ isEnabled: () => false, getProfileId: () => 'p1', onStatus: () => {} });
 
   assert.doesNotThrow(() => watcher.deps.onRead('saved'));
+});
+
+test('a closed inventory with no baseline reports needsBaseline on every tick, and only then', () => {
+  const context = setup();
+  const { watcher, log, setRead } = context;
+
+  setRead({ open: false, items: {} });
+  watcher.tick();
+  watcher.tick();
+  assert.deepEqual(log.reads, ['needsBaseline', 'needsBaseline']);
+  assert.equal(watcher.hasBaseline('poe2'), false);
+
+  // The inventory open: that read is the baseline, not a request for one.
+  readBaseline(context, { 'Exalted Orb': 1 });
+  assert.equal(log.reads.at(-1), 'saved');
+  assert.equal(watcher.hasBaseline('poe2'), true);
+
+  // With a baseline a closed inventory says nothing.
+  log.reads.length = 0;
+  setRead({ open: false, items: {} });
+  watcher.tick();
+  assert.deepEqual(log.reads, []);
+});
+
+test('needsBaseline carries the character, is per character, and hasBaseline follows the character', () => {
+  const context = setup();
+  const { watcher, env, setRead } = context;
+  const calls = [];
+  watcher.deps.onRead = (kind, details) => calls.push([kind, details]);
+
+  setRead({ open: false, items: {} });
+  watcher.tick();
+  assert.deepEqual(calls, [['needsBaseline', { characterKey: 'poe2:c1' }]]);
+
+  readBaseline(context, {});
+  assert.equal(watcher.hasBaseline('poe2'), true);
+  env.character = { id: 'c2' };
+  assert.equal(watcher.hasBaseline('poe2'), false);
+  assert.equal(watcher.hasBaseline('poe1'), false);
+  env.character = null;
+  assert.equal(watcher.hasBaseline('poe2'), false);
+});
+
+test('needsBaseline is not reported with the inventory covered, in a map, with the screen unreadable or at an unchecked size', () => {
+  for (const [overrides, read] of [
+    [{}, { open: true, covered: true, items: {} }],
+    [{ inMap: true }, { open: false, items: {} }],
+    // A town, a trial or a campaign zone is outside a map too, but the hint is for the hideout.
+    [{ inMapHub: false }, { open: false, items: {} }],
+    [{ gameWindow: { x: 0, y: 0, width: 1920, height: 1080 } }, { open: false, items: {} }],
+    [{ game: 'poe1' }, { open: false, items: {} }]
+  ]) {
+    const context = setup(overrides);
+    context.setRead(read);
+    context.watcher.tick();
+    assert.ok(!context.log.reads.includes('needsBaseline'), JSON.stringify(overrides));
+  }
 });

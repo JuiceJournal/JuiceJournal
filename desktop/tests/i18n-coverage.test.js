@@ -609,8 +609,11 @@ test('main process dialogs use keys that exist in en and tr', () => {
   }
   assert.deepEqual(
     enKeys.filter((name) => name.startsWith('inventoryStatus_')).sort(),
-    [...reportedKinds, 'saveFailed'].map((kind) => `inventoryStatus_${kind}`).sort()
+    [...reportedKinds, 'firstRead', 'saveFailed'].map((kind) => `inventoryStatus_${kind}`).sort()
   );
+  // The first-read hint comes from the main process, not from a watcher status.
+  assert.notEqual(translations.tr.inventoryStatus_firstRead, translations.en.inventoryStatus_firstRead);
+  assert.match(translations.tr.inventoryStatus_firstRead, /^[ -~]+$/);
   assert.ok(translations.en.inventoryStatusTitle);
   assert.notEqual(translations.tr.inventoryStatusTitle, translations.en.inventoryStatusTitle);
   for (const key of enKeys.filter((name) => name.startsWith('data'))) {

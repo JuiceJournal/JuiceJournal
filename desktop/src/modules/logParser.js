@@ -59,6 +59,13 @@ function isPoe2NonMapAreaName(value) {
   return POE2_SIDE_AREA_NAMES.has(normalizeAreaKey(value));
 }
 
+// Where a map is opened, besides a hideout: the PoE 2 endgame town, before a player claims a hideout. Its name comes
+// from the "You have entered" line, so this only matches an English client; a hideout's own id matches in any.
+const MAP_HUB_AREA_NAMES = new Set(['ziggurat refuge', 'the ziggurat refuge']);
+
+// Leaving the game, for its login, its character select or the desktop (the lines gameSessionModel reads as such).
+const LEFT_GAME_MESSAGE = /^(?:Closing game gracefully|Async connecting to \S*login\S*)/i;
+
 function isSafeAreaName(value) {
   const normalized = normalizeAreaKey(value);
   return SAFE_AREA_NAMES.has(normalized) || normalized === 'hideout' || normalized.endsWith(' hideout');
@@ -86,6 +93,10 @@ class LogParser extends EventEmitter {
     this.currentMap = null;
     this.mapStartTime = null;
     this.currentMapIdentity = null;
+    // The game's own id of the last area it generated, the same in every client language ("HideoutFelled", "MapDunes"),
+    // and the name the game gave it on entering, when it said one.
+    this.currentAreaId = null;
+    this.currentAreaName = null;
 
     // Login -> character select -> in game, from Client.txt (see gameSessionModel)
     this.gameSession = createGameSessionState();
@@ -198,13 +209,35 @@ class LogParser extends EventEmitter {
   /**
    * Parse a single line
    */
+  // Whether the player is where maps are opened: a hideout, or the endgame town before one is claimed. Unknown, so
+  // false, until the game generates an area, and again once the player leaves the game.
+  isInMapHub() {
+    return /^hideout/i.test(this.currentAreaId || '') || MAP_HUB_AREA_NAMES.has(normalizeAreaKey(this.currentAreaName));
+  }
+
   parseLine(line) {
     this.trackGameSession(line);
 
+    const read = readMessage(line);
+    if (read?.logOpened || LEFT_GAME_MESSAGE.test(read?.message || '')) {
+      this.currentAreaId = null;
+      this.currentAreaName = null;
+    }
+
     // Chat can say anything, so map changes come only from the game's own lines, read after the client tag.
-    const message = readMessage(line)?.message;
+    const message = read?.message;
     if (!message) {
       return;
+    }
+
+    const generatedArea = message.match(/^(?:: )?Generating level \d+ area "([^"]+)"/i);
+    if (generatedArea) {
+      this.currentAreaId = generatedArea[1];
+      this.currentAreaName = null;
+    }
+    const enteredArea = message.match(/^: You have entered ([^.]+)\./i);
+    if (enteredArea) {
+      this.currentAreaName = enteredArea[1].trim();
     }
 
     if (this.reconcilePendingInstanceExit(message)) {
@@ -608,8 +641,11 @@ class LogParser extends EventEmitter {
       }
     }
 
-    // Resume the session phase without replaying its events, so a Play after startup is still detected.
+    // Resume the session phase without replaying its events, so a Play after startup is still detected. The area too:
+    // a player already in a hideout when the app starts is there before the first map.
     this.gameSession = probe.gameSession;
+    this.currentAreaId = probe.currentAreaId;
+    this.currentAreaName = probe.currentAreaName;
 
     if (!probe.currentMap || !lastEntry) {
       return false;

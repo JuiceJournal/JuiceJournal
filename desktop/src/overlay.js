@@ -299,7 +299,7 @@
     var itemCount = Math.max(0, parseInt(result.lootItemCount, 10) || 0);
     // A player can name a farm type anything, "constructor" included.
     var farmTypeKey = Object.prototype.hasOwnProperty.call(STORED_FARM_TYPE_KEYS, result.farmType) ? STORED_FARM_TYPE_KEYS[result.farmType] : null;
-    setText(el.kickerLabel, root.t('overlay.mapComplete'));
+    setText(el.kickerLabel, root.t(result.lootUncounted ? 'overlay.mapCompleteUncounted' : 'overlay.mapComplete'));
     setPrimary(
       farmTypeKey ? root.t(farmTypeKey) : (result.farmType || root.t('overlay.completedMap')),
       result.noLoot ? null : createProfitValue(result.netProfit, rates, poeVersion),
@@ -312,7 +312,8 @@
       // The rows carry the loot, so the left of the secondary row only says how many maps it covers.
       setSecondary(mapsNote);
     } else {
-      var lootLine = itemCount ? root.t(itemCount === 1 ? 'overlay.itemScanned' : 'overlay.itemsScanned', { count: itemCount }) : root.t(result.lootPending ? 'overlay.openInventoryForLoot' : 'overlay.noLootScanned');
+      var emptyLine = result.lootUncounted ? 'overlay.openInventoryBeforeNextMap' : (result.lootPending ? 'overlay.openInventoryForLoot' : 'overlay.noLootScanned');
+      var lootLine = itemCount ? root.t(itemCount === 1 ? 'overlay.itemScanned' : 'overlay.itemsScanned', { count: itemCount }) : root.t(emptyLine);
       setSecondary(mapsNote ? lootLine + ' · ' + mapsNote : lootLine);
     }
     setResultMeta(getMapResultTier(state), formatDuration(result.durationSeconds));
@@ -443,6 +444,10 @@
     var visibility = state.visibility || 'waiting';
     var mode = state.mode || 'runtime';
     var tone = (state.mapResult && state.mapResult.tone) || state.tone || 'neutral';
+    // A map that could not be counted has no profit tone; the warning colour says so.
+    if (mode === 'map-result' && state.mapResult && state.mapResult.result && state.mapResult.result.lootUncounted) {
+      tone = 'uncounted';
+    }
 
     if (el.card) {
       el.card.dataset.overlayState = visibility;

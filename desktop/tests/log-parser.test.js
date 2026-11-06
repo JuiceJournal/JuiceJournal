@@ -7,6 +7,61 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const line = (text) => `2026/05/04 21:00:00 1 abc [DEBUG Client 1] ${text}`;
+
+test('log parser knows where maps start: a hideout by its own area id, and the endgame town by name', () => {
+  const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
+  assert.equal(parser.isInMapHub(), false, 'unknown until an area is generated');
+
+  parser.parseLine(line('Generating level 65 area "HideoutFelled" with seed 1'));
+  assert.equal(parser.isInMapHub(), true, 'a hideout, in any client language');
+  parser.parseLine(line('Generating level 80 area "MapHeadland" with seed 2'));
+  assert.equal(parser.isInMapHub(), false);
+  parser.parseLine(line('Generating level 1 area "G1_town" with seed 3'));
+  parser.parseLine(line(': You have entered Clearfell Encampment.'));
+  assert.equal(parser.isInMapHub(), false, 'a campaign town is not where maps start');
+  parser.parseLine(line('Generating level 65 area "EndgameTown" with seed 4'));
+  parser.parseLine(line(': You have entered The Ziggurat Refuge.'));
+  assert.equal(parser.isInMapHub(), true, 'the endgame town before a hideout is claimed');
+  parser.parseLine(line('Generating level 80 area "MapHeadland" with seed 5'));
+  assert.equal(parser.isInMapHub(), false, 'the name of the last area goes with it');
+
+  // Local chat that reads like the game's own line moves nothing.
+  parser.parseLine('2026/05/04 21:10:00 1 abc [INFO Client 1] Someone: You have entered The Ziggurat Refuge.');
+  assert.equal(parser.isInMapHub(), false);
+});
+
+test('log parser forgets the area when the player leaves the game', () => {
+  for (const leaving of [
+    '2026/05/04 21:20:00 1 abc [INFO Client 1] Async connecting to eu.login.pathofexile2.com:6112',
+    '2026/05/04 21:20:00 1 abc [INFO Client 1] Closing game gracefully',
+    '2026/05/04 21:20:00 ***** LOG FILE OPENING *****'
+  ]) {
+    const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
+    parser.parseLine(line('Generating level 65 area "HideoutFelled" with seed 1'));
+    assert.equal(parser.isInMapHub(), true);
+    parser.parseLine(leaving);
+    assert.equal(parser.isInMapHub(), false, leaving);
+  }
+});
+
+test('log parser resumes the area from the recent log, so a player already in a hideout is known at start', () => {
+  const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
+  parser.bootstrapFromRecentLines([
+    line('Generating level 80 area "MapHeadland" with seed 2'),
+    line('Generating level 65 area "HideoutFelled" with seed 1')
+  ]);
+  assert.equal(parser.isInMapHub(), true);
+
+  // A hideout from an earlier run of the game, before it was opened again, is not where the player is now.
+  const restarted = new LogParser('Client.txt', { poeVersion: 'poe2' });
+  restarted.bootstrapFromRecentLines([
+    line('Generating level 65 area "HideoutFelled" with seed 1'),
+    '2026/05/04 22:00:00 ***** LOG FILE OPENING *****'
+  ]);
+  assert.equal(restarted.isInMapHub(), false);
+});
+
 test('log parser treats PoE2 endgame area names without Map as map entries', () => {
   const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
   const entries = [];
