@@ -129,6 +129,13 @@ function applyWindowsAppIdentity() {
 
 applyWindowsAppIdentity();
 
+// One app per profile folder. A second launch, such as another click on the shortcut, exits here, before it reads or
+// writes any settings, and the running app comes to the front instead (see handleSecondInstance). The lock belongs to
+// the userData folder, so e2e runs, each with a folder of its own, never meet the player's app.
+if (!app.requestSingleInstanceLock()) {
+  process.exit(0);
+}
+
 const MAIN_PROCESS_TRANSLATIONS = {
   tr: {
     trayStillRunning: 'Uygulama sistem tepsisinde calismaya devam ediyor.',
@@ -5488,6 +5495,17 @@ app.on('activate', () => {
   }
   showMainWindow();
 });
+
+// Another launch while this app runs: this window comes back, from the tray too. Before the app is ready the window
+// does not exist yet and opens on its own; while quitting it must not come back.
+function handleSecondInstance() {
+  if (!app.isReady() || app.isQuiting) {
+    return;
+  }
+  showMainWindow();
+}
+
+app.on('second-instance', handleSecondInstance);
 
 function handleAppWillQuit() {
   // Clear global shortcuts.
