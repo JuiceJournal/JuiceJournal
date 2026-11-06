@@ -2188,6 +2188,21 @@ test('applyGameVersion never opens a stored network path', () => {
   assert.ok(!checked.includes(unc));
 });
 
+test('applyGameVersion does not store or track a game found on a network share', () => {
+  const unc = String.raw`\\nas\games\steamapps\common\Path of Exile\logs\Client.txt`;
+  const local = 'C:/Games/Path of Exile/logs/Client.txt';
+  const { applyGameVersion, storeState, messages } = loadMainWithMocks({
+    storeState: { poePath: local },
+    GameDetector: { findLogPath: () => unc },
+    fs: { existsSync: () => true }
+  });
+
+  applyGameVersion('poe1');
+
+  assert.equal(storeState.poePath, local);
+  assert.ok(!JSON.stringify(messages).includes('nas'));
+});
+
 function loadOnlineConfirm(storeState) {
   return loadFunctions([
     'normalizeHostname',
@@ -2354,6 +2369,63 @@ test('confirmOnlineSend refuses a second save while its dialog is open and asks 
   assert.equal(await third, false);
 });
 
+test('confirmOnlineSend drops an Allow once the server it named is no longer the one the save sends to', async () => {
+  let answer;
+  const { context } = loadConfirmOnlineSend({
+    showMessageBox: () => new Promise((resolve) => {
+      answer = resolve;
+    })
+  });
+
+  const moved = { origin: 'http://localhost:3001' };
+  const pending = context.confirmOnlineSend(moved);
+  moved.origin = 'https://other.example';
+  answer({ response: 0 });
+  assert.equal(await pending, false);
+
+  const settled = { origin: 'https://api.example' };
+  const stillAsked = context.confirmOnlineSend(settled);
+  settled.origin = null;
+  answer({ response: 0 });
+  assert.equal(await stillAsked, true);
+});
+
+test('an Allow for the stored server does not turn online on after another save moved the server', async () => {
+  const storeState = { onlineEnabled: false, apiUrl: 'http://localhost:3001' };
+  let answer;
+  const context = loadFunctions([
+    'normalizeHostname',
+    'getUrlPort',
+    'isLoopbackHost',
+    'isPrivateOrReservedIp',
+    'isValidApiUrl',
+    'isOnlineEnabled',
+    'getOnlineConfirmOrigin',
+    'confirmOnlineSend'
+  ], {
+    URL,
+    net,
+    LOCAL_API_PORTS: new Set([80, 443, 3000, 3001]),
+    store: { get: (key) => storeState[key] },
+    mainWindow: {},
+    t: (key) => key,
+    dialog: {
+      showMessageBox: () => new Promise((resolve) => {
+        answer = resolve;
+      })
+    }
+  });
+  vm.runInContext('let onlineConfirmOpen = false;', context);
+
+  const turnOn = context.confirmOnlineSend({ onlineEnabled: true });
+  // Online is still off, so this save needs no prompt and is stored while the dialog naming localhost is open.
+  assert.equal(await context.confirmOnlineSend({ apiUrl: 'https://evil.example' }), true);
+  storeState.apiUrl = 'https://evil.example';
+  answer({ response: 0 });
+
+  assert.equal(await turnOn, false);
+});
+
 test('the set-settings handler waits for the online prompt and saves nothing when it is declined', () => {
   const source = fs.readFileSync(mainJsPath, 'utf8');
 
@@ -2447,6 +2519,32 @@ test('legacy auth token migration does nothing without a plain token', () => {
   const sealedOnly = loadLegacyTokenMigration({ stored: { authToken: null, authTokenEncrypted: sealToken('current') } });
   sealedOnly.context.migrateLegacyAuthToken();
   assert.deepEqual(sealedOnly.writes, []);
+});
+
+test('legacy auth token migration never stops the app when config.json cannot be written', () => {
+  for (const failingKey of ['authTokenEncrypted', 'authToken']) {
+    const storeState = { authToken: 'cookie-5' };
+    const context = loadFunctions(['encryptAuthToken', 'getDecryptedAuthToken', 'migrateLegacyAuthToken'], {
+      Buffer,
+      safeStorage: {
+        isEncryptionAvailable: () => true,
+        encryptString: (value) => Buffer.from(`sealed:${value.toString()}`),
+        decryptString: (buffer) => buffer.toString().slice('sealed:'.length)
+      },
+      store: {
+        get: (key) => storeState[key],
+        set(key, value) {
+          if (key === failingKey) {
+            throw new Error('EPERM: config.json is locked');
+          }
+          storeState[key] = value;
+        }
+      }
+    });
+
+    assert.doesNotThrow(() => context.migrateLegacyAuthToken());
+    assert.equal(context.getDecryptedAuthToken(), 'cookie-5');
+  }
 });
 
 test('the migrated auth token reads back as the original one', () => {

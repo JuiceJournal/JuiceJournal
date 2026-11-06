@@ -719,15 +719,20 @@ function migrateLegacyAuthToken() {
       // A sealed copy this machine cannot open; the plain one replaces it below.
     }
   }
-  if (!sealedWorks) {
-    // The plain copy is the only usable one, so it goes only once the sealed copy is stored.
-    const sealed = encryptAuthToken(legacy);
-    if (!sealed) {
-      return;
+  try {
+    if (!sealedWorks) {
+      // The plain copy is the only usable one, so it goes only once the sealed copy is stored.
+      const sealed = encryptAuthToken(legacy);
+      if (!sealed) {
+        return;
+      }
+      store.set('authTokenEncrypted', sealed);
     }
-    store.set('authTokenEncrypted', sealed);
+    store.set('authToken', null);
+  } catch {
+    // config.json is locked or the disk is full. The app still starts: the plain copy stays readable, or the sealed
+    // copy already written wins the next read, and the move is tried again at the next start.
   }
-  store.set('authToken', null);
 }
 
 function persistPoeTokens(tokens) {
@@ -4444,6 +4449,10 @@ function applyGameVersion(version, options = {}) {
   detectedLogPath = GameDetector.findLogPath(version, {
     processes: Array.isArray(options.processes) ? options.processes : []
   });
+  // A game found on a network share is not tracked: storing that path would make every Settings save fail the check.
+  if (!isValidPoePath(detectedLogPath)) {
+    detectedLogPath = null;
+  }
 
   if (shouldRetargetPriceService) {
     // Runtime services follow the detected game.
@@ -4522,7 +4531,9 @@ function getOnlineConfirmOrigin(settings) {
 let onlineConfirmOpen = false;
 
 // Main asks, not the page, because a script in the page cannot answer a system dialog. Cancel is the default, a dialog
-// that fails counts as Cancel, and a second save while one is open is refused instead of stacking another.
+// that fails counts as Cancel, and a second save while one is open is refused instead of stacking another. A save that
+// needs no prompt can still change the stored server meanwhile, so Allow counts only if the save would still send to
+// the server the dialog named. The handler applies the save in the same tick, so nothing can change it in between.
 async function confirmOnlineSend(settings) {
   const origin = getOnlineConfirmOrigin(settings);
   if (!origin) {
@@ -4543,7 +4554,11 @@ async function confirmOnlineSend(settings) {
       message: t('onlineSendMessage', { server: origin }),
       detail: t('onlineSendDetail')
     });
-    return choice.response === 0;
+    if (choice.response !== 0) {
+      return false;
+    }
+    const originNow = getOnlineConfirmOrigin(settings);
+    return originNow === null || originNow === origin;
   } catch {
     return false;
   } finally {
