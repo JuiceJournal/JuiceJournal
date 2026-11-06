@@ -180,7 +180,7 @@ test('a map without a name records no map name, and a journal write that fails r
 
 test('main wires the watcher, the failure path, the IPC handle and the settings save to the status', () => {
   const watcherBody = extractFunction(mainJs, 'createInventoryWatcher');
-  assert.match(watcherBody, /if \(kind === 'resolution' \|\| kind === 'measured'\) \{\s+setInventoryReadBlocked\(kind === 'resolution'\);\s+\} else if \(kind !== 'gain'\) \{\s+noteInventoryRead\(kind\);/);
+  assert.match(watcherBody, /if \(kind === 'resolution' \|\| kind === 'measured'\) \{\s+setInventoryReadBlocked\(kind === 'resolution'\);\s+\} else if \(kind === 'needsBaseline'\) \{\s+maybeShowFirstReadNudge\(details\.characterKey\);\s+\} else if \(kind !== 'gain'\) \{\s+noteInventoryRead\(kind\);/);
   assert.ok(watcherBody.includes('noteInventoryRead(\'saveFailed\');'));
   // The failure is recorded before the player is told, in the same catch.
   assert.ok(watcherBody.indexOf('noteInventoryRead(\'saveFailed\')') < watcherBody.indexOf('showInventoryStatus(\'saveFailed\')'));

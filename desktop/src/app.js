@@ -2794,7 +2794,7 @@ function setupIPCListeners() {
     if (mapResult && typeof window.electronAPI.showMapResultOverlay === 'function') {
       try {
         // Only the card says loot is still to be counted: a kept result would say so for good.
-        await window.electronAPI.showMapResultOverlay({ ...mapResult, lootPending: Boolean(session?.lootPending) });
+        await window.electronAPI.showMapResultOverlay({ ...mapResult, lootPending: Boolean(session?.lootPending), lootUncounted: Boolean(session?.lootUncounted) });
       } catch (error) {
         console.warn('Failed to show map result overlay', error);
       }
@@ -4527,6 +4527,10 @@ function renderInventoryReadStatus() {
 function setInventoryReadStatus(status) {
   state.inventoryReadStatus = status || null;
   renderInventoryReadStatus();
+  // The guide in an empty Recent Loot follows the reading toggle.
+  if (!state.recentLoot?.length && typeof renderRecentLoot === 'function') {
+    renderRecentLoot();
+  }
 }
 
 async function loadInventoryReadStatus() {
@@ -5622,6 +5626,12 @@ function renderRecentLoot() {
   if (!elements.recentLootList) return;
 
   if (!state.currentUser || !state.recentLoot.length) {
+    // A PoE 2 player with no loot yet learns how the inventory reads count a map.
+    if (state.currentUser && getResolvedLeagueVersion() !== 'poe1' && state.inventoryReadStatus?.kind !== 'off') {
+      const step = (n) => `<li><span class="loot-guide-num" aria-hidden="true">${n}</span><span><strong>${escapeHTML(window.t(`dashboard.lootGuideStep${n}Lead`))}</strong> ${escapeHTML(window.t(`dashboard.lootGuideStep${n}Rest`))}</span></li>`;
+      elements.recentLootList.innerHTML = `<div class="loot-guide"><span class="loot-guide-title">${escapeHTML(window.t('dashboard.lootGuideTitle'))}</span><ol class="loot-guide-steps">${step(1)}${step(2)}${step(3)}</ol></div>`;
+      return;
+    }
     elements.recentLootList.innerHTML = emptyStateHTML({ art: 'chest', title: window.t('dashboard.noLoot'), hint: window.t('dashboard.noLootHint') });
     return;
   }

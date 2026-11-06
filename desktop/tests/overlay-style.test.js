@@ -96,3 +96,7 @@ test('game art on the result card stays 20px or smaller in the 112px window', ()
     }
   }
 });
+
+test('an uncounted map result uses the warning colour', () => {
+  assert.match(overlayCss, /\[data-overlay-mode="map-result"\]\[data-overlay-tone="uncounted"\]\s*\{\s*--tone:\s*var\(--gold\);\s*\}/);
+});

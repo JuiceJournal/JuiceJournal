@@ -579,7 +579,7 @@ test('main tells the window only when a map ended with nothing counted or read f
 });
 
 // endCurrentSession over a watcher stub; answers the session it sent to the window and the sessions the watcher saw.
-async function endMapWithWatcher({ canSettle, lootEntries = [], options = {}, watcher, automaticReading = true } = {}) {
+async function endMapWithWatcher({ canSettle, lootEntries = [], options = {}, watcher, automaticReading = true, baseline = true } = {}) {
   const backend = createJournalBackend();
   const active = backend.start({ mapName: 'Channel', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-1');
   backend.journal.sessions[0].lootEntries = lootEntries;
@@ -592,7 +592,8 @@ async function endMapWithWatcher({ canSettle, lootEntries = [], options = {}, wa
       sessionEnded(session) {
         seen.push(session.id);
         return canSettle;
-      }
+      },
+      hasBaseline: () => baseline
     } : watcher,
     store: { get: (key) => (key === 'inventoryReadEnabled' ? automaticReading : undefined) },
     appendAuditTrail() {},
@@ -622,6 +623,20 @@ test('main marks a no-loot map as waiting for its loot only when the inventory w
   assert.equal(withStash.session.lootPending, false);
   // With automatic reading off, opening the inventory counts nothing, so the card must not say it does.
   assert.equal((await endMapWithWatcher({ canSettle: true, automaticReading: false })).session.lootPending, false);
+});
+
+test('main marks a no-loot map as not counted, not pending, when the character has no baseline to count it from', async () => {
+  const uncounted = await endMapWithWatcher({ canSettle: true, baseline: false });
+  assert.equal(uncounted.session.noLoot, true);
+  assert.equal(uncounted.session.lootUncounted, true);
+  assert.equal(uncounted.session.lootPending, false);
+
+  // Every case where the map is not waiting on a read stays out of it.
+  assert.equal((await endMapWithWatcher({ canSettle: true })).session.lootUncounted, false);
+  assert.equal((await endMapWithWatcher({ canSettle: false, baseline: false })).session.lootUncounted, false);
+  assert.equal((await endMapWithWatcher({ canSettle: true, baseline: false, automaticReading: false })).session.lootUncounted, false);
+  assert.equal((await endMapWithWatcher({ canSettle: true, baseline: false, lootEntries: [{ itemName: 'Divine Orb', quantity: 1, chaosValue: 150 }] })).session.lootUncounted, false);
+  assert.equal((await endMapWithWatcher({ canSettle: true, baseline: false, options: { shuttingDown: true } })).session.lootUncounted, false);
 });
 
 test('main does not wait for inventory loot while the app is shutting down', async () => {
@@ -1748,6 +1763,7 @@ test('map-enter handler publishes runtime state and leaves session start to the 
   let mapsEntered = 0;
   const context = loadFunctions(['handleMapEntered'], {
     currentSession: null,
+    overlayInventoryStatus: null,
     inventoryWatcher: { mapEntered: () => { mapsEntered += 1; } },
     startNewSession(input) {
       startCalls.push({ ...input });

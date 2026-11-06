@@ -41,6 +41,8 @@ class InventoryWatcher {
    * @param {function(): (string|null)} deps.getGame - The running game: 'poe1', 'poe2' or null
    * @param {function(): boolean} deps.isGameInFront
    * @param {function(): boolean} deps.isInMap
+   * @param {function(): boolean} [deps.isInMapHub] - In a hideout, or where maps start; only there does a missing
+   *   baseline call for the first-read hint
    * @param {function(): (object|null)} deps.getGameWindow - Client rectangle in screen pixels
    * @param {function(number, number, number, number): (Uint8Array|null)} deps.readScreen - BGRA pixels of a screen area
    * @param {function(): (object|null)} deps.getCharacter
@@ -49,13 +51,14 @@ class InventoryWatcher {
    * @param {function(string): (object|null)} deps.loadArt - { coarse, fine } pixels of an icon file
    * @param {function(string, Array, number): void} deps.onGain - Session id, its new items and how many maps they cover
    * @param {function(string): void} deps.onStatus - Something the player should be told, see the kinds below
-   * @param {function(string): void} [deps.onRead] - What the last read came to, for the Dashboard's status line:
+   * @param {function(string, object=): void} [deps.onRead] - What the last read came to, for the Dashboard's status line:
    *   saved, noBaseline, noGain, gain; resolution when the window turns to a size reading has not been checked on, and
-   *   measured when it fits again
+   *   measured when it fits again; needsBaseline ({ characterKey }) when the inventory is closed and the character has
+   *   no baseline yet, on every tick
    * @param {function(): number} [deps.now]
    */
   constructor(deps) {
-    this.deps = { now: Date.now, onRead: () => {}, ...deps };
+    this.deps = { now: Date.now, onRead: () => {}, isInMapHub: () => false, ...deps };
     this.profileId = null;
     this.windowUnmeasured = false;
     this.state = createInventoryLootState();
@@ -204,7 +207,15 @@ class InventoryWatcher {
     const result = grid ? this.readGrid(grid) : null;
     if (result?.open && !result.covered) {
       this.applyRead(characterKey, result, { announce: false });
+    } else if (result && !result.open && !this.state.baselines[characterKey] && this.deps.isInMapHub()) {
+      this.deps.onRead('needsBaseline', { characterKey });
     }
+  }
+
+  // Whether the character in front has an inventory read to count the next map from.
+  hasBaseline(game) {
+    const characterKey = getCharacterKey(game, this.deps.getCharacter());
+    return Boolean(characterKey && this.state.baselines[characterKey]);
   }
 
   // The read hotkey. Status kinds: unsupported, resolution, inMap, notReady, failed, notOpen, covered, saved, noBaseline, noGain, reading.

@@ -563,3 +563,29 @@ test('the overlay start prompt offers a custom farm type as a coloured chip with
   assert.match(chips, /assets\/icons\.svg#farm-tablet"\/><\/svg>Boss &lt;Tablets&gt;<\/button>/);
   assert.match(chips, /data-farm-type-id="ritual" data-farm-type="ritual" aria-pressed="false">Ritual<\/button>/);
 });
+
+test('a map with no loot and no baseline says it was not counted, in the warning tone, and asks for the inventory before the next map', () => {
+  const overlay = loadOverlay();
+
+  renderResult(overlay, { netProfit: 0, noLoot: true, lootUncounted: true, durationSeconds: 250, lootItemCount: 0, topOutputs: [] });
+  assert.equal(overlay.kicker.textContent, 'Map complete \u00b7 not counted');
+  assert.equal(overlay.card.dataset.overlayTone, 'uncounted');
+  assert.equal(overlay.secondary.textContent, 'Open your inventory before the next map');
+  assert.equal(overlay.card.dataset.profitTier, undefined);
+  assert.equal(overlay.primary.children.length, 1, 'no profit of 0');
+
+  // An ordinary result keeps its kicker and tone.
+  renderResult(overlay, { netProfit: 0, noLoot: true, durationSeconds: 250, lootItemCount: 0, topOutputs: [] });
+  assert.equal(overlay.kicker.textContent, 'Map Complete');
+  assert.notEqual(overlay.card.dataset.overlayTone, 'uncounted');
+
+  overlay.renderState({
+    visibility: 'visible',
+    mode: 'map-result',
+    language: 'tr',
+    mapResult: { visible: true, result: { netProfit: 0, noLoot: true, lootUncounted: true, lootItemCount: 0, topOutputs: [] } }
+  });
+  assert.equal(overlay.kicker.textContent, 'Map tamamlandi - sayilmadi');
+  assert.equal(overlay.secondary.textContent, 'Sonraki mapten once envanterini ac');
+
+});
