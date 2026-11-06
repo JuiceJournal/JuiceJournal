@@ -616,7 +616,7 @@ test('main.js refreshes the redaction targets wherever new names or paths arrive
   assert.ok(setupLogParser.indexOf('refreshRedactionTargets();') < setupLogParser.indexOf('new LogParser('));
   assert.match(
     source,
-    /ipcMain\.handle\('set-settings', \(event, settings\) => \{\s*try \{\s*return applyDesktopSettings\(settings\);\s*\} finally \{[^}]*refreshRedactionTargets\(\);\s*\}/
+    /ipcMain\.handle\('set-settings', async \(event, settings\) => \{[\s\S]{0,260}?try \{\s*return applyDesktopSettings\(settings\);\s*\} finally \{[^}]*refreshRedactionTargets\(\);\s*\}/
   );
   assert.match(source, /const profile = await signInWithPoe\(\);\s*refreshRedactionTargets\(\);/);
   assert.match(source, /refreshRedactionTargets\(\);\s*console\.warn\('Path of Exile sign-in failed', error\);/);
@@ -715,6 +715,7 @@ const REPORT_FUNCTIONS = [
   'readRecentErrors',
   'refreshRedactionTargets',
   'collectBugReportInput',
+  'isValidPoePath',
   'getBugReport',
   'copyBugReportToClipboard',
   'isAllowedExternalAuthUrl',

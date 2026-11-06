@@ -120,6 +120,7 @@ const ERROR_MESSAGE_KEY_MAP = {
   'An unexpected error occurred': 'errors.unexpected',
   'Unauthorized request': 'errors.loginFailed',
   'Invalid API URL': 'errors.invalidApiUrl',
+  'Invalid Client.txt path': 'errors.invalidPoePath',
   'Hotkey is required': 'settings.hotkeyErrorRequired',
   'Hotkey must include a non-modifier key': 'settings.hotkeyErrorModifierOnly',
   'Hotkey must include only one non-modifier key': 'settings.hotkeyErrorOneKey',
@@ -5833,7 +5834,11 @@ async function handleSaveSettings() {
   };
 
   try {
-    await window.electronAPI.setSettings(settings);
+    const result = await window.electronAPI.setSettings(settings);
+    // Cancel in main's online prompt saved nothing, so the form keeps what was typed and shows no saved state.
+    if (result?.canceled === true) {
+      return;
+    }
     state.settings = { ...state.settings, ...settings };
     applySettingsDraftToDom(state.settings);
     // The idle map card mentions auto-start only while it is on.

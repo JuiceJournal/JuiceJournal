@@ -209,7 +209,11 @@ const MAIN_PROCESS_TRANSLATIONS = {
     dataNewJournalTitle: 'Yeni gunluk baslat',
     dataNewJournalMessage: 'Yeni ve bos bir gunluk baslatilsin mi?',
     dataNewJournalDetail: 'Gunluk dosyan okunamiyor. Veri klasorunde journal.broken-<tarih>-<saat>.json olarak saklanir; hicbir sey silinmez. Icindeki session ve lootlar uygulamada gorunmez; kayitli map sonuclarin kalir.',
-    dataNewJournalConfirm: 'Yeni gunluk baslat'
+    dataNewJournalConfirm: 'Yeni gunluk baslat',
+    onlineSendTitle: 'Online ozellikleri kullan',
+    onlineSendMessage: '{server} adresine veri gonderilsin mi?',
+    onlineSendDetail: 'Giris bilgilerin ve paylasmayi sectigin farm run ve stash snapshot kayitlarin bu sunucuya gider. Sunucuyu sen calistiriyorsan ya da ona guveniyorsan devam et. Online ozellikleri Ayarlar bolumunden tekrar kapatabilirsin.',
+    onlineSendConfirm: 'Izin ver'
   },
   en: {
     trayStillRunning: 'The app is still running in the system tray.',
@@ -280,7 +284,11 @@ const MAIN_PROCESS_TRANSLATIONS = {
     dataNewJournalTitle: 'Start a new journal',
     dataNewJournalMessage: 'Start a new, empty journal?',
     dataNewJournalDetail: 'Your journal file cannot be read. It is kept in the data folder as journal.broken-<date>-<time>.json; nothing is deleted. The sessions and loot in it do not show in the app; saved map results stay.',
-    dataNewJournalConfirm: 'Start new journal'
+    dataNewJournalConfirm: 'Start new journal',
+    onlineSendTitle: 'Use online features',
+    onlineSendMessage: 'Send data to {server}?',
+    onlineSendDetail: 'Your sign-in details, and the farm runs and stash snapshots you choose to share, go to this server. Continue only if you run it yourself or trust it. You can turn online features off again in Settings.',
+    onlineSendConfirm: 'Allow'
   }
 };
 
@@ -635,6 +643,13 @@ function isValidApiUrl(urlString) {
   }
 }
 
+// Client.txt must be a .txt file on a drive letter. A UNC, \\?\ or \\.\ path would make every read of it open a network
+// share, which can send the user's NTLM response there. A mapped drive letter cannot be told apart and stays allowed.
+function isValidPoePath(value) {
+  return typeof value === 'string' && value.length <= 260
+    && /^[A-Za-z]:[\\/](?:[^\\/:*?"<>|\x00-\x1f]+[\\/])*[^\\/:*?"<>|\x00-\x1f]+\.txt$/i.test(value);
+}
+
 function serializeSecurePayload(value) {
   const payload = JSON.stringify(value);
   if (!safeStorage.isEncryptionAvailable()) {
@@ -684,6 +699,39 @@ function getDecryptedAuthToken() {
   } catch {
     // Decryption failed (e.g., key changed) — require re-login
     return null;
+  }
+}
+
+// An older build kept the session cookie as plain text in config.json. Where encryption works it moves into
+// authTokenEncrypted; where it does not, the plain copy is the only one and stays. Runs at every start, so a launch
+// with encryption briefly unavailable only puts the move off.
+function migrateLegacyAuthToken() {
+  const legacy = store.get('authToken');
+  if (!legacy || !safeStorage.isEncryptionAvailable()) {
+    return;
+  }
+  let sealedWorks = false;
+  const encrypted = store.get('authTokenEncrypted');
+  if (encrypted) {
+    try {
+      sealedWorks = Boolean(safeStorage.decryptString(Buffer.from(encrypted, 'base64')));
+    } catch {
+      // A sealed copy this machine cannot open; the plain one replaces it below.
+    }
+  }
+  try {
+    if (!sealedWorks) {
+      // The plain copy is the only usable one, so it goes only once the sealed copy is stored.
+      const sealed = encryptAuthToken(legacy);
+      if (!sealed) {
+        return;
+      }
+      store.set('authTokenEncrypted', sealed);
+    }
+    store.set('authToken', null);
+  } catch {
+    // config.json is locked or the disk is full. The app still starts: the plain copy stays readable, or the sealed
+    // copy already written wins the next read, and the move is tried again at the next start.
   }
 }
 
@@ -1724,7 +1772,7 @@ function collectBugReportInput() {
     settings: {
       ...buildSafeSettingsSnapshot(),
       customServer: typeof apiUrl === 'string' && apiUrl !== DEFAULT_API_URL,
-      clientTxtFound: typeof poePath === 'string' && poePath !== '' && fs.existsSync(poePath)
+      clientTxtFound: isValidPoePath(poePath) && fs.existsSync(poePath)
     },
     signedIn: Boolean(profile),
     sessionActive: currentSession?.status === 'active',
@@ -4270,7 +4318,8 @@ function setupLogParser() {
   const defaultPath = DEFAULT_POE_LOG_PATH;
 
   // Eger poePath bos veya dosya yoksa, varsayilani dene
-  if (!poePath || !require('fs').existsSync(poePath)) {
+  // A stored path that is not a local .txt file (saved before the check) counts as empty and is never opened.
+  if (!isValidPoePath(poePath) || !require('fs').existsSync(poePath)) {
     if (require('fs').existsSync(defaultPath)) {
       poePath = defaultPath;
       store.set('poePath', defaultPath);
@@ -4400,6 +4449,10 @@ function applyGameVersion(version, options = {}) {
   detectedLogPath = GameDetector.findLogPath(version, {
     processes: Array.isArray(options.processes) ? options.processes : []
   });
+  // A game found on a network share is not tracked: storing that path would make every Settings save fail the check.
+  if (!isValidPoePath(detectedLogPath)) {
+    detectedLogPath = null;
+  }
 
   if (shouldRetargetPriceService) {
     // Runtime services follow the detected game.
@@ -4408,7 +4461,7 @@ function applyGameVersion(version, options = {}) {
   }
 
   const shouldUpdatePoePath = Boolean(detectedLogPath && detectedLogPath !== storedPoePath);
-  const storedPoePathUsable = Boolean(storedPoePath && fs.existsSync(storedPoePath));
+  const storedPoePathUsable = isValidPoePath(storedPoePath) && fs.existsSync(storedPoePath);
   const runtimeLogPath = detectedLogPath || (storedPoePathUsable ? storedPoePath : null);
   const logParserNeedsResync = !logParser || !logParser.isRunning;
   const shouldRestartLogParser = Boolean(
@@ -4440,6 +4493,79 @@ function applyGameVersion(version, options = {}) {
   }
 }
 
+// The server a save would start sending to, or null when it sends nowhere new: online stays off, or it was already on
+// for the same server. An address in the save that fails the check is null too, so applyDesktopSettings refuses it as
+// before. The stored address is only parsed, because it can predate the check and the client still sends to it.
+function getOnlineConfirmOrigin(settings) {
+  if (!settings || typeof settings !== 'object') {
+    return null;
+  }
+  const hasApiUrl = Object.prototype.hasOwnProperty.call(settings, 'apiUrl');
+  const hasOnline = Object.prototype.hasOwnProperty.call(settings, 'onlineEnabled');
+  if (!hasApiUrl && !hasOnline) {
+    return null;
+  }
+  const nextOnline = hasOnline ? settings.onlineEnabled === true : isOnlineEnabled();
+  const nextUrl = hasApiUrl
+    ? (typeof settings.apiUrl === 'string' ? settings.apiUrl.trim() : settings.apiUrl)
+    : store.get('apiUrl');
+  if (!nextOnline || (hasApiUrl && !isValidApiUrl(nextUrl))) {
+    return null;
+  }
+  let nextOrigin;
+  try {
+    nextOrigin = new URL(nextUrl).origin;
+  } catch {
+    // Nothing can be sent to an address that does not parse.
+    return null;
+  }
+  let storedOrigin = null;
+  try {
+    storedOrigin = new URL(store.get('apiUrl')).origin;
+  } catch {
+    // No usable stored address: the save is a new server.
+  }
+  return isOnlineEnabled() && nextOrigin === storedOrigin ? null : nextOrigin;
+}
+
+let onlineConfirmOpen = false;
+
+// Main asks, not the page, because a script in the page cannot answer a system dialog. Cancel is the default, a dialog
+// that fails counts as Cancel, and a second save while one is open is refused instead of stacking another. A save that
+// needs no prompt can still change the stored server meanwhile, so Allow counts only if the save would still send to
+// the server the dialog named. The handler applies the save in the same tick, so nothing can change it in between.
+async function confirmOnlineSend(settings) {
+  const origin = getOnlineConfirmOrigin(settings);
+  if (!origin) {
+    return true;
+  }
+  if (onlineConfirmOpen) {
+    return false;
+  }
+  onlineConfirmOpen = true;
+  try {
+    const choice = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: [t('onlineSendConfirm'), t('promptCancel')],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+      title: t('onlineSendTitle'),
+      message: t('onlineSendMessage', { server: origin }),
+      detail: t('onlineSendDetail')
+    });
+    if (choice.response !== 0) {
+      return false;
+    }
+    const originNow = getOnlineConfirmOrigin(settings);
+    return originNow === null || originNow === origin;
+  } catch {
+    return false;
+  } finally {
+    onlineConfirmOpen = false;
+  }
+}
+
 const SETTINGS_ALLOWLIST = new Set([
   'apiUrl', 'onlineEnabled', 'poePath', 'autoStartSession', 'notifications',
   'soundNotifications', 'language', 'poeVersion', 'defaultLeaguePoe1', 'defaultLeaguePoe2',
@@ -4458,6 +4584,15 @@ function applyDesktopSettings(settings = {}) {
 
   if (hasApiUrl && !isValidApiUrl(normalizedApiUrl)) {
     throw new Error('Invalid API URL');
+  }
+
+  // An empty path means the default one.
+  const hasPoePath = Object.prototype.hasOwnProperty.call(settings, 'poePath');
+  const normalizedPoePath = hasPoePath && typeof settings.poePath === 'string'
+    ? settings.poePath.trim()
+    : settings.poePath;
+  if (hasPoePath && normalizedPoePath !== '' && !isValidPoePath(normalizedPoePath)) {
+    throw new Error('Invalid Client.txt path');
   }
 
   const hasScanHotkey = Object.prototype.hasOwnProperty.call(settings, 'scanHotkey');
@@ -4523,6 +4658,11 @@ function applyDesktopSettings(settings = {}) {
 
     if (key === 'onlineEnabled') {
       store.set(key, value === true);
+      continue;
+    }
+
+    if (key === 'poePath') {
+      store.set(key, normalizedPoePath);
       continue;
     }
 
@@ -4640,7 +4780,11 @@ function setupIPC() {
   // Ayarlari getir (secret alanlari cikar)
   ipcMain.handle('get-settings', () => getRendererSettings());
 
-  ipcMain.handle('set-settings', (event, settings) => {
+  ipcMain.handle('set-settings', async (event, settings) => {
+    // A save that would start sending to a server the player has not allowed asks first; Cancel writes nothing.
+    if (!(await confirmOnlineSend(settings))) {
+      return { canceled: true };
+    }
     try {
       return applyDesktopSettings(settings);
     } finally {
@@ -4771,10 +4915,11 @@ function setupIPC() {
 
   // Client.txt dosya secici
   ipcMain.handle('browse-poe-path', async () => {
+    const storedPoePath = store.get('poePath');
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
       title: 'Select Client.txt',
-      // Without this the dialog opens in Downloads since Electron 43.
-      defaultPath: store.get('poePath') || DEFAULT_POE_LOG_PATH,
+      // Without this the dialog opens in Downloads since Electron 43. A stored network path is not opened.
+      defaultPath: isValidPoePath(storedPoePath) ? storedPoePath : DEFAULT_POE_LOG_PATH,
       filters: [{ name: 'Log Files', extensions: ['txt'] }],
       properties: ['openFile']
     });
@@ -5543,7 +5688,8 @@ function blockRemoteFileRequests() {
 app.whenReady().then(() => {
   blockRemoteFileRequests();
 
-  // Initialize the API client.
+  // Initialize the API client. safeStorage answers reliably only once the app is ready.
+  migrateLegacyAuthToken();
   const resolvedToken = getDecryptedAuthToken();
   apiClient = new APIClient(store.get('apiUrl'), resolvedToken, { online: isOnlineEnabled() });
   poeApiClient = new PoeApiClient();

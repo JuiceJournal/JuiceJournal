@@ -184,7 +184,8 @@ function loadMainWithMocks({
     ...storeState
   };
   const context = loadFunctions([
-    'applyGameVersion'
+    'applyGameVersion',
+    'isValidPoePath'
   ], {
     store: store || {
       get(key) {
@@ -984,7 +985,8 @@ test('runtime game detection makes the detected game the Settings game and tells
   const context = loadFunctions([
     'getRuntimeSessionSnapshot',
     'clearRuntimeSession',
-    'applyGameVersion'
+    'applyGameVersion',
+    'isValidPoePath'
   ], {
     store: {
       get(key) {
@@ -1079,7 +1081,8 @@ test('runtime game detection retargets pricing and the Settings game when the de
   const context = loadFunctions([
     'getRuntimeSessionSnapshot',
     'clearRuntimeSession',
-    'applyGameVersion'
+    'applyGameVersion',
+    'isValidPoePath'
   ], {
     store: {
       get(key) {
@@ -1719,7 +1722,7 @@ test('setupLogParser forwards game session events from Client.txt to the rendere
     }
   }
 
-  const context = loadFunctions(['setupLogParser'], {
+  const context = loadFunctions(['setupLogParser', 'isValidPoePath'], {
     store: {
       get(key) {
         return storeState[key];
@@ -2002,4 +2005,563 @@ test('main device characters map GGG errors to renderer-safe results', async () 
   assert.deepEqual({ ...(await context.getPoeDeviceCharacters('poe2')) }, {
     connected: false, characters: null, error: 'auth_expired'
   });
+});
+
+const POE_PATH_HELPERS = ['isValidPoePath'];
+
+test('isValidPoePath accepts a .txt file on a drive letter and nothing else', () => {
+  const { isValidPoePath } = loadFunctions(POE_PATH_HELPERS);
+  const unc = String.raw`\\srv\share\Client.txt`;
+  assert.equal(unc, '\\\\srv\\share\\Client.txt');
+  assert.equal(String.raw`\\?\C:\a\Client.txt`, '\\\\?\\C:\\a\\Client.txt');
+  assert.equal(String.raw`C:\a\\Client.txt`, 'C:\\a\\\\Client.txt');
+
+  for (const accepted of [
+    String.raw`E:\Grinding Gear Games\Path of Exile\logs\Client.txt`,
+    'C:/Path of Exile/logs/Client.txt',
+    String.raw`D:\SteamLibrary\steamapps\common\Path of Exile 2\logs\Client.txt`,
+    String.raw`C:\x\KakaoClient.txt`
+  ]) {
+    assert.equal(isValidPoePath(accepted), true, accepted);
+  }
+
+  for (const rejected of [
+    unc,
+    '//srv/share/Client.txt',
+    String.raw`\\?\C:\a\Client.txt`,
+    String.raw`\\.\C:\a\Client.txt`,
+    String.raw`\\?\UNC\srv\share\Client.txt`,
+    'C:Client.txt',
+    String.raw`C:\a\Client.txt:ads`,
+    String.raw`C:\a\\Client.txt`,
+    '/Client.txt',
+    'file:///C:/Client.txt',
+    String.raw`C:\a\x.exe`,
+    `C:\\${'a'.repeat(300)}.txt`,
+    '',
+    null,
+    undefined,
+    5
+  ]) {
+    assert.equal(isValidPoePath(rejected), false, String(rejected));
+  }
+});
+
+function loadPoePathSettings() {
+  const writes = [];
+  let registerGlobalShortcutsCalls = 0;
+  const context = loadFunctions(['applyDesktopSettings', 'isValidPoePath'], {
+    SETTINGS_ALLOWLIST: getSettingsAllowlist(),
+    store: {
+      set(key, value) {
+        writes.push([key, value]);
+      }
+    },
+    getValidatedHotkeySettings: () => ({
+      scanHotkey: 'Alt+F10',
+      stashScanHotkey: 'CommandOrControl+Shift+K'
+    }),
+    registerGlobalShortcuts() {
+      registerGlobalShortcutsCalls += 1;
+    },
+    releaseInactiveScanHotkeys() { },
+    refreshTrayMenu() { }
+  });
+  return { context, writes, getShortcutCalls: () => registerGlobalShortcutsCalls };
+}
+
+test('main settings reject a network Client.txt path before any write or hotkey registration', () => {
+  const { context, writes, getShortcutCalls } = loadPoePathSettings();
+
+  assert.throws(() => {
+    context.applyDesktopSettings({
+      poePath: String.raw`\\srv\share\Client.txt`,
+      language: 'tr',
+      scanHotkey: 'alt+f10',
+      stashScanHotkey: 'ctrl+shift+k'
+    });
+  }, /Invalid Client\.txt path/);
+
+  assert.equal(getShortcutCalls(), 0);
+  assert.deepEqual(writes, []);
+});
+
+test('main settings store an empty Client.txt path as empty and a padded one trimmed', () => {
+  const { context, writes } = loadPoePathSettings();
+
+  context.applyDesktopSettings({ poePath: '' });
+  context.applyDesktopSettings({ poePath: '  C:/Games/logs/Client.txt  ' });
+
+  assert.deepEqual(writes, [['poePath', ''], ['poePath', 'C:/Games/logs/Client.txt']]);
+});
+
+test('main settings reject a Client.txt path that is not text, and a save without one is fine', () => {
+  const { context, writes } = loadPoePathSettings();
+
+  assert.throws(() => context.applyDesktopSettings({ poePath: null }), /Invalid Client\.txt path/);
+  assert.throws(() => context.applyDesktopSettings({ poePath: 5 }), /Invalid Client\.txt path/);
+  assert.deepEqual(writes, []);
+
+  assert.doesNotThrow(() => context.applyDesktopSettings({ language: 'en' }));
+  assert.deepEqual(writes, [['language', 'en']]);
+});
+
+function loadSetupLogParser({ existing, storedPath }) {
+  const storeState = { poePath: storedPath };
+  const checked = [];
+  const created = [];
+  class FakeLogParser {
+    constructor(logPath) {
+      this.logPath = logPath;
+      created.push(logPath);
+    }
+
+    on() { }
+
+    start() { }
+
+    bootstrapFromTail() {
+      return false;
+    }
+  }
+  const context = loadFunctions(['setupLogParser', 'isValidPoePath'], {
+    store: {
+      get: (key) => storeState[key],
+      set(key, value) {
+        storeState[key] = value;
+      }
+    },
+    require: () => ({
+      existsSync(filePath) {
+        checked.push(filePath);
+        return existing.includes(filePath);
+      }
+    }),
+    DEFAULT_POE_LOG_PATH: 'C:/Default/Client.txt',
+    refreshRedactionTargets() { },
+    LogParser: FakeLogParser,
+    normalizePoeVersion: (version) => version || null
+  });
+  return { context, storeState, checked, created };
+}
+
+test('setupLogParser never opens a stored network path and falls back to the default Client.txt', () => {
+  const unc = String.raw`\\srv\share\Client.txt`;
+  const { context, storeState, checked, created } = loadSetupLogParser({
+    existing: ['C:/Default/Client.txt', unc],
+    storedPath: unc
+  });
+
+  context.setupLogParser();
+
+  assert.ok(!checked.includes(unc));
+  assert.deepEqual(created, ['C:/Default/Client.txt']);
+  assert.equal(storeState.poePath, 'C:/Default/Client.txt');
+});
+
+test('setupLogParser starts no parser for a stored network path when there is no default Client.txt', () => {
+  const unc = String.raw`\\srv\share\Client.txt`;
+  const { context, storeState, checked, created } = loadSetupLogParser({ existing: [unc], storedPath: unc });
+
+  context.setupLogParser();
+
+  assert.ok(!checked.includes(unc));
+  assert.deepEqual(created, []);
+  assert.equal(storeState.poePath, unc);
+});
+
+test('applyGameVersion never opens a stored network path', () => {
+  const unc = String.raw`\\srv\share\Client.txt`;
+  const checked = [];
+  const { applyGameVersion } = loadMainWithMocks({
+    storeState: { poePath: unc },
+    fs: {
+      existsSync(filePath) {
+        checked.push(filePath);
+        return true;
+      }
+    }
+  });
+
+  applyGameVersion('poe1');
+
+  assert.ok(!checked.includes(unc));
+});
+
+test('applyGameVersion does not store or track a game found on a network share', () => {
+  const unc = String.raw`\\nas\games\steamapps\common\Path of Exile\logs\Client.txt`;
+  const local = 'C:/Games/Path of Exile/logs/Client.txt';
+  const { applyGameVersion, storeState, messages } = loadMainWithMocks({
+    storeState: { poePath: local },
+    GameDetector: { findLogPath: () => unc },
+    fs: { existsSync: () => true }
+  });
+
+  applyGameVersion('poe1');
+
+  assert.equal(storeState.poePath, local);
+  assert.ok(!JSON.stringify(messages).includes('nas'));
+});
+
+function loadOnlineConfirm(storeState) {
+  return loadFunctions([
+    'normalizeHostname',
+    'getUrlPort',
+    'isLoopbackHost',
+    'isPrivateOrReservedIp',
+    'isValidApiUrl',
+    'isOnlineEnabled',
+    'getOnlineConfirmOrigin'
+  ], {
+    URL,
+    net,
+    LOCAL_API_PORTS: new Set([80, 443, 3000, 3001]),
+    store: { get: (key) => storeState[key] }
+  });
+}
+
+test('getOnlineConfirmOrigin prompts with the origin only when online goes from off to on', () => {
+  const stored = { onlineEnabled: false, apiUrl: 'https://api.juicejournal.example/v1/?a=1' };
+  const { getOnlineConfirmOrigin } = loadOnlineConfirm(stored);
+
+  assert.equal(getOnlineConfirmOrigin({ onlineEnabled: true }), 'https://api.juicejournal.example');
+  assert.equal(
+    getOnlineConfirmOrigin({ onlineEnabled: true, apiUrl: ' https://other.example/path/ ' }),
+    'https://other.example'
+  );
+});
+
+test('getOnlineConfirmOrigin stays quiet while online is on and the origin does not change', () => {
+  const { getOnlineConfirmOrigin } = loadOnlineConfirm({ onlineEnabled: true, apiUrl: 'https://api.juicejournal.example/' });
+
+  assert.equal(getOnlineConfirmOrigin({ onlineEnabled: true }), null);
+  assert.equal(getOnlineConfirmOrigin({ apiUrl: 'https://api.juicejournal.example' }), null);
+  assert.equal(getOnlineConfirmOrigin({ apiUrl: 'https://api.juicejournal.example/other/path' }), null);
+  assert.equal(
+    getOnlineConfirmOrigin({ onlineEnabled: true, apiUrl: 'https://api.juicejournal.example/x/' }),
+    null
+  );
+});
+
+test('getOnlineConfirmOrigin prompts for a new origin while online is on', () => {
+  const { getOnlineConfirmOrigin } = loadOnlineConfirm({ onlineEnabled: true, apiUrl: 'https://api.juicejournal.example' });
+
+  assert.equal(getOnlineConfirmOrigin({ apiUrl: 'https://other.example/api' }), 'https://other.example');
+  assert.equal(getOnlineConfirmOrigin({ apiUrl: 'https://api.juicejournal.example:8443' }), 'https://api.juicejournal.example:8443');
+});
+
+test('getOnlineConfirmOrigin stays quiet when online ends up off or the save does not touch it', () => {
+  const { getOnlineConfirmOrigin } = loadOnlineConfirm({ onlineEnabled: false, apiUrl: 'https://api.juicejournal.example' });
+
+  assert.equal(getOnlineConfirmOrigin({ apiUrl: 'https://other.example' }), null);
+  assert.equal(getOnlineConfirmOrigin({ onlineEnabled: false, apiUrl: 'https://other.example' }), null);
+  assert.equal(getOnlineConfirmOrigin({ language: 'en', poePath: 'C:/a/Client.txt' }), null);
+  for (const notSettings of [null, undefined, 'onlineEnabled', 5]) {
+    assert.equal(getOnlineConfirmOrigin(notSettings), null, String(notSettings));
+  }
+});
+
+test('getOnlineConfirmOrigin leaves an address in the save that fails the check to applyDesktopSettings', () => {
+  const { getOnlineConfirmOrigin } = loadOnlineConfirm({ onlineEnabled: false, apiUrl: 'https://api.juicejournal.example' });
+
+  assert.equal(getOnlineConfirmOrigin({ onlineEnabled: true, apiUrl: 'http://192.168.1.5:3001' }), null);
+  assert.equal(getOnlineConfirmOrigin({ onlineEnabled: true, apiUrl: 'https://user:pw@host.example' }), null);
+  assert.equal(getOnlineConfirmOrigin({ onlineEnabled: true, apiUrl: '' }), null);
+  assert.equal(getOnlineConfirmOrigin({ onlineEnabled: true, apiUrl: 'not a url' }), null);
+});
+
+test('getOnlineConfirmOrigin only parses the stored address, which can predate the check', () => {
+  const stored = { onlineEnabled: false, apiUrl: 'http://127.0.0.1:54321' };
+  const { getOnlineConfirmOrigin, isValidApiUrl } = loadOnlineConfirm(stored);
+
+  assert.equal(isValidApiUrl(stored.apiUrl), false);
+  assert.equal(getOnlineConfirmOrigin({ onlineEnabled: true }), 'http://127.0.0.1:54321');
+
+  stored.apiUrl = 'not a url';
+  assert.equal(getOnlineConfirmOrigin({ onlineEnabled: true }), null);
+});
+
+function loadConfirmOnlineSend({ language = 'en', showMessageBox } = {}) {
+  const boxes = [];
+  const mainWindow = { id: 'main' };
+  const source = fs.readFileSync(mainJsPath, 'utf8').replace(/\r\n/g, '\n');
+  const translationsStart = source.indexOf('const MAIN_PROCESS_TRANSLATIONS = {');
+  assert.notEqual(translationsStart, -1);
+  const translations = source.slice(translationsStart, source.indexOf('\n};', translationsStart) + 3);
+  // extractFunctionSource would match the first async function whose name starts with t, so t() is cut out here.
+  const tStart = source.indexOf('function t(key, values = {}) {');
+  assert.notEqual(tStart, -1);
+  const tSource = source.slice(tStart, source.indexOf('\n}\n', tStart) + 3);
+  const context = loadFunctions(['getLanguage', 'confirmOnlineSend'], {
+    store: { get: (key) => (key === 'language' ? language : undefined) },
+    mainWindow,
+    getOnlineConfirmOrigin: (settings) => settings?.origin || null,
+    dialog: {
+      showMessageBox: (...args) => {
+        boxes.push(args);
+        return showMessageBox(...args);
+      }
+    }
+  });
+  vm.runInContext(`${translations}\n${tSource}\nlet onlineConfirmOpen = false;`, context);
+  return { context, boxes, mainWindow };
+}
+
+test('confirmOnlineSend asks nothing and allows the save when there is no server to ask about', async () => {
+  const { context, boxes } = loadConfirmOnlineSend({ showMessageBox: async () => ({ response: 1 }) });
+
+  assert.equal(await context.confirmOnlineSend({}), true);
+  assert.equal(await context.confirmOnlineSend(undefined), true);
+  assert.equal(boxes.length, 0);
+});
+
+test('confirmOnlineSend shows a warning that names the server and defaults to Cancel', async () => {
+  const { context, boxes, mainWindow } = loadConfirmOnlineSend({ showMessageBox: async () => ({ response: 0 }) });
+
+  assert.equal(await context.confirmOnlineSend({ origin: 'https://api.example:8443' }), true);
+
+  assert.equal(boxes.length, 1);
+  assert.equal(boxes[0][0], mainWindow);
+  const options = JSON.parse(JSON.stringify(boxes[0][1]));
+  assert.deepEqual(options.buttons, ['Allow', 'Cancel']);
+  assert.equal(options.type, 'warning');
+  assert.equal(options.defaultId, 1);
+  assert.equal(options.cancelId, 1);
+  assert.equal(options.noLink, true);
+  assert.equal(options.title, 'Use online features');
+  assert.equal(options.message, 'Send data to https://api.example:8443?');
+  assert.match(options.detail, /go to this server/);
+});
+
+test('confirmOnlineSend treats Cancel and a dialog that fails as a no', async () => {
+  const cancel = loadConfirmOnlineSend({ showMessageBox: async () => ({ response: 1 }) });
+  assert.equal(await cancel.context.confirmOnlineSend({ origin: 'https://api.example' }), false);
+
+  const failing = loadConfirmOnlineSend({
+    showMessageBox: async () => {
+      throw new Error('dialog failed');
+    }
+  });
+  assert.equal(await failing.context.confirmOnlineSend({ origin: 'https://api.example' }), false);
+  // The failure leaves the lock open for the next save.
+  assert.equal(await failing.context.confirmOnlineSend({ origin: 'https://api.example' }), false);
+  assert.equal(failing.boxes.length, 2);
+});
+
+test('confirmOnlineSend refuses a second save while its dialog is open and asks again after it closes', async () => {
+  let answer;
+  const { context, boxes } = loadConfirmOnlineSend({
+    showMessageBox: () => new Promise((resolve) => {
+      answer = resolve;
+    })
+  });
+
+  const first = context.confirmOnlineSend({ origin: 'https://api.example' });
+  assert.equal(await context.confirmOnlineSend({ origin: 'https://api.example' }), false);
+  assert.equal(boxes.length, 1);
+
+  answer({ response: 0 });
+  assert.equal(await first, true);
+
+  const third = context.confirmOnlineSend({ origin: 'https://api.example' });
+  assert.equal(boxes.length, 2);
+  answer({ response: 1 });
+  assert.equal(await third, false);
+});
+
+test('confirmOnlineSend drops an Allow once the server it named is no longer the one the save sends to', async () => {
+  let answer;
+  const { context } = loadConfirmOnlineSend({
+    showMessageBox: () => new Promise((resolve) => {
+      answer = resolve;
+    })
+  });
+
+  const moved = { origin: 'http://localhost:3001' };
+  const pending = context.confirmOnlineSend(moved);
+  moved.origin = 'https://other.example';
+  answer({ response: 0 });
+  assert.equal(await pending, false);
+
+  const settled = { origin: 'https://api.example' };
+  const stillAsked = context.confirmOnlineSend(settled);
+  settled.origin = null;
+  answer({ response: 0 });
+  assert.equal(await stillAsked, true);
+});
+
+test('an Allow for the stored server does not turn online on after another save moved the server', async () => {
+  const storeState = { onlineEnabled: false, apiUrl: 'http://localhost:3001' };
+  let answer;
+  const context = loadFunctions([
+    'normalizeHostname',
+    'getUrlPort',
+    'isLoopbackHost',
+    'isPrivateOrReservedIp',
+    'isValidApiUrl',
+    'isOnlineEnabled',
+    'getOnlineConfirmOrigin',
+    'confirmOnlineSend'
+  ], {
+    URL,
+    net,
+    LOCAL_API_PORTS: new Set([80, 443, 3000, 3001]),
+    store: { get: (key) => storeState[key] },
+    mainWindow: {},
+    t: (key) => key,
+    dialog: {
+      showMessageBox: () => new Promise((resolve) => {
+        answer = resolve;
+      })
+    }
+  });
+  vm.runInContext('let onlineConfirmOpen = false;', context);
+
+  const turnOn = context.confirmOnlineSend({ onlineEnabled: true });
+  // Online is still off, so this save needs no prompt and is stored while the dialog naming localhost is open.
+  assert.equal(await context.confirmOnlineSend({ apiUrl: 'https://evil.example' }), true);
+  storeState.apiUrl = 'https://evil.example';
+  answer({ response: 0 });
+
+  assert.equal(await turnOn, false);
+});
+
+test('the set-settings handler waits for the online prompt and saves nothing when it is declined', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+
+  assert.match(
+    source,
+    /ipcMain\.handle\('set-settings', async \(event, settings\) => \{[\s\S]{0,200}?if \(!\(await confirmOnlineSend\(settings\)\)\) \{\s*return \{ canceled: true \};\s*\}\s*try \{\s*return applyDesktopSettings\(settings\);/
+  );
+});
+
+function loadLegacyTokenMigration({ stored, encryptionAvailable = true, encryptFails = false } = {}) {
+  const storeState = { ...stored };
+  const writes = [];
+  const safeStorage = {
+    isEncryptionAvailable: () => encryptionAvailable,
+    encryptString(value) {
+      if (encryptFails) {
+        throw new Error('encryption failed');
+      }
+      return Buffer.from(`sealed:${value.toString()}`);
+    },
+    decryptString(buffer) {
+      const text = buffer.toString();
+      if (!text.startsWith('sealed:')) {
+        throw new Error('cannot decrypt');
+      }
+      return text.slice('sealed:'.length);
+    }
+  };
+  const context = loadFunctions(['encryptAuthToken', 'getDecryptedAuthToken', 'migrateLegacyAuthToken'], {
+    Buffer,
+    safeStorage,
+    store: {
+      get: (key) => storeState[key],
+      set(key, value) {
+        storeState[key] = value;
+        writes.push([key, value]);
+      }
+    }
+  });
+  return { context, storeState, writes };
+}
+
+const sealToken = (token) => Buffer.from(`sealed:${token}`).toString('base64');
+
+test('legacy auth token migration seals the plain token first and clears the plain copy after', () => {
+  const { context, writes, storeState } = loadLegacyTokenMigration({ stored: { authToken: 'cookie-1' } });
+
+  context.migrateLegacyAuthToken();
+
+  assert.deepEqual(writes, [['authTokenEncrypted', sealToken('cookie-1')], ['authToken', null]]);
+  assert.equal(storeState.authToken, null);
+});
+
+test('legacy auth token migration keeps a sealed copy that still opens and only clears the plain one', () => {
+  const { context, writes } = loadLegacyTokenMigration({
+    stored: { authToken: 'old-plain', authTokenEncrypted: sealToken('current') }
+  });
+
+  context.migrateLegacyAuthToken();
+
+  assert.deepEqual(writes, [['authToken', null]]);
+});
+
+test('legacy auth token migration replaces a sealed copy this machine cannot open', () => {
+  const { context, writes } = loadLegacyTokenMigration({
+    stored: { authToken: 'cookie-2', authTokenEncrypted: Buffer.from('garbage').toString('base64') }
+  });
+
+  context.migrateLegacyAuthToken();
+
+  assert.deepEqual(writes, [['authTokenEncrypted', sealToken('cookie-2')], ['authToken', null]]);
+});
+
+test('legacy auth token migration leaves the plain token alone when it cannot be sealed', () => {
+  const unavailable = loadLegacyTokenMigration({ stored: { authToken: 'cookie-3' }, encryptionAvailable: false });
+  unavailable.context.migrateLegacyAuthToken();
+  assert.deepEqual(unavailable.writes, []);
+  assert.equal(unavailable.storeState.authToken, 'cookie-3');
+
+  const failing = loadLegacyTokenMigration({ stored: { authToken: 'cookie-3' }, encryptFails: true });
+  failing.context.migrateLegacyAuthToken();
+  assert.deepEqual(failing.writes, []);
+  assert.equal(failing.storeState.authToken, 'cookie-3');
+});
+
+test('legacy auth token migration does nothing without a plain token', () => {
+  const none = loadLegacyTokenMigration({ stored: {} });
+  none.context.migrateLegacyAuthToken();
+  assert.deepEqual(none.writes, []);
+
+  const sealedOnly = loadLegacyTokenMigration({ stored: { authToken: null, authTokenEncrypted: sealToken('current') } });
+  sealedOnly.context.migrateLegacyAuthToken();
+  assert.deepEqual(sealedOnly.writes, []);
+});
+
+test('legacy auth token migration never stops the app when config.json cannot be written', () => {
+  for (const failingKey of ['authTokenEncrypted', 'authToken']) {
+    const storeState = { authToken: 'cookie-5' };
+    const context = loadFunctions(['encryptAuthToken', 'getDecryptedAuthToken', 'migrateLegacyAuthToken'], {
+      Buffer,
+      safeStorage: {
+        isEncryptionAvailable: () => true,
+        encryptString: (value) => Buffer.from(`sealed:${value.toString()}`),
+        decryptString: (buffer) => buffer.toString().slice('sealed:'.length)
+      },
+      store: {
+        get: (key) => storeState[key],
+        set(key, value) {
+          if (key === failingKey) {
+            throw new Error('EPERM: config.json is locked');
+          }
+          storeState[key] = value;
+        }
+      }
+    });
+
+    assert.doesNotThrow(() => context.migrateLegacyAuthToken());
+    assert.equal(context.getDecryptedAuthToken(), 'cookie-5');
+  }
+});
+
+test('the migrated auth token reads back as the original one', () => {
+  const { context } = loadLegacyTokenMigration({ stored: { authToken: 'cookie-4' } });
+
+  context.migrateLegacyAuthToken();
+
+  assert.equal(context.getDecryptedAuthToken(), 'cookie-4');
+});
+
+test('app start migrates the legacy auth token right before it reads it', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+  const whenReady = source.indexOf('app.whenReady().then(() => {');
+  assert.notEqual(whenReady, -1);
+
+  const match = /migrateLegacyAuthToken\(\);\s*const resolvedToken = getDecryptedAuthToken\(\);/.exec(source);
+  assert.ok(match, 'migrateLegacyAuthToken(); should come right before getDecryptedAuthToken()');
+  assert.ok(match.index > whenReady, 'the migration belongs inside app.whenReady');
+  assert.equal(source.split('migrateLegacyAuthToken();').length - 1, 1);
 });

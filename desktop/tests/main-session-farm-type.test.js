@@ -1714,7 +1714,7 @@ test('a map exit that cannot end the map in an unreadable journal leaves no unha
   const handlers = {};
   const endings = [];
   let failure = null;
-  const context = loadFunctions(['setupLogParser'], {
+  const context = loadFunctions(['setupLogParser', 'isValidPoePath'], {
     store: { get: (key) => (key === 'poePath' ? 'C:/PoE/logs/Client.txt' : undefined), set() {} },
     DEFAULT_POE_LOG_PATH: 'C:/PoE/logs/Client.txt',
     require: () => ({ existsSync: () => true }),
