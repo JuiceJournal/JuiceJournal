@@ -899,6 +899,7 @@ function loadInventoryLoot(backend, session, priceService, overrides = {}) {
     SESSION_PRICES_RETRY_MS: 60_000,
     crypto: { randomUUID: () => `loot-${++lootId}` },
     mainWindow: null,
+    noteInventoryRead: () => {},
     console: { log() {}, warn() {} },
     setTimeout,
     clearTimeout,

@@ -474,6 +474,18 @@ window.Translations = {
     'journal.startNew': 'Yeni gunluk baslat',
     'journal.openDataFolder': 'Veri klasorunu ac',
 
+    // Inventory read status (Dashboard, Recent Loot)
+    'inventoryRead.saved': 'Envanter okundu - {time}',
+    'inventoryRead.added': '{count} item {map} mapine eklendi - {time}',
+    'inventoryRead.addedOne': '1 item {map} mapine eklendi - {time}',
+    'inventoryRead.lastMap': 'son',
+    'inventoryRead.noGain': 'Yeni loot yok - {time}',
+    'inventoryRead.noBaseline': 'Son map sayilmadi - {time}',
+    'inventoryRead.none': 'Envanter henuz okunmadi. Sonraki mapten once ac.',
+    'inventoryRead.resolution': 'Okunamadi: 1440p oyun penceresi gerekli',
+    'inventoryRead.saveFailed': 'Son mapin lootu kaydedilemedi - {time}',
+    'inventoryRead.off': 'Envanter okuma kapali',
+
     // Toasts
     'toast.mapStartFailed': 'Map baslatilamadi',
     'toast.mapEndFailed': 'Map bitirilemedi',
@@ -1489,6 +1501,18 @@ window.Translations = {
     'journal.unreadableBody': 'Your journal file is kept as it is; nothing was deleted. Starting a new journal keeps the broken file next to the new one in the data folder.',
     'journal.startNew': 'Start a new journal',
     'journal.openDataFolder': 'Open data folder',
+
+    // Inventory read status (Dashboard, Recent Loot)
+    'inventoryRead.saved': 'Inventory read · {time}',
+    'inventoryRead.added': '{count} items added to {map} · {time}',
+    'inventoryRead.addedOne': '1 item added to {map} · {time}',
+    'inventoryRead.lastMap': 'the last map',
+    'inventoryRead.noGain': 'No new loot · {time}',
+    'inventoryRead.noBaseline': 'Last map not counted · {time}',
+    'inventoryRead.none': 'Inventory not read yet. Open it before your next map.',
+    'inventoryRead.resolution': 'Not read: needs a 1440p game window',
+    'inventoryRead.saveFailed': 'Could not save the last map\'s loot · {time}',
+    'inventoryRead.off': 'Inventory reading is off',
 
     // Toasts
     'toast.mapStartFailed': 'Could not start the map',

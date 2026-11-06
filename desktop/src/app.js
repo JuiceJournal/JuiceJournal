@@ -51,6 +51,7 @@ const state = {
   auditTrail: [],
   // True while main says the signed-in profile's journal cannot be read; Dashboard and Sessions show the notice.
   journalUnreadable: false,
+  inventoryReadStatus: null,
   mapSessionPromptActive: false,
   farmType: window.farmTypeModel
     ? window.farmTypeModel.createFarmTypeState()
@@ -220,6 +221,8 @@ const elements = {
   mapResultHistory: document.getElementById('map-result-history'),
   mapResultHistoryCard: document.getElementById('map-result-history-card'),
   recentLootList: document.getElementById('recent-loot-list'),
+  inventoryReadStatus: document.getElementById('inventory-read-status'),
+  inventoryReadStatusText: document.getElementById('inventory-read-status-text'),
 
   // Sessions
   sessionsSummary: document.getElementById('sessions-summary'),
@@ -1251,6 +1254,10 @@ function syncRendererGameContext(version, options = {}) {
   updateActiveLeagueFieldContext({ syncValue: true });
   if (typeof applyDashboardCapabilities === 'function') {
     applyDashboardCapabilities();
+  }
+  // The inventory read line follows the game the tracker shows.
+  if (typeof renderInventoryReadStatus === 'function') {
+    renderInventoryReadStatus();
   }
   if (typeof syncFarmTypeSelectionForVersion === 'function') {
     void syncFarmTypeSelectionForVersion(normalizedSettingsVersion || normalizedDetectedVersion);
@@ -2819,6 +2826,10 @@ function setupIPCListeners() {
     await refreshTrackerData({ includeSessions: true, immediate: true });
   });
 
+  if (window.electronAPI.onInventoryReadStatus) {
+    window.electronAPI.onInventoryReadStatus(setInventoryReadStatus);
+  }
+
   // Loot olaylari
   window.electronAPI.onLootAdded(() => {
     refreshTrackerData({ includeSessions: isPageActive('sessions') });
@@ -3377,6 +3388,9 @@ function applyLocalizedChrome() {
   // So is Recent Loot's empty state; it redraws from state, with no IPC.
   if (typeof renderRecentLoot === 'function') {
     renderRecentLoot();
+  }
+  if (typeof renderInventoryReadStatus === 'function') {
+    renderInventoryReadStatus();
   }
   // The character card and the map result cards write their fallback lines from JS too.
   if (typeof renderCharacterSummaryCard === 'function') {
@@ -4463,6 +4477,66 @@ async function loadJournalStatus() {
   }
 }
 
+// The line in Recent Loot's header: how the last inventory read went. Not shown for PoE 1, which has no inventory read.
+function describeInventoryReadStatus(status) {
+  const time = status.at
+    ? new Date(status.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    : '';
+  switch (status.kind) {
+    case 'saved':
+      return { tone: 'ok', text: window.t('inventoryRead.saved', { time }) };
+    case 'added': {
+      const map = status.mapName || window.t('inventoryRead.lastMap');
+      const text = status.count === 1
+        ? window.t('inventoryRead.addedOne', { map, time })
+        : window.t('inventoryRead.added', { count: status.count, map, time });
+      return { tone: 'ok', text };
+    }
+    case 'noGain':
+      return { tone: 'ok', text: window.t('inventoryRead.noGain', { time }) };
+    case 'noBaseline':
+      return { tone: 'warn', text: window.t('inventoryRead.noBaseline', { time }) };
+    case 'none':
+      return { tone: 'warn', text: window.t('inventoryRead.none') };
+    case 'resolution':
+      return { tone: 'warn', text: window.t('inventoryRead.resolution') };
+    case 'saveFailed':
+      return { tone: 'warn', text: window.t('inventoryRead.saveFailed', { time }) };
+    case 'off':
+      return { tone: 'muted', text: window.t('inventoryRead.off') };
+    default:
+      return null;
+  }
+}
+
+function renderInventoryReadStatus() {
+  const element = elements.inventoryReadStatus;
+  if (!element) return;
+
+  const status = state.inventoryReadStatus;
+  const view = state.currentUser && status && getResolvedLeagueVersion() !== 'poe1'
+    ? describeInventoryReadStatus(status)
+    : null;
+  element.hidden = !view;
+  if (!view) return;
+
+  element.dataset.tone = view.tone;
+  elements.inventoryReadStatusText.textContent = view.text;
+}
+
+function setInventoryReadStatus(status) {
+  state.inventoryReadStatus = status || null;
+  renderInventoryReadStatus();
+}
+
+async function loadInventoryReadStatus() {
+  try {
+    setInventoryReadStatus(await window.electronAPI.getInventoryReadStatus());
+  } catch {
+    // The line keeps its last state.
+  }
+}
+
 let _refreshPending = null;
 let _refreshOptions = {};
 let _refreshRunNow = null;
@@ -4495,6 +4569,7 @@ async function refreshTrackerData({ includeSessions = false, includeCurrency = f
       renderRecentLoot();
       renderSessionsList();
       updateActiveSessionUI();
+      renderInventoryReadStatus();
       return;
     }
 
@@ -4503,7 +4578,8 @@ async function refreshTrackerData({ includeSessions = false, includeCurrency = f
       loadDashboardStats(),
       loadRecentLoot(),
       loadMapResultHistory(),
-      loadJournalStatus()
+      loadJournalStatus(),
+      loadInventoryReadStatus()
     ];
 
     if (opts.includeSessions || isPageActive('sessions')) {

@@ -68,6 +68,26 @@ test('the result card and prompts slide in once, with no exit animation and none
   assert.match(overlayCss, /\.jj-btn:active:not\(:disabled\),\s*\.jj-form-btn:active:not\(:disabled\),\s*\.jj-chip:active:not\(:disabled\)\s*\{\s*transform:\s*translateY\(1px\);/);
 });
 
+test('the drop rows keep the over-game rules: 22px slot, 13px currency icon, muted count, ellipsis name', () => {
+  const rule = (selector) => {
+    const escaped = selector.replace(/[.[\]]/g, '\\$&');
+    return overlayCss.match(new RegExp('\\n\\s*' + escaped + '\\s*\\{([^}]*)\\}'))[1];
+  };
+  assert.match(rule('.jj-drop'), /grid-template-columns:\s*22px minmax\(0, 1fr\) auto/);
+  assert.match(rule('.jj-drop .jj-slot'), /width:\s*22px;\s*height:\s*22px/);
+  assert.match(rule('.jj-mini'), /width:\s*13px;\s*height:\s*13px/);
+  assert.match(rule('.jj-drop-name'), /min-width:\s*0/);
+  assert.match(rule('.jj-drop-label'), /text-overflow:\s*ellipsis/);
+  assert.match(rule('.jj-drop-label'), /white-space:\s*nowrap/);
+  assert.match(rule('.jj-drop-qty'), /color:\s*var\(--text-muted\)/);
+  assert.match(rule('.jj-drop-qty'), /flex-shrink:\s*0/, 'the count stays whole while the name gives way');
+  assert.match(rule('.jj-drop-value'), /color:\s*var\(--text-bright\)/);
+  assert.match(rule('.jj-drops[hidden]'), /display:\s*none/);
+  assert.doesNotMatch(overlayCss.slice(overlayCss.indexOf('.jj-drops {'), overlayCss.indexOf('.jj-meta {')), /filter\s*:/, 'game art is never recoloured');
+  assert.ok(overlayHtml.indexOf('modules/mapResultOverlayModel.js') > 0);
+  assert.ok(overlayHtml.indexOf('modules/mapResultOverlayModel.js') < overlayHtml.indexOf('src="overlay.js"'));
+});
+
 test('game art on the result card stays 20px or smaller in the 112px window', () => {
   for (const selector of ['.jj-value-icon', '.jj-slot', '.jj-meme-icon']) {
     const rule = overlayCss.match(new RegExp(`\\n\\s*${selector.replace('.', '\\.')}\\s*\\{([^}]*)\\}`))[1];

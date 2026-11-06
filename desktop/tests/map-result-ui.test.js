@@ -1678,6 +1678,7 @@ function loadTrackerRefresh() {
     loadRecentLoot: async () => loads.push('loot'),
     loadMapResultHistory: async () => loads.push('history'),
     loadJournalStatus: async () => loads.push('journal'),
+    loadInventoryReadStatus: async () => loads.push('inventoryRead'),
     loadSessions: async () => loads.push('sessions')
   });
   return { context, timers, loads };
@@ -1692,7 +1693,7 @@ test('a refresh waits out the coalescing timer, and one call covers every call t
 
   timers[0].callback();
   await second;
-  assert.deepEqual([...loads].sort(), ['history', 'journal', 'loot', 'session', 'sessions', 'stats']);
+  assert.deepEqual([...loads].sort(), ['history', 'inventoryRead', 'journal', 'loot', 'session', 'sessions', 'stats']);
 });
 
 test('an immediate refresh reads at once, also ending a wait already running, and later calls wait again', async () => {

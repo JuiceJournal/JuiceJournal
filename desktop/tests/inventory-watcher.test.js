@@ -35,7 +35,7 @@ function loadWatcher(script) {
 }
 
 function setup(overrides = {}) {
-  const log = { statuses: [], gains: [], artLoads: 0, screenReads: 0 };
+  const log = { statuses: [], reads: [], gains: [], artLoads: 0, screenReads: 0 };
   let read = { open: true, items: {} };
   const Watcher = loadWatcher(() => read);
   const env = {
@@ -74,6 +74,7 @@ function setup(overrides = {}) {
     },
     onGain: (sessionId, items, mapCount) => log.gains.push({ sessionId, items, mapCount }),
     onStatus: (kind) => log.statuses.push(kind),
+    onRead: (kind) => log.reads.push(kind),
     now: () => env.now
   });
   return { watcher, log, env, setRead: (next) => { read = next; } };
@@ -359,4 +360,88 @@ test('a screen that cannot be read says so', () => {
   watcher.readNow();
 
   assert.deepEqual(log.statuses, ['failed']);
+});
+
+test('every read that applies something reports how it went, and an unchanged automatic read stays silent', () => {
+  const context = setup();
+  const { watcher, log, setRead } = context;
+
+  // The first read only notes the inventory.
+  readBaseline(context, { 'Exalted Orb': 5 });
+  assert.deepEqual(log.reads, ['saved']);
+
+  // Nothing changed since: an automatic read says nothing, the hotkey still does.
+  watcher.tick();
+  assert.deepEqual(log.reads, ['saved']);
+  watcher.readNow();
+  assert.deepEqual(log.reads, ['saved', 'saved']);
+
+  // A map with nothing new in the inventory afterwards.
+  watcher.mapEntered();
+  watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' });
+  watcher.tick();
+  assert.deepEqual(log.reads.slice(2), ['noGain']);
+
+  watcher.mapEntered();
+  watcher.sessionEnded({ id: 's2', poeVersion: 'poe2' });
+  setRead({ open: true, items: { 'Exalted Orb': 7 } });
+  watcher.tick();
+  assert.deepEqual(log.reads.slice(3), ['gain']);
+  assert.deepEqual(log.statuses.slice(-1), ['reading']);
+});
+
+test('a map finished with no inventory read before it reports noBaseline', () => {
+  const { watcher, log } = setup();
+
+  watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' });
+  watcher.tick();
+
+  assert.deepEqual(log.reads, ['noBaseline']);
+  assert.deepEqual(log.statuses, ['noBaseline']);
+});
+
+test('the timer reports a window not measured when it starts and when it ends, only while it could read', () => {
+  const poe1 = setup({ game: 'poe1' });
+  poe1.watcher.tick();
+  assert.deepEqual(poe1.log.reads, [], 'PoE 1 has nothing to read or report');
+
+  const small = setup({ gameWindow: { x: 0, y: 0, width: 1920, height: 1080 } });
+  small.watcher.tick();
+  small.watcher.tick();
+  assert.deepEqual(small.log.reads, ['resolution'], 'once, not every tick');
+  assert.equal(small.log.screenReads, 0);
+
+  // A baseline at 1440p, a window that turns small, then 1440p again with the same inventory: no read applies
+  // anything new, and the line still clears.
+  const resized = setup();
+  resized.watcher.tick();
+  assert.deepEqual(resized.log.reads, ['saved']);
+  resized.env.gameWindow = { x: 0, y: 0, width: 1920, height: 1080 };
+  resized.watcher.tick();
+  resized.env.gameWindow = { x: 0, y: 0, width: 2560, height: 1440 };
+  resized.watcher.tick();
+  resized.watcher.tick();
+  assert.deepEqual(resized.log.reads, ['saved', 'resolution', 'measured']);
+
+  // A lookup that misses and a minimized window are not a resolution problem.
+  for (const gameWindow of [null, { x: 0, y: 0, width: 2560, height: 1440, minimized: true }]) {
+    const missing = setup({ gameWindow });
+    missing.watcher.tick();
+    assert.deepEqual(missing.log.reads, []);
+  }
+
+  for (const blocked of [{ inMap: true }, { inFront: false }, { enabled: false }, { profileId: null }]) {
+    for (const overrides of [{ game: 'poe1' }, { gameWindow: { x: 0, y: 0, width: 1920, height: 1080 } }]) {
+      const quiet = setup({ ...blocked, ...overrides });
+      quiet.watcher.tick();
+      assert.deepEqual(quiet.log.reads, [], JSON.stringify({ blocked, overrides }));
+    }
+  }
+});
+
+test('a watcher built without onRead still works', () => {
+  const Watcher = loadWatcher(() => ({ open: true, items: {} }));
+  const watcher = new Watcher({ isEnabled: () => false, getProfileId: () => 'p1', onStatus: () => {} });
+
+  assert.doesNotThrow(() => watcher.deps.onRead('saved'));
 });

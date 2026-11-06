@@ -1948,6 +1948,43 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 
 /* Recent Loot Card */
 
+/* Inventory read status under the card header: a diamond dot and the line, which wraps rather than lose its time. */
+.inventory-read-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: -0.55rem 0 0.9rem;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.inventory-read-status[hidden] {
+  display: none;
+}
+
+.inventory-read-status-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  margin-top: 0.38em;
+  background: var(--text-muted);
+  transform: rotate(45deg);
+}
+
+.inventory-read-status[data-tone="ok"] .inventory-read-status-dot {
+  background: var(--gain);
+}
+
+.inventory-read-status[data-tone="warn"] .inventory-read-status-dot {
+  background: var(--gold);
+}
+
+.inventory-read-status-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 #recent-loot-list {
   display: flex;
   flex-direction: column;
