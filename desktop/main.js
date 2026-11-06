@@ -427,6 +427,8 @@ let apiClient = null;
 let poeApiClient = null;
 let priceService = null;
 let priceSnapshots = null;
+// Per game, the promise of a lowercase item name -> art index over the newest kept price list. A new kept list drops it.
+const itemIconIndexes = { poe1: null, poe2: null };
 let iconCache = null;
 let stashAnalyzer = null;
 let gameDetector = null;
@@ -2038,6 +2040,63 @@ async function getLastKnownCurrencyPrices(params = {}) {
     updatedAt: new Date(snapshot.syncedAt).toISOString(),
     rates
   };
+}
+
+const ITEM_ICON_MAX_NAMES = 200;
+const ITEM_ICON_MAX_NAME_LENGTH = 200;
+
+// Art is the same across the leagues of a game, so the newest kept list serves a game the price service does not hold.
+function loadItemIconIndex(poeVersion) {
+  if (!itemIconIndexes[poeVersion]) {
+    itemIconIndexes[poeVersion] = (async () => {
+      const index = new Map();
+      const league = await priceSnapshots.newestLeague(poeVersion);
+      const snapshot = league ? await priceSnapshots.load(poeVersion, league) : null;
+      for (const entry of snapshot?.entries || []) {
+        if (typeof entry?.name === 'string' && typeof entry.icon === 'string') {
+          index.set(entry.name.toLowerCase().trim(), entry.icon);
+        }
+      }
+      return index;
+    })().catch(() => new Map());
+  }
+  return itemIconIndexes[poeVersion];
+}
+
+function dropItemIconIndex(poeVersion) {
+  if (poeVersion in itemIconIndexes) {
+    itemIconIndexes[poeVersion] = null;
+  }
+}
+
+// Item name -> poe.ninja art URL, for the names it knows. Loot rows saved before art was stored, and manual loot, ask
+// for theirs here. Only https art is passed on, because the page puts it in an img.
+async function getItemIcons(names, poeVersion) {
+  if (poeVersion !== 'poe1' && poeVersion !== 'poe2') {
+    return {};
+  }
+  const wanted = (Array.isArray(names) ? names : [])
+    .filter((name) => typeof name === 'string' && name.trim() && name.length <= ITEM_ICON_MAX_NAME_LENGTH)
+    .slice(0, ITEM_ICON_MAX_NAMES);
+  if (!wanted.length) {
+    return {};
+  }
+
+  const loaded = Boolean(priceService) && priceService.poeVersion === poeVersion;
+  let index = null;
+  const icons = {};
+  for (const name of wanted) {
+    let icon = loaded ? priceService.getPriceInfo(name)?.icon : null;
+    // The kept list covers a name the loaded list lacks, and the whole game while its list is still loading.
+    if (!icon) {
+      index = index || await loadItemIconIndex(poeVersion);
+      icon = index.get(name.toLowerCase().trim());
+    }
+    if (typeof icon === 'string' && icon.startsWith('https://')) {
+      icons[name] = icon;
+    }
+  }
+  return icons;
 }
 
 async function closePoeAuthServer() {
@@ -4694,6 +4753,8 @@ function setupIPC() {
     }
   });
 
+  ipcMain.handle('get-item-icons', (event, names, poeVersion) => getItemIcons(names, poeVersion));
+
   ipcMain.handle('get-currency-leagues', async (event, poeVersion = 'poe1') => {
     try {
       return { activeLeagues: await priceService.getLeagues(poeVersion) };
@@ -5488,7 +5549,7 @@ app.whenReady().then(() => {
   poeApiClient = new PoeApiClient();
   priceService = new PriceService();
   priceSnapshots = new PriceSnapshotStore({ dir: path.join(app.getPath('userData'), 'price-snapshots') });
-  priceService.onSynced = (snapshot) => priceSnapshots.save(snapshot);
+  priceService.onSynced = (snapshot) => priceSnapshots.save(snapshot).then(() => dropItemIconIndex(snapshot.poeVersion));
   iconCache = new IconCache({ dir: path.join(app.getPath('userData'), 'icon-cache') });
   stashAnalyzer = new StashAnalyzer();
   inventoryWatcher = createInventoryWatcher();

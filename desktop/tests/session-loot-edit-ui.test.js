@@ -22,7 +22,16 @@ function extractFunctionSource(source, functionName) {
 
 function loadFunctions(functionNames, contextOverrides = {}) {
   const source = fs.readFileSync(appJsPath, 'utf8');
-  const context = vm.createContext({ console, ...contextOverrides });
+  const context = vm.createContext({
+    console,
+    // Loot art lookups are tested on their own; these tests draw without them.
+    lootArtUrl: () => '',
+    ensureLootArt() {},
+    ensureLootArtForRows() {},
+    clearLootArtMisses() {},
+    applyCachedItemIcons() {},
+    ...contextOverrides
+  });
   for (const functionName of functionNames) {
     vm.runInContext(`${extractFunctionSource(source, functionName)};\nthis.${functionName} = ${functionName};`, context);
   }
@@ -74,7 +83,7 @@ function fakeNode(attributes = {}) {
 
 // Rows are parsed back out of the drawer's HTML, so the fake list finds controls the way the real one does. As in
 // Electron, rebuilding the rows fires focusout on the control that had focus.
-function createDrawer({ session, editing = false, armedId = null } = {}) {
+function createDrawer({ session, editing = false, armedId = null, overrides = {} } = {}) {
   const calls = [];
   const documentStub = { activeElement: null };
   let harness = null;
@@ -155,7 +164,8 @@ function createDrawer({ session, editing = false, armedId = null } = {}) {
     refreshTrackerData: async (options) => calls.push(['refresh', options]),
     setTimeout: (callback, ms) => { timers.push({ callback, ms }); return timers.length; },
     clearTimeout: (id) => { if (id) timers[id - 1] = null; },
-    nextSession: null
+    nextSession: null,
+    ...overrides
   });
   harness = context;
   return { context, state, elements, nodes, toggle, calls, timers };
@@ -510,4 +520,60 @@ test('the drawer markup carries the toggle, and the listeners are wired once on 
   assert.match(source, /sessionDrawerLoot\.addEventListener\('focusout', handleSessionLootChange\)/);
   assert.doesNotMatch(source, /sessionDrawerLoot\.addEventListener\('change'/, 'a spinner or arrow step must not save');
   assert.match(source, /if \(state\.selectedSession\) \{\s+redrawSessionLoot\(\);/);
+});
+
+test('drawer rows pass the stored art, else the looked-up art, to the item slot, and ask for the art of rows with none', () => {
+  const slots = [];
+  const asks = [];
+  const art = { 'Old Entry': 'https://web.poecdn.com/gen/image/old.png' };
+  const session = sessionWith([
+    { id: 'a', itemName: 'Divine Orb', quantity: 1, chaosValue: 1, icon: 'https://web.poecdn.com/gen/image/stored.png', createdAt: '2026-10-21T12:03:00.000Z' },
+    { id: 'b', itemName: 'Old Entry', quantity: 1, chaosValue: 1, createdAt: '2026-10-21T12:02:00.000Z' },
+    { id: 'c', itemName: 'Nothing Known', quantity: 1, chaosValue: 1, createdAt: '2026-10-21T12:01:00.000Z' }
+  ]);
+  const { context, elements } = createDrawer({
+    session,
+    overrides: {
+      lootArtUrl: (loot) => loot.icon || art[loot.itemName] || '',
+      itemSlotHTML: (itemName, poeVersion, options) => { slots.push([itemName, poeVersion, options.iconUrl]); return '<span class="item-slot"></span>'; },
+      applyCachedItemIcons: (container) => asks.push(['icons', container]),
+      ensureLootArt: (names, poeVersion, redraw) => asks.push(['art', names, poeVersion, redraw])
+    }
+  });
+
+  context.renderSessionDrawer();
+
+  assert.deepEqual(slots, [
+    ['Divine Orb', 'poe1', 'https://web.poecdn.com/gen/image/stored.png'],
+    ['Old Entry', 'poe1', 'https://web.poecdn.com/gen/image/old.png'],
+    ['Nothing Known', 'poe1', '']
+  ]);
+  assert.equal(asks[0][0], 'icons');
+  assert.equal(asks[0][1], elements.sessionDrawerLoot);
+  assert.deepEqual(plain(asks[1].slice(0, 3)), ['art', ['Old Entry', 'Nothing Known'], 'poe1']);
+});
+
+test('art that arrives later redraws the drawer through redrawSessionLoot, and only for the session still open', () => {
+  let redraw = null;
+  const { context, state } = createDrawer({
+    session: sessionWith(LOOT),
+    overrides: { ensureLootArt: (names, poeVersion, callback) => { redraw = callback; } }
+  });
+  context.renderSessionDrawer();
+  const renders = [];
+  context.renderSessionDrawer = (options) => renders.push(options);
+
+  redraw();
+  assert.deepEqual(plain(renders), [{ keepForm: true }]);
+
+  // A loot edit replaces the session object; it is still the same run.
+  state.selectedSession = { ...state.selectedSession };
+  redraw();
+  assert.equal(renders.length, 2);
+
+  state.selectedSession = { ...state.selectedSession, id: 'another-run' };
+  redraw();
+  state.selectedSession = null;
+  redraw();
+  assert.equal(renders.length, 2);
 });
