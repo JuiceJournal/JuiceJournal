@@ -41,7 +41,7 @@ const {
 } = require('./src/modules/runtimeSessionModel');
 const { appendMapResult, getTopLootOutputs, normalizeMapResultForLedger } = require('./src/modules/mapResultStoreModel');
 const localJournal = require('./src/modules/localJournalModel');
-const { deriveMapResultOverlayState } = require('./src/modules/mapResultOverlayModel');
+const { deriveMapResultOverlayState, getMapResultCardHeight } = require('./src/modules/mapResultOverlayModel');
 const { buildFarmPublishPayload } = require('./src/modules/farmPublishPayloadModel');
 const { deriveOverlayState } = require('./src/modules/overlayStateModel');
 const {
@@ -438,6 +438,11 @@ let overlayMapResultState = null;
 let overlayInventoryStatus = null;
 let overlayInventoryStatusTimer = null;
 let inventoryWatcher = null;
+// What the last inventory read came to, for the Dashboard's status line. Kept per profile, in memory only.
+let inventoryReadStatus = { kind: 'none', at: null, profileId: null };
+// True while the game window is a size reading has not been checked on. Kept apart from the last read, which it
+// covers until the window fits again.
+let inventoryReadBlocked = false;
 let lastInventoryTickAt = 0;
 let overlayStartMapPromptState = null;
 let overlayCharacterPromptState = null;
@@ -3011,7 +3016,9 @@ function getOverlayWindowBounds(overlayState = {}) {
   const workArea = display.workArea || display.bounds;
   const isInteractivePrompt = overlayState.mode === 'start-map-prompt' || overlayState.mode === 'character-prompt';
   const width = isInteractivePrompt ? 440 : 360;
-  const height = isInteractivePrompt ? 286 : 112;
+  const height = isInteractivePrompt
+    ? 286
+    : overlayState.mode === 'map-result' ? getMapResultCardHeight(overlayState.mapResult?.result) : 112;
 
   return {
     width,
@@ -3608,10 +3615,19 @@ function createInventoryWatcher() {
     onGain: (sessionId, items, mapCount) => {
       addInventoryLoot(sessionId, items, mapCount).catch((error) => {
         console.warn('Could not add the inventory loot to the map', error);
+        noteInventoryRead('saveFailed');
         showInventoryStatus('saveFailed');
       });
     },
-    onStatus: showInventoryStatus
+    onStatus: showInventoryStatus,
+    // A gain is recorded when its loot is saved, which is what the line reports.
+    onRead: (kind) => {
+      if (kind === 'resolution' || kind === 'measured') {
+        setInventoryReadBlocked(kind === 'resolution');
+      } else if (kind !== 'gain') {
+        noteInventoryRead(kind);
+      }
+    }
   });
 }
 
@@ -3661,6 +3677,41 @@ function showInventoryStatus(kind) {
   updateOverlayWindow();
 }
 
+// Records the outcome of an inventory read and tells the main window.
+function noteInventoryRead(kind, details = {}) {
+  inventoryReadStatus = { kind, at: new Date().toISOString(), profileId: getActiveProfile()?.id || null, ...details };
+  sendInventoryReadStatus();
+}
+
+function setInventoryReadBlocked(blocked) {
+  if (blocked === inventoryReadBlocked) {
+    return;
+  }
+  inventoryReadBlocked = blocked;
+  sendInventoryReadStatus();
+}
+
+function getInventoryReadStatus() {
+  if (store.get('inventoryReadEnabled') === false) {
+    return { kind: 'off' };
+  }
+  if (inventoryReadBlocked) {
+    return { kind: 'resolution', at: null };
+  }
+  if (inventoryReadStatus.profileId !== (getActiveProfile()?.id || null)) {
+    return { kind: 'none', at: null };
+  }
+
+  const { profileId, ...status } = inventoryReadStatus;
+  return status;
+}
+
+function sendInventoryReadStatus() {
+  if (mainWindow) {
+    mainWindow.webContents.send('inventory-read-status', getInventoryReadStatus());
+  }
+}
+
 // A map's inventory loot arrives after it ended, from the first read back outside the map.
 async function addInventoryLoot(sessionId, items, mapCount = 1) {
   const session = localJournal.getSession(readJournal(), sessionId);
@@ -3684,6 +3735,10 @@ async function addInventoryLoot(sessionId, items, mapCount = 1) {
   if (mainWindow) {
     mainWindow.webContents.send('session-loot-updated', { ...updated, lootMapCount: mapCount });
   }
+  noteInventoryRead('added', {
+    count: items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0),
+    mapName: updated.mapName || null
+  });
   // With the overlay off the game is in front of the in-app notice, so the result needs a notification of its own.
   if (!isOverlayEnabled()) {
     showNotification(updated.mapName || t('unknownMap'), t('mapProfitBody', { value: Math.round(updated.profitChaos) }));
@@ -4376,6 +4431,11 @@ function applyDesktopSettings(settings = {}) {
     ensureOverlayWindowForSettings();
   }
 
+  // The status line follows the reading toggle.
+  if (Object.prototype.hasOwnProperty.call(settings, 'inventoryReadEnabled')) {
+    sendInventoryReadStatus();
+  }
+
   return true;
 }
 
@@ -4749,6 +4809,9 @@ function setupIPC() {
   // The journal notice. No renderer input: main finds the signed-in profile's journal, asks first and only renames it.
   ipcMain.handle('get-journal-status', () => getJournalStatus());
   ipcMain.handle('start-new-journal', () => startNewJournal());
+
+  // The Dashboard's inventory read line. No renderer input: main knows what the last read came to.
+  ipcMain.handle('get-inventory-read-status', () => getInventoryReadStatus());
 
   // Settings > Data's Delete everything. No renderer input and no confirm in main: the renderer's own dialog asked.
   ipcMain.handle('delete-all-local-data', () => deleteAllLocalData());

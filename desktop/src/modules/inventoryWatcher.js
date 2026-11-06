@@ -49,11 +49,15 @@ class InventoryWatcher {
    * @param {function(string): (object|null)} deps.loadArt - { coarse, fine } pixels of an icon file
    * @param {function(string, Array, number): void} deps.onGain - Session id, its new items and how many maps they cover
    * @param {function(string): void} deps.onStatus - Something the player should be told, see the kinds below
+   * @param {function(string): void} [deps.onRead] - What the last read came to, for the Dashboard's status line:
+   *   saved, noBaseline, noGain, gain; resolution when the window turns to a size reading has not been checked on, and
+   *   measured when it fits again
    * @param {function(): number} [deps.now]
    */
   constructor(deps) {
-    this.deps = { now: Date.now, ...deps };
+    this.deps = { now: Date.now, onRead: () => {}, ...deps };
     this.profileId = null;
+    this.windowUnmeasured = false;
     this.state = createInventoryLootState();
     this.resetArt(null);
   }
@@ -151,12 +155,16 @@ class InventoryWatcher {
     this.state = state;
 
     if (!outcome) {
+      this.deps.onRead('saved');
       if (announce) this.deps.onStatus('saved');
     } else if (outcome.type === 'noBaseline') {
+      this.deps.onRead('noBaseline');
       this.deps.onStatus('noBaseline');
     } else if (outcome.items.length === 0) {
+      this.deps.onRead('noGain');
       this.deps.onStatus('noGain');
     } else {
+      this.deps.onRead('gain');
       this.deps.onStatus('reading');
       this.deps.onGain(outcome.sessionId, outcome.items, outcome.mapCount);
     }
@@ -169,8 +177,26 @@ class InventoryWatcher {
     }
 
     const game = this.deps.getGame();
+    // PoE 1 has no inventory layout yet, so there is nothing to read or to report.
+    if (!game || !hasInventoryLayout(game)) {
+      return;
+    }
+    // A window at a size reading has not been checked on is reported when it starts and when it ends, so the line can
+    // clear even if the inventory did not change meanwhile. A lookup that misses or a minimized window says nothing.
+    const gameWindow = this.deps.getGameWindow();
+    if (gameWindow && !gameWindow.minimized) {
+      const unmeasured = !isMeasuredWindow(gameWindow);
+      if (unmeasured !== this.windowUnmeasured) {
+        this.windowUnmeasured = unmeasured;
+        this.deps.onRead(unmeasured ? 'resolution' : 'measured');
+      }
+      if (unmeasured) {
+        return;
+      }
+    }
+
     const characterKey = getCharacterKey(game, this.deps.getCharacter());
-    if (!game || !characterKey || !hasInventoryLayout(game) || !this.warmArt(game)) {
+    if (!characterKey || !this.warmArt(game)) {
       return;
     }
 

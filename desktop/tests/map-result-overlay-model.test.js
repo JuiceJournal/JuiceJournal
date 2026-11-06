@@ -149,3 +149,58 @@ test('map result overlay model hides all map results when the overlay setting is
     tone: 'neutral'
   });
 });
+
+test('map result overlay model lists up to three named drops that are worth something, in order', () => {
+  const getMapResultDrops = getMapResultOverlayModelExport('getMapResultDrops');
+
+  assert.deepEqual(getMapResultDrops(createCompletedResult({
+    topOutputs: [
+      { label: 'Chaos Orb', quantityDelta: 40, valueDelta: 40, icon: 'https://cdn.example/chaos.png' },
+      { label: '  ', valueDelta: 90 },
+      { label: 'Worthless', quantityDelta: 5, valueDelta: 0 },
+      { label: 'Divine Orb', valueDelta: 300 },
+      { label: 'Exalted Orb', quantityDelta: 0, valueDelta: 20, icon: 7 },
+      { label: 'Fourth', valueDelta: 10 }
+    ]
+  })), [
+    { label: 'Chaos Orb', quantity: 40, valueDelta: 40, icon: 'https://cdn.example/chaos.png' },
+    { label: 'Divine Orb', quantity: 1, valueDelta: 300, icon: '' },
+    { label: 'Exalted Orb', quantity: 1, valueDelta: 20, icon: '' }
+  ]);
+  assert.deepEqual(getMapResultDrops(createCompletedResult({ topOutputs: undefined })), []);
+  assert.deepEqual(getMapResultDrops(null), []);
+});
+
+test('main sizes the overlay window to the map result card and keeps the other modes as they were', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const vm = require('node:vm');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
+  const start = source.indexOf('\nfunction getOverlayWindowBounds(');
+  const body = source.slice(start, source.indexOf('\n}\n', start) + 2);
+  const context = vm.createContext({
+    getOverlayDisplay: () => ({ workArea: { x: 0, y: 0, width: 2560, height: 1400 } }),
+    getMapResultCardHeight: getMapResultOverlayModelExport('getMapResultCardHeight')
+  });
+  vm.runInContext(`${body}\nthis.getOverlayWindowBounds = getOverlayWindowBounds;`, context);
+  const drop = (label) => ({ label, valueDelta: 10 });
+  const bounds = (state) => JSON.parse(JSON.stringify(context.getOverlayWindowBounds(state)));
+
+  assert.deepEqual(bounds({ mode: 'map-result', mapResult: { result: { topOutputs: [drop('a'), drop('b'), drop('c')] } } }), { width: 360, height: 188, x: 2176, y: 24 });
+  assert.equal(bounds({ mode: 'map-result', mapResult: { result: { topOutputs: [] } } }).height, 112);
+  assert.equal(bounds({ mode: 'map-result' }).height, 112);
+  assert.equal(bounds({ mode: 'runtime' }).height, 112);
+  assert.equal(bounds({ mode: 'inventory-status' }).height, 112);
+  assert.deepEqual(bounds({ mode: 'start-map-prompt' }), { width: 440, height: 286, x: 2096, y: 24 });
+});
+
+test('map result overlay card height is 112 plus the measured height of the listed drops', () => {
+  const getMapResultCardHeight = getMapResultOverlayModelExport('getMapResultCardHeight');
+  const drop = (label) => ({ label, valueDelta: 10 });
+
+  assert.equal(getMapResultCardHeight(createCompletedResult({ topOutputs: [] })), 112);
+  assert.equal(getMapResultCardHeight(createCompletedResult({ topOutputs: [drop('a'), { label: 'b', valueDelta: 0 }] })), 138);
+  assert.equal(getMapResultCardHeight(createCompletedResult({ topOutputs: [drop('a'), drop('b')] })), 163);
+  assert.equal(getMapResultCardHeight(createCompletedResult({ topOutputs: [drop('a'), drop('b'), drop('c'), drop('d')] })), 188);
+  assert.equal(getMapResultCardHeight(undefined), 112);
+});

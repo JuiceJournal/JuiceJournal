@@ -15,6 +15,7 @@ const ELEMENT_SELECTORS = [
   '[data-overlay-pin]',
   '[data-overlay-dismiss]',
   '[data-overlay-primary]',
+  '[data-overlay-drops]',
   '[data-overlay-secondary]',
   '[data-overlay-meta]'
 ];
@@ -54,6 +55,7 @@ function loadOverlay({ extraSelectors = [], farmTypeModel = null } = {}) {
     overlayStateModel,
     profitCurrencyModel: require('../src/modules/profitCurrencyModel'),
     profitTierModel: require('../src/modules/profitTierModel'),
+    mapResultOverlayModel: require('../src/modules/mapResultOverlayModel'),
     ...(farmTypeModel ? { farmTypeModel } : {})
   };
   const context = vm.createContext({
@@ -84,6 +86,7 @@ function loadOverlay({ extraSelectors = [], farmTypeModel = null } = {}) {
     card: elements['[data-overlay-state]'],
     kicker: elements['[data-overlay-kicker-label]'],
     primary: elements['[data-overlay-primary]'],
+    drops: elements['[data-overlay-drops]'],
     secondary: elements['[data-overlay-secondary]'],
     meta: elements['[data-overlay-meta]'],
     pin: elements['[data-overlay-pin]'],
@@ -233,14 +236,14 @@ function renderResult(overlay, result) {
   overlay.renderState({ visibility: 'visible', mode: 'map-result', mapResult: { visible: true, result: { profitCurrencyRates: RATES, ...result } } });
 }
 
-test('the result card shows the amount with its currency icon, the top drop in a slot and the tier reaction', () => {
+test('the result card shows the amount with its currency icon, the top drops as rows and the tier reaction', () => {
   const overlay = loadOverlay();
   renderResult(overlay, {
     farmType: 'Ritual',
     netProfit: 750,
     durationSeconds: 412,
     poeVersion: 'poe1',
-    topOutputs: [{ label: 'Divine Orb', valueDelta: 600 }]
+    topOutputs: [{ label: 'Divine Orb', quantityDelta: 3, valueDelta: 600 }]
   });
 
   const [, , value] = overlay.primary.children;
@@ -254,10 +257,24 @@ test('the result card shows the amount with its currency icon, the top drop in a
   assert.equal(currencyIcon.removed, true);
   assert.equal(value.textContent, '+7.50 div');
 
-  assert.equal(overlay.secondary.textContent, 'Divine Orb +6.00 div');
-  const [slot] = overlay.secondary.children;
+  assert.equal(overlay.secondary.textContent, '', 'the rows carry the loot');
+  assert.equal(overlay.drops.hidden, false);
+  const [row] = overlay.drops.children;
+  assert.equal(row.className, 'jj-drop');
+  const [slot, name, worth] = row.children;
   assert.equal(slot.className, 'jj-slot');
   assert.equal(slot.children[0].src, 'assets/currency/poe1/divine.png');
+  assert.equal(name.className, 'jj-drop-name');
+  assert.equal(name.children[0].className, 'jj-drop-label');
+  assert.equal(name.children[0].textContent, 'Divine Orb');
+  assert.equal(name.children[1].className, 'jj-drop-qty');
+  assert.equal(name.children[1].textContent, '\u00d73');
+  assert.equal(worth.className, 'jj-drop-value');
+  assert.equal(worth.textContent, '+6.00');
+  assert.equal(worth.children[0].className, 'jj-mini');
+  assert.equal(worth.children[0].src, 'assets/currency/poe1/divine.png');
+  worth.children[0].listeners.error();
+  assert.equal(worth.textContent, '+6.00 div', 'a missing image names the currency in text');
 
   assert.equal(overlay.card.dataset.profitTier, 'unique');
   const [meme, metaText] = overlay.meta.children;
@@ -270,7 +287,8 @@ test('the result card uses the same game art only and says how much loot was cou
 
   renderResult(overlay, { netProfit: 250, poeVersion: 'poe2', topOutputs: [{ label: 'vaal orb', valueDelta: 40 }] });
   assert.equal(overlay.primary.children[2].children[0].src, 'assets/currency/poe2/divine.webp');
-  assert.equal(overlay.secondary.children.length, 0, 'no PoE 1 art for a PoE 2 drop');
+  const [poe2Slot] = overlay.drops.children[0].children;
+  assert.equal(poe2Slot.children.length, 0, 'no PoE 1 art for a PoE 2 drop: an empty slot well');
 
   renderResult(overlay, { netProfit: 0, topOutputs: [], lootItemCount: 3 });
   assert.equal(overlay.secondary.textContent, '3 items counted');
@@ -323,6 +341,102 @@ test('a result whose loot covers several maps says how many', () => {
 
   renderResult(overlay, { netProfit: 10, lootItemCount: 3, lootMapCount: 1, topOutputs: [] });
   assert.equal(overlay.secondary.textContent, '3 items counted');
+});
+
+test('the result card lists at most three worthwhile drops and hides the list when there are none', () => {
+  const overlay = loadOverlay();
+  renderResult(overlay, {
+    netProfit: 900,
+    topOutputs: [
+      { label: 'Chaos Orb', quantityDelta: 40, valueDelta: 40 },
+      { label: 'Worthless', valueDelta: 0 },
+      { label: 'Divine Orb', valueDelta: 300 },
+      { label: 'Exalted Orb', quantityDelta: 2, valueDelta: 20 },
+      { label: 'Fourth', valueDelta: 10 }
+    ]
+  });
+  assert.deepEqual(overlay.drops.children.map((row) => row.children[1].children[0].textContent), ['Chaos Orb', 'Divine Orb', 'Exalted Orb']);
+  assert.equal(overlay.drops.children[1].children[1].children[1].textContent, '\u00d71');
+
+  renderResult(overlay, { netProfit: 5, lootItemCount: 3, topOutputs: [{ label: 'Chaos Orb', valueDelta: 0 }] });
+  assert.equal(overlay.drops.hidden, true);
+  assert.equal(overlay.drops.children.length, 0);
+  assert.equal(overlay.secondary.textContent, '3 items counted');
+});
+
+test('a drop worth less than the smallest step reads <0.01, not 0', () => {
+  const overlay = loadOverlay();
+  renderResult(overlay, { netProfit: 5, topOutputs: [{ label: 'Scrap', valueDelta: 0.004 }] });
+  const [row] = overlay.drops.children;
+  assert.equal(row.children[2].textContent, '<0.01');
+});
+
+test('a drop name is item text and only ever goes in as text', () => {
+  const overlay = loadOverlay();
+  renderResult(overlay, { netProfit: 5, topOutputs: [{ label: '<img src=x onerror=alert(1)>', valueDelta: 5 }] });
+  const [row] = overlay.drops.children;
+  assert.equal(row.children[1].children[0].textContent, '<img src=x onerror=alert(1)>');
+  assert.equal(row.insertedHTML, undefined);
+  assert.equal(row.children[1].insertedHTML, undefined);
+  assert.equal(row.children[1].children[0].insertedHTML, undefined);
+});
+
+test('the maps note stays on the left of the secondary row beside the drop rows', () => {
+  const overlay = loadOverlay();
+  renderResult(overlay, { netProfit: 10, lootMapCount: 2, durationSeconds: 60, topOutputs: [{ label: 'Divine Orb', valueDelta: 100 }] });
+  assert.equal(overlay.secondary.textContent, '2 maps');
+  assert.equal(overlay.meta.textContent, '1m 00s');
+
+  renderResult(overlay, { netProfit: 10, lootMapCount: 1, topOutputs: [{ label: 'Divine Orb', valueDelta: 100 }] });
+  assert.equal(overlay.secondary.textContent, '');
+});
+
+test('a remote drop icon fills the slot of its own row once the cache has it, and never a later result', async () => {
+  const overlay = loadOverlay();
+  const pending = {};
+  overlay.window.electronAPI = {
+    getCachedIcon: (url) => new Promise((resolve) => { pending[url] = resolve; })
+  };
+  renderResult(overlay, {
+    netProfit: 10,
+    topOutputs: [
+      { label: 'Omen of Light', valueDelta: 50, icon: 'https://cdn.example/omen.png' },
+      { label: 'Divine Orb', valueDelta: 40, icon: 'https://cdn.example/divine.png' },
+      { label: 'Mystery', valueDelta: 30 }
+    ]
+  });
+  const [omenSlot] = overlay.drops.children[0].children;
+  const [divineSlot] = overlay.drops.children[1].children;
+  const [mysterySlot] = overlay.drops.children[2].children;
+  assert.deepEqual(Object.keys(pending), ['https://cdn.example/omen.png'], 'the bundled art needs no fetch');
+  assert.equal(omenSlot.children.length, 0);
+
+  pending['https://cdn.example/omen.png']('file:///cache/omen.png');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(omenSlot.children[0].src, 'file:///cache/omen.png');
+  assert.equal(divineSlot.children[0].src, 'assets/currency/poe1/divine.png');
+  assert.equal(mysterySlot.children.length, 0);
+
+  // Another result renders while an icon is still loading: its late arrival fills only the rows now on screen.
+  renderResult(overlay, { netProfit: 10, topOutputs: [{ label: 'Rune', valueDelta: 5, icon: 'https://cdn.example/rune.png' }] });
+  const [runeSlot] = overlay.drops.children[0].children;
+  renderResult(overlay, { netProfit: 10, topOutputs: [{ label: 'Other', valueDelta: 5 }] });
+  pending['https://cdn.example/rune.png']('file:///cache/rune.png');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(runeSlot.children.length, 0, 'the slot of a replaced row stays as it was');
+  assert.equal(overlay.drops.children[0].children[0].children.length, 0);
+
+  // A cached icon is there at once the next time.
+  renderResult(overlay, { netProfit: 10, topOutputs: [{ label: 'Rune', valueDelta: 5, icon: 'https://cdn.example/rune.png' }] });
+  assert.equal(overlay.drops.children[0].children[0].children[0].src, 'file:///cache/rune.png');
+});
+
+test('leaving the result card clears its rows', () => {
+  const overlay = loadOverlay();
+  renderResult(overlay, { netProfit: 10, topOutputs: [{ label: 'Divine Orb', valueDelta: 100 }] });
+  overlay.renderState({ visibility: 'visible', mode: 'inventory-status', primaryLine: 'Inventory', secondaryLine: 'x' });
+  assert.equal(overlay.drops.hidden, true);
+  assert.equal(overlay.drops.children.length, 0);
 });
 
 test('the inventory status mode shows its note under an Inventory kicker with nothing else', () => {

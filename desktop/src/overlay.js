@@ -5,6 +5,7 @@
     pin: document.querySelector('[data-overlay-pin]'),
     dismiss: document.querySelector('[data-overlay-dismiss]'),
     primary: document.querySelector('[data-overlay-primary]'),
+    drops: document.querySelector('[data-overlay-drops]'),
     secondary: document.querySelector('[data-overlay-secondary]'),
     meta: document.querySelector('[data-overlay-meta]'),
     startForm: document.querySelector('[data-overlay-start-form]'),
@@ -42,11 +43,13 @@
     if (element) { element.textContent = value || ''; }
   }
 
-  // Game art for the top drop. The overlay CSP only allows local images: bundled files for the core currencies
+  // Game art for the top drops. The overlay CSP only allows local images: bundled files for the core currencies
   // (same names and same-game rule as the main window's loot rows), else the main-process icon cache as a file://
   // URL, keyed by the remote URL; '' while loading or when the icon is unavailable.
   var cachedIconSources = Object.create(null);
-  var secondaryIconUrl = '';
+  // The art slots of the rows on screen that still wait for a remote icon, by icon URL. Every render starts
+  // a new list, so an icon that arrives late never fills a row of an earlier result.
+  var pendingDropSlots = Object.create(null);
   var LOCAL_ICON_KEYS = {
     'chaos orb': 'chaos', 'divine orb': 'divine', 'exalted orb': 'exalted', 'mirror of kalandra': 'mirror',
     'vaal orb': 'vaal', 'orb of alchemy': 'alchemy', 'orb of fusing': 'fusing', 'chromatic orb': 'chromatic',
@@ -123,17 +126,37 @@
     }
     var selected = model.selectProfitCurrency(chaosValue, rates || {});
     span.textContent = model.formatCurrencyAmount(selected.value, selected.type, { signed: true });
+    span.appendChild(createCurrencyIcon(span, selected.type, poeVersion, 'jj-value-icon'));
+    return span;
+  }
+
+  function createCurrencyIcon(span, type, poeVersion, className) {
     var icon = document.createElement('img');
-    icon.className = 'jj-value-icon';
-    icon.alt = CURRENCY_NAMES[selected.type] || '';
+    icon.className = className;
+    icon.alt = CURRENCY_NAMES[type] || '';
     icon.draggable = false;
     // If the bundled image cannot load, the currency is named in text instead ("+540c", "+2.00 div").
     icon.addEventListener('error', function () {
       icon.remove();
-      span.textContent += CURRENCY_TEXT_SUFFIX[selected.type] || 'c';
+      span.textContent += CURRENCY_TEXT_SUFFIX[type] || 'c';
     });
-    icon.src = getLocalIconPath(selected.type, poeVersion);
-    span.appendChild(icon);
+    icon.src = getLocalIconPath(type, poeVersion);
+    return icon;
+  }
+
+  // A drop's worth: the same amount and currency icon as the headline, small.
+  function createDropValue(chaosValue, rates, poeVersion) {
+    var model = root.profitCurrencyModel;
+    var span = document.createElement('span');
+    span.className = 'jj-drop-value';
+    if (!model || typeof model.formatCurrencyAmount !== 'function') {
+      span.textContent = formatSignedProfit(chaosValue, rates);
+      return span;
+    }
+    var selected = model.selectProfitCurrency(chaosValue, rates || {});
+    // A drop is listed for any worth, so a tiny one reads "<0.01" rather than "0".
+    span.textContent = model.formatCurrencyAmount(selected.value, selected.type, { signed: true, markTiny: true });
+    span.appendChild(createCurrencyIcon(span, selected.type, poeVersion, 'jj-mini'));
     return span;
   }
 
@@ -154,23 +177,18 @@
     el.meta.replaceChildren(icon, MEME_LABELS[meme] + (durationText ? SEPARATOR + durationText : ''));
   }
 
-  function setSecondary(text, iconSrc) {
+  function setSecondary(text) {
     if (!el.secondary) return;
     el.secondary.textContent = text || '';
-    secondaryIconUrl = '';
-    if (iconSrc) prependSecondaryIcon(iconSrc);
   }
 
   // Game art sits in a small slot well, as content; it is never recoloured.
-  function prependSecondaryIcon(iconSrc) {
-    var slot = document.createElement('span');
-    slot.className = 'jj-slot';
+  function fillSlot(slot, iconSrc) {
     var icon = document.createElement('img');
     icon.src = iconSrc;
     icon.alt = '';
     icon.draggable = false;
     slot.appendChild(icon);
-    el.secondary.prepend(slot);
   }
 
   function loadCachedIcon(iconUrl) {
@@ -180,8 +198,45 @@
     api.getCachedIcon(iconUrl).then(function (src) {
       if (typeof src !== 'string' || src.indexOf('file:') !== 0) return;
       cachedIconSources[iconUrl] = src;
-      if (el.secondary && secondaryIconUrl === iconUrl) prependSecondaryIcon(src);
+      (pendingDropSlots[iconUrl] || []).forEach(function (slot) { fillSlot(slot, src); });
+      delete pendingDropSlots[iconUrl];
     }).catch(function () {});
+  }
+
+  // One row per drop: art, name with its count, worth. Names are item text, so they only ever go in as textContent.
+  function setDrops(drops, rates, poeVersion) {
+    pendingDropSlots = Object.create(null);
+    if (!el.drops) return;
+    el.drops.hidden = drops.length === 0;
+    el.drops.replaceChildren.apply(el.drops, drops.map(function (drop) {
+      var row = document.createElement('div');
+      row.className = 'jj-drop';
+      var slot = document.createElement('span');
+      slot.className = 'jj-slot';
+      var localIcon = getLocalItemIconPath(drop.label, poeVersion);
+      if (localIcon) {
+        fillSlot(slot, localIcon);
+      } else if (drop.icon) {
+        if (cachedIconSources[drop.icon]) {
+          fillSlot(slot, cachedIconSources[drop.icon]);
+        } else {
+          (pendingDropSlots[drop.icon] = pendingDropSlots[drop.icon] || []).push(slot);
+          if (!(drop.icon in cachedIconSources)) loadCachedIcon(drop.icon);
+        }
+      }
+      var name = document.createElement('span');
+      name.className = 'jj-drop-name';
+      // The label gives way with an ellipsis; the count after it always stays whole.
+      var label = document.createElement('span');
+      label.className = 'jj-drop-label';
+      label.textContent = drop.label;
+      var quantity = document.createElement('span');
+      quantity.className = 'jj-drop-qty';
+      quantity.textContent = '\u00d7' + drop.quantity;
+      name.append(label, quantity);
+      row.append(slot, name, createDropValue(drop.valueDelta, rates, poeVersion));
+      return row;
+    }));
   }
 
   function escapeHTML(value) {
@@ -239,9 +294,8 @@
     var result = (state.mapResult && state.mapResult.result) || {};
     var rates = result.profitCurrencyRates || result.currencyRates || (state.mapResult && state.mapResult.profitCurrencyRates) || {};
     var poeVersion = result.poeVersion === 'poe2' ? 'poe2' : 'poe1';
-    var topOutput = Array.isArray(result.topOutputs) && result.topOutputs.length > 0 ? result.topOutputs[0] : null;
-    var localIcon = topOutput ? getLocalItemIconPath(topOutput.label, poeVersion) : '';
-    var iconUrl = !localIcon && topOutput && typeof topOutput.icon === 'string' ? topOutput.icon : '';
+    var overlayModel = root.mapResultOverlayModel;
+    var drops = overlayModel && typeof overlayModel.getMapResultDrops === 'function' ? overlayModel.getMapResultDrops(result) : [];
     var itemCount = Math.max(0, parseInt(result.lootItemCount, 10) || 0);
     // A player can name a farm type anything, "constructor" included.
     var farmTypeKey = Object.prototype.hasOwnProperty.call(STORED_FARM_TYPE_KEYS, result.farmType) ? STORED_FARM_TYPE_KEYS[result.farmType] : null;
@@ -251,17 +305,15 @@
       result.noLoot ? null : createProfitValue(result.netProfit, rates, poeVersion),
       getFarmTypeId(result.farmTypeId || result.farmType)
     );
-    var lootLine = topOutput
-      ? (topOutput.label || '') + ' ' + formatSignedProfit(topOutput.valueDelta, rates)
-      : (itemCount ? root.t(itemCount === 1 ? 'overlay.itemScanned' : 'overlay.itemsScanned', { count: itemCount }) : root.t(result.lootPending ? 'overlay.openInventoryForLoot' : 'overlay.noLootScanned'));
+    setDrops(drops, rates, poeVersion);
     var lootMapCount = parseInt(result.lootMapCount, 10) || 0;
-    setSecondary(
-      lootMapCount > 1 ? lootLine + ' · ' + root.t('overlay.lootFromMaps', { count: lootMapCount }) : lootLine,
-      localIcon || cachedIconSources[iconUrl]
-    );
-    if (iconUrl) {
-      secondaryIconUrl = iconUrl;
-      if (!(iconUrl in cachedIconSources)) loadCachedIcon(iconUrl);
+    var mapsNote = lootMapCount > 1 ? root.t('overlay.lootFromMaps', { count: lootMapCount }) : '';
+    if (drops.length) {
+      // The rows carry the loot, so the left of the secondary row only says how many maps it covers.
+      setSecondary(mapsNote);
+    } else {
+      var lootLine = itemCount ? root.t(itemCount === 1 ? 'overlay.itemScanned' : 'overlay.itemsScanned', { count: itemCount }) : root.t(result.lootPending ? 'overlay.openInventoryForLoot' : 'overlay.noLootScanned');
+      setSecondary(mapsNote ? lootLine + ' · ' + mapsNote : lootLine);
     }
     setResultMeta(getMapResultTier(state), formatDuration(result.durationSeconds));
   }
@@ -405,6 +457,7 @@
       el.card.hidden = visibility === 'hidden';
     }
 
+    if (mode !== 'map-result') setDrops([]);
     if (mode === 'map-result') {
       renderMapResultMode(state);
     } else if (mode === 'start-map-prompt') {
