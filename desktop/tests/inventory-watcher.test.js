@@ -470,6 +470,70 @@ test('a closed inventory with no baseline reports needsBaseline on every tick, a
   assert.deepEqual(log.reads, []);
 });
 
+test('library art carries the item value in Divine Orbs, and an item without one stays unknown', () => {
+  const context = setup({
+    pricedItems: [{ name: 'Exalted Orb', icon: 'exalted-url', divineValue: 0.002 }, { name: 'Omen of Light', icon: 'light-url' }],
+    iconFor: () => '/icons/any.png'
+  });
+
+  readBaseline(context, {});
+
+  assert.deepEqual(
+    context.watcher.art.list.map(({ name, value }) => ({ name, value })),
+    [{ name: 'Exalted Orb', value: 0.002 }, { name: 'Omen of Light', value: null }]
+  );
+});
+
+test('each read holds items to their current price, and a price of 0 counts as not known', () => {
+  const prices = { 'Exalted Orb': 0.002, 'Omen of Light': 0 };
+  const context = setup({
+    pricedItems: [{ name: 'Exalted Orb', icon: 'exalted-url', divineValue: 0.002 }, { name: 'Omen of Light', icon: 'light-url', divineValue: 0 }],
+    iconFor: () => '/icons/any.png'
+  });
+  let current = true;
+  context.watcher.deps.getItemValues = (game) => (current && game === 'poe2' ? new Map(Object.entries(prices)) : null);
+  const values = () => context.watcher.art.list.map(({ name, value }) => [name, value]);
+
+  readBaseline(context, {});
+  assert.deepEqual(values(), [['Exalted Orb', 0.002], ['Omen of Light', null]]);
+
+  context.watcher.cellCache.set('cell', { name: 'Exalted Orb', quantity: 1 });
+  readBaseline(context, {});
+  assert.equal(context.watcher.cellCache.size, 1, 'unchanged prices keep the cached cells');
+
+  prices['Omen of Light'] = 10.8;
+  readBaseline(context, {});
+  assert.deepEqual(values(), [['Exalted Orb', 0.002], ['Omen of Light', 10.8]]);
+  assert.equal(context.watcher.cellCache.size, 0, 'a cell decided under the old prices is decided again');
+
+  // Another league loaded for the Currency page leaves the values as they were.
+  current = false;
+  prices['Omen of Light'] = 0.3;
+  readBaseline(context, {});
+  assert.deepEqual(values(), [['Exalted Orb', 0.002], ['Omen of Light', 10.8]]);
+
+  // An item missing from the current list counts as not known.
+  current = true;
+  delete prices['Exalted Orb'];
+  readBaseline(context, {});
+  assert.deepEqual(values(), [['Exalted Orb', null], ['Omen of Light', 0.3]]);
+});
+
+test('every read outcome tells which character it was for', () => {
+  const context = setup();
+  const { watcher, setRead } = context;
+  const calls = [];
+  watcher.deps.onRead = (kind, details) => calls.push([kind, details]);
+
+  readBaseline(context, {});
+  watcher.mapEntered();
+  watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' });
+  setRead({ open: true, items: { 'Exalted Orb': 1 } });
+  watcher.tick();
+
+  assert.deepEqual(calls, [['saved', { characterKey: 'poe2:c1' }], ['gain', { characterKey: 'poe2:c1' }]]);
+});
+
 test('needsBaseline carries the character, is per character, and hasBaseline follows the character', () => {
   const context = setup();
   const { watcher, env, setRead } = context;

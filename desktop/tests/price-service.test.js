@@ -89,8 +89,8 @@ test('price service lists its priced items with their icons and gives each its j
   assert.deepEqual(
     service.listItems().sort((left, right) => left.name.localeCompare(right.name)),
     [
-      { name: 'Divine Orb', icon: 'https://web.poecdn.com/divine.png' },
-      { name: 'Mirror of Kalandra', icon: 'https://web.poecdn.com/mirror.png' }
+      { name: 'Divine Orb', icon: 'https://web.poecdn.com/divine.png', divineValue: 1 },
+      { name: 'Mirror of Kalandra', icon: 'https://web.poecdn.com/mirror.png', divineValue: 1200 }
     ]
   );
   assert.equal(service.getItemType('Divine Orb'), 'currency');

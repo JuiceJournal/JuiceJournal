@@ -161,7 +161,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     inventoryStatusTitle: 'Envanter',
     inventoryStatus_firstRead: 'Envanterini bir kez ac. I tusuna bas, sonraki map sayilsin.',
     inventoryStatus_reading: 'Envanter okunuyor...',
-    inventoryStatus_saved: 'Envanter kaydedildi. Sonraki map buradan sayilir.',
+    inventoryStatus_saved: 'Envanter okundu. Haritaya hazirsin.',
     inventoryStatus_noGain: 'Yeni loot bulunamadi.',
     inventoryStatus_noBaseline: 'Bu map sayilamadi. Sonraki map sayilacak.',
     inventoryStatus_notOpen: 'Once envanterini ac.',
@@ -236,7 +236,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     inventoryStatusTitle: 'Inventory',
     inventoryStatus_firstRead: 'Open your inventory once. Press I, so your next map counts.',
     inventoryStatus_reading: 'Reading your inventory...',
-    inventoryStatus_saved: 'Inventory noted. Your next map counts from here.',
+    inventoryStatus_saved: 'Inventory read. You are ready for the map.',
     inventoryStatus_noGain: 'No new loot found.',
     inventoryStatus_noBaseline: 'This map was not counted. The next one will be.',
     inventoryStatus_notOpen: 'Open your inventory first.',
@@ -463,6 +463,8 @@ let overlayInventoryStatusTimer = null;
 // characters it has been shown for in this run.
 let firstReadNudge = { characterKey: null, firstAt: 0, lastAt: 0 };
 const firstReadNudgeShown = new Set();
+// Profile and character pairs whose read since the last map entered was already told on the overlay.
+const inventoryReadAnnounced = new Set();
 let inventoryWatcher = null;
 // What the last inventory read came to, for the Dashboard's status line. Kept per profile, in memory only.
 let inventoryReadStatus = { kind: 'none', at: null, profileId: null };
@@ -3735,6 +3737,11 @@ function createInventoryWatcher() {
     getCharacter: () => overlayCharacterState,
     listPricedItems: listPricedInventoryItems,
     getIconPath: getInventoryIconPath,
+    getItemValues: (game) => {
+      const { league } = resolveLeagueContext({ poeVersion: game });
+      const current = priceService.poeVersion === game && priceService.league === league && priceService.fullySynced;
+      return current ? new Map(priceService.listItems().map((item) => [item.name, item.divineValue])) : null;
+    },
     loadArt: loadInventoryArt,
     onGain: (sessionId, items, mapCount) => {
       addInventoryLoot(sessionId, items, mapCount).catch((error) => {
@@ -3752,10 +3759,13 @@ function createInventoryWatcher() {
         maybeShowFirstReadNudge(details.characterKey);
       } else if (kind !== 'gain') {
         noteInventoryRead(kind);
-        // The hint asked for this read, so it gives way to the note that it worked.
-        if (kind === 'saved' && overlayInventoryStatus?.kind === 'firstRead') {
-          showInventoryStatus('saved');
+        if (kind === 'saved') {
+          announceInventoryReady(details.characterKey);
         }
+      }
+      // A settled map shows its own card, which already tells the player that reading works.
+      if ((kind === 'gain' || kind === 'noGain' || kind === 'noBaseline') && details.characterKey) {
+        inventoryReadAnnounced.add(getInventoryAnnounceKey(details.characterKey));
       }
     }
   });
@@ -3832,6 +3842,39 @@ function maybeShowFirstReadNudge(characterKey, now = Date.now()) {
     firstReadNudge = { characterKey: null, firstAt: 0, lastAt: 0 };
     showInventoryStatus('firstRead');
   }
+}
+
+// The first read in a hideout before a map shows a short card, once per map, so the player knows the inventory was read
+// without pressing the read hotkey. A hotkey read shows the same card and counts as told. The first-read hint always
+// gives way to it.
+function announceInventoryReady(characterKey) {
+  if (!characterKey) {
+    return;
+  }
+  const key = getInventoryAnnounceKey(characterKey);
+  // The hint asked for this read, so it gives way to the card wherever the read happened.
+  if (overlayInventoryStatus?.kind === 'firstRead') {
+    inventoryReadAnnounced.add(key);
+    showInventoryStatus('saved');
+    return;
+  }
+
+  const blocked = inventoryReadAnnounced.has(key)
+    || !logParser?.isInMapHub?.()
+    || !isOverlayEnabled()
+    || overlayStartMapPromptState
+    || overlayCharacterPromptState
+    || (overlayMapResultState?.visible && overlayMapResultState.result);
+  // A read that could not be told leaves the next one free to tell it.
+  if (!blocked) {
+    inventoryReadAnnounced.add(key);
+    showInventoryStatus('saved');
+  }
+}
+
+// Another profile can play the same character name, so the profile is part of what was told.
+function getInventoryAnnounceKey(characterKey) {
+  return `${getActiveProfile()?.id || ''}|${characterKey}`;
 }
 
 // Records the outcome of an inventory read and tells the main window.
@@ -3997,6 +4040,7 @@ async function startNewSession(input = {}) {
 
 async function handleMapEntered(data) {
   inventoryWatcher?.mapEntered();
+  inventoryReadAnnounced.clear();
   if (overlayInventoryStatus?.kind === 'firstRead') {
     clearTimeout(overlayInventoryStatusTimer);
     overlayInventoryStatusTimer = null;

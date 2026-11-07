@@ -267,6 +267,64 @@ test('only measured window heights count as readable', () => {
   assert.equal(vision.isMeasuredWindow(null), false);
 });
 
+// A library entry whose art is a faint blend of another's: a look-alike that is ahead by less than the valuable bar.
+function lookAlike(name, art, other, share) {
+  const blend = (left, right) => Uint8Array.from(left, (value, i) => Math.round(value * (1 - share) + right[i] * share));
+  return { name, coarse: blend(art.coarse, other.coarse), fine: blend(art.fine, other.fine), value: 0.01 };
+}
+
+// Cell 4,2 painted with art 1, made brighter by `lift` so it matches its own art less closely.
+function liftedCell(lift = 0) {
+  const image = blankGrid();
+  paintCell(image, 4, 2, 1);
+  drawGridLines(image);
+  const cell = vision.cropCell(image, GRID, 4, 2);
+  for (let i = 0; i < cell.data.length; i += 4) {
+    for (let channel = 0; channel < 3; channel += 1) cell.data[i + channel] = Math.min(255, cell.data[i + channel] + lift);
+  }
+  return cell;
+}
+
+// The cell's own art, a look-alike blended from it, and an unrelated item.
+function lookAlikeLibrary({ name, value, twinName = 'Twin', twinValue = 0.01, share = 0.03 }) {
+  const art = { ...makeArt(name, 1), value };
+  return [art, { ...lookAlike(twinName, art, makeArt('Other', 2), share), value: twinValue }, { ...makeArt('Third', 3), value: 0.01 }];
+}
+
+test('a cell that could be a valuable item counts only when its art is far ahead and close to the picture', () => {
+  const cell = liftedCell();
+  const { score, margin } = vision.matchCell(cell, lookAlikeLibrary({ name: 'Perfect Storm Rune', value: 15 }));
+  assert.ok(margin >= 2.3 && margin < 5.8 && score <= 12, `ahead by ${margin} at ${score}: only the valuable bar refuses it`);
+
+  assert.equal(vision.readCell(cell, lookAlikeLibrary({ name: 'Perfect Storm Rune', value: 15 })), null);
+  assert.equal(vision.readCell(cell, lookAlikeLibrary({ name: 'Perfect Storm Rune', value: null })), null, 'no known value counts as valuable');
+  assert.equal(vision.readCell(cell, lookAlikeLibrary({ name: 'Perfect Storm Rune', value: 0.1 })).name, 'Perfect Storm Rune');
+  // A cheap read is held to the same bar when the next picture is a valuable item: the cell could be either.
+  assert.equal(vision.readCell(cell, lookAlikeLibrary({ name: 'Lesser Storm Rune', value: 0.01, twinValue: 15 })), null);
+
+  // With no look-alike in the library the same valuable item reads.
+  const alone = [{ ...makeArt('Perfect Storm Rune', 1), value: 15 }, { ...makeArt('Third', 3), value: 0.01 }];
+  assert.equal(vision.readCell(cell, alone).name, 'Perfect Storm Rune');
+});
+
+test('an omen counts only when it is clearly itself, whatever it is worth', () => {
+  const cell = liftedCell();
+  assert.equal(vision.readCell(cell, lookAlikeLibrary({ name: 'Omen of Refreshment', value: 0.02 })), null);
+
+  const alone = [{ ...makeArt('Omen of Refreshment', 1), value: 0.02 }, { ...makeArt('Third', 3), value: 0.01 }];
+  assert.equal(vision.readCell(cell, alone).name, 'Omen of Refreshment');
+});
+
+test('a cheap item only a little ahead of the next picture must also be close to its own art', () => {
+  const library = (share) => lookAlikeLibrary({ name: 'Lesser Storm Rune', value: 0.01, share });
+  const unclear = vision.matchCell(liftedCell(10), library(0.04));
+  assert.ok(unclear.margin < 2.3 && unclear.score > 12, `ahead by ${unclear.margin} at ${unclear.score}`);
+
+  assert.equal(vision.readCell(liftedCell(10), library(0.04)), null);
+  assert.equal(vision.readCell(liftedCell(10), library(0.06)).name, 'Lesser Storm Rune', 'clearly ahead');
+  assert.equal(vision.readCell(liftedCell(6), library(0.03)).name, 'Lesser Storm Rune', 'close to its own art');
+});
+
 test('a cell read reports its place, its stack and whether digits showed', () => {
   const image = blankGrid();
   paintCell(image, 4, 2, 1);

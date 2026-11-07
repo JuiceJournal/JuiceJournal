@@ -1765,6 +1765,7 @@ test('map-enter handler publishes runtime state and leaves session start to the 
     currentSession: null,
     overlayInventoryStatus: null,
     inventoryWatcher: { mapEntered: () => { mapsEntered += 1; } },
+    inventoryReadAnnounced: new Set(),
     startNewSession(input) {
       startCalls.push({ ...input });
       throw new Error('main process should not auto-start sessions on map enter');

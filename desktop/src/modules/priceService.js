@@ -680,7 +680,7 @@ class PriceService {
   }
 
   listItems() {
-    return [...this.priceMap.values()].map(({ name, icon }) => ({ name, icon }));
+    return [...this.priceMap.values()].map(({ name, icon, divineValue }) => ({ name, icon, divineValue }));
   }
 
   // The journal's item type for a priced item.
