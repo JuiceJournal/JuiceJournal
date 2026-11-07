@@ -32,20 +32,22 @@ function loadFunctions(names, globals) {
 
 const STRINGS = {
   inventoryStatus_firstRead: 'Open your inventory once. Press I, so your next map counts.',
-  inventoryStatus_saved: 'Inventory noted. Your next map counts from here.',
+  inventoryStatus_saved: 'Inventory read. You are ready for the map.',
   inventoryStatus_noGain: 'No new loot found.',
   inventoryStatusTitle: 'Inventory'
 };
 
 function load(overrides = {}) {
   const log = { notifications: [], overlayUpdates: 0, timers: [], cleared: [], notes: [] };
-  const context = loadFunctions(['maybeShowFirstReadNudge', 'showInventoryStatus', 'handleMapEntered', 'createInventoryWatcher'], {
+  const context = loadFunctions(['maybeShowFirstReadNudge', 'announceInventoryReady', 'getInventoryAnnounceKey', 'showInventoryStatus', 'handleMapEntered', 'createInventoryWatcher'], {
     INVENTORY_READING_CARD_MS: 1200,
     INVENTORY_STATUS_CARD_MS: 4000,
     INVENTORY_FIRST_READ_CARD_MS: 20000,
     FIRST_READ_NUDGE_DEBOUNCE_MS: 3000,
     firstReadNudge: { characterKey: null, firstAt: 0, lastAt: 0 },
     firstReadNudgeShown: new Set(),
+    inventoryReadAnnounced: new Set(),
+    inMapHub: true,
     overlayInventoryStatus: null,
     overlayInventoryStatusTimer: null,
     overlayStartMapPromptState: null,
@@ -63,7 +65,7 @@ function load(overrides = {}) {
     InventoryWatcher: class { constructor(deps) { log.deps = deps; } },
     isGameWindowInFront: () => true,
     gameDetector: null,
-    logParser: null,
+    logParser: { isInMapHub: () => context.inMapHub },
     getGameWindowRect: () => null,
     win32Probe: {},
     overlayCharacterState: null,
@@ -72,7 +74,8 @@ function load(overrides = {}) {
     loadInventoryArt: () => null,
     addInventoryLoot: async () => {},
     store: { get: () => undefined },
-    getActiveProfile: () => ({ id: 'p1' }),
+    profileId: 'p1',
+    getActiveProfile: () => ({ id: context.profileId }),
     noteInventoryRead: (kind) => log.notes.push(kind),
     setInventoryReadBlocked() {},
     ...overrides
@@ -173,15 +176,110 @@ test('watcher reports reach the hint, and a saved read replaces it without needs
   assert.equal(context.firstReadNudge.characterKey, 'poe2:c1');
 
   context.overlayInventoryStatus = { kind: 'firstRead', primaryLine: 'x', secondaryLine: 'y' };
-  onRead('saved');
+  onRead('saved', { characterKey: 'poe2:c1' });
   assert.deepEqual(log.notes, ['saved']);
   assert.equal(context.overlayInventoryStatus.kind, 'saved');
-  assert.equal(context.overlayInventoryStatus.primaryLine, 'Inventory noted');
+  assert.equal(context.overlayInventoryStatus.primaryLine, 'Inventory read');
+  assert.equal(context.overlayInventoryStatus.secondaryLine, 'You are ready for the map.');
+});
 
-  // A saved read with no hint showing adds no card of its own; the hotkey's own status does.
+test('the first read in a hideout before a map shows the ready card once, and again before the next map', async () => {
+  const { context, log } = load();
+  context.createInventoryWatcher();
+  const { onRead } = log.deps;
+
+  onRead('saved', { characterKey: 'poe2:c1' });
+  assert.equal(context.overlayInventoryStatus?.kind, 'saved');
+  assert.equal(context.overlayInventoryStatus.primaryLine, 'Inventory read');
+
+  // Moving items around in the hideout reads again, with no second card.
   context.overlayInventoryStatus = null;
-  onRead('saved');
+  onRead('saved', { characterKey: 'poe2:c1' });
   assert.equal(context.overlayInventoryStatus, null);
+
+  // The read after the map settles it with its own card, so the baseline read after that adds none.
+  await context.handleMapEntered({});
+  onRead('gain', { characterKey: 'poe2:c1' });
+  onRead('saved', { characterKey: 'poe2:c1' });
+  assert.equal(context.overlayInventoryStatus, null);
+
+  await context.handleMapEntered({});
+  onRead('noGain', { characterKey: 'poe2:c1' });
+  onRead('saved', { characterKey: 'poe2:c1' });
+  assert.equal(context.overlayInventoryStatus, null);
+
+  // A map that ended with no read leaves the next baseline read to say it.
+  await context.handleMapEntered({});
+  onRead('saved', { characterKey: 'poe2:c1' });
+  assert.equal(context.overlayInventoryStatus?.kind, 'saved');
+  assert.deepEqual(log.notifications, []);
+});
+
+test('a read the card could not tell leaves the next read free to tell it', () => {
+  for (const blocker of [
+    { overlayEnabled: false },
+    { overlayStartMapPromptState: { visible: true } },
+    { overlayMapResultState: { visible: true, result: { id: 's1' } } }
+  ]) {
+    const { context, log } = load(blocker);
+    context.createInventoryWatcher();
+    log.deps.onRead('saved', { characterKey: 'poe2:c1' });
+    assert.equal(context.overlayInventoryStatus, null, JSON.stringify(blocker));
+
+    for (const key of Object.keys(blocker)) context[key] = key === 'overlayEnabled' ? true : null;
+    log.deps.onRead('saved', { characterKey: 'poe2:c1' });
+    assert.equal(context.overlayInventoryStatus?.kind, 'saved', JSON.stringify(blocker));
+  }
+});
+
+test('another profile playing the same character gets its own ready card', () => {
+  const { context, log } = load();
+  context.createInventoryWatcher();
+  log.deps.onRead('saved', { characterKey: 'poe2:c1' });
+  assert.equal(context.overlayInventoryStatus?.kind, 'saved');
+
+  context.overlayInventoryStatus = null;
+  context.profileId = 'p2';
+  log.deps.onRead('saved', { characterKey: 'poe2:c1' });
+  assert.equal(context.overlayInventoryStatus?.kind, 'saved');
+});
+
+test('the first-read hint gives way to the card even for a read outside a hideout', () => {
+  const { context, log } = load();
+  context.createInventoryWatcher();
+  context.inMapHub = false;
+  context.overlayInventoryStatus = { kind: 'firstRead', primaryLine: 'x', secondaryLine: 'y' };
+
+  log.deps.onRead('saved', { characterKey: 'poe2:c1' });
+
+  assert.equal(context.overlayInventoryStatus?.kind, 'saved');
+});
+
+test('the ready card waits for a hideout and stays off the overlay when it is off or a prompt or result shows', () => {
+  const { context, log } = load();
+  context.createInventoryWatcher();
+  const { onRead } = log.deps;
+
+  // Town or a campaign zone: no card, and the first read in a hideout still gets one.
+  context.inMapHub = false;
+  onRead('saved', { characterKey: 'poe2:c1' });
+  assert.equal(context.overlayInventoryStatus, null);
+  context.inMapHub = true;
+  onRead('saved', { characterKey: 'poe2:c1' });
+  assert.equal(context.overlayInventoryStatus?.kind, 'saved');
+
+  for (const blocker of [
+    { overlayEnabled: false },
+    { overlayStartMapPromptState: { visible: true } },
+    { overlayCharacterPromptState: { visible: true } },
+    { overlayMapResultState: { visible: true, result: { id: 's1' } } }
+  ]) {
+    const blocked = load(blocker);
+    blocked.context.createInventoryWatcher();
+    blocked.log.deps.onRead('saved', { characterKey: 'poe2:c1' });
+    assert.equal(blocked.context.overlayInventoryStatus, null, JSON.stringify(blocker));
+    assert.deepEqual(blocked.log.notifications, [], JSON.stringify(blocker));
+  }
 });
 
 test('a map starting clears the hint and leaves other cards alone', async () => {
@@ -201,4 +299,9 @@ test('a map starting clears the hint and leaves other cards alone', async () => 
 test('the main process words the hint in both languages', () => {
   assert.match(mainJs, /inventoryStatus_firstRead: 'Open your inventory once\. Press I, so your next map counts\.'/);
   assert.match(mainJs, /inventoryStatus_firstRead: 'Envanterini bir kez ac\. I tusuna bas, sonraki map sayilsin\.'/);
+});
+
+test('the ready card says the inventory was read, in both languages', () => {
+  assert.match(mainJs, /inventoryStatus_saved: 'Inventory read\. You are ready for the map\.'/);
+  assert.match(mainJs, /inventoryStatus_saved: 'Envanter okundu\. Haritaya hazirsin\.'/);
 });

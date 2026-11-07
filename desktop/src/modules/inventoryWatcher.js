@@ -28,6 +28,11 @@ const ART_BATCH_SIZE = 40;
 const ART_WAIT_MS = 15_000;
 const CELL_CACHE_LIMIT = 512;
 
+// The value the reader holds an item's art to: a price of 0 or none is not known, and the reader treats that as valuable.
+function toArtValue(divineValue) {
+  return Number.isFinite(divineValue) && divineValue > 0 ? divineValue : null;
+}
+
 // Cells come back in reading order, so an unchanged read gives the same text.
 function sameRead(left, right) {
   return Boolean(left) && JSON.stringify(left.cells) === JSON.stringify(right.cells);
@@ -46,15 +51,18 @@ class InventoryWatcher {
    * @param {function(): (object|null)} deps.getGameWindow - Client rectangle in screen pixels
    * @param {function(number, number, number, number): (Uint8Array|null)} deps.readScreen - BGRA pixels of a screen area
    * @param {function(): (object|null)} deps.getCharacter
-   * @param {function(string): {complete: boolean, items: Array}} deps.listPricedItems - Priced items as { name, icon }
+   * @param {function(string): {complete: boolean, items: Array}} deps.listPricedItems - Priced items as
+   *   { name, icon, divineValue }
    * @param {function(string): (string|null)} deps.getIconPath - Local file of an icon URL; a miss starts its download
    * @param {function(string): (object|null)} deps.loadArt - { coarse, fine } pixels of an icon file
+   * @param {function(string): (Map|null)} [deps.getItemValues] - Item name to price in Divine Orbs for a game, or null
+   *   while the loaded prices are not that game's current league
    * @param {function(string, Array, number): void} deps.onGain - Session id, its new items and how many maps they cover
    * @param {function(string): void} deps.onStatus - Something the player should be told, see the kinds below
    * @param {function(string, object=): void} [deps.onRead] - What the last read came to, for the Dashboard's status line:
-   *   saved, noBaseline, noGain, gain; resolution when the window turns to a size reading has not been checked on, and
-   *   measured when it fits again; needsBaseline ({ characterKey }) when the inventory is closed and the character has
-   *   no baseline yet, on every tick
+   *   saved, noBaseline, noGain, gain (each with { characterKey }); resolution when the window turns to a size reading
+   *   has not been checked on, and measured when it fits again; needsBaseline ({ characterKey }) when the inventory is
+   *   closed and the character has no baseline yet, on every tick
    * @param {function(): number} [deps.now]
    */
   constructor(deps) {
@@ -105,7 +113,8 @@ class InventoryWatcher {
       }
       const art = this.deps.loadArt(iconPath);
       loaded += 1;
-      if (art) this.art.items.set(item.name, { name: item.name, ...art });
+      // The reader holds a valuable item to a higher bar; one with no known value counts as valuable.
+      if (art) this.art.items.set(item.name, { name: item.name, value: toArtValue(item.divineValue), ...art });
     }
     this.art.queue = remaining;
 
@@ -133,11 +142,31 @@ class InventoryWatcher {
     return gameWindow && !gameWindow.minimized && isMeasuredWindow(gameWindow) ? getGridRect(game, gameWindow) : null;
   }
 
+  // Prices move after the library is built, so each read holds items to the bar their current price calls for.
+  refreshArtValues() {
+    const values = this.deps.getItemValues?.(this.art.game);
+    // Prices loaded for another league, for the Currency page, say nothing about this one: the values stay as they were.
+    if (!values) {
+      return;
+    }
+    let changed = false;
+    for (const entry of this.art.list) {
+      const value = toArtValue(values.get(entry.name));
+      if (value !== entry.value) {
+        entry.value = value;
+        changed = true;
+      }
+    }
+    // A cell decided under the old values is decided again.
+    if (changed) this.cellCache.clear();
+  }
+
   readGrid(grid) {
     const data = this.deps.readScreen(grid.x, grid.y, grid.width, grid.height);
     if (!data) {
       return null;
     }
+    this.refreshArtValues();
     if (this.cellCache.size > CELL_CACHE_LIMIT) {
       this.cellCache.clear();
     }
@@ -158,16 +187,16 @@ class InventoryWatcher {
     this.state = state;
 
     if (!outcome) {
-      this.deps.onRead('saved');
+      this.deps.onRead('saved', { characterKey });
       if (announce) this.deps.onStatus('saved');
     } else if (outcome.type === 'noBaseline') {
-      this.deps.onRead('noBaseline');
+      this.deps.onRead('noBaseline', { characterKey });
       this.deps.onStatus('noBaseline');
     } else if (outcome.items.length === 0) {
-      this.deps.onRead('noGain');
+      this.deps.onRead('noGain', { characterKey });
       this.deps.onStatus('noGain');
     } else {
-      this.deps.onRead('gain');
+      this.deps.onRead('gain', { characterKey });
       this.deps.onStatus('reading');
       this.deps.onGain(outcome.sessionId, outcome.items, outcome.mapCount);
     }

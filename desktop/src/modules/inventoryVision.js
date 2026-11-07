@@ -33,6 +33,23 @@ const SAME_ART_GAP = 0.25;
 // On real screenshots items in the library scored at most 17.4 and everything else at least 21.5.
 const ACCEPT_SCORE = 19;
 const ACCEPT_MARGIN = 1;
+// A cell whose best or next picture is an item worth this many Divine Orbs or more could be either, and an item missing
+// from the price list reads as its look-alike, so such a cell counts only when its art is far ahead and close to the
+// picture. A wrong read of a valuable item is what moves a map's total, so a cell that is not clear stays unread. An item
+// whose value is not known counts as valuable. Measured on one real screenshot at three sizes and on rendered cells
+// with the true item left out: real right reads were at least 6.7 ahead and scored at most 16.1.
+const VALUABLE_DIVINE = 0.5;
+const VALUABLE_MARGIN = 5.8;
+const VALUABLE_SCORE = 17;
+// Omens are one family of look-alikes, cheap and dear mixed, and a missing omen reads as a sibling whose own value says
+// nothing. Real omen reads were at least 9.1 ahead and scored at most 11.8; sibling reads were at most 4.8 ahead.
+const OMEN_MARGIN = 5;
+const OMEN_SCORE = 14;
+// Any other cell that is only a little ahead of the next picture must also be close to its own: what it shows may be a
+// valuable item missing from the price list. Such wrong reads were at most 2.2 ahead and scored at least 14.8. At worst
+// this leaves a cheap item unread.
+const CLEAR_MARGIN = 2.3;
+const CLEAR_SCORE = 12;
 const DIGIT_BRIGHTNESS = 185;
 const TIER_BRIGHTNESS = 170;
 const DIGIT_MAX_DISTANCE = 0.35;
@@ -440,13 +457,15 @@ function matchCell(cell, art) {
   return {
     score,
     margin: next ? next.score - score : Infinity,
-    names: ranked.filter((item) => item.score - score <= SAME_ART_GAP).map((item) => item.entry.name)
+    names: ranked.filter((item) => item.score - score <= SAME_ART_GAP).map((item) => item.entry.name),
+    runnerUp: next ? next.entry.name : null
   };
 }
 
 /**
- * Finds what is in a cell. `art` is the library of priced items: { name, coarse, fine } with premultiplied BGRA pixels,
- * coarse at COARSE_SIZE and fine at FINE_ART_SIZE. Returns { name, quantity } or null for an item it does not hold.
+ * Finds what is in a cell. `art` is the library of priced items: { name, coarse, fine, value } with premultiplied BGRA
+ * pixels, coarse at COARSE_SIZE and fine at FINE_ART_SIZE, and value in Divine Orbs. Returns { name, quantity } or null
+ * for an item it does not hold or cannot tell apart clearly enough.
  */
 function readCell(cell, art) {
   const match = matchCell(cell, art);
@@ -454,6 +473,14 @@ function readCell(cell, art) {
 
   const name = match.names.length > 1 ? pickFromSameArt(match.names, readTierBars(cell)) : match.names[0];
   if (!name) return null;
+  const isCheap = (itemName) => {
+    const value = art.find((entry) => entry.name === itemName)?.value;
+    return Number.isFinite(value) && value < VALUABLE_DIVINE;
+  };
+  const valuable = !isCheap(name) || (match.runnerUp !== null && !isCheap(match.runnerUp));
+  if (valuable && (match.margin < VALUABLE_MARGIN || match.score > VALUABLE_SCORE)) return null;
+  if (/^Omen /.test(name) && (match.margin < OMEN_MARGIN || match.score > OMEN_SCORE)) return null;
+  if (!valuable && match.margin < CLEAR_MARGIN && match.score > CLEAR_SCORE) return null;
 
   const { quantity, digits } = readStackSize(cell);
   return quantity === null ? null : { name, quantity, digits };
