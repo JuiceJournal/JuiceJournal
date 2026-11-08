@@ -216,6 +216,40 @@ test('account state model picks the selected character and formats summary field
   assert.equal(result.summary.level, 96);
 });
 
+test('account state model takes a newer level from Client.txt and never a lower one', () => {
+  const deriveAccountState = getAccountStateModelExport('deriveAccountState');
+  const characters = [
+    { id: 'poe2-main', name: 'IceInMyArrows', level: 94, class: 'Deadeye', poeVersion: 'poe2' },
+    { id: 'poe1-main', name: 'IceInMyArrows', level: 80, class: 'Ranger', poeVersion: 'poe1' }
+  ];
+
+  const raised = deriveAccountState({
+    activePoeVersion: 'poe2',
+    selectedCharacterId: 'poe2-main',
+    characters,
+    loggedLevelsByGame: { poe2: { IceInMyArrows: 95 } }
+  });
+  assert.equal(raised.summary.level, 95);
+  assert.equal(raised.charactersByGame.poe2[0].level, 95);
+  assert.equal(raised.charactersByGame.poe1[0].level, 80, 'the other game keeps its own level');
+
+  const stale = deriveAccountState({
+    activePoeVersion: 'poe2',
+    selectedCharacterId: 'poe2-main',
+    characters,
+    loggedLevelsByGame: { poe2: { IceInMyArrows: 90 } }
+  });
+  assert.equal(stale.summary.level, 94);
+
+  // A selected character that is in no list gets the newer level too.
+  const fromPayload = deriveAccountState({
+    activePoeVersion: 'poe2',
+    selectedCharacter: { id: 'poe2-main', name: 'IceInMyArrows', level: 94, poeVersion: 'poe2' },
+    loggedLevelsByGame: { poe2: { IceInMyArrows: 95 } }
+  });
+  assert.equal(fromPayload.summary.level, 95);
+});
+
 test('account state model falls back cleanly when no character list is available', () => {
   const deriveAccountState = getAccountStateModelExport('deriveAccountState');
 
@@ -522,6 +556,7 @@ function loadCharacterSessionRenderer({ lastKnownAccountState, poeDeviceConnecte
     detectedGameVersion: 'poe2',
     characterSession: null,
     deviceCharactersByGame: {},
+    loggedLevelsByGame: {},
     poeDeviceConnected
   };
   const overlayCharacters = [];
@@ -668,6 +703,23 @@ test('renderer switches to and remembers an own character named in Client.txt', 
     { ...persistedSettings.at(-1).lastKnownAccountState.confirmedCharacterByGame },
     { poe2: 'poe2-alt' }
   );
+});
+
+test('renderer shows the level from an own level-up line at once and keeps it in the saved character cache', () => {
+  const { context, state, persistedSettings } = loadCharacterSessionRenderer();
+  assert.equal(state.account.summary.level, 94);
+
+  context.handleCharacterLogLine({ poeVersion: 'poe2', name: 'HighLevelDeadeye', kind: 'level_up', level: 95 });
+  assert.equal(state.account.summary.level, 95);
+  const saved = persistedSettings.at(-1).lastKnownAccountState.charactersByGame.poe2
+    .find((character) => character.name === 'HighLevelDeadeye');
+  assert.equal(saved.level, 95);
+
+  // A party member's level-up and an older line change nothing.
+  context.handleCharacterLogLine({ poeVersion: 'poe2', name: 'PartyFriend', kind: 'level_up', level: 99 });
+  context.handleCharacterLogLine({ poeVersion: 'poe2', name: 'HighLevelDeadeye', kind: 'level_up', level: 93 });
+  assert.equal(state.account.summary.level, 95);
+  assert.equal(state.loggedLevelsByGame.poe2.PartyFriend, undefined);
 });
 
 test('renderer ignores party members and other-game names from Client.txt', () => {
