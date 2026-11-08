@@ -98,6 +98,12 @@ const fs = require('fs');
 const path = require('path');
 const { app, Notification, Tray } = require('electron');
 require(${JSON.stringify(path.join(__dirname, 'network-stub.cjs'))});
+const win32Probe = require(${JSON.stringify(path.join(__dirname, '..', 'src', 'modules', 'win32Probe.js'))});
+
+// The game detector finds no game, so the real process list and game log are never read. A Path of Exile 2 running on
+// the machine would otherwise make these PoE 2 maps, which end with "Open your inventory before the next map".
+win32Probe.scanProcesses = () => [];
+win32Probe.findProcessWindow = () => null;
 
 const appDataDir = process.env.JUICE_JOURNAL_E2E_APP_DATA_DIR;
 const userDataDir = process.env.JUICE_JOURNAL_E2E_USER_DATA_DIR;
