@@ -97,6 +97,16 @@
       : null;
   }
 
+  // A level-up line in Client.txt is newer than any character list, so a logged level the list has not caught up with
+  // wins. Levels only rise, so an old line read again never lowers one. Kept by id: a character remade under the same
+  // name starts again from its own level.
+  function withLoggedLevels(characters, loggedLevelsByGame = {}) {
+    return characters.map((character) => {
+      const logged = loggedLevelsByGame?.[character.poeVersion]?.[character.id];
+      return Number.isFinite(logged) && logged > character.level ? { ...character, level: logged } : character;
+    });
+  }
+
   function deriveAccountState({
     accountName,
     activePoeVersion,
@@ -104,13 +114,17 @@
     selectedCharacterByGame = {},
     selectedCharacter: selectedCharacterPayload,
     characters = [],
-    cachedAccountState = null
+    cachedAccountState = null,
+    loggedLevelsByGame = {}
   } = {}) {
     const normalizedCharacters = normalizeCharacters(characters);
     const cachedCharacters = flattenCachedCharacters(cachedAccountState);
-    const normalizedSelectedCharacter = normalizeCharacter(selectedCharacterPayload);
+    const [normalizedSelectedCharacter = null] = withLoggedLevels(
+      [normalizeCharacter(selectedCharacterPayload)].filter(Boolean),
+      loggedLevelsByGame
+    );
     const normalizedActivePoeVersion = normalizePoeVersion(activePoeVersion);
-    const allCharacters = normalizedCharacters.length ? normalizedCharacters : cachedCharacters;
+    const allCharacters = withLoggedLevels(normalizedCharacters.length ? normalizedCharacters : cachedCharacters, loggedLevelsByGame);
     const charactersByGame = groupCharactersByGame(allCharacters);
     const normalizedSelectedCharacterId = normalizeString(
       (normalizedActivePoeVersion ? selectedCharacterByGame[normalizedActivePoeVersion] : null)

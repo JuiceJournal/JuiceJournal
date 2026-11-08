@@ -31,6 +31,8 @@ const state = {
   account: null,
   characterSession: null,
   deviceCharactersByGame: {},
+  // Levels from level-up lines in Client.txt, by game and character id, newer than the character lists.
+  loggedLevelsByGame: {},
   poeDeviceConnected: false,
   // Whether the device sign-in may read stashes (account:stashes); the built-in sign-in does not ask for it.
   poeStashAccess: false,
@@ -3423,6 +3425,7 @@ function showSignedOutWindow() {
     renderCustomFarmTypes();
   }
   state.deviceCharactersByGame = {};
+  state.loggedLevelsByGame = {};
   state.poeDeviceConnected = false;
   state.poeStashAccess = false;
   state.currentSession = null;
@@ -3599,7 +3602,8 @@ function refreshAccountStateFromCurrentUser() {
         || [],
       state.deviceCharactersByGame
     ),
-    cachedAccountState: state.settings?.lastKnownAccountState || null
+    cachedAccountState: state.settings?.lastKnownAccountState || null,
+    loggedLevelsByGame: state.loggedLevelsByGame
   });
   persistLastKnownAccountState();
   if (typeof syncOverlayCharacter === 'function') {
@@ -3673,6 +3677,11 @@ async function handleCharacterLogLine({ poeVersion, name, kind, level } = {}) {
   }
 
   if (character) {
+    // The card and the character lists show the new level at once, not only after the next fetch from GGG.
+    if (kind === 'level_up' && Number.isFinite(level)) {
+      const levels = state.loggedLevelsByGame[version] || {};
+      state.loggedLevelsByGame = { ...state.loggedLevelsByGame, [version]: { ...levels, [character.id]: Math.max(levels[character.id] || 0, level) } };
+    }
     confirmActiveCharacter(version, character.id);
   }
 }
