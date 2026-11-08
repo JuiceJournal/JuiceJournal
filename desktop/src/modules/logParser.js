@@ -234,10 +234,13 @@ class LogParser extends EventEmitter {
     if (generatedArea) {
       this.currentAreaId = generatedArea[1];
       this.currentAreaName = null;
+      this.emit('areaGenerated', { areaId: this.currentAreaId });
     }
+    // Written once the area has loaded and the player is in it; only an English client writes it in this form.
     const enteredArea = message.match(/^: You have entered ([^.]+)\./i);
     if (enteredArea) {
       this.currentAreaName = enteredArea[1].trim();
+      this.emit('areaEntered', { areaName: this.currentAreaName });
     }
 
     if (this.reconcilePendingInstanceExit(message)) {

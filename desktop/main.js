@@ -88,6 +88,10 @@ const BROWSER_DATA_CLEAR_TIMEOUT_MS = 15_000;
 const DELETE_ALL_FOLDER_ATTEMPTS = 3;
 const DELETE_ALL_FOLDER_RETRY_MS = 250;
 const CHARACTER_PROMPT_OVERLAY_DURATION_MS = 8_000;
+// A client in another language writes no "You have entered" line, so the prompt shows this long after the area loads.
+const CHARACTER_PROMPT_LOAD_FALLBACK_MS = 10_000;
+// A prompt not shown this long after Play belongs to no area any more and is dropped.
+const CHARACTER_PROMPT_QUEUE_MS = 60_000;
 // The renderer closes an unanswered start prompt itself; if it never does (it reloaded), main hides the prompt
 // this long after it should have closed, so "closes in 0s" cannot stay on screen.
 const START_MAP_PROMPT_OVERLAY_GRACE_MS = 3_000;
@@ -475,6 +479,9 @@ let lastInventoryTickAt = 0;
 let overlayStartMapPromptState = null;
 let overlayCharacterPromptState = null;
 let overlayCharacterPromptTimer = null;
+// The prompt asked for at Play, until the game is in the world (see queueCharacterPromptOverlay).
+let pendingCharacterPrompt = null;
+let pendingCharacterPromptTimer = null;
 let overlayMapResultDismissTimer = null;
 let poeAuthServer = null;
 let trayHintShown = false;
@@ -3398,6 +3405,42 @@ function showCharacterPromptOverlay(prompt = {}) {
   return updateOverlayWindow();
 }
 
+// Play asks for the prompt when the game leaves the character select screen. With the overlay on, the game ignored the
+// Play click when the window appeared at that moment, so the prompt waits until the game is in the world: the area's
+// "You have entered" line, or a while after the area was generated. Back at character select it is dropped.
+function queueCharacterPromptOverlay(prompt = {}) {
+  dropPendingCharacterPrompt();
+  pendingCharacterPrompt = { prompt, queuedAt: Date.now() };
+  // The parser reads the log in batches, so the area lines can arrive in the same read as Play, before this call.
+  // Leaving the game clears the area, so one known here came after Play.
+  if (logParser?.currentAreaName) {
+    showPendingCharacterPrompt();
+  } else if (logParser?.currentAreaId) {
+    scheduleCharacterPromptAfterLoad();
+  }
+  return null;
+}
+
+function dropPendingCharacterPrompt() {
+  clearTimeout(pendingCharacterPromptTimer);
+  pendingCharacterPromptTimer = null;
+  pendingCharacterPrompt = null;
+}
+
+function showPendingCharacterPrompt() {
+  const pending = pendingCharacterPrompt;
+  dropPendingCharacterPrompt();
+  if (pending && Date.now() - pending.queuedAt <= CHARACTER_PROMPT_QUEUE_MS) {
+    showCharacterPromptOverlay(pending.prompt);
+  }
+}
+
+function scheduleCharacterPromptAfterLoad() {
+  if (pendingCharacterPrompt && !pendingCharacterPromptTimer) {
+    pendingCharacterPromptTimer = setTimeout(showPendingCharacterPrompt, CHARACTER_PROMPT_LOAD_FALLBACK_MS);
+  }
+}
+
 function chooseCharacterPromptOverlay(payload = {}) {
   const prompt = overlayCharacterPromptState;
   const character = prompt?.characters.find((entry) => entry.id === payload.characterId) || null;
@@ -4379,6 +4422,11 @@ function setupLogParser() {
       || normalizePoeVersion(store.get('poeVersion'))
       || 'poe1'
   });
+
+  // The "Playing as" prompt waits until the game is in the world.
+  logParser.on('areaEntered', showPendingCharacterPrompt);
+  logParser.on('areaGenerated', scheduleCharacterPromptAfterLoad);
+  logParser.on('gameSessionLeft', dropPendingCharacterPrompt);
 
   logParser.on('mapEntered', (data) => {
     handleMapEntered(data).catch(() => {
@@ -5568,7 +5616,7 @@ function setupIPC() {
 
   ipcMain.handle('show-character-prompt-overlay', async (event, prompt) => {
     assertDesktopUserAuthenticated();
-    return showCharacterPromptOverlay(prompt || {});
+    return queueCharacterPromptOverlay(prompt || {});
   });
 
   ipcMain.handle('choose-character-prompt-overlay', async (event, payload) => {
