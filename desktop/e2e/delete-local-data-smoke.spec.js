@@ -130,6 +130,11 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 require(${JSON.stringify(path.join(__dirname, 'network-stub.cjs'))});
+const win32Probe = require(${JSON.stringify(path.join(__dirname, '..', 'src', 'modules', 'win32Probe.js'))});
+
+// The game detector finds no game, so the real process list and game log are never read.
+win32Probe.scanProcesses = () => [];
+win32Probe.findProcessWindow = () => null;
 
 // Every request the main process starts, answered by the stub or not, so a test can check that none went out. The
 // app's requests all go through axios or Node's http, https or fetch.
