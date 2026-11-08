@@ -31,6 +31,23 @@ test('log parser knows where maps start: a hideout by its own area id, and the e
   assert.equal(parser.isInMapHub(), false);
 });
 
+test('log parser tells when an area is generated and when the player is in it', () => {
+  const parser = new LogParser('Client.txt', { poeVersion: 'poe2' });
+  const events = [];
+  parser.on('areaGenerated', (data) => events.push(['areaGenerated', data]));
+  parser.on('areaEntered', (data) => events.push(['areaEntered', data]));
+
+  parser.parseLine(line('Generating level 65 area "HideoutFelled" with seed 1'));
+  parser.parseLine(line(': You have entered Felled Hideout.'));
+  // Chat that reads like the game's line is not the player arriving.
+  parser.parseLine('2026/05/04 21:10:00 1 abc [INFO Client 1] Someone: You have entered Felled Hideout.');
+
+  assert.deepEqual(events, [
+    ['areaGenerated', { areaId: 'HideoutFelled' }],
+    ['areaEntered', { areaName: 'Felled Hideout' }]
+  ]);
+});
+
 test('log parser forgets the area when the player leaves the game', () => {
   for (const leaving of [
     '2026/05/04 21:20:00 1 abc [INFO Client 1] Async connecting to eu.login.pathofexile2.com:6112',

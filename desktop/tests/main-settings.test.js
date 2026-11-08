@@ -1723,6 +1723,10 @@ test('setupLogParser forwards game session events from Client.txt to the rendere
   }
 
   const context = loadFunctions(['setupLogParser', 'isValidPoePath'], {
+    // The Play prompt's listeners; these tests do not follow it.
+    showPendingCharacterPrompt() {},
+    scheduleCharacterPromptAfterLoad() {},
+    dropPendingCharacterPrompt() {},
     store: {
       get(key) {
         return storeState[key];
@@ -1766,11 +1770,20 @@ function loadCharacterPromptMain() {
     'normalizeOverlayCharacter',
     'clearCharacterPromptOverlay',
     'showCharacterPromptOverlay',
+    'queueCharacterPromptOverlay',
+    'dropPendingCharacterPrompt',
+    'showPendingCharacterPrompt',
+    'scheduleCharacterPromptAfterLoad',
     'chooseCharacterPromptOverlay'
   ], {
     overlayCharacterPromptState: null,
     overlayCharacterPromptTimer: null,
+    pendingCharacterPrompt: null,
+    pendingCharacterPromptTimer: null,
+    logParser: null,
     CHARACTER_PROMPT_OVERLAY_DURATION_MS: 8000,
+    CHARACTER_PROMPT_LOAD_FALLBACK_MS: 10000,
+    CHARACTER_PROMPT_QUEUE_MS: 60000,
     normalizePoeVersion: (value) => value === 'poe1' || value === 'poe2' ? value : null,
     updateOverlayWindow: () => {
       overlayUpdates.push(context.overlayCharacterPromptState);
@@ -1837,6 +1850,89 @@ test('main character prompt ignores ids it did not offer and closes itself after
   timers.at(-1).callback();
   assert.equal(context.overlayCharacterPromptState, null);
   assert.deepEqual(sent, []);
+});
+
+test('the Play prompt waits until the game is in the world and shows no window before that', () => {
+  const { context, overlayUpdates } = loadCharacterPromptMain();
+
+  context.queueCharacterPromptOverlay(PROMPT);
+  assert.deepEqual(overlayUpdates, [], 'nothing reaches the overlay while the game leaves character select');
+
+  context.showPendingCharacterPrompt();
+  assert.equal(context.overlayCharacterPromptState.characters.length, 2);
+  assert.equal(overlayUpdates.length, 1);
+
+  // Only once per Play.
+  context.showPendingCharacterPrompt();
+  assert.equal(overlayUpdates.length, 1);
+});
+
+test('the Play prompt shows a while after the area loads when no entered line comes', () => {
+  const { context, overlayUpdates, timers } = loadCharacterPromptMain();
+
+  context.scheduleCharacterPromptAfterLoad();
+  assert.equal(timers.length, 0, 'no prompt is waiting, so nothing is scheduled');
+
+  context.queueCharacterPromptOverlay(PROMPT);
+  context.scheduleCharacterPromptAfterLoad();
+  context.scheduleCharacterPromptAfterLoad();
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].delay, 10000);
+
+  timers[0].callback();
+  assert.equal(context.overlayCharacterPromptState.characters.length, 2);
+  assert.equal(overlayUpdates.length, 1);
+});
+
+test('the Play prompt is dropped back at character select and a newer Play replaces it', () => {
+  const { context, overlayUpdates, timers } = loadCharacterPromptMain();
+
+  context.queueCharacterPromptOverlay(PROMPT);
+  context.scheduleCharacterPromptAfterLoad();
+  context.dropPendingCharacterPrompt();
+  assert.equal(timers[0].cleared, true);
+  context.showPendingCharacterPrompt();
+  assert.deepEqual(overlayUpdates, []);
+
+  context.queueCharacterPromptOverlay({ ...PROMPT, selectedId: 'poe2-high' });
+  context.queueCharacterPromptOverlay(PROMPT);
+  context.showPendingCharacterPrompt();
+  assert.equal(context.overlayCharacterPromptState.selectedId, 'poe2-alt');
+});
+
+test('the Play prompt follows area lines the parser read in the same batch as Play', () => {
+  const generated = loadCharacterPromptMain();
+  generated.context.logParser = { currentAreaId: 'HideoutCanal', currentAreaName: null };
+  generated.context.queueCharacterPromptOverlay(PROMPT);
+  assert.equal(generated.timers.length, 1, 'the area was generated already, so the wait starts now');
+  assert.equal(generated.timers[0].delay, 10000);
+  assert.deepEqual(generated.overlayUpdates, []);
+
+  const entered = loadCharacterPromptMain();
+  entered.context.logParser = { currentAreaId: 'HideoutCanal', currentAreaName: 'Canal Hideout' };
+  entered.context.queueCharacterPromptOverlay(PROMPT);
+  assert.equal(entered.context.overlayCharacterPromptState.characters.length, 2, 'the player is in the world already');
+});
+
+test('a Play prompt that waited too long is dropped instead of shown in a later area', () => {
+  const { context, overlayUpdates } = loadCharacterPromptMain();
+
+  context.queueCharacterPromptOverlay(PROMPT);
+  context.pendingCharacterPrompt.queuedAt -= 61000;
+  context.showPendingCharacterPrompt();
+
+  assert.deepEqual(overlayUpdates, []);
+  assert.equal(context.pendingCharacterPrompt, null);
+});
+
+test('Play queues the prompt and the log parser decides when it shows', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+
+  assert.match(source, /ipcMain\.handle\('show-character-prompt-overlay', async \(event, prompt\) => \{\s*assertDesktopUserAuthenticated\(\);\s*return queueCharacterPromptOverlay\(prompt \|\| \{\}\);/);
+  const setup = extractFunctionSource(source, 'setupLogParser', mainJsPath);
+  assert.match(setup, /logParser\.on\('areaEntered', showPendingCharacterPrompt\);/);
+  assert.match(setup, /logParser\.on\('areaGenerated', scheduleCharacterPromptAfterLoad\);/);
+  assert.match(setup, /logParser\.on\('gameSessionLeft', dropPendingCharacterPrompt\);/);
 });
 
 test('main overlay character accepts only short display fields from the renderer', () => {
@@ -2125,6 +2221,10 @@ function loadSetupLogParser({ existing, storedPath }) {
     }
   }
   const context = loadFunctions(['setupLogParser', 'isValidPoePath'], {
+    // The Play prompt's listeners; these tests do not follow it.
+    showPendingCharacterPrompt() {},
+    scheduleCharacterPromptAfterLoad() {},
+    dropPendingCharacterPrompt() {},
     store: {
       get: (key) => storeState[key],
       set(key, value) {
