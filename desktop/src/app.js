@@ -31,7 +31,7 @@ const state = {
   account: null,
   characterSession: null,
   deviceCharactersByGame: {},
-  // Levels from level-up lines in Client.txt, by game and character name, newer than the character lists.
+  // Levels from level-up lines in Client.txt, by game and character id, newer than the character lists.
   loggedLevelsByGame: {},
   poeDeviceConnected: false,
   // Whether the device sign-in may read stashes (account:stashes); the built-in sign-in does not ask for it.
@@ -3680,7 +3680,7 @@ async function handleCharacterLogLine({ poeVersion, name, kind, level } = {}) {
     // The card and the character lists show the new level at once, not only after the next fetch from GGG.
     if (kind === 'level_up' && Number.isFinite(level)) {
       const levels = state.loggedLevelsByGame[version] || {};
-      state.loggedLevelsByGame = { ...state.loggedLevelsByGame, [version]: { ...levels, [character.name]: Math.max(levels[character.name] || 0, level) } };
+      state.loggedLevelsByGame = { ...state.loggedLevelsByGame, [version]: { ...levels, [character.id]: Math.max(levels[character.id] || 0, level) } };
     }
     confirmActiveCharacter(version, character.id);
   }

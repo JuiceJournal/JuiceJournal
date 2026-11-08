@@ -227,7 +227,7 @@ test('account state model takes a newer level from Client.txt and never a lower 
     activePoeVersion: 'poe2',
     selectedCharacterId: 'poe2-main',
     characters,
-    loggedLevelsByGame: { poe2: { IceInMyArrows: 95 } }
+    loggedLevelsByGame: { poe2: { 'poe2-main': 95 } }
   });
   assert.equal(raised.summary.level, 95);
   assert.equal(raised.charactersByGame.poe2[0].level, 95);
@@ -237,7 +237,7 @@ test('account state model takes a newer level from Client.txt and never a lower 
     activePoeVersion: 'poe2',
     selectedCharacterId: 'poe2-main',
     characters,
-    loggedLevelsByGame: { poe2: { IceInMyArrows: 90 } }
+    loggedLevelsByGame: { poe2: { 'poe2-main': 90 } }
   });
   assert.equal(stale.summary.level, 94);
 
@@ -245,9 +245,17 @@ test('account state model takes a newer level from Client.txt and never a lower 
   const fromPayload = deriveAccountState({
     activePoeVersion: 'poe2',
     selectedCharacter: { id: 'poe2-main', name: 'IceInMyArrows', level: 94, poeVersion: 'poe2' },
-    loggedLevelsByGame: { poe2: { IceInMyArrows: 95 } }
+    loggedLevelsByGame: { poe2: { 'poe2-main': 95 } }
   });
   assert.equal(fromPayload.summary.level, 95);
+
+  // A character remade under the same name has a new id and starts from its own level.
+  const remade = deriveAccountState({
+    activePoeVersion: 'poe2',
+    characters: [{ id: 'poe2-new', name: 'IceInMyArrows', level: 2, class: 'Deadeye', poeVersion: 'poe2' }],
+    loggedLevelsByGame: { poe2: { 'poe2-main': 95 } }
+  });
+  assert.equal(remade.summary.level, 2);
 });
 
 test('account state model falls back cleanly when no character list is available', () => {
@@ -719,7 +727,7 @@ test('renderer shows the level from an own level-up line at once and keeps it in
   context.handleCharacterLogLine({ poeVersion: 'poe2', name: 'PartyFriend', kind: 'level_up', level: 99 });
   context.handleCharacterLogLine({ poeVersion: 'poe2', name: 'HighLevelDeadeye', kind: 'level_up', level: 93 });
   assert.equal(state.account.summary.level, 95);
-  assert.equal(state.loggedLevelsByGame.poe2.PartyFriend, undefined);
+  assert.deepEqual({ ...state.loggedLevelsByGame.poe2 }, { 'poe2-high': 95 });
 });
 
 test('renderer ignores party members and other-game names from Client.txt', () => {

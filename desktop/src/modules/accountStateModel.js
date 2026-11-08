@@ -98,10 +98,11 @@
   }
 
   // A level-up line in Client.txt is newer than any character list, so a logged level the list has not caught up with
-  // wins. Levels only rise, so an old line read again never lowers one.
+  // wins. Levels only rise, so an old line read again never lowers one. Kept by id: a character remade under the same
+  // name starts again from its own level.
   function withLoggedLevels(characters, loggedLevelsByGame = {}) {
     return characters.map((character) => {
-      const logged = loggedLevelsByGame?.[character.poeVersion]?.[character.name];
+      const logged = loggedLevelsByGame?.[character.poeVersion]?.[character.id];
       return Number.isFinite(logged) && logged > character.level ? { ...character, level: logged } : character;
     });
   }
