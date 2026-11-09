@@ -3144,3 +3144,40 @@ test('the active Settings tab is a lit plate without a side stripe, and session 
   // The farm colour moved to a chip on the farm name in the meta line.
   assert.match(cssRule('.session-meta [data-farm-type]'), /background: color-mix\(in srgb, var\(--farm-color\) 14%, transparent\);/);
 });
+
+test('connected poe account chrome says until when the sign-in lasts unless GGG renews it', () => {
+  const expiresAt = Date.UTC(2026, 10, 9, 20, 0, 0);
+  const shownTime = new Date(expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const cases = [
+    [{ poeDeviceRenewable: false, poeDeviceExpiresAt: expiresAt }, `settings.poeLiveUntil|${shownTime}`],
+    [{ poeDeviceRenewable: true, poeDeviceExpiresAt: expiresAt }, 'settings.poeLiveMode'],
+    [{ poeDeviceRenewable: false, poeDeviceExpiresAt: null }, 'settings.poeLiveMode']
+  ];
+
+  for (const [deviceState, expectedMode] of cases) {
+    const connectBtn = createToggleButton();
+    const disconnectBtn = createToggleButton(['hidden']);
+    const elements = {
+      poeLinkStatus: { textContent: '' },
+      poeAccountName: { textContent: '' },
+      poeLinkMode: { textContent: '' },
+      poeConnectBtn: connectBtn,
+      poeDisconnectBtn: disconnectBtn
+    };
+    const context = loadFunctions(['renderPoeLinkStatus', 'formatPoeDeviceEnd'], {
+      elements,
+      state: { currentUser: { accountName: 'RangerMain' }, poeDeviceConnected: true, ...deviceState },
+      window: {
+        t: (key, params) => (params ? `${key}|${params.time}` : key)
+      }
+    });
+
+    context.renderPoeLinkStatus();
+
+    assert.equal(elements.poeLinkStatus.textContent, 'settings.poeLinked');
+    assert.equal(elements.poeAccountName.textContent, 'RangerMain');
+    assert.equal(elements.poeLinkMode.textContent, expectedMode, JSON.stringify(deviceState));
+    assert.equal(connectBtn.classList.contains('hidden'), true);
+    assert.equal(disconnectBtn.classList.contains('hidden'), false);
+  }
+});

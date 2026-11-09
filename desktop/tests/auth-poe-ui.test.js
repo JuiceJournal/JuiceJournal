@@ -427,6 +427,7 @@ test('a failed Path of Exile connect hands the whole reply to the error copy and
   ];
   const characterConnectBtn = createButtonStub('character.connect');
   const poeConnectBtn = createButtonStub('settings.poeConnect');
+  let syncs = 0;
   const context = loadFunctions(['setButtonBusy', 'handleConnectPoeDevice'], {
     state: { account: { activePoeVersion: 'poe1' }, poeDeviceConnected: false },
     elements: { characterConnectBtn, poeConnectBtn },
@@ -441,12 +442,17 @@ test('a failed Path of Exile connect hands the whole reply to the error copy and
       return fallbackKey;
     },
     refreshDeviceCharacters: async () => assert.fail('a failed connect loads no characters'),
+    syncPoeDeviceConnection: async () => {
+      syncs += 1;
+    },
     renderPoeLinkStatus: () => {},
     renderCharacterSummaryCard: () => {}
   });
 
   await context.handleConnectPoeDevice();
   await context.handleConnectPoeDevice();
+
+  assert.equal(syncs, 2, 'each failed connect reads main\'s sign-in state again');
 
   assert.equal(mapped[0].errorCode, 'POE_DIFFERENT_ACCOUNT');
   assert.deepEqual(toasts, [

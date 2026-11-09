@@ -12,6 +12,8 @@ const stylesPath = path.join(desktopDir, 'src', 'styles.css');
 function extractFunctionSource(source, functionName) {
   const signature = `function ${functionName}`;
   const startIndex = source.indexOf(signature);
+  // An async function keeps its keyword, or its body could not await.
+  const sourceStart = source.slice(startIndex - 6, startIndex) === 'async ' ? startIndex - 6 : startIndex;
 
   if (startIndex === -1) {
     assert.fail(`Expected app.js to define ${functionName}()`);
@@ -128,7 +130,7 @@ function extractFunctionSource(source, functionName) {
     if (char === '}') {
       depth -= 1;
       if (depth === 0) {
-        return source.slice(startIndex, index + 1);
+        return source.slice(sourceStart, index + 1);
       }
     }
   }
@@ -269,7 +271,7 @@ test('renderer fills hero banner artwork and chips from normalized account state
     characterStatus: { textContent: '' },
     characterGameVersion: { textContent: '' }
   };
-  const context = loadFunctions(['renderCharacterSummaryCard'], {
+  const context = loadFunctions(['renderCharacterSummaryCard', 'getPoeDeviceNote', 'formatPoeDeviceEnd'], {
     elements,
     state: {
       currentUser: { username: 'FallbackUser' },
@@ -358,7 +360,7 @@ test('renderer keeps the last detected game character badge when no game is acti
     characterStatus: { textContent: '' },
     characterGameVersion: { textContent: '' }
   };
-  const context = loadFunctions(['renderCharacterSummaryCard'], {
+  const context = loadFunctions(['renderCharacterSummaryCard', 'getPoeDeviceNote', 'formatPoeDeviceEnd'], {
     elements,
     state: {
       currentUser: { username: 'FallbackUser' },
@@ -433,7 +435,7 @@ test('renderer keeps hero text current when character art is unavailable', () =>
     characterStatus: { textContent: '' },
     characterGameVersion: { textContent: '' }
   };
-  const context = loadFunctions(['renderCharacterSummaryCard'], {
+  const context = loadFunctions(['renderCharacterSummaryCard', 'getPoeDeviceNote', 'formatPoeDeviceEnd'], {
     elements,
     state: {
       currentUser: { username: 'FallbackUser' },
@@ -494,7 +496,7 @@ test('renderer empty state shows em dashes and the unknown class line', () => {
     characterLeague: { textContent: '' },
     characterClass: { textContent: '' }
   };
-  const context = loadFunctions(['renderCharacterSummaryCard'], {
+  const context = loadFunctions(['renderCharacterSummaryCard', 'getPoeDeviceNote', 'formatPoeDeviceEnd'], {
     elements,
     state: { account: null },
     window: { t: (key) => key },
@@ -516,7 +518,7 @@ test('renderer shows only the class for an unascended character', () => {
     characterSummaryCard: { dataset: {} },
     characterClass: { textContent: '' }
   };
-  const context = loadFunctions(['renderCharacterSummaryCard'], {
+  const context = loadFunctions(['renderCharacterSummaryCard', 'getPoeDeviceNote', 'formatPoeDeviceEnd'], {
     elements,
     state: {
       account: {
@@ -531,4 +533,297 @@ test('renderer shows only the class for an unascended character', () => {
   context.renderCharacterSummaryCard();
 
   assert.equal(elements.characterClass.textContent, 'Ranger');
+});
+
+const POE_DEVICE_WARN_MS = 30 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+
+// The clock time the note shows, built the same way the renderer builds it.
+function clockTime(timestamp) {
+  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderCardWithDevice(stateOverrides) {
+  const elements = {
+    characterSummaryCard: { dataset: {} },
+    characterBanner: { dataset: {} },
+    characterBannerImage: { src: '', hidden: true, alt: '' },
+    characterPortrait: { dataset: {} },
+    characterPortraitImage: { src: '', hidden: true, alt: '' },
+    characterPortraitBadge: { textContent: '', style: {} },
+    characterName: { textContent: '' },
+    characterClass: { textContent: '' },
+    characterLevel: { textContent: '' },
+    characterLeague: { textContent: '' },
+    characterStatus: { textContent: '' },
+    characterGameVersion: { textContent: '' },
+    characterConnectBtn: { hidden: true },
+    characterConnectNote: { hidden: true, textContent: '', dataset: {} }
+  };
+  const context = loadFunctions(['renderCharacterSummaryCard', 'getPoeDeviceNote', 'formatPoeDeviceEnd'], {
+    elements,
+    POE_DEVICE_WARN_MS,
+    state: {
+      currentUser: { username: 'FallbackUser' },
+      account: { summary: { status: 'ready', name: 'Hero', level: 90, className: 'Ranger', league: 'Standard' } },
+      detectedGameVersion: 'poe1',
+      settings: { poeVersion: 'poe1' },
+      poeDeviceConnected: true,
+      poeDeviceRenewable: false,
+      poeDeviceExpiresAt: null,
+      ...stateOverrides
+    },
+    window: {
+      t: (key, params) => (params ? `${key}|${params.time}` : key),
+      location: { href: 'file:///D:/Workstation/JuiceJournal/JuiceJournal/desktop/src/index.html' }
+    },
+    URL,
+    normalizePoeVersion: (value) => value,
+    getCharacterVisualModel: () => ({
+      deriveCharacterVisual: () => ({
+        portraitKey: 'ranger',
+        bannerKey: 'ranger',
+        tone: 'ember',
+        badgeText: 'R',
+        classLabel: 'Ranger',
+        baseClassLabel: 'Ranger',
+        portraitPath: '',
+        bannerPath: ''
+      })
+    })
+  });
+
+  context.renderCharacterSummaryCard();
+  return { elements, context };
+}
+
+test('character card asks to reconnect once the Path of Exile sign-in has ended', () => {
+  const { elements } = renderCardWithDevice({ poeDeviceConnected: false, poeDeviceExpiresAt: null });
+
+  assert.equal(elements.characterConnectNote.hidden, false);
+  assert.equal(elements.characterConnectNote.textContent, 'dashboard.poeReconnectNote');
+  assert.equal(elements.characterConnectNote.dataset.tone, 'warn');
+  assert.equal(elements.characterConnectBtn.hidden, false);
+});
+
+test('character card says until when a sign-in lasts that GGG does not renew, and keeps Reconnect away', () => {
+  const expiresAt = Date.now() + 5 * HOUR_MS;
+  const { elements } = renderCardWithDevice({ poeDeviceExpiresAt: expiresAt });
+
+  assert.equal(elements.characterConnectNote.hidden, false);
+  assert.equal(elements.characterConnectNote.textContent, `dashboard.poeConnectionUntil|${clockTime(expiresAt)}`);
+  assert.equal(elements.characterConnectNote.dataset.tone, 'muted');
+  assert.equal(elements.characterConnectBtn.hidden, true);
+});
+
+test('character card warns and offers Reconnect early when the sign-in ends within 30 minutes', () => {
+  const expiresAt = Date.now() + 10 * 60 * 1000;
+  const { elements } = renderCardWithDevice({ poeDeviceExpiresAt: expiresAt });
+
+  assert.equal(elements.characterConnectNote.hidden, false);
+  assert.equal(elements.characterConnectNote.textContent, `dashboard.poeConnectionEndsSoon|${clockTime(expiresAt)}`);
+  assert.equal(elements.characterConnectNote.dataset.tone, 'warn');
+  assert.equal(elements.characterConnectBtn.hidden, false);
+});
+
+test('character card switches to the ends-soon note at exactly 30 minutes left, not before', () => {
+  const now = Date.UTC(2026, 10, 9, 12, 0, 0);
+  const { context } = renderCardWithDevice({ poeDeviceExpiresAt: now + POE_DEVICE_WARN_MS });
+
+  assert.equal(context.getPoeDeviceNote(now).endsSoon, true);
+  assert.equal(context.getPoeDeviceNote(now - 1).endsSoon, undefined);
+  assert.equal(context.getPoeDeviceNote(now - 1).tone, 'muted');
+});
+
+test('character card stays quiet while GGG renews the sign-in, when no end is known and when signed out', () => {
+  const cases = [
+    { poeDeviceRenewable: true, poeDeviceExpiresAt: Date.now() + 10 * 60 * 1000 },
+    { poeDeviceRenewable: false, poeDeviceExpiresAt: null },
+    { currentUser: null, poeDeviceConnected: false }
+  ];
+
+  for (const overrides of cases) {
+    const { elements } = renderCardWithDevice(overrides);
+
+    assert.equal(elements.characterConnectNote.hidden, true, JSON.stringify(overrides));
+    assert.equal(elements.characterConnectNote.textContent, '', JSON.stringify(overrides));
+    assert.equal(elements.characterConnectNote.dataset.tone, '', JSON.stringify(overrides));
+    assert.equal(elements.characterConnectBtn.hidden, true, JSON.stringify(overrides));
+  }
+});
+
+test('dashboard html and stylesheet carry the Path of Exile connection note', () => {
+  const html = fs.readFileSync(indexHtmlPath, 'utf8');
+  const css = fs.readFileSync(stylesPath, 'utf8');
+
+  assert.match(html, /id="character-connect-note"/);
+  assert.match(css, /\.character-connect-note/);
+});
+
+const SIGN_IN_ENDS_AT = Date.UTC(2026, 10, 9, 20, 0, 0);
+
+function loadExpiryScheduler({ status = { authenticated: true, expiresAt: SIGN_IN_ENDS_AT, renewable: false, stashAccess: false } } = {}) {
+  const clock = { now: SIGN_IN_ENDS_AT - 5 * HOUR_MS };
+  const timers = [];
+  const cleared = [];
+  const toasts = [];
+  const calls = [];
+  const replies = { status };
+  const handleConnectPoeDevice = async () => {};
+  const state = { currentUser: { id: 'p1' }, poeDeviceConnected: true, poeDeviceRenewable: false, poeDeviceExpiresAt: SIGN_IN_ENDS_AT };
+  const context = loadFunctions(['schedulePoeDeviceExpiry', 'syncPoeDeviceConnection'], {
+    state,
+    clock,
+    poeDeviceExpiryTimer: null,
+    POE_DEVICE_WARN_MS,
+    Date: { now: () => clock.now },
+    setTimeout: (callback, delay) => {
+      const timer = { callback, delay };
+      timers.push(timer);
+      return timer;
+    },
+    clearTimeout: (timer) => cleared.push(timer),
+    window: {
+      t: (key) => key,
+      electronAPI: { getPoeAuthStatus: async () => replies.status }
+    },
+    applyDashboardCapabilities: () => calls.push('applyDashboardCapabilities'),
+    renderPoeLinkStatus: () => calls.push('renderPoeLinkStatus'),
+    renderCharacterSummaryCard: () => calls.push('renderCharacterSummaryCard'),
+    refreshDeviceCharacters: async () => calls.push('refreshDeviceCharacters'),
+    showToast: (...args) => toasts.push(args),
+    handleConnectPoeDevice
+  });
+
+  return { context, state, clock, timers, cleared, toasts, calls, replies, handleConnectPoeDevice };
+}
+
+test('device expiry timer is not set while GGG renews the sign-in, when disconnected or when no end is known', () => {
+  for (const overrides of [
+    { poeDeviceRenewable: true },
+    { poeDeviceConnected: false },
+    { poeDeviceExpiresAt: null }
+  ]) {
+    const { context, state, timers } = loadExpiryScheduler();
+    Object.assign(state, overrides);
+
+    context.schedulePoeDeviceExpiry();
+
+    assert.equal(timers.length, 0, JSON.stringify(overrides));
+  }
+});
+
+test('device expiry timer fires 30 minutes before the end, when more than 30 minutes are left', () => {
+  const { context, timers } = loadExpiryScheduler();
+
+  context.schedulePoeDeviceExpiry();
+
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].delay, 4.5 * HOUR_MS);
+});
+
+test('device expiry timer fires one second after the end, when 30 minutes or less are left', () => {
+  const { context, clock, timers } = loadExpiryScheduler();
+
+  clock.now = SIGN_IN_ENDS_AT - 10 * 60 * 1000;
+  context.schedulePoeDeviceExpiry();
+  clock.now = SIGN_IN_ENDS_AT - POE_DEVICE_WARN_MS;
+  context.schedulePoeDeviceExpiry();
+  // Already past the end (the PC slept): the check still runs, one second from now.
+  clock.now = SIGN_IN_ENDS_AT + 5000;
+  context.schedulePoeDeviceExpiry();
+
+  assert.deepEqual(timers.map((timer) => timer.delay), [10 * 60 * 1000 + 1000, POE_DEVICE_WARN_MS + 1000, 1000]);
+});
+
+test('the 30 minute timer redraws the card and Settings, then waits for the end', () => {
+  const { context, clock, timers, calls } = loadExpiryScheduler();
+
+  context.schedulePoeDeviceExpiry();
+  clock.now = SIGN_IN_ENDS_AT - POE_DEVICE_WARN_MS;
+  timers[0].callback();
+
+  assert.deepEqual(calls, ['renderCharacterSummaryCard', 'renderPoeLinkStatus']);
+  assert.equal(timers.length, 2);
+  assert.equal(timers[1].delay, POE_DEVICE_WARN_MS + 1000);
+});
+
+test('when the sign-in has ended the timer syncs with main and shows a warning with a Reconnect action', async () => {
+  const { context, state, clock, timers, toasts, replies, handleConnectPoeDevice } = loadExpiryScheduler();
+  clock.now = SIGN_IN_ENDS_AT - 10 * 60 * 1000;
+  context.schedulePoeDeviceExpiry();
+
+  clock.now = SIGN_IN_ENDS_AT + 1000;
+  replies.status = { authenticated: false, expiresAt: SIGN_IN_ENDS_AT, renewable: false, stashAccess: false };
+  await timers[0].callback();
+
+  assert.equal(state.poeDeviceConnected, false);
+  assert.equal(state.poeDeviceExpiresAt, null);
+  assert.equal(toasts.length, 1);
+  assert.deepEqual(toasts[0].slice(0, 3), ['toast.poeConnectionEnded', 'dashboard.poeReconnectNote', 'warning']);
+  assert.equal(toasts[0][3].action.label, 'dashboard.connectDevice');
+  assert.equal(toasts[0][3].action.onSelect, handleConnectPoeDevice);
+  // Disconnected, so nothing is scheduled again.
+  assert.equal(timers.length, 1);
+});
+
+test('a sign-in that ends after the player signed out shows no notice on the sign-in screen', async () => {
+  const { context, state, clock, timers, toasts, replies } = loadExpiryScheduler();
+  clock.now = SIGN_IN_ENDS_AT - 10 * 60 * 1000;
+  context.schedulePoeDeviceExpiry();
+
+  state.currentUser = null;
+  clock.now = SIGN_IN_ENDS_AT + 1000;
+  replies.status = null;
+  await timers[0].callback();
+
+  assert.equal(state.poeDeviceConnected, false);
+  assert.deepEqual(toasts, []);
+});
+
+test('when main says the sign-in is still connected the timer shows no warning and watches the new end', async () => {
+  const { context, state, clock, timers, toasts, replies } = loadExpiryScheduler();
+  clock.now = SIGN_IN_ENDS_AT - 10 * 60 * 1000;
+  context.schedulePoeDeviceExpiry();
+
+  clock.now = SIGN_IN_ENDS_AT + 1000;
+  replies.status = { authenticated: true, expiresAt: SIGN_IN_ENDS_AT + 10 * HOUR_MS, renewable: false, stashAccess: false };
+  await timers[0].callback();
+
+  assert.equal(state.poeDeviceConnected, true);
+  assert.deepEqual(toasts, []);
+  assert.equal(timers.length, 2);
+  assert.equal(timers[1].delay, 9.5 * HOUR_MS - 1000);
+});
+
+test('a later sync replaces the device expiry timer', async () => {
+  const { context, timers, cleared } = loadExpiryScheduler();
+
+  await context.syncPoeDeviceConnection();
+  await context.syncPoeDeviceConnection();
+
+  assert.equal(timers.length, 2);
+  assert.deepEqual(cleared, [null, timers[0]]);
+  assert.equal(timers[1].delay, 4.5 * HOUR_MS);
+});
+
+test('syncing the device sign-in records when it ends and whether GGG renews it', async () => {
+  const cases = [
+    [{ authenticated: true, expiresAt: SIGN_IN_ENDS_AT, renewable: false }, true, SIGN_IN_ENDS_AT, false],
+    [{ authenticated: true, expiresAt: SIGN_IN_ENDS_AT, renewable: true }, true, SIGN_IN_ENDS_AT, true],
+    [{ authenticated: true, expiresAt: null, renewable: false }, true, null, false],
+    [{ authenticated: true, expiresAt: '2026-11-09', renewable: 'yes' }, true, null, false],
+    [{ authenticated: false, expiresAt: SIGN_IN_ENDS_AT, renewable: false }, false, null, false],
+    [null, false, null, false]
+  ];
+
+  for (const [status, connected, expiresAt, renewable] of cases) {
+    const { context, state } = loadExpiryScheduler({ status });
+
+    await context.syncPoeDeviceConnection();
+
+    assert.equal(state.poeDeviceConnected, connected, JSON.stringify(status));
+    assert.equal(state.poeDeviceExpiresAt, expiresAt, JSON.stringify(status));
+    assert.equal(state.poeDeviceRenewable, renewable, JSON.stringify(status));
+  }
 });

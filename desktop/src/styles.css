@@ -1218,6 +1218,18 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   min-width: 0;
 }
 
+.character-connect-note {
+  margin: 0.4rem 0 0;
+  max-width: 34rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.character-connect-note[data-tone="warn"] {
+  color: var(--gold-light);
+}
+
 .character-status {
   display: flex;
   align-items: center;

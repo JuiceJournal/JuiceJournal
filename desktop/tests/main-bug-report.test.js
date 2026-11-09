@@ -748,7 +748,12 @@ function secretSettings({ poePath }) {
   };
 }
 
-function loadReport(t, { settings = secretSettings, fsOverride = null } = {}) {
+// A device sign-in GGG does not renew, with 2.54 hours left. Only the three things the report reads.
+function deviceSignIn() {
+  return { isAuthenticated: () => true, canRenew: () => false, tokenExpiresAt: Date.now() + 2.54 * 3_600_000 };
+}
+
+function loadReport(t, { settings = secretSettings, fsOverride = null, poeApiClient = deviceSignIn() } = {}) {
   const tmp = makeTempDir(t);
   const userData = path.join(tmp, 'userData');
   const poePath = path.join(tmp, 'Client.txt');
@@ -787,6 +792,7 @@ function loadReport(t, { settings = secretSettings, fsOverride = null } = {}) {
       env: {}
     },
     store,
+    poeApiClient,
     bugReportModel,
     errorLogState: { writing: false, recent: new Map(), poePaths: new Set(), redactionTargets: [] },
     DEFAULT_API_URL: 'http://localhost:3001',
@@ -838,6 +844,7 @@ test('the bug report prints settings and counts but no names, leagues, server, p
     'Online features: off, custom server: yes',
     'Client.txt found: yes',
     'Signed in (local profile): yes',
+    'Path of Exile on this device: connected yes, renews itself no, hours left 2.5',
     'Local data: journal.json n/a, map results 3, activity entries 2',
     'Recent errors (newest first): 1',
     '[2026-10-27T09:00:00.000Z] main error: Failed for <account> as <character> in <private league> reading <userData>\\config.json',
@@ -1050,4 +1057,48 @@ test('the bug report IPC takes no renderer input but the report id, and preload 
   assert.match(preload, /getBugReport: \(\) => ipcRenderer\.invoke\('get-bug-report'\),/);
   assert.match(preload, /copyBugReport: \(reportId\) => ipcRenderer\.invoke\('copy-bug-report', reportId\),/);
   assert.match(preload, /openBugReportIssue: \(reportId\) => ipcRenderer\.invoke\('open-bug-report-issue', reportId\),/);
+});
+
+test('the bug report says whether the Path of Exile sign-in renews itself and how long it has left, never the tokens', (t) => {
+  const hours = (count) => Date.now() + count * 3_600_000;
+  const poeDeviceFor = (poeApiClient) => plain(loadReport(t, { poeApiClient }).context.collectBugReportInput().poeDevice);
+
+  // Hours left are rounded to one decimal: 2.54 h shows as 2.5.
+  assert.deepEqual(
+    poeDeviceFor({ isAuthenticated: () => true, canRenew: () => false, tokenExpiresAt: hours(2.54) }),
+    { connected: true, renewable: false, hoursLeft: 2.5 }
+  );
+  assert.deepEqual(
+    poeDeviceFor({ isAuthenticated: () => true, canRenew: () => true, tokenExpiresAt: hours(9.04) }),
+    { connected: true, renewable: true, hoursLeft: 9 }
+  );
+  // Past its end: not connected, and never a negative number of hours.
+  assert.deepEqual(
+    poeDeviceFor({ isAuthenticated: () => false, canRenew: () => false, tokenExpiresAt: hours(-3) }),
+    { connected: false, renewable: false, hoursLeft: 0 }
+  );
+  // No expiry known: n/a in the report.
+  assert.deepEqual(
+    poeDeviceFor({ isAuthenticated: () => false, canRenew: () => false, tokenExpiresAt: null }),
+    { connected: false, renewable: false, hoursLeft: null }
+  );
+
+  const { context } = loadReport(t, {
+    poeApiClient: { isAuthenticated: () => true, canRenew: () => false, tokenExpiresAt: hours(2.54) }
+  });
+  const { text } = context.getBugReport();
+  assert.ok(text.split('\n').includes('Path of Exile on this device: connected yes, renews itself no, hours left 2.5'));
+  assert.ok(!text.includes('accessToken'));
+});
+
+test('get-poe-auth-status also tells the renderer when the device sign-in ends and whether it renews itself', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+  const handler = source.match(/ipcMain\.handle\('get-poe-auth-status', async \(\) => \{[\s\S]*?\n  \}\);/)?.[0] || '';
+
+  assert.match(handler, /authenticated: poeApiClient\.isAuthenticated\(\),/);
+  assert.match(handler, /expired: poeApiClient\.isTokenExpired\(\),/);
+  assert.match(handler, /expiresAt: poeApiClient\.tokenExpiresAt \|\| null,/);
+  assert.match(handler, /renewable: poeApiClient\.canRenew\(\),/);
+  assert.match(handler, /stashAccess: poeApiClient\.hasScope\('account:stashes'\)/);
+  assert.doesNotMatch(handler, /accessToken|refreshToken/);
 });

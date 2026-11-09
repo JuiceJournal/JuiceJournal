@@ -38,6 +38,8 @@ class PoeApiClient {
     this.clientId = process.env.POE_CLIENT_ID || DEFAULT_POE_CLIENT_ID;
     this.lastRequestAt = 0;
     this.tokenListener = null;
+    // The refresh under way, shared by every caller (see refreshAccessToken).
+    this.refreshInFlight = null;
     this.characterListRequests = [];
     this.characterListBlockedUntil = 0;
 
@@ -85,9 +87,16 @@ class PoeApiClient {
     this.tokenListener = typeof listener === 'function' ? listener : null;
   }
 
+  // A listener that fails (config.json locked, say) must not undo a sign-in or a refresh that worked; the tokens stay
+  // in memory and the next change tries to save them again.
   _notifyTokens() {
-    if (this.tokenListener) {
+    if (!this.tokenListener) {
+      return;
+    }
+    try {
       this.tokenListener(this.getTokens());
+    } catch (error) {
+      console.warn('Could not save the Path of Exile tokens', error);
     }
   }
 
@@ -107,8 +116,14 @@ class PoeApiClient {
     this.scope = null;
   }
 
+  // An expired sign-in that cannot be renewed has ended, even before a request finds out.
   isAuthenticated() {
-    return !!this.accessToken;
+    return !!this.accessToken && !(this.isTokenExpired() && !this.refreshToken);
+  }
+
+  // Whether GGG gave a refresh token, so the sign-in renews itself instead of ending at tokenExpiresAt.
+  canRenew() {
+    return !!this.refreshToken;
   }
 
   // Tokens saved before the scope was recorded came from the built-in sign-in, which only asks for
@@ -138,19 +153,52 @@ class PoeApiClient {
    * Returns new token data or throws
    */
   async refreshAccessToken() {
+    // A refresh token works once (GGG rotates it), so two refreshes at the same time would end the sign-in: callers
+    // share the one under way.
+    if (!this.refreshInFlight) {
+      this.refreshInFlight = this._refreshOnce().finally(() => {
+        this.refreshInFlight = null;
+      });
+    }
+    return this.refreshInFlight;
+  }
+
+  async _refreshOnce() {
     if (!this.refreshToken) {
       throw new Error('No refresh token available');
     }
 
-    const response = await this.client.post(`${POE_AUTH_BASE}/oauth/token`, new URLSearchParams({
-      grant_type: 'refresh_token',
-      client_id: this.clientId,
-      refresh_token: this.refreshToken
-    }).toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 10000
-    });
+    // A sign-out or a new sign-in can replace the tokens while GGG answers; the answer then belongs to tokens that are
+    // gone and changes nothing.
+    const usedRefreshToken = this.refreshToken;
+    let response;
+    try {
+      response = await this.client.post(`${POE_AUTH_BASE}/oauth/token`, new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: this.clientId,
+        refresh_token: this.refreshToken
+      }).toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 10000
+      });
+    } catch (error) {
+      // A refused refresh token (used, expired or revoked) ends the sign-in. A network or server error keeps it for the
+      // next try.
+      const status = error.response?.status;
+      if (this.refreshToken !== usedRefreshToken) {
+        throw error;
+      }
+      if (status === 400 || status === 401) {
+        this.clearTokens();
+        this._notifyTokens();
+        throw Object.assign(new Error('PoE API authentication expired'), { code: 'POE_AUTH_EXPIRED' });
+      }
+      throw error;
+    }
 
+    if (this.refreshToken !== usedRefreshToken) {
+      return this.getTokens();
+    }
     const data = response.data;
     this.setTokens({
       accessToken: data.access_token,
@@ -216,7 +264,7 @@ class PoeApiClient {
   /**
    * Make an authenticated request to the PoE API
    */
-  async _request(method, url, options = {}) {
+  async _request(method, url, options = {}, retried = false) {
     // Auto-refresh expired tokens. GGG issues no refresh token to this public client (checked 2026-10-21),
     // so an expired desktop sign-in ends here instead of spending a request on a certain 401.
     if (this.isTokenExpired()) {
@@ -260,6 +308,11 @@ class PoeApiClient {
       }
 
       if (error.response?.status === 401) {
+        // A sign-in that can renew gets one refresh and one more try before it counts as ended.
+        if (this.refreshToken && !retried) {
+          await this.refreshAccessToken();
+          return this._request(method, url, options, true);
+        }
         // Token expired/invalid
         this.clearTokens();
         this._notifyTokens();

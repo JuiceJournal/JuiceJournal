@@ -372,7 +372,7 @@ function formatErrorEntry(entry) {
 }
 
 // The text the user pastes into a GitHub issue. Always English, built only from what main collected on this PC.
-function buildBugReportText({ generatedAt, app, os, settings, signedIn, sessionActive, localData, errors, activity }) {
+function buildBugReportText({ generatedAt, app, os, settings, signedIn, poeDevice = {}, sessionActive, localData, errors, activity }) {
   const shownErrors = toList(errors).slice(0, MAX_REPORT_ERRORS);
   const shownActivity = toList(activity).slice(0, MAX_REPORT_ACTIVITY);
   const journalSize = typeof localData.journalBytes === 'number' ? `${localData.journalBytes} bytes` : 'n/a';
@@ -396,6 +396,8 @@ function buildBugReportText({ generatedAt, app, os, settings, signedIn, sessionA
     `Notifications: ${onOff(settings.notifications)}, sound: ${onOff(settings.soundNotifications)}, `
       + `auto-start session: ${onOff(settings.autoStartSession)}`,
     `Signed in (local profile): ${yesNo(signedIn)}`,
+    `Path of Exile on this device: connected ${yesNo(poeDevice.connected)}, renews itself ${yesNo(poeDevice.renewable)}, `
+      + `hours left ${typeof poeDevice.hoursLeft === 'number' ? poeDevice.hoursLeft : 'n/a'}`,
     `Active session: ${sessionActive ? 'active' : 'none'}`,
     `Local data: journal.json ${journalSize}, map results ${mapResults}, activity entries ${localData.activityEntries}`,
     '',
