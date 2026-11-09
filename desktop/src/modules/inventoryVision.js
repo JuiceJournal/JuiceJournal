@@ -517,7 +517,8 @@ function readInventory(image, grid, art, cache = null) {
       const position = `${row},${col}`;
       const cell = cropCell(image, grid, col, row);
       if (!isOccupied(cell)) {
-        if (isCellCovered(image, grid, col, row)) cells[position] = { unknown: true };
+        // Hidden, so maybe not empty; but nothing was seen there, so it is not an item left unread either.
+        if (isCellCovered(image, grid, col, row)) cells[position] = { unknown: true, covered: true };
         continue;
       }
 
@@ -533,7 +534,9 @@ function readInventory(image, grid, art, cache = null) {
         items[read.name] = (items[read.name] || 0) + read.quantity;
         cells[position] = read;
       } else {
-        cells[position] = { unknown: true };
+        // Both side borders hidden is a tooltip or a held item over the cell, not an item left unread. An item's own
+        // picture hides at most the one border inside it.
+        cells[position] = isCellCovered(image, grid, col, row) ? { unknown: true, covered: true } : { unknown: true };
       }
     }
   }

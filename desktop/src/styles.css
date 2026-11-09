@@ -2926,6 +2926,56 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   margin: 0;
 }
 
+/* A note above the loot when the inventory read left new items unread. */
+.session-drawer-loot-note {
+  margin: 0 0 0.6rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+/* Edit mode's row for adding an item by hand: name, quantity, Add. */
+.session-drawer-loot-add {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.session-drawer-loot-add-name,
+.session-drawer-loot-add-qty {
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--bevel-sm);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.8rem;
+}
+
+.session-drawer-loot-add-name {
+  flex: 1 1 auto;
+}
+
+.session-drawer-loot-add-qty {
+  flex: 0 0 4.5rem;
+  width: 4.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-drawer-loot-add-name:focus,
+.session-drawer-loot-add-qty:focus {
+  outline: none;
+  border-color: var(--border-gold);
+  box-shadow: 0 0 0 3px rgb(var(--brass-rgb) / 0.1);
+}
+
+.session-drawer-loot-add-error {
+  margin: -0.3rem 0 0.6rem;
+  color: rgb(var(--loss-rgb));
+  font-size: 0.75rem;
+}
+
 /* Edit mode turns the Cost fact into an amount box and its unit, side by side. */
 .session-drawer-cost-edit {
   display: flex;

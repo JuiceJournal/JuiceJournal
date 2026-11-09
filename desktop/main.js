@@ -167,6 +167,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     mapProfitBody: 'Kazanc {value}c',
     mapLossBody: 'Zarar {value}c',
     mapNoLootBody: 'Loot sayilmadi',
+    mapLootUnreadBody: 'Bazi yeni esyalar okunamadi; run detayindan ekleyebilirsin',
     inventoryStatusTitle: 'Envanter',
     inventoryStatus_firstRead: 'Envanterini bir kez ac. I tusuna bas, sonraki map sayilsin.',
     inventoryStatus_reading: 'Envanter okunuyor...',
@@ -242,6 +243,7 @@ const MAIN_PROCESS_TRANSLATIONS = {
     mapProfitBody: 'Profit {value}c',
     mapLossBody: 'Loss {value}c',
     mapNoLootBody: 'No loot counted',
+    mapLootUnreadBody: 'Some new items could not be read; add them in the run detail',
     inventoryStatusTitle: 'Inventory',
     inventoryStatus_firstRead: 'Open your inventory once. Press I, so your next map counts.',
     inventoryStatus_reading: 'Reading your inventory...',
@@ -1362,6 +1364,58 @@ function addLootToCurrentSession(items, source) {
   return { lootEntries, session };
 }
 
+// The read after a finished map found new items it could not name and nothing it could. The map's result card says so,
+// so the player can add them by hand in the run detail.
+function markSessionLootUnread(sessionId) {
+  const { journal, session } = localJournal.markLootUnread(readJournal(), sessionId, { now: new Date() });
+  writeJournal(journal);
+  // The result the window saves again from this keeps saying no loot was counted, rather than a loss of the cost.
+  const update = { ...session, noLoot: !(session.lootEntries || []).length };
+  if (mainWindow) {
+    mainWindow.webContents.send('session-loot-updated', update);
+  }
+  // With the overlay off the game is in front of the in-app notice, as for a counted gain.
+  if (!isOverlayEnabled()) {
+    showNotification(session.mapName || t('unknownMap'), t('mapLootUnreadBody'));
+  }
+  return update;
+}
+
+// The run detail adds an item the inventory read did not name. Its price comes from the loaded list only when that is
+// the run's own league: another league's price would be written into the run's history for good, so it is kept at 0.
+function addSessionLootByHand(sessionId, { itemName, quantity } = {}) {
+  const name = typeof itemName === 'string' ? itemName.trim() : '';
+  const count = typeof quantity === 'number' ? quantity : NaN;
+  if (!name || name.length > 200 || !Number.isInteger(count) || count < 1 || count > 1_000_000) {
+    throw Object.assign(new Error('Enter an item name and a quantity from 1 to 1000000'), { code: 'LOOT_INVALID' });
+  }
+
+  const session = localJournal.getSession(readJournal(), sessionId);
+  if (!session) {
+    throw Object.assign(new Error('Session not found'), { code: 'SESSION_NOT_FOUND' });
+  }
+  const priced = priceService.poeVersion === session.poeVersion && priceService.league === session.league;
+  const info = priced ? priceService.getPriceInfo(name) : null;
+  const { journal, session: updated, totalsFollowLoot } = localJournal.addLoot(readJournal(), sessionId, [{
+    itemName: name,
+    itemType: priceService.getItemType(name),
+    quantity: count,
+    chaosValue: priced ? readLocalChaosPrice(name, session.poeVersion) || 0 : 0,
+    divineValue: info?.divineValue ?? null,
+    icon: info?.icon || null,
+    source: 'manual'
+  }], { createId: () => crypto.randomUUID(), now: new Date() });
+  writeJournal(journal);
+  if (currentSession?.id === updated.id) {
+    currentSession = updated;
+    updateOverlayWindow();
+  }
+  if (updated.status !== 'active' && totalsFollowLoot) {
+    updateSessionMapResult(updated);
+  }
+  return updated;
+}
+
 function getStoredMapResults() {
   const storeKey = getMapResultsStoreKey();
   if (!storeKey) {
@@ -1393,6 +1447,8 @@ function updateSessionMapResult(session) {
   const { profitChaos, topLootItems, calculationStatus, ...stored } = results[index];
   const nextResult = normalizeMapResultForLedger({
     ...stored,
+    // A map whose loot was counted (or added by hand) since has loot now.
+    noLoot: lootEntries.length > 0 ? false : Boolean(stored.noLoot),
     outputValue: Number(session.totalLootChaos) || 0,
     netProfit,
     profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral',
@@ -4071,8 +4127,15 @@ function createInventoryWatcher() {
       return current ? new Map(priceService.listItems().map((item) => [item.name, item.divineValue])) : null;
     },
     loadArt: loadInventoryArt,
-    onGain: (sessionId, items, mapCount) => {
-      addInventoryLoot(sessionId, items, mapCount).catch((error) => {
+    onUnreadLoot: (sessionId) => {
+      try {
+        markSessionLootUnread(sessionId);
+      } catch (error) {
+        console.warn('Could not mark the map as having unread loot', error);
+      }
+    },
+    onGain: (sessionId, items, mapCount, unread) => {
+      addInventoryLoot(sessionId, items, mapCount, unread).catch((error) => {
         console.warn('Could not add the inventory loot to the map', error);
         noteInventoryRead('saveFailed');
         showInventoryStatus('saveFailed');
@@ -4241,7 +4304,7 @@ function sendInventoryReadStatus() {
 }
 
 // A map's inventory loot arrives after it ended, from the first read back outside the map.
-async function addInventoryLoot(sessionId, items, mapCount = 1) {
+async function addInventoryLoot(sessionId, items, mapCount = 1, unread = false) {
   const session = localJournal.getSession(readJournal(), sessionId);
   await withTimeout(loadSessionPrices(session), SESSION_PRICES_WAIT_MS).catch(() => null);
   // Another league's prices would be written into this map's history for good; no price counts as 0.
@@ -4257,7 +4320,8 @@ async function addInventoryLoot(sessionId, items, mapCount = 1) {
   }));
   const { journal, session: updated } = localJournal.addLoot(readJournal(), sessionId, entries, {
     createId: () => crypto.randomUUID(),
-    now: new Date()
+    now: new Date(),
+    lootUnread: unread
   });
   writeJournal(journal);
   if (mainWindow) {
@@ -5412,6 +5476,14 @@ function setupIPC() {
       return editSessionLoot(sessionId, lootId, { remove: true });
     } catch (error) {
       throw toRendererError(error, 'Failed to remove loot');
+    }
+  });
+
+  ipcMain.handle('add-session-loot', async (event, sessionId, item = {}) => {
+    try {
+      return addSessionLootByHand(sessionId, { itemName: item?.itemName, quantity: item?.quantity });
+    } catch (error) {
+      throw toRendererError(error, 'Failed to add loot');
     }
   });
 

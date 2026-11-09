@@ -2,7 +2,8 @@
  * Inventory Loot Model
  * Decides what a map earned from two inventory reads: the last one before the map and the first one after it.
  * A read is { items: { name: quantity }, cells: { position: cell } }. A cell holds { name, quantity, digits } or
- * { unknown: true } for something unread, such as gear or an item under a tooltip. An empty cell has no entry.
+ * { unknown: true } for something unread, such as gear or an item the reader was not sure of, and { unknown: true,
+ * covered: true } for a cell under a tooltip. An empty cell has no entry.
  *
  * The baseline has to be the inventory last seen before the map. Against an older read, stacks the player put in the
  * stash and then found again would look like no gain at all.
@@ -50,6 +51,12 @@ function diffInventory(before = EMPTY_READ, after = EMPTY_READ) {
     .filter((item) => item.quantity > 0);
 }
 
+// Something unread in a cell that was empty before the map is loot the reader could not name, such as gear or an
+// item it was not sure of. It counts no gain, so the player is told instead.
+function hasNewUnreadItem(before = EMPTY_READ, after = EMPTY_READ) {
+  return Object.entries(after.cells).some(([position, cell]) => cell.unknown && !cell.covered && !before.cells[position]);
+}
+
 function noteMapEntered(state, characterKey) {
   return {
     ...state,
@@ -68,7 +75,8 @@ function markSessionEnded(state, { sessionId, characterKey }) {
 
 /**
  * Applies an inventory read and returns { state, outcome }. Outcome is null when the read only refreshes the baseline,
- * { type: 'gain', sessionId, items, mapCount } when it settles a finished map, and { type: 'noBaseline', sessionId } when
+ * { type: 'gain', sessionId, items, mapCount, unread } when it settles a finished map (unread: new items were left
+ * unread), and { type: 'noBaseline', sessionId } when
  * that map started before any read, so its loot cannot be told from what was already carried. A read of another
  * character leaves a waiting map alone.
  */
@@ -90,7 +98,8 @@ function applyInventoryRead(state, { characterKey, read }) {
         type: 'gain',
         sessionId: pending.sessionId,
         items: diffInventory(pending.baseline, read),
-        mapCount: Math.max(1, mapCount)
+        mapCount: Math.max(1, mapCount),
+        unread: hasNewUnreadItem(pending.baseline, read)
       }
       : { type: 'noBaseline', sessionId: pending.sessionId }
   };
@@ -100,6 +109,7 @@ module.exports = {
   createInventoryLootState,
   getCharacterKey,
   diffInventory,
+  hasNewUnreadItem,
   noteMapEntered,
   markSessionEnded,
   applyInventoryRead

@@ -53,6 +53,11 @@ const state = {
   sessionLootArmTimer: null,
   sessionLootBusyId: null,
   sessionLootRedrawing: false,
+  // Edit mode's add row: what is typed, the price list names it suggests, whether an add is running, and its error.
+  sessionLootAddDraft: { name: '', quantity: '1' },
+  sessionLootAddSuggestions: [],
+  sessionLootAddBusy: false,
+  sessionLootAddError: null,
   // The unit the Cost box of the open run reads in, and whether a cost save is running.
   sessionCostUnit: 'chaos',
   sessionCostBusy: false,
@@ -2853,6 +2858,8 @@ function setupEventListeners() {
     elements.sessionDrawerLoot.addEventListener('click', handleSessionLootClick);
     elements.sessionDrawerLoot.addEventListener('keydown', handleSessionLootKeydown);
     elements.sessionDrawerLoot.addEventListener('focusout', handleSessionLootChange);
+    elements.sessionDrawerLoot.addEventListener('input', handleSessionLootAddInput);
+    elements.sessionDrawerLoot.addEventListener('submit', handleSessionLootAddSubmit);
   }
   if (elements.farmingHubVersionFilter) elements.farmingHubVersionFilter.addEventListener('change', loadFarmingHubRuns);
   if (elements.farmingHubLeagueFilter) elements.farmingHubLeagueFilter.addEventListener('change', loadFarmingHubRuns);
@@ -4325,6 +4332,7 @@ function createCompletedSessionMapResult(session = {}) {
     topOutputs: getScannedTopOutputs(lootEntries),
     lootItemCount: lootEntries.reduce((sum, loot) => sum + (parseInt(loot.quantity || 1, 10) || 1), 0),
     noLoot: Boolean(session.noLoot),
+    lootUnread: Boolean(session.lootUnread),
     lootMapCount: session.lootMapCount > 1 ? session.lootMapCount : undefined,
     // The run's Divine and Mirror rates, as stash-diff results keep them: the overlay tiers the run by them.
     profitCurrencyRates: typeof getProfitCurrencyRates === 'function'
@@ -8184,12 +8192,15 @@ function renderSessionDrawer({ keepForm = false } = {}) {
       .join('');
   }
 
+  // New items the inventory read could not name are not in the totals; Edit can add them.
+  const unreadNote = session.lootUnread ? `<p class="session-drawer-loot-note">${window.t('sessions.lootUnread')}</p>` : '';
+  const addRow = lootEditing ? sessionLootAddHTML() : '';
   if (!lootEntries.length) {
-    elements.sessionDrawerLoot.innerHTML = `<p class="empty-state">${window.t('sessions.detailEmptyLoot')}</p>`;
+    elements.sessionDrawerLoot.innerHTML = `${unreadNote}${addRow}<p class="empty-state">${window.t('sessions.detailEmptyLoot')}</p>`;
     return;
   }
 
-  elements.sessionDrawerLoot.innerHTML = sortSessionLoot(lootEntries)
+  elements.sessionDrawerLoot.innerHTML = unreadNote + addRow + sortSessionLoot(lootEntries)
     .map((loot) => {
       const quantity = parseInt(loot.quantity || 1, 10) || 1;
       const totalValue = (parseFloat(loot.chaosValue || 0) * quantity) || 0;
@@ -8230,6 +8241,92 @@ function renderSessionDrawer({ keepForm = false } = {}) {
   );
 }
 
+// Edit mode's row for an item the inventory read did not name. Names come from the run's league prices when they are
+// loaded; any other name is kept, with no price.
+function sessionLootAddHTML() {
+  const draft = state.sessionLootAddDraft || { name: '', quantity: '1' };
+  const disabledAttr = state.sessionLootAddBusy ? ' disabled' : '';
+  const options = (state.sessionLootAddSuggestions || []).map((name) => `<option value="${escapeHTML(name)}"></option>`).join('');
+  const error = state.sessionLootAddError
+    ? `<p class="session-drawer-loot-add-error" role="alert">${window.t(state.sessionLootAddError)}</p>`
+    : '';
+  return `<form class="session-drawer-loot-add" data-session-loot-add novalidate>
+      <input type="text" name="itemName" class="session-drawer-loot-add-name" list="session-drawer-loot-add-options" maxlength="200" autocomplete="off" placeholder="${window.t('sessions.lootAddName')}" aria-label="${window.t('sessions.lootAddNameAria')}" value="${escapeHTML(draft.name)}"${disabledAttr}>
+      <datalist id="session-drawer-loot-add-options">${options}</datalist>
+      <input type="number" name="quantity" class="session-drawer-loot-add-qty" min="1" max="1000000" step="1" inputmode="numeric" aria-label="${window.t('sessions.lootAddQtyAria')}" value="${escapeHTML(draft.quantity)}"${disabledAttr}>
+      <button type="submit" class="btn btn-secondary btn-small"${disabledAttr}>${window.t('sessions.lootAdd')}</button>
+    </form>${error}`;
+}
+
+let sessionLootSuggestTimer = null;
+
+// What is typed survives a redraw, and the name box asks the run's league prices for matches.
+function handleSessionLootAddInput(event) {
+  const form = event.target?.closest?.('[data-session-loot-add]');
+  if (!form) return;
+  state.sessionLootAddDraft = { name: form.elements.itemName.value, quantity: form.elements.quantity.value };
+  if (event.target.name !== 'itemName') return;
+  clearTimeout(sessionLootSuggestTimer);
+  const session = state.selectedSession;
+  const search = form.elements.itemName.value.trim();
+  const showSuggestions = (names) => {
+    state.sessionLootAddSuggestions = names;
+    const list = document.getElementById('session-drawer-loot-add-options');
+    if (list) list.innerHTML = names.map((name) => `<option value="${escapeHTML(name)}"></option>`).join('');
+  };
+  if (!session || search.length < 2 || !window.electronAPI?.getCurrencyPrices) {
+    showSuggestions([]);
+    return;
+  }
+  sessionLootSuggestTimer = setTimeout(async () => {
+    // cacheOnly: another league's list is never loaded for this, since live tracking reads the loaded one.
+    const result = await window.electronAPI.getCurrencyPrices({
+      poeVersion: session.poeVersion, league: session.league, search, limit: 8, cacheOnly: true
+    }).catch(() => null);
+    // A newer search, or another run, answers for itself.
+    if (state.selectedSession?.id !== session.id || form.elements.itemName.value.trim() !== search) return;
+    showSuggestions((result?.prices || []).map((price) => price.itemName));
+  }, 150);
+}
+
+async function handleSessionLootAddSubmit(event) {
+  const form = event.target?.closest?.('[data-session-loot-add]');
+  if (!form) return;
+  event.preventDefault();
+  const session = state.selectedSession;
+  if (!session?.id || state.sessionLootAddBusy) return;
+  const itemName = form.elements.itemName.value.trim();
+  const quantity = parseSessionLootQuantity(form.elements.quantity.value);
+  if (!itemName || quantity === null) {
+    state.sessionLootAddError = 'sessions.lootAddInvalid';
+    redrawSessionLoot({ kind: itemName ? 'addQty' : 'addName' });
+    return;
+  }
+
+  state.sessionLootAddBusy = true;
+  state.sessionLootAddError = null;
+  let added = null;
+  try {
+    const updated = await window.electronAPI.addSessionLoot(session.id, { itemName, quantity });
+    if (state.selectedSession?.id === session.id) state.selectedSession = updated;
+    if (state.currentSession?.id === updated.id) {
+      state.currentSession = { ...state.currentSession, ...updated };
+      updateActiveSessionUI();
+    }
+    added = (updated.lootEntries || [])[0] || null;
+    state.sessionLootAddDraft = { name: '', quantity: '1' };
+  } catch (error) {
+    state.sessionLootAddError = 'toast.lootAddError';
+  } finally {
+    state.sessionLootAddBusy = false;
+  }
+
+  redrawSessionLoot({ kind: 'addName' });
+  if (!added) return;
+  announceStatus(window.t(Number(added.chaosValue) > 0 ? 'sessions.lootAdded' : 'sessions.lootAddedNoPrice', { item: itemName }));
+  await refreshTrackerData({ includeSessions: true, immediate: true });
+}
+
 function sortSessionLoot(lootEntries) {
   return lootEntries.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
@@ -8245,6 +8342,9 @@ function resetSessionLootEditing() {
   state.sessionLootEditing = false;
   state.sessionLootBusyId = null;
   state.sessionCostUnit = 'chaos';
+  state.sessionLootAddDraft = { name: '', quantity: '1' };
+  state.sessionLootAddSuggestions = [];
+  state.sessionLootAddError = null;
 }
 
 // A redraw replaces the rows, so the control the player was on is found again by its loot id. A box keeps what was
@@ -8254,6 +8354,9 @@ function getFocusedSessionLootControl(node = document.activeElement) {
   if (node && elements.sessionDrawerSummary?.contains?.(node)) {
     if (node.classList.contains('session-drawer-cost-input')) return { kind: 'cost', value: node.value };
     if (node.classList.contains('session-drawer-cost-unit')) return { kind: 'costUnit' };
+  }
+  if (node && elements.sessionDrawerLoot.contains(node) && node.closest?.('[data-session-loot-add]')) {
+    return { kind: node.name === 'quantity' ? 'addQty' : 'addName' };
   }
   if (!node || !elements.sessionDrawerLoot.contains(node) || !node.dataset?.lootId) return null;
   return node.classList.contains('session-drawer-loot-remove')
@@ -8266,6 +8369,8 @@ function focusSessionLootControl(target) {
   let node = null;
   if (target.kind === 'cost' || target.kind === 'costUnit') {
     node = elements.sessionDrawerSummary.querySelector(target.kind === 'cost' ? '.session-drawer-cost-input' : '.session-drawer-cost-unit');
+  } else if (target.kind === 'addName' || target.kind === 'addQty') {
+    node = elements.sessionDrawerLoot.querySelector(`[data-session-loot-add] [name="${target.kind === 'addQty' ? 'quantity' : 'itemName'}"]`);
   } else if (target.kind === 'toggle') {
     // With no editable entry left the toggle is hidden, so focus goes to the drawer's close button.
     node = elements.sessionDrawerLootEdit?.classList.contains('hidden') ? elements.sessionDrawerClose : elements.sessionDrawerLootEdit;

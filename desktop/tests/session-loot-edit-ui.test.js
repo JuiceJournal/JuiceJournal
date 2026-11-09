@@ -40,6 +40,8 @@ function loadFunctions(functionNames, contextOverrides = {}) {
 
 const DRAWER_FUNCTIONS = [
   'renderSessionDrawer',
+  'sessionLootAddHTML',
+  'handleSessionLootAddSubmit',
   'sortSessionLoot',
   'clearSessionLootArm',
   'resetSessionLootEditing',
@@ -891,4 +893,54 @@ test('the cost boxes are wired once on the drawer summary, and use the app strin
   for (const key of ['sessions.costAria', 'sessions.costUnitAria', 'sessions.costChanged', 'sessions.costNotCounted', 'toast.costUpdateError']) {
     assert.equal(stringsSource.split(`'${key}'`).length - 1, 2, `${key} has an en and a tr string`);
   }
+});
+
+test('a run with unread loot says so, and edit mode adds a row for adding an item by hand', () => {
+  const unread = { ...sessionWith(LOOT), lootUnread: true };
+  const viewing = createDrawer({ session: unread });
+  viewing.context.renderSessionDrawer();
+  assert.match(viewing.elements.sessionDrawerLoot.innerHTML, /<p class="session-drawer-loot-note">sessions\.lootUnread<\/p>/);
+  assert.doesNotMatch(viewing.elements.sessionDrawerLoot.innerHTML, /data-session-loot-add/);
+
+  const editing = createDrawer({ session: unread, editing: true });
+  editing.state.sessionLootAddDraft = { name: 'Essence <of> Ruin', quantity: '2' };
+  editing.context.renderSessionDrawer();
+  const html = editing.elements.sessionDrawerLoot.innerHTML;
+  assert.match(html, /data-session-loot-add/);
+  assert.match(html, /name="itemName"[^>]*value="Essence &lt;of&gt; Ruin"/);
+  assert.match(html, /name="quantity"[^>]*value="2"/);
+
+  // A run without loot can still get some.
+  const empty = createDrawer({ session: { ...sessionWith([]), lootUnread: true }, editing: true });
+  empty.context.renderSessionDrawer();
+  assert.match(empty.elements.sessionDrawerLoot.innerHTML, /data-session-loot-add[\s\S]*sessions\.detailEmptyLoot/);
+});
+
+test('adding an item by hand sends it to main, clears the row and says it was added; a bad row says why', async () => {
+  const run = sessionWith(LOOT);
+  const drawer = createDrawer({ session: run, editing: true });
+  drawer.elements.sessionDrawerLoot.querySelector = () => null;
+  const form = (name, quantity) => ({ elements: { itemName: { value: name }, quantity: { value: quantity } } });
+  const submit = (target) => drawer.context.handleSessionLootAddSubmit({ target: { closest: () => target }, preventDefault() {} });
+  const added = [];
+  drawer.context.window.electronAPI.addSessionLoot = async (sessionId, item) => {
+    added.push([sessionId, item]);
+    return { ...run, lootEntries: [{ id: 'hand-1', itemName: item.itemName, quantity: item.quantity, chaosValue: 30 }, ...run.lootEntries] };
+  };
+
+  await submit(form('', '1'));
+  assert.equal(drawer.state.sessionLootAddError, 'sessions.lootAddInvalid');
+  assert.deepEqual(added, []);
+
+  await submit(form('Essence of Ruin', '2'));
+  assert.deepEqual(JSON.parse(JSON.stringify(added)), [['run-1', { itemName: 'Essence of Ruin', quantity: 2 }]]);
+  assert.equal(drawer.state.selectedSession.lootEntries[0].id, 'hand-1');
+  assert.deepEqual(JSON.parse(JSON.stringify(drawer.state.sessionLootAddDraft)), { name: '', quantity: '1' });
+  assert.equal(drawer.state.sessionLootAddError, null);
+  assert.ok(drawer.calls.some(([kind, text]) => kind === 'announce' && text === 'sessions.lootAdded|Essence of Ruin'));
+
+  drawer.context.window.electronAPI.addSessionLoot = async () => { throw new Error('nope'); };
+  await submit(form('Essence of Ruin', '1'));
+  assert.equal(drawer.state.sessionLootAddError, 'toast.lootAddError');
+  assert.equal(drawer.state.sessionLootAddBusy, false);
 });

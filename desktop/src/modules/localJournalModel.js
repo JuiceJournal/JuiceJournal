@@ -199,8 +199,9 @@
     return { journal: replaceSession(current, updated), session: updated, delta };
   }
 
-  // Each entry needs an itemName; adding loot recalculates the session totals like the server did.
-  function addLoot(journal, sessionId, entries = [], { createId, now }) {
+  // Each entry needs an itemName. Adding loot recalculates the session totals like the server did, unless they came
+  // from a stash diff (see retotalSession). `lootUnread` marks that the read that found this loot left new items unread.
+  function addLoot(journal, sessionId, entries = [], { createId, now, lootUnread = false }) {
     const current = normalizeJournal(journal);
     const session = requireSession(current, sessionId);
     const timestamp = now.toISOString();
@@ -228,16 +229,17 @@
     });
 
     const allLoot = [...lootEntries, ...(session.lootEntries || [])];
-    const totalLootChaos = sumLootChaos(allLoot);
-    const updated = {
-      ...session,
-      lootEntries: allLoot,
-      totalLootChaos,
-      profitChaos: totalLootChaos - toNumber(session.costChaos),
-      updatedAt: timestamp
-    };
+    const { session: retotaled, totalsFollowLoot } = retotalSession(session, allLoot, timestamp);
+    const updated = lootUnread ? { ...retotaled, lootUnread: true } : retotaled;
 
-    return { journal: replaceSession(current, updated), lootEntries, session: updated };
+    return { journal: replaceSession(current, updated), lootEntries, session: updated, totalsFollowLoot };
+  }
+
+  // The read after a finished map found only items it could not name, so the run says some loot was not read.
+  function markLootUnread(journal, sessionId, { now }) {
+    const current = normalizeJournal(journal);
+    const updated = { ...requireSession(current, sessionId), lootUnread: true, updatedAt: now.toISOString() };
+    return { journal: replaceSession(current, updated), session: updated };
   }
 
   // The totals follow the loot only while they were derived from it. A PoE 1 stash diff passes its own totals to
@@ -379,6 +381,7 @@
   return {
     MAX_COST_CHAOS,
     addLoot,
+    markLootUnread,
     deleteLoot,
     endSession,
     getActiveSession,
