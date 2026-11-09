@@ -1598,7 +1598,7 @@ test('main shutdown finalizer closes a session without loot at zero when stash p
   ]);
 });
 
-test('main shutdown finalizer stores calculated persisted profit before closing', async () => {
+test('main shutdown finalizer stores calculated persisted profit before closing, with the entry cost taken off', async () => {
   const calls = [];
   const backend = createJournalBackend();
   const context = loadFunctions([
@@ -1614,7 +1614,7 @@ test('main shutdown finalizer stores calculated persisted profit before closing'
     'endCurrentSession',
     'finalizeActiveSessionOnShutdown'
   ], {
-    currentSession: backend.start({ mapType: 'breach', startedAt: '2026-05-06T12:00:00.000Z' }, 'session-shutdown-2'),
+    currentSession: backend.start({ mapType: 'breach', startedAt: '2026-05-06T12:00:00.000Z', costChaos: 10 }, 'session-shutdown-2'),
     calculateSessionProfitFromPersistedSnapshots: async () => ({
       report: {
         summary: {
@@ -1656,15 +1656,16 @@ test('main shutdown finalizer stores calculated persisted profit before closing'
 
   const result = await context.finalizeActiveSessionOnShutdown();
 
+  // The stash lost 5 and gained 40; the map's entry cost of 10 left before the stash was read.
   assert.equal(result.status, 'completed');
-  assert.equal(result.profitChaos, 35);
+  assert.equal(result.profitChaos, 25);
   assert.equal(calls[0][1].profitUnavailable, false);
-  assert.equal(calls[0][1].inputValue, 5);
+  assert.equal(calls[0][1].inputValue, 15);
   assert.equal(calls[0][1].outputValue, 40);
-  assert.equal(calls[0][1].netProfit, 35);
+  assert.equal(calls[0][1].netProfit, 25);
   const stored = backend.journal.sessions[0];
-  assert.deepEqual([stored.id, stored.status, stored.endedAt, stored.durationSec, stored.totalLootChaos, stored.profitChaos], [
-    'session-shutdown-2', 'completed', '2026-05-06T12:04:00.000Z', 240, 40, 35
+  assert.deepEqual([stored.id, stored.status, stored.endedAt, stored.durationSec, stored.totalLootChaos, stored.profitChaos, stored.costChaos], [
+    'session-shutdown-2', 'completed', '2026-05-06T12:04:00.000Z', 240, 40, 25, 10
   ]);
 });
 

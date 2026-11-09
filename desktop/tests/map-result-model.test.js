@@ -748,6 +748,105 @@ test('renderer helper derives the current map result from snapshot-captured cont
   }]);
 });
 
+test('renderer adds the ended map\'s entry cost to its stash diff as an input, and to no other run\'s diff', () => {
+  const derived = { id: 'map-result-1', sessionId: 'session-1', inputValue: 5, outputValue: 40, netProfit: 35, profitState: 'positive' };
+  const resultFor = (currentSession, { sessionId = 'session-1', session } = {}) => {
+    const context = loadFunctions(['addStashEntryCost', 'deriveCurrentMapResult'], {
+      stashState: { mapResultContext: null },
+      state: { currentSession, farmType: {} },
+      getSelectedTrackerContext: () => ({ poeVersion: 'poe1' }),
+      getFarmTypeModel: () => ({ listFarmTypes: () => [] }),
+      getMapResultModel: () => ({ deriveMapResult: () => ({ ...derived, sessionId }) })
+    });
+    return session === undefined ? context.deriveCurrentMapResult() : context.deriveCurrentMapResult(null, session);
+  };
+
+  const costed = resultFor({ id: 'session-1', costChaos: 50 });
+  assert.equal(costed.inputValue, 55);
+  assert.equal(costed.outputValue, 40);
+  assert.equal(costed.netProfit, -15);
+  assert.equal(costed.profitState, 'negative');
+  assert.equal(costed.entryCostChaos, 50);
+
+  // A diff without a run id is the run being ended, as its completion is.
+  assert.equal(resultFor({ id: 'session-1', costChaos: 50 }, { sessionId: null }).netProfit, -15);
+  // The session the end flow captured wins over the one current when the stash answers.
+  assert.equal(resultFor(null, { session: { id: 'session-1', costChaos: 20 } }).netProfit, 15);
+
+  assert.deepEqual(resultFor({ id: 'other-session', costChaos: 50 }), derived);
+  assert.deepEqual(resultFor({ id: 'session-1', costChaos: 0 }), derived);
+  assert.deepEqual(resultFor(null), derived);
+});
+
+test('a cost settled when the map ended reaches the stash result already shown and saved, and the stash panel', async () => {
+  const shown = [];
+  const saved = [];
+  const panels = [];
+  const stashState = {
+    lastMapResult: { id: 'map-result-1', sessionId: 'session-1', inputValue: 50, outputValue: 900, netProfit: 850, profitState: 'positive' }
+  };
+  const context = loadFunctions(['addStashEntryCost', 'settleStashResultCost'], {
+    stashState,
+    window: { electronAPI: { showMapResultOverlay: async (result) => shown.push(result) } },
+    persistMapResultHistory: async (result) => saved.push(result),
+    renderProfitReport: (report, options) => panels.push([report, options]),
+    console: { warn() {} }
+  });
+
+  await context.settleStashResultCost({ id: 'session-1', costChaos: 500 }, { summary: {} });
+
+  assert.equal(stashState.lastMapResult.inputValue, 550);
+  assert.equal(stashState.lastMapResult.netProfit, 350);
+  assert.equal(stashState.lastMapResult.entryCostChaos, 500);
+  assert.deepEqual(shown, [stashState.lastMapResult]);
+  assert.deepEqual(saved, [stashState.lastMapResult]);
+  assert.deepEqual(JSON.parse(JSON.stringify(panels)), [[{ summary: {} }, { entryCostChaos: 500 }]]);
+
+  // A result that holds the run's cost already, or no ended run, leaves everything as it is.
+  await context.settleStashResultCost({ id: 'session-1', costChaos: 500 });
+  await context.settleStashResultCost(null);
+  assert.equal(shown.length, 1);
+  assert.equal(saved.length, 1);
+});
+
+test('the end payload says how much entry cost a stash result holds, and the stash panel counts it as a loss', () => {
+  const payloadContext = loadFunctions(['getSessionNumber', 'buildSessionCompletionPayloadFromMapResult'], {
+    state: { currentSession: { id: 'session-1' } }
+  });
+  const payload = payloadContext.buildSessionCompletionPayloadFromMapResult({ sessionId: 'session-1', outputValue: 900, netProfit: 840, durationSeconds: 60, entryCostChaos: 10 });
+  assert.equal(payload.profitChaos, 840);
+  assert.equal(payload.entryCostChaos, 10);
+  assert.equal('entryCostChaos' in payloadContext.buildSessionCompletionPayloadFromMapResult({ netProfit: 5, durationSeconds: 60 }), false);
+
+  const elements = {
+    stashProfitResult: { classList: { remove() {} } },
+    profitChaosValue: { textContent: '' },
+    profitDivineValue: { textContent: '' },
+    profitGainedValue: { textContent: '' },
+    profitLostValue: { textContent: '' },
+    stashTrackerStatus: { textContent: '', style: {} }
+  };
+  const panel = loadFunctions(['renderProfitReport'], {
+    elements,
+    stashState: { lastMapResult: { poeVersion: 'poe1', league: 'Mirage' } },
+    isStashTrackingUnavailable: () => false,
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe1', league: 'Mirage' }),
+    getProfitCurrencyRates: () => ({}),
+    formatAdaptiveProfitText: (value) => `${value}c`
+  });
+  panel.renderProfitReport({
+    summary: { netProfitChaos: 850, netProfitDivine: 4.25, divinePrice: 200, totalGainedChaos: 900, totalLostChaos: 50 },
+    gained: [],
+    lost: []
+  }, { entryCostChaos: 100 });
+
+  assert.equal(elements.profitChaosValue.textContent, '750c');
+  assert.equal(elements.profitDivineValue.textContent, '3.8 div');
+  assert.equal(elements.profitGainedValue.textContent, '+900c');
+  assert.equal(elements.profitLostValue.textContent, '-150c');
+  assert.equal(elements.stashTrackerStatus.textContent, '750c');
+});
+
 test('renderer helper does not leak live account state when snapshot context is only partially captured', () => {
   const calls = [];
   const stashState = {

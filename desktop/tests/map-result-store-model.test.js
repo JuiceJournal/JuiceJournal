@@ -660,6 +660,7 @@ test('poe1 stash profit calculation ends the active session after persisting the
     'getSessionNumber',
     'shouldEndSessionAfterStashProfit',
     'buildSessionCompletionPayloadFromMapResult',
+    'settleStashResultCost',
     'completeCurrentSessionAfterStashProfit',
     'handleCalculateProfit'
   ], {

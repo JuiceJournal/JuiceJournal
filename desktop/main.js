@@ -1428,7 +1428,9 @@ function updateSessionMapResultCost(session, costDelta) {
     ...stored,
     inputValue,
     netProfit,
-    profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral'
+    profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral',
+    // A stash diff's result says how much entry cost it holds.
+    ...(stored.entryCostChaos !== undefined ? { entryCostChaos: (Number(stored.entryCostChaos) || 0) + costDelta } : {})
   });
   store.set(storeKey, results.map((result, resultIndex) => (resultIndex === index ? nextResult : result)));
 }
@@ -1695,9 +1697,11 @@ function buildSessionShutdownMapResult(session = {}, options = {}) {
   const outputValue = Number.isFinite(Number(options.totalLootChaos))
     ? Number(options.totalLootChaos)
     : (Number.isFinite(Number(summary.totalGainedChaos)) ? Number(summary.totalGainedChaos) : Math.max(0, netProfit));
+  const costChaos = getSessionValueNumber(session, 'costChaos', 'cost_chaos');
+  // A stash diff's input is what left the stash plus the run's entry cost, which the diff does not see.
   const inputValue = Number.isFinite(Number(summary.totalLostChaos))
-    ? Number(summary.totalLostChaos)
-    : getSessionValueNumber(session, 'costChaos', 'cost_chaos');
+    ? Number(summary.totalLostChaos) + costChaos
+    : costChaos;
   const farmTypeId = session.farmTypeId || session.mapType || session.map_type || getActiveFarmTypeId();
 
   return {
@@ -4429,7 +4433,10 @@ async function endCurrentSession(options = {}) {
     const profitChaos = Number(options.profitChaos);
     if (Number.isFinite(totalLootChaos) && totalLootChaos >= 0 && Number.isFinite(profitChaos)) {
       completionPayload.totalLootChaos = totalLootChaos;
-      completionPayload.profitChaos = profitChaos;
+      // The stash is read once the map is open, after the map device took the map, so a stash diff does not see the
+      // entry cost. The caller says how much of it its profit holds already; the rest of the run's cost comes off here.
+      const includedCostChaos = Number(options.entryCostChaos) || 0;
+      completionPayload.profitChaos = profitChaos - ((Number(activeSession.costChaos) || 0) - includedCostChaos);
     }
 
     const ended = localJournal.endSession(journal, activeSession.id, completionPayload, { now: new Date() });
@@ -4440,7 +4447,7 @@ async function endCurrentSession(options = {}) {
     // The OS notice names the map; the in-app result and the overlay card carry the rest.
     const profit = Math.round(parseFloat(session.profitChaos) || 0);
     // The entry cost makes a map without loot a loss, so the loot decides whether there is a profit to report. A stash
-    // diff's totals are final and keep their own profit: the entry cost is not folded into them.
+    // diff's totals are final, with the entry cost already taken off.
     const hasLoot = completionPayload.profitChaos !== undefined || Number(session.totalLootChaos) > 0 || session.lootEntries?.length;
     let outcome;
     if (hasLoot && profit < 0) {
