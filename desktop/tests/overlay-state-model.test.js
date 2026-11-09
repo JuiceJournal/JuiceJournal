@@ -298,16 +298,26 @@ test('overlay state model skips the character prompt when there is no choice, th
   }).mode, 'start-map-prompt');
 });
 
-test('prompts that close on their own count down to it', () => {
+test('prompts that answer themselves count down to it, and the start prompt keeps each farm type\'s cost', () => {
   const deriveOverlayState = getOverlayStateModelExport('deriveOverlayState');
   const formatOverlayClock = getOverlayStateModelExport('formatOverlayClock');
   const now = Date.parse('2026-05-04T12:15:12.000Z');
 
   const start = deriveOverlayState({ enabled: true, now, startMapPrompt: { mapName: 'Channel', expiresAt: now + 7000 } });
-  assert.deepEqual(start.clock, { kind: 'countdown', expiresAt: now + 7000 });
-  assert.equal(start.metaLine, 'closes in 7s');
-  assert.equal(formatOverlayClock(start.clock, now + 1500), 'closes in 6s');
-  assert.equal(formatOverlayClock(start.clock, now + 9000), 'closes in 0s');
+  assert.deepEqual(start.clock, { kind: 'countdown', expiresAt: now + 7000, action: 'start' });
+  assert.equal(start.metaLine, 'starts in 7s');
+  assert.equal(formatOverlayClock(start.clock, now + 1500), 'starts in 6s');
+  assert.equal(formatOverlayClock(start.clock, now + 9000), 'starts in 0s');
+
+  const costed = deriveOverlayState({
+    enabled: true,
+    now,
+    startMapPrompt: { mapName: 'Channel', farmTypeOptions: [{ id: 'breach', label: 'Breach', cost: '1.2 div' }, { id: 'ritual', label: 'Ritual', cost: ' ' }] }
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(costed.startMapPrompt.farmTypeOptions)), [
+    { id: 'breach', label: 'Breach', cost: '1.2 div' },
+    { id: 'ritual', label: 'Ritual' }
+  ]);
 
   const character = deriveOverlayState({
     enabled: true,
@@ -321,6 +331,8 @@ test('prompts that close on their own count down to it', () => {
   });
   assert.equal(character.metaLine, 'PoE 2 · 8s');
   assert.equal(formatOverlayClock(character.clock, now + 3000), 'PoE 2 · 5s');
+  // A character prompt without a game closes; only the start prompt starts something.
+  assert.equal(formatOverlayClock({ kind: 'countdown', expiresAt: now + 4000 }, now), 'closes in 4s');
 });
 
 test('overlay lines and clocks follow the language, and an untranslated language reads English', () => {
@@ -341,7 +353,7 @@ test('overlay lines and clocks follow the language, and an untranslated language
   assert.equal(prompt.metaLine, 'map baslangicini onayla');
 
   const timedPrompt = deriveOverlayState({ enabled: true, now, language, startMapPrompt: { expiresAt: now + 7000 } });
-  assert.equal(timedPrompt.metaLine, '7 sn icinde kapanir');
+  assert.equal(timedPrompt.metaLine, '7 sn icinde baslar');
 
   const characterPrompt = (characters) => deriveOverlayState({
     enabled: true,

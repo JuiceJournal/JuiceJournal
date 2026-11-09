@@ -378,6 +378,22 @@
       text-transform: none;
     }
 
+    /* The entry cost the farm type applies, quieter than its name. */
+    .jj-chip-cost {
+      margin-left: 6px;
+      color: var(--text-muted);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .jj-start-note {
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: normal;
+      text-transform: none;
+    }
+
     .jj-chip[aria-pressed="true"] {
       color: var(--text-bright);
       background: rgb(var(--ember-rgb) / 0.2);
@@ -490,6 +506,7 @@
         <div class="jj-field">
           <span data-i18n="dashboard.farmType">Farm Type</span>
           <div class="jj-chips" role="group" aria-label="Farm type" data-i18n-aria="dashboard.farmType" data-overlay-start-farm-types></div>
+          <span class="jj-start-note" data-overlay-start-cost-note hidden></span>
         </div>
         <div class="jj-form-actions">
           <button class="jj-form-btn" type="button" data-overlay-start-cancel data-i18n="mapSession.cancel">Cancel</button>

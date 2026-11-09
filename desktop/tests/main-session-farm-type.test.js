@@ -252,6 +252,8 @@ test('main start-map overlay prompt state can be shown and cleared independently
   ], {
     overlayStartMapPromptState: null,
     START_MAP_PROMPT_OVERLAY_GRACE_MS: 3000,
+    // The chips show each farm type's entry cost as typed.
+    getStoredFarmTypeCosts: () => ({ breach: { amount: 1.2, unit: 'divine' }, ritual: { amount: 35, unit: 'chaos' } }),
     setTimeout: (callback, delay) => timers.push({ callback, delay }),
     updateOverlayWindow() {
       overlayUpdates.push(JSON.parse(JSON.stringify(context.overlayStartMapPromptState)));
@@ -281,7 +283,7 @@ test('main start-map overlay prompt state can be shown and cleared independently
     poeVersion: 'poe2',
     league: 'Fate of the Vaal',
     farmTypeOptions: [
-      { id: 'breach', label: 'Breach' },
+      { id: 'breach', label: 'Breach', cost: '1.2 div' },
       { id: 'expedition', label: 'Expedition' }
     ],
     source: 'map-detected',
@@ -300,7 +302,7 @@ test('main start-map overlay prompt state can be shown and cleared independently
       poeVersion: 'poe2',
       league: 'Fate of the Vaal',
       farmTypeOptions: [
-        { id: 'breach', label: 'Breach' },
+        { id: 'breach', label: 'Breach', cost: '1.2 div' },
         { id: 'expedition', label: 'Expedition' }
       ],
       source: 'map-detected',

@@ -165,11 +165,11 @@ test('overlay renderer labels each prompt and ticks its clock in the app languag
   assert.equal(overlay.kicker.textContent, 'Yeni Map');
   assert.equal(overlay.primary.children[0].textContent, 'Channel');
   assert.equal(overlay.secondary.textContent, 'Farm tipi sec');
-  assert.equal(overlay.meta.textContent, '7 sn icinde kapanir');
+  assert.equal(overlay.meta.textContent, '7 sn icinde baslar');
 
   overlay.clock.now = now + 2000;
   overlay.tick();
-  assert.equal(overlay.meta.textContent, '5 sn icinde kapanir');
+  assert.equal(overlay.meta.textContent, '5 sn icinde baslar');
 
   overlay.renderState({
     ...overlayStateModel.deriveOverlayState({
@@ -480,7 +480,7 @@ test('the overlay takes its language from the state main pushes', () => {
   assert.deepEqual(applied, ['tr', 'en']);
 });
 
-test('a prompt counts down to closing on its own', () => {
+test('the start prompt counts down to starting the map on its own', () => {
   const overlay = loadOverlay();
   const now = Date.parse('2026-05-04T12:15:12.000Z');
   overlay.clock.now = now;
@@ -490,12 +490,43 @@ test('a prompt counts down to closing on its own', () => {
     now,
     startMapPrompt: { mapName: 'Channel', expiresAt: now + 7000 }
   }));
-  assert.equal(overlay.meta.textContent, 'closes in 7s');
+  assert.equal(overlay.meta.textContent, 'starts in 7s');
   assert.equal(overlay.intervals.size, 1);
 
   overlay.clock.now = now + 2000;
   overlay.tick();
-  assert.equal(overlay.meta.textContent, 'closes in 5s');
+  assert.equal(overlay.meta.textContent, 'starts in 5s');
+});
+
+test('at 0 the start prompt takes no more clicks, and the next prompt takes them again', () => {
+  const overlay = loadOverlay({
+    extraSelectors: ['[data-overlay-start-form]', '[data-overlay-start-farm-types]', '[data-overlay-start-submit]', '[data-overlay-start-cancel]']
+  });
+  const submit = overlay.elements['[data-overlay-start-submit]'];
+  const cancel = overlay.elements['[data-overlay-start-cancel]'];
+  const now = Date.parse('2026-05-04T12:15:12.000Z');
+  overlay.clock.now = now;
+  const show = (at) => overlay.renderState(overlayStateModel.deriveOverlayState({
+    enabled: true,
+    now: at,
+    startMapPrompt: { mapName: 'Channel', expiresAt: at + 7000 }
+  }));
+
+  show(now);
+  overlay.clock.now = now + 6000;
+  overlay.tick();
+  assert.equal(submit.disabled, false);
+
+  overlay.clock.now = now + 7000;
+  overlay.tick();
+  assert.equal(overlay.meta.textContent, 'starts in 0s');
+  assert.equal(submit.disabled, true);
+  assert.equal(cancel.disabled, true);
+
+  // The same map entered again is a new prompt.
+  show(now + 60000);
+  assert.equal(submit.disabled, false);
+  assert.equal(cancel.disabled, false);
 });
 
 const CUSTOM_FARM_ID = 'custom-3f2b8f6e-0000-4000-8000-000000000001';
@@ -562,6 +593,36 @@ test('the overlay start prompt offers a custom farm type as a coloured chip with
   assert.match(chips, new RegExp(`data-farm-type-id="${CUSTOM_FARM_ID}" data-farm-type="${CUSTOM_FARM_ID}" data-farm-color="amber" aria-pressed="true">`));
   assert.match(chips, /assets\/icons\.svg#farm-tablet"\/><\/svg>Boss &lt;Tablets&gt;<\/button>/);
   assert.match(chips, /data-farm-type-id="ritual" data-farm-type="ritual" aria-pressed="false">Ritual<\/button>/);
+});
+
+test('the start prompt chips show each farm type\'s entry cost, and a farm type without one says where to set it', () => {
+  const overlay = loadOverlay({
+    extraSelectors: ['[data-overlay-start-form]', '[data-overlay-start-farm-types]', '[data-overlay-start-cost-note]']
+  });
+  const prompt = (farmTypeId) => overlay.renderState({
+    visibility: 'visible',
+    mode: 'start-map-prompt',
+    startMapPrompt: {
+      mapName: 'Burial Chambers',
+      farmTypeId,
+      farmTypeOptions: [{ id: 'breach', label: 'Breach', cost: '1.2 div' }, { id: 'ritual', label: 'Ritual' }]
+    }
+  });
+  const note = overlay.elements['[data-overlay-start-cost-note]'];
+
+  prompt('breach');
+  const chips = overlay.elements['[data-overlay-start-farm-types]'].innerHTML;
+  assert.match(chips, /Breach<span class="jj-chip-cost">1\.2 div<\/span><\/button>/);
+  assert.match(chips, /aria-pressed="false">Ritual<\/button>/);
+  assert.equal(note.hidden, true);
+
+  prompt('ritual');
+  assert.equal(note.hidden, false);
+  assert.equal(note.textContent, 'No entry cost yet: set it on the Dashboard.');
+
+  // No farm type has no cost to set.
+  prompt(null);
+  assert.equal(note.hidden, true);
 });
 
 test('a map with no loot and no baseline says it was not counted, in the warning tone, and asks for the inventory before the next map', () => {

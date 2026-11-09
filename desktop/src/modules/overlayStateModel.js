@@ -22,6 +22,7 @@
       waitingForArea: 'Waiting for area data',
       level: 'Level',
       closesIn: (seconds) => `closes in ${seconds}s`,
+      startsIn: (seconds) => `starts in ${seconds}s`,
       elapsed: (time) => `elapsed ${time}`,
       map: 'Map',
       total: 'Total',
@@ -40,6 +41,7 @@
       waitingForArea: 'Bolge bilgisi bekleniyor',
       level: 'Seviye',
       closesIn: (seconds) => `${seconds} sn icinde kapanir`,
+      startsIn: (seconds) => `${seconds} sn icinde baslar`,
       elapsed: (time) => `gecen sure ${time}`,
       map: 'Map',
       total: 'Toplam',
@@ -70,7 +72,8 @@
 
         const id = normalizeString(entry.id);
         const label = normalizeString(entry.label, id);
-        return id ? { id, label } : null;
+        const cost = normalizeString(entry.cost);
+        return id ? { id, label, ...(cost ? { cost } : {}) } : null;
       })
       .filter(Boolean);
   }
@@ -115,10 +118,13 @@
     }
 
     const text = getOverlayText(language);
-    // A prompt counts down to the moment it closes on its own.
+    // A prompt counts down to the moment it answers itself: the start prompt starts the map then, others close.
     if (clock.kind === 'countdown') {
       const secondsLeft = Math.max(0, Math.ceil((clock.expiresAt - now) / 1000));
-      return clock.label ? `${clock.label}${SEPARATOR}${secondsLeft}${text.seconds}` : text.closesIn(secondsLeft);
+      if (clock.label) {
+        return `${clock.label}${SEPARATOR}${secondsLeft}${text.seconds}`;
+      }
+      return clock.action === 'start' ? text.startsIn(secondsLeft) : text.closesIn(secondsLeft);
     }
 
     const passedSeconds = Math.max(0, Math.floor((now - clock.at) / 1000));
@@ -342,7 +348,7 @@
         startMapPrompt: startMapPromptSummary
       };
       if (startMapPromptSummary.expiresAt) {
-        promptState.clock = { kind: 'countdown', expiresAt: startMapPromptSummary.expiresAt };
+        promptState.clock = { kind: 'countdown', expiresAt: startMapPromptSummary.expiresAt, action: 'start' };
         promptState.metaLine = formatOverlayClock(promptState.clock, now, language);
       }
       return promptState;

@@ -10,6 +10,7 @@
     meta: document.querySelector('[data-overlay-meta]'),
     startForm: document.querySelector('[data-overlay-start-form]'),
     startFarmTypes: document.querySelector('[data-overlay-start-farm-types]'),
+    startCostNote: document.querySelector('[data-overlay-start-cost-note]'),
     startSubmit: document.querySelector('[data-overlay-start-submit]'),
     startCancel: document.querySelector('[data-overlay-start-cancel]'),
     characterForm: document.querySelector('[data-overlay-character-form]'),
@@ -23,6 +24,7 @@
   var startPromptKey = null;
   var renderedChipsKey = null;
   var selectedFarmTypeId = '';
+  var startFarmTypeOptions = [];
   var renderedCharactersKey = null;
   var promptedCharacterId = '';
   // Main pushes state only on events, so a running map or session counts up here: one 1 Hz timer that only
@@ -248,7 +250,8 @@
     return value.map(function (entry) {
       if (!entry || typeof entry !== 'object') return null;
       var id = String(entry.id || '').trim();
-      return id ? { id: id, label: String(entry.label || id).trim() } : null;
+      var cost = String(entry.cost || '').trim();
+      return id ? { id: id, label: String(entry.label || id).trim(), cost: cost } : null;
     }).filter(Boolean);
   }
 
@@ -341,7 +344,7 @@
     setText(el.kickerLabel, root.t('overlay.newMap'));
     setPrimary(prompt.mapName || state.primaryLine || root.t('misc.unknownMap'));
     setSecondary(state.secondaryLine || '');
-    // "closes in 6s" while the prompt counts down to closing on its own.
+    // "starts in 6s" while the prompt counts down to starting the map on its own.
     setText(el.meta, state.metaLine || '');
   }
 
@@ -352,10 +355,12 @@
     if (!showForm) return;
     var prompt = (state.startMapPrompt && typeof state.startMapPrompt === 'object') ? state.startMapPrompt : {};
     var opts = normalizeFarmTypeOptions(prompt.farmTypeOptions);
-    // A new prompt (entering the prompt mode, or a different map) resets the selection to its default.
-    var promptKey = String(prompt.mapName || '') + '|' + String(prompt.farmTypeId || '');
+    // A new prompt (entering the prompt mode, or another map entry) resets the selection to its default and takes
+    // clicks again.
+    var promptKey = String(prompt.mapName || '') + '|' + String(prompt.farmTypeId || '') + '|' + String(prompt.expiresAt || '');
     if (lastRenderedMode !== 'start-map-prompt' || promptKey !== startPromptKey) {
       startPromptKey = promptKey;
+      setStartMapPromptBusy(false);
       renderedChipsKey = null;
       selectedFarmTypeId = opts.some(function (e) { return e.id === prompt.farmTypeId; }) ? prompt.farmTypeId : '';
     }
@@ -371,9 +376,21 @@
           (farmTypeId ? ' data-farm-type="' + farmTypeId + '"' : '') +
           (farmColor ? ' data-farm-color="' + farmColor + '"' : '') + ' aria-pressed="' +
           (e.id === selectedFarmTypeId ? 'true' : 'false') + '">' +
-          (farmTypeId ? getFarmTypeIconHTML(farmTypeId) : '') + escapeHTML(e.label) + '</button>';
+          (farmTypeId ? getFarmTypeIconHTML(farmTypeId) : '') + escapeHTML(e.label) +
+          (e.cost ? '<span class="jj-chip-cost">' + escapeHTML(e.cost) + '</span>' : '') + '</button>';
       }).join('');
     }
+    startFarmTypeOptions = opts;
+    renderStartCostNote();
+  }
+
+  // A farm type without an entry cost says where one is set; the overlay takes no typing.
+  function renderStartCostNote() {
+    if (!el.startCostNote) return;
+    var selected = startFarmTypeOptions.filter(function (e) { return e.id === selectedFarmTypeId; })[0];
+    var missing = Boolean(selected) && !selected.cost;
+    el.startCostNote.hidden = !missing;
+    el.startCostNote.textContent = missing ? root.t('overlay.noEntryCost') : '';
   }
 
   function selectFarmType(farmTypeId) {
@@ -382,6 +399,7 @@
     Array.prototype.forEach.call(el.startFarmTypes.querySelectorAll('[data-farm-type-id]'), function (button) {
       button.setAttribute('aria-pressed', button.getAttribute('data-farm-type-id') === farmTypeId ? 'true' : 'false');
     });
+    renderStartCostNote();
   }
 
   /* ── Mode: Character Prompt ── */
@@ -421,6 +439,10 @@
     var model = root.overlayStateModel;
     if (clockState && model && typeof model.formatOverlayClock === 'function') {
       setText(el.meta, model.formatOverlayClock(clockState, Date.now(), appliedLanguage));
+    }
+    // At 0 the app starts the map itself, so a click then would be lost: the card stops taking them.
+    if (clockState && clockState.action === 'start' && clockState.expiresAt <= Date.now()) {
+      setStartMapPromptBusy(true);
     }
   }
 

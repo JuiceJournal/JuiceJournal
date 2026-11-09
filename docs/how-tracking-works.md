@@ -16,7 +16,7 @@ From the log it reads:
 
 Chat lines are skipped. Party members also appear in the name lines, so a name only counts when it matches one of your own characters.
 
-When a map starts and there is no active session, the app asks whether to start one (Settings → Path of Exile → **Open start modal on new map entry**, on by default). The prompt appears in the in-game overlay if the overlay is on; if you do not answer there within 7 seconds, or the overlay is off, it opens in the main window.
+When you enter a map and no map is running, the app starts one (Settings → Path of Exile → **Start maps on entry**, on by default). If the overlay is on, it first shows a card for 7 seconds. There you can pick another farm type, each with its entry cost, or press Cancel to skip the map. If you do nothing, the map starts with the farm type selected on the Dashboard. If you leave the map before then, nothing starts. The main window never opens over the game for this.
 
 ## Your characters: Path of Exile API
 
