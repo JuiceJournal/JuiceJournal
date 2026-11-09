@@ -5,6 +5,7 @@ const {
   createInventoryLootState,
   getCharacterKey,
   diffInventory,
+  hasNewUnreadItem,
   noteMapEntered,
   markSessionEnded,
   applyInventoryRead
@@ -91,7 +92,7 @@ test('the first read after a map gives its gain against the last read before it'
 
   const { state: next, outcome } = applyInventoryRead(state, { characterKey: KEY, read: read({ 'Exalted Orb': 2 }) });
 
-  assert.deepEqual(outcome, { type: 'gain', sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }], mapCount: 1 });
+  assert.deepEqual(outcome, { type: 'gain', sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }], mapCount: 1, unread: false });
   assert.equal(next.pending, null);
   assert.equal(next.mapsSinceRead[KEY], 0);
 });
@@ -110,7 +111,7 @@ test('a map with an empty start still has a baseline', () => {
 
   const { outcome } = applyInventoryRead(state, { characterKey: KEY, read: read({ 'Regal Orb': 1 }) });
 
-  assert.deepEqual(outcome, { type: 'gain', sessionId: 's1', items: [{ name: 'Regal Orb', quantity: 1 }], mapCount: 1 });
+  assert.deepEqual(outcome, { type: 'gain', sessionId: 's1', items: [{ name: 'Regal Orb', quantity: 1 }], mapCount: 1, unread: false });
 });
 
 test('a map with no earlier read reports that instead of counting the whole inventory', () => {
@@ -149,7 +150,7 @@ test('a read after several maps goes to the newest one and says how many it cove
 
   const { outcome } = applyInventoryRead(state, { characterKey: KEY, read: read({ 'Exalted Orb': 4 }) });
 
-  assert.deepEqual(outcome, { type: 'gain', sessionId: 's2', items: [{ name: 'Exalted Orb', quantity: 3 }], mapCount: 2 });
+  assert.deepEqual(outcome, { type: 'gain', sessionId: 's2', items: [{ name: 'Exalted Orb', quantity: 3 }], mapCount: 2, unread: false });
 });
 
 test('a map played without a session counts towards the covered maps', () => {
@@ -177,4 +178,23 @@ test('getCharacterKey separates games and characters, and has no key for an unkn
   assert.equal(getCharacterKey('poe2', { name: 'Ann' }), 'poe2:Ann');
   assert.equal(getCharacterKey('poe1', null), null);
   assert.equal(getCharacterKey('poe2', { league: 'Standard' }), null);
+});
+
+test('a new item left unread is reported with the map, but not a covered cell or one that held something before', () => {
+  const key = 'poe2:c1';
+  const before = {
+    items: { 'Exalted Orb': 1 },
+    cells: { '0,0': { name: 'Exalted Orb', quantity: 1, digits: true }, '0,1': { unknown: true } }
+  };
+  const essence = { ...before, cells: { ...before.cells, '3,0': { unknown: true } } };
+  const tooltip = { ...before, cells: { ...before.cells, '3,0': { unknown: true, covered: true } } };
+
+  assert.equal(hasNewUnreadItem(before, essence), true);
+  assert.equal(hasNewUnreadItem(before, tooltip), false, 'nothing was seen under the tooltip');
+  assert.equal(hasNewUnreadItem(before, before), false, 'the unread cell was there before the map');
+
+  let state = applyInventoryRead(createInventoryLootState(), { characterKey: key, read: before }).state;
+  state = markSessionEnded(state, { sessionId: 's1', characterKey: key });
+  const { outcome } = applyInventoryRead(state, { characterKey: key, read: essence });
+  assert.deepEqual(outcome, { type: 'gain', sessionId: 's1', items: [], mapCount: 1, unread: true });
 });

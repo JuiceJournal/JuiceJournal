@@ -354,8 +354,32 @@ test('a small dark patch over empty cells marks them unread instead of empty', (
   const result = vision.readInventory(image, GRID, []);
 
   assert.equal(result.covered, undefined);
-  assert.deepEqual(result.cells['0,3'], { unknown: true });
+  // Covered, not an item left unread: nothing was seen there.
+  assert.deepEqual(result.cells['0,3'], { unknown: true, covered: true });
   assert.equal(result.cells['1,3'], undefined);
+});
+
+test('an item the reader cannot name is unread, but one under hidden side borders is covered', () => {
+  const image = blankGrid();
+  paintCell(image, 5, 2, 7);
+  paintCell(image, 3, 0, 8);
+  drawGridLines(image);
+  // A dark tooltip over the edges of cell (0,3): both side borders and their dark flanks, with its picture between.
+  for (let y = 0; y < Math.round(GRID.pitchY); y += 1) {
+    for (const border of [3, 4]) {
+      for (let x = Math.round(GRID.pitchX * border) - 9; x <= Math.round(GRID.pitchX * border) + 9; x += 1) {
+        const i = (y * image.width + x) * 4;
+        image.data[i] = 6;
+        image.data[i + 1] = 6;
+        image.data[i + 2] = 6;
+      }
+    }
+  }
+
+  const { cells } = vision.readInventory(image, GRID, []);
+
+  assert.deepEqual(cells['2,5'], { unknown: true });
+  assert.deepEqual(cells['0,3'], { unknown: true, covered: true });
 });
 
 test('tier bars that name nobody in the group leave the cell out rather than guess', () => {

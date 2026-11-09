@@ -170,7 +170,7 @@ test('sessions loot edit smoke: quantity and remove reach the journal and the sa
     const profileId = JSON.parse(fs.readFileSync(profile.configPath, 'utf8')).activeProfileId;
     const journalDir = path.join(profile.userDataDir, 'profiles', profileId);
     fs.mkdirSync(journalDir, { recursive: true });
-    fs.writeFileSync(path.join(journalDir, 'journal.json'), JSON.stringify({ sessions: [createSession()] }));
+    fs.writeFileSync(path.join(journalDir, 'journal.json'), JSON.stringify({ sessions: [{ ...createSession(), lootUnread: true }] }));
 
     // The edited run's result goes in first, a newer unrelated one second, so the edited one is not first in the list.
     await page.evaluate((result) => window.electronAPI.saveMapResult(result), createMapResult({
@@ -190,6 +190,9 @@ test('sessions loot edit smoke: quantity and remove reach the journal and the sa
     await expect(page.locator('#session-detail-drawer')).not.toHaveClass(/hidden/);
     await expect(page.locator('#session-drawer-title')).toHaveText('Cemetery Map');
     await expect(page.locator('#session-drawer-loot-count')).toHaveText('7');
+
+    // The read that settled this map left new items unread, so the run says so.
+    await expect(page.locator('.session-drawer-loot-note')).toContainText('could not be read');
 
     // The old entry never gets controls; the others do once editing is on.
     const toggle = page.locator('#session-drawer-loot-edit');
@@ -265,6 +268,18 @@ test('sessions loot edit smoke: quantity and remove reach the journal and the sa
     expect(after.map((result) => result.id)).toEqual(['map-result-other-run', RESULT_ID]);
     expect(after[1]).toMatchObject({ publishState: 'published', publishedRunId: 'run-1', outputValue: 515, netProfit: 495, lootItemCount: 7 });
     expect(after[0]).toMatchObject({ outputValue: 50, netProfit: 30 });
+
+    // An item the read left unread is added by hand. No prices are loaded for this run's league, so it counts as 0.
+    const addRow = page.locator('[data-session-loot-add]');
+    await expect(addRow).toBeVisible();
+    await addRow.locator('[name="itemName"]').fill('Essence of Ruin');
+    await addRow.locator('[name="quantity"]').fill('2');
+    await addRow.locator('[name="quantity"]').press('Enter');
+    await expect(page.locator('#session-drawer-loot .session-drawer-loot-item', { hasText: 'Essence of Ruin' })).toHaveCount(1);
+    await expect(addRow.locator('[name="itemName"]')).toHaveValue('');
+    session = await getJournalSession(page);
+    expect(session.lootEntries[0]).toMatchObject({ itemName: 'Essence of Ruin', quantity: 2, source: 'manual', chaosValue: 0 });
+    expect(session.totalLootChaos).toBe(515);
   } finally {
     if (electronApp) {
       await shutdownElectronApp(electronApp);

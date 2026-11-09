@@ -311,13 +311,15 @@
     setDrops(drops, rates, poeVersion);
     var lootMapCount = parseInt(result.lootMapCount, 10) || 0;
     var mapsNote = lootMapCount > 1 ? root.t('overlay.lootFromMaps', { count: lootMapCount }) : '';
+    // New items the read could not name are not in the total, so the card says so.
+    var unreadNote = result.lootUnread ? root.t('overlay.lootUnread') : '';
     if (drops.length) {
       // The rows carry the loot, so the left of the secondary row only says how many maps it covers.
-      setSecondary(mapsNote);
+      setSecondary([mapsNote, unreadNote].filter(Boolean).join(' · '));
     } else {
       var emptyLine = result.lootUncounted ? 'overlay.openInventoryBeforeNextMap' : (result.lootPending ? 'overlay.openInventoryForLoot' : 'overlay.noLootScanned');
       var lootLine = itemCount ? root.t(itemCount === 1 ? 'overlay.itemScanned' : 'overlay.itemsScanned', { count: itemCount }) : root.t(emptyLine);
-      setSecondary(mapsNote ? lootLine + ' · ' + mapsNote : lootLine);
+      setSecondary([lootLine, unreadNote, mapsNote].filter(Boolean).join(' · '));
     }
     setResultMeta(getMapResultTier(state), formatDuration(result.durationSeconds));
   }

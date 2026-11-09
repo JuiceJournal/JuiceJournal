@@ -21,7 +21,8 @@ function loadWatcher(script) {
           for (const [name, quantity] of Object.entries(read.items)) {
             cells[name] = { name, quantity, digits: true };
           }
-          return { ...read, cells };
+          // A script can add cells of its own, such as an item left unread.
+          return { ...read, cells: { ...cells, ...(read.extraCells || {}) } };
         }
       };
     }
@@ -35,7 +36,7 @@ function loadWatcher(script) {
 }
 
 function setup(overrides = {}) {
-  const log = { statuses: [], reads: [], gains: [], artLoads: 0, screenReads: 0 };
+  const log = { statuses: [], reads: [], gains: [], unread: [], artLoads: 0, screenReads: 0 };
   let read = { open: true, items: {} };
   const Watcher = loadWatcher(() => read);
   const env = {
@@ -74,7 +75,8 @@ function setup(overrides = {}) {
       log.artLoads += 1;
       return { coarse: new Uint8Array(0), fine: new Uint8Array(0) };
     },
-    onGain: (sessionId, items, mapCount) => log.gains.push({ sessionId, items, mapCount }),
+    onGain: (sessionId, items, mapCount, unread) => log.gains.push({ sessionId, items, mapCount, ...(unread ? { unread } : {}) }),
+    onUnreadLoot: (sessionId) => log.unread.push(sessionId),
     onStatus: (kind) => log.statuses.push(kind),
     onRead: (kind) => log.reads.push(kind),
     now: () => env.now
@@ -567,4 +569,25 @@ test('needsBaseline is not reported with the inventory covered, in a map, with t
     context.watcher.tick();
     assert.ok(!context.log.reads.includes('needsBaseline'), JSON.stringify(overrides));
   }
+});
+
+test('a map whose only new items were left unread is marked so, and a gain says when some were', () => {
+  const context = setup();
+  const { watcher, log, setRead } = context;
+
+  readBaseline(context, { 'Exalted Orb': 1 });
+  watcher.mapEntered();
+  watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' });
+  setRead({ open: true, items: { 'Exalted Orb': 1 }, extraCells: { '3,0': { unknown: true } } });
+  watcher.tick();
+  assert.deepEqual(log.unread, ['s1']);
+  assert.deepEqual(log.gains, []);
+
+  // The unread cell from the last map is not new any more; another one is.
+  watcher.mapEntered();
+  watcher.sessionEnded({ id: 's2', poeVersion: 'poe2' });
+  setRead({ open: true, items: { 'Exalted Orb': 3 }, extraCells: { '3,0': { unknown: true }, '4,0': { unknown: true } } });
+  watcher.tick();
+  assert.deepEqual(log.gains, [{ sessionId: 's2', items: [{ name: 'Exalted Orb', quantity: 2 }], mapCount: 1, unread: true }]);
+  assert.deepEqual(log.unread, ['s1']);
 });

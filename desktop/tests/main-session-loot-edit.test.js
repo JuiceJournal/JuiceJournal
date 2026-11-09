@@ -188,3 +188,78 @@ test('the loot edit channels are main-window only and wired through preload', ()
   assert.ok(preloadJs.includes("  updateLoot: (sessionId, lootId, changes) => ipcRenderer.invoke('update-loot', sessionId, lootId, changes),"));
   assert.ok(preloadJs.includes("  deleteLoot: (sessionId, lootId) => ipcRenderer.invoke('delete-loot', sessionId, lootId),"));
 });
+
+function loadAddByHand(backend, { league = 'Mirage', currentSession = null, overlayEnabled = true } = {}) {
+  const calls = [];
+  const context = loadFunctions(['addSessionLootByHand', 'markSessionLootUnread', 'updateSessionMapResult'], {
+    ...backend.context,
+    currentSession,
+    crypto: { randomUUID: () => 'hand-1' },
+    priceService: {
+      poeVersion: 'poe1',
+      league,
+      getPriceInfo: (name) => (name === 'Essence of Ruin' ? { divineValue: 0.2, icon: 'ruin.png' } : null),
+      getItemType: () => 'essence'
+    },
+    readLocalChaosPrice: (name) => (name === 'Essence of Ruin' ? 30 : null),
+    updateOverlayWindow: () => calls.push(['overlay']),
+    isOverlayEnabled: () => overlayEnabled,
+    showNotification: (title, body) => calls.push(['notify', title, body]),
+    t: (key) => key,
+    mainWindow: { webContents: { send: (channel, payload) => calls.push([channel, JSON.parse(JSON.stringify(payload))]) } }
+  });
+  return { context, calls };
+}
+
+test('an item added by hand takes the run league\'s price, moves a finished run\'s saved result, and is checked', () => {
+  const backend = createBackend({ results: [storedResult({ noLoot: true })] });
+  const { context } = loadAddByHand(backend);
+
+  const updated = context.addSessionLootByHand('session-1', { itemName: ' Essence of Ruin ', quantity: 2 });
+
+  assert.equal(updated.lootEntries[0].itemName, 'Essence of Ruin');
+  assert.equal(updated.lootEntries[0].source, 'manual');
+  assert.equal(updated.lootEntries[0].chaosValue, 30);
+  assert.equal(updated.lootEntries[0].icon, 'ruin.png');
+  assert.equal(updated.totalLootChaos, 265);
+  assert.equal(updated.profitChaos, 255);
+  assert.equal(backend.stored.key[0].outputValue, 265);
+  assert.equal(backend.stored.key[0].noLoot, false, 'a run with loot now is no longer a no-loot result');
+
+  for (const bad of [{ itemName: '', quantity: 1 }, { itemName: 'Essence of Ruin', quantity: 0 }, { itemName: 'Essence of Ruin', quantity: 1.5 }, { itemName: 'Essence of Ruin', quantity: '0x10' }]) {
+    assert.throws(() => context.addSessionLootByHand('session-1', bad), { code: 'LOOT_INVALID' });
+  }
+  assert.throws(() => context.addSessionLootByHand('nope', { itemName: 'Essence of Ruin', quantity: 1 }), { code: 'SESSION_NOT_FOUND' });
+});
+
+test('an item added by hand to a run of another league than the loaded prices counts as 0', () => {
+  const backend = createBackend({ status: 'active' });
+  const running = backend.journal.sessions[0];
+  const { context, calls } = loadAddByHand(backend, { league: 'Standard', currentSession: running });
+
+  const updated = context.addSessionLootByHand('session-1', { itemName: 'Essence of Ruin', quantity: 1 });
+
+  assert.equal(updated.lootEntries[0].chaosValue, 0);
+  assert.equal(context.currentSession, updated, 'the running map follows');
+  assert.deepEqual(calls, [['overlay']]);
+});
+
+test('a map whose only new items were unread is marked so, and the window keeps it a no-loot map', () => {
+  const backend = createBackend();
+  // A map that ended with nothing counted.
+  backend.journal = { sessions: [{ ...backend.journal.sessions[0], lootEntries: [] }] };
+  const { context, calls } = loadAddByHand(backend);
+
+  context.markSessionLootUnread('session-1');
+
+  assert.equal(backend.journal.sessions[0].lootUnread, true);
+  assert.equal(calls[0][0], 'session-loot-updated');
+  assert.equal(calls[0][1].lootUnread, true);
+  assert.equal(calls[0][1].noLoot, true, 'its saved result stays not calculated, not a loss of its cost');
+  assert.equal(calls.length, 1, 'the overlay shows it');
+
+  // With the overlay off, the OS notice says so, as it does for a counted gain.
+  const quiet = loadAddByHand(backend, { overlayEnabled: false });
+  quiet.context.markSessionLootUnread('session-1');
+  assert.deepEqual(quiet.calls[1], ['notify', 'Dunes Map', 'mapLootUnreadBody']);
+});

@@ -57,7 +57,9 @@ class InventoryWatcher {
    * @param {function(string): (object|null)} deps.loadArt - { coarse, fine } pixels of an icon file
    * @param {function(string): (Map|null)} [deps.getItemValues] - Item name to price in Divine Orbs for a game, or null
    *   while the loaded prices are not that game's current league
-   * @param {function(string, Array, number): void} deps.onGain - Session id, its new items and how many maps they cover
+   * @param {function(string, Array, number, boolean): void} deps.onGain - Session id, its new items, how many maps they
+   *   cover, and whether new items were left unread
+   * @param {function(string): void} [deps.onUnreadLoot] - Session id of a finished map whose only new items were unread
    * @param {function(string): void} deps.onStatus - Something the player should be told, see the kinds below
    * @param {function(string, object=): void} [deps.onRead] - What the last read came to, for the Dashboard's status line:
    *   saved, noBaseline, noGain, gain (each with { characterKey }); resolution when the window turns to a size reading
@@ -195,10 +197,11 @@ class InventoryWatcher {
     } else if (outcome.items.length === 0) {
       this.deps.onRead('noGain', { characterKey });
       this.deps.onStatus('noGain');
+      if (outcome.unread && this.deps.onUnreadLoot) this.deps.onUnreadLoot(outcome.sessionId);
     } else {
       this.deps.onRead('gain', { characterKey });
       this.deps.onStatus('reading');
-      this.deps.onGain(outcome.sessionId, outcome.items, outcome.mapCount);
+      this.deps.onGain(outcome.sessionId, outcome.items, outcome.mapCount, Boolean(outcome.unread));
     }
   }
 

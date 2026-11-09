@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateSessionDetails: (sessionId, payload) => ipcRenderer.invoke('update-session-details', sessionId, payload),
   updateLoot: (sessionId, lootId, changes) => ipcRenderer.invoke('update-loot', sessionId, lootId, changes),
   deleteLoot: (sessionId, lootId) => ipcRenderer.invoke('delete-loot', sessionId, lootId),
+  addSessionLoot: (sessionId, item) => ipcRenderer.invoke('add-session-loot', sessionId, item),
   updateSessionCost: (sessionId, costChaos) => ipcRenderer.invoke('update-session-cost', sessionId, costChaos),
   getSessions: (params) => ipcRenderer.invoke('get-sessions', params),
   getDashboardStats: (context) => ipcRenderer.invoke('get-dashboard-stats', context),

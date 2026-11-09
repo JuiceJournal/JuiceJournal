@@ -650,3 +650,13 @@ test('a map with no loot and no baseline says it was not counted, in the warning
   assert.equal(overlay.secondary.textContent, 'Sonraki mapten once envanterini ac');
 
 });
+
+test('a result whose read left new items unread says so beside its loot line', () => {
+  const overlay = loadOverlay();
+
+  renderResult(overlay, { netProfit: 0, noLoot: true, lootUnread: true, durationSeconds: 250, lootItemCount: 0, topOutputs: [] });
+  assert.equal(overlay.secondary.textContent, 'No loot counted · Some items not read');
+
+  renderResult(overlay, { netProfit: 0, noLoot: true, durationSeconds: 250, lootItemCount: 0, topOutputs: [] });
+  assert.equal(overlay.secondary.textContent, 'No loot counted');
+});

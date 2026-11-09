@@ -41,6 +41,7 @@ Experimental. For now it works for Path of Exile 2 only, because the PoE1 invent
 - While automatic reading is on (Settings → Path of Exile), the app reads a small part of the screen when the game is in front and you are outside a map. It does not read the game's memory or send input to it.
 - If more than one map passes without a read, the whole gain goes to the last map and its result says how many maps it covers.
 - A read is skipped while a tooltip covers your items. Anything the app cannot read for sure counts as no gain, so the total can come out low but should not come out high.
+- When a new item could not be read (gear, or an item the app was not sure of, such as some essences), the map result card says "Some items not read" and the run detail says so too. In the run detail, Edit lets you add an item by hand: pick it from the run league's price list as you type, with a quantity. An item not on that list, or a run from another league than the loaded prices, counts as 0.
 - Nothing from the screen is saved or sent. The item counts of your last read stay in memory until you close the app, so after a restart open your inventory before the next map, or that map is not counted.
 
 ## Prices: poe.ninja

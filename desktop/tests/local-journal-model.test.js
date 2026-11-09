@@ -10,6 +10,7 @@ const {
   getSession,
   listRecentLoot,
   listSessions,
+  markLootUnread,
   startSession,
   updateCost,
   updateLoot,
@@ -474,4 +475,28 @@ test('the stats count the changed cost and profit of a finished map', () => {
   assert.equal(summary.totalCost, 40);
   assert.equal(summary.totalLoot, 205);
   assert.equal(summary.totalProfit, 165);
+});
+
+test('addLoot keeps stash totals, says whether the totals follow the loot, and marks unread loot; markLootUnread marks a run', () => {
+  const started = startSession({ sessions: [] }, { mapName: 'Dunes Map', poeVersion: 'poe1', league: 'Mirage', costChaos: 10 }, { id: 's1', now: NOW });
+  const ended = endSession(started.journal, 's1', { endedAt: NOW.toISOString(), totalLootChaos: 900, profitChaos: 840 }, { now: NOW });
+
+  const stash = addLoot(ended.journal, 's1', [{ itemName: 'Essence of Ruin', chaosValue: 30 }], { createId: () => 'l1', now: NOW });
+  assert.equal(stash.totalsFollowLoot, false);
+  assert.equal(stash.session.totalLootChaos, 900);
+  assert.equal(stash.session.profitChaos, 840);
+  assert.equal(stash.session.lootEntries.length, 1);
+  assert.equal(stash.session.lootUnread, undefined);
+
+  const read = addLoot(started.journal, 's1', [{ itemName: 'Exalted Orb', chaosValue: 5, quantity: 2 }], { createId: () => 'l2', now: NOW, lootUnread: true });
+  assert.equal(read.totalsFollowLoot, true);
+  assert.equal(read.session.totalLootChaos, 10);
+  assert.equal(read.session.profitChaos, 0);
+  assert.equal(read.session.lootUnread, true);
+
+  const marked = markLootUnread(ended.journal, 's1', { now: NOW });
+  assert.equal(marked.session.lootUnread, true);
+  assert.equal(marked.session.profitChaos, 840);
+  assert.equal(getSession(marked.journal, 's1').lootUnread, true);
+  assert.throws(() => markLootUnread(ended.journal, 'nope', { now: NOW }), { code: 'SESSION_NOT_FOUND' });
 });
