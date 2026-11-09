@@ -3054,6 +3054,8 @@ function setupIPCListeners() {
   // Session olaylari
   window.electronAPI.onSessionStarted((session) => {
     state.currentSession = session;
+    // A map started another way (the tray, the Dashboard) drops a start card without an answer: stop waiting for one.
+    state.stopStartMapPrompt?.();
     updateActiveSessionUI();
     ensureSessionClock();
     refreshTrackerData({ includeSessions: true });
@@ -3445,6 +3447,8 @@ async function handleMapEnteredEvent(data = {}) {
           }
 
           if (overlayResult?.action === 'cancel') {
+            // Main took the card down before it sent the cancel (and refuses a hide call after a sign-out).
+            startPromptOverlayShown = false;
             return;
           }
         } else {

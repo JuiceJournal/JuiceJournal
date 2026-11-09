@@ -385,7 +385,7 @@ test('main start-map overlay confirmation forwards the selected map details to t
 });
 
 // The start card's main side: engaging it, lending and returning the keyboard, and saving a typed cost.
-function loadStartCardMain({ saveResult = { ok: true }, gameInFront = true, focusGameThrows = false } = {}) {
+function loadStartCardMain({ saveResult = { ok: true }, gameInFront = true, focusGameThrows = false, functions = [], overrides = {} } = {}) {
   const calls = [];
   const overlayWindow = {
     isDestroyed: () => false,
@@ -401,7 +401,8 @@ function loadStartCardMain({ saveResult = { ok: true }, gameInFront = true, focu
     'releaseStartMapPromptKeyboard',
     'confirmStartMapPromptOverlay',
     'cancelStartMapPromptOverlay',
-    'hideStartMapPromptOverlay'
+    'hideStartMapPromptOverlay',
+    ...functions
   ], {
     overlayWindow,
     overlayKeyboardLent: false,
@@ -424,7 +425,8 @@ function loadStartCardMain({ saveResult = { ok: true }, gameInFront = true, focu
         return true;
       }
     },
-    setStoredFarmTypeCost: (farmTypeId, cost) => { calls.push(['saveCost', farmTypeId, JSON.parse(JSON.stringify(cost))]); return saveResult; }
+    setStoredFarmTypeCost: (farmTypeId, cost) => { calls.push(['saveCost', farmTypeId, JSON.parse(JSON.stringify(cost))]); return saveResult; },
+    ...overrides
   });
   return { context, calls };
 }
@@ -552,6 +554,59 @@ test('cancelling or hiding the start card gives the keyboard back to the game', 
     context[close]();
     assert.deepEqual(calls.slice(0, 2), [['setFocusable', false], ['focusGame', [4242]]], close);
     assert.equal(context.overlayStartMapPromptState, null, close);
+  }
+});
+
+// A card left alone, one the player worked on (no countdown left to end it), and one with the keyboard on its cost box.
+const START_CARD_STAGES = [null, { keyboard: false }, { keyboard: true }];
+const START_CARD_CANCELLED = ['send', 'start-map-prompt-overlay-result', { action: 'cancel', mapName: 'Channel', farmTypeId: null, source: 'map-detected' }];
+
+function assertStartCardTakenDown({ context, calls }, engage) {
+  const label = JSON.stringify(engage);
+  assert.equal(context.overlayStartMapPromptState, null, label);
+  assert.equal(context.overlayKeyboardLent, false, label);
+  // The window stops waiting for an answer, and starts no map.
+  assert.deepEqual(calls.filter(([name]) => name === 'send')[0], START_CARD_CANCELLED, label);
+  assert.ok(calls.some(([name]) => name === 'update'), `${label}: the overlay is redrawn`);
+}
+
+test('closing the game takes the start card down and ends the wait for its answer', () => {
+  for (const engage of START_CARD_STAGES) {
+    const loaded = loadStartCardMain({ functions: ['handleGameClosed'], overrides: { clearRuntimeSession: () => null } });
+    if (engage) loaded.context.engageStartMapPromptOverlay(engage);
+    loaded.calls.length = 0;
+
+    loaded.context.handleGameClosed('poe2');
+
+    assertStartCardTakenDown(loaded, engage);
+    assert.deepEqual(loaded.calls.at(-1), ['send', 'game-closed', { version: 'poe2', runtimeSession: null }]);
+  }
+});
+
+test('signing out takes the start card down and ends the wait for its answer', () => {
+  for (const engage of START_CARD_STAGES) {
+    const loaded = loadStartCardMain({
+      functions: ['handleLogout'],
+      overrides: {
+        appendAuditTrail: () => {},
+        store: { set: () => {} },
+        apiClient: { setToken: () => {} },
+        currentSession: null,
+        stashAnalyzer: null,
+        overlayMapResultState: null,
+        clearOverlayMapResultDismissTimer: () => {},
+        dropPendingCharacterPrompt: () => {},
+        clearCharacterPromptOverlay: () => {},
+        poeApiClient: null,
+        persistPoeClientTokens: () => {}
+      }
+    });
+    if (engage) loaded.context.engageStartMapPromptOverlay(engage);
+    loaded.calls.length = 0;
+
+    assert.equal(loaded.context.handleLogout(), true);
+
+    assertStartCardTakenDown(loaded, engage);
   }
 });
 

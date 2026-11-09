@@ -1261,6 +1261,7 @@ test('main game close clears active runtime session state before notifying rende
     runtimeSessionState,
     clearRuntimeSessionState,
     cloneRuntimeSessionState,
+    overlayStartMapPromptState: null,
     console: {
       log() { }
     },
@@ -1313,6 +1314,9 @@ test('main logout clears desktop auth state', () => {
     'handleLogout'
   ], {
     releaseStartMapPromptKeyboard: () => {},
+    overlayStartMapPromptState: null,
+    dropPendingCharacterPrompt: () => {},
+    clearCharacterPromptOverlay: () => {},
     poeApiClient: {
       clearTokens() {
         poeClearCalls += 1;
@@ -1778,7 +1782,7 @@ test('setupLogParser forwards game session events from Client.txt to the rendere
   ]);
 });
 
-function loadCharacterPromptMain() {
+function loadCharacterPromptMain({ functions = [], overrides = {} } = {}) {
   const sent = [];
   const overlayUpdates = [];
   const timers = [];
@@ -1790,7 +1794,8 @@ function loadCharacterPromptMain() {
     'dropPendingCharacterPrompt',
     'showPendingCharacterPrompt',
     'scheduleCharacterPromptAfterLoad',
-    'chooseCharacterPromptOverlay'
+    'chooseCharacterPromptOverlay',
+    ...functions
   ], {
     overlayCharacterPromptState: null,
     overlayCharacterPromptTimer: null,
@@ -1821,7 +1826,8 @@ function loadCharacterPromptMain() {
           sent.push({ channel, payload });
         }
       }
-    }
+    },
+    ...overrides
   });
 
   return { context, sent, overlayUpdates, timers };
@@ -1939,6 +1945,42 @@ test('a Play prompt that waited too long is dropped instead of shown in a later 
 
   assert.deepEqual(overlayUpdates, []);
   assert.equal(context.pendingCharacterPrompt, null);
+});
+
+test('signing out drops a Play prompt that is waiting or on screen, so nobody else sees these characters', () => {
+  const signOut = {
+    functions: ['handleLogout'],
+    overrides: {
+      appendAuditTrail: () => {},
+      store: { set: () => {} },
+      apiClient: { setToken: () => {} },
+      currentSession: null,
+      stashAnalyzer: null,
+      overlayMapResultState: null,
+      clearOverlayMapResultDismissTimer: () => {},
+      releaseStartMapPromptKeyboard: () => {},
+      overlayStartMapPromptState: null,
+      poeApiClient: null,
+      persistPoeClientTokens: () => {}
+    }
+  };
+
+  const waiting = loadCharacterPromptMain(signOut);
+  waiting.context.queueCharacterPromptOverlay(PROMPT);
+  waiting.context.scheduleCharacterPromptAfterLoad();
+  waiting.context.handleLogout();
+  assert.equal(waiting.context.pendingCharacterPrompt, null);
+  assert.equal(waiting.timers[0].cleared, true, 'the wait for the area is over');
+  // The area finishes loading after the sign-out.
+  waiting.context.showPendingCharacterPrompt();
+  assert.equal(waiting.context.overlayCharacterPromptState, null);
+
+  const shown = loadCharacterPromptMain(signOut);
+  shown.context.showCharacterPromptOverlay(PROMPT);
+  shown.context.handleLogout();
+  assert.equal(shown.context.overlayCharacterPromptState, null);
+  assert.equal(shown.timers[0].cleared, true);
+  assert.equal(shown.overlayUpdates.at(-1), null, 'the overlay is redrawn without the prompt');
 });
 
 test('Play queues the prompt and the log parser decides when it shows', () => {
