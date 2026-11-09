@@ -55,7 +55,15 @@ const DRAWER_FUNCTIONS = [
   'handleSessionLootKeydown',
   'handleSessionLootChange',
   'changeSessionLoot',
-  'closeSessionDrawer'
+  'closeSessionDrawer',
+  'parseCostAmount',
+  'getSessionCostDivineRate',
+  'sessionCostEditHTML',
+  'getSessionCostControls',
+  'handleSessionCostKeydown',
+  'handleSessionCostChange',
+  'handleSessionCostUnitChange',
+  'changeSessionCost'
 ];
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -117,11 +125,41 @@ function createDrawer({ session, editing = false, armedId = null, overrides = {}
     contains: (node) => [...nodes.qty, ...nodes.remove].includes(node),
     querySelectorAll: (selector) => (selector === '.session-drawer-loot-remove' ? nodes.remove : nodes.qty)
   };
+  // The cost boxes are parsed out of the summary the same way, and rebuilding it fires focusout on the one in focus.
+  const costNodes = { input: null, unit: null };
+  const attribute = (tag, name) => tag.match(new RegExp(`\\s${name}="([^"]*)"`))?.[1];
+  const summary = {
+    _html: '',
+    get innerHTML() { return this._html; },
+    set innerHTML(html) {
+      const active = documentStub.activeElement;
+      if (harness && active && (active === costNodes.input || active === costNodes.unit)) {
+        harness.handleSessionCostChange({ type: 'focusout', target: active, relatedTarget: null });
+      }
+      this._html = html;
+      const inputTag = html.match(/<input[^>]*session-drawer-cost-input[^>]*>/)?.[0];
+      const selectMatch = html.match(/<select([^>]*session-drawer-cost-unit[^>]*)>([\s\S]*?)<\/select>/);
+      costNodes.input = inputTag
+        ? Object.assign(fakeNode({ className: 'session-drawer-cost-input', value: attribute(inputTag, 'value'), disabled: / disabled(?=[\s>])/.test(inputTag) }), {
+          dataset: { baseline: attribute(inputTag, 'data-baseline'), unit: attribute(inputTag, 'data-unit') }
+        })
+        : null;
+      costNodes.unit = selectMatch
+        ? Object.assign(fakeNode({
+          className: 'session-drawer-cost-unit',
+          value: selectMatch[2].match(/<option value="([^"]+)" selected>/)?.[1],
+          disabled: / disabled(?=[\s>])/.test(selectMatch[1])
+        }), { options: [...selectMatch[2].matchAll(/<option value="([^"]+)"/g)].map(([, value]) => value) })
+        : null;
+    },
+    contains: (node) => Boolean(node) && (node === costNodes.input || node === costNodes.unit),
+    querySelector: (selector) => (selector.includes('input') ? costNodes.input : costNodes.unit)
+  };
   const elements = {
     sessionDrawerTitle: { textContent: '' },
     sessionDrawerLootCount: { textContent: '' },
     sessionDrawerLootEdit: toggle,
-    sessionDrawerSummary: { innerHTML: '' },
+    sessionDrawerSummary: summary,
     sessionDrawerAnalytics: { innerHTML: '' },
     sessionDrawerLoot: lootList,
     sessionDrawerClose: { focused: false, focus() { this.focused = true; } },
@@ -143,12 +181,15 @@ function createDrawer({ session, editing = false, armedId = null, overrides = {}
     elements,
     document: documentStub,
     window: {
-      t: (key, values = {}) => `${key}${values.item !== undefined ? `|${values.item}` : ''}${values.count !== undefined ? `|${values.count}` : ''}`,
+      t: (key, values = {}) => `${key}${values.item !== undefined ? `|${values.item}` : ''}${values.count !== undefined ? `|${values.count}` : ''}${values.cost !== undefined ? `|${values.cost}` : ''}`,
       electronAPI: {
         updateLoot: async (...args) => { calls.push(['updateLoot', ...args]); return context.nextSession; },
-        deleteLoot: async (...args) => { calls.push(['deleteLoot', ...args]); return context.nextSession; }
+        deleteLoot: async (...args) => { calls.push(['deleteLoot', ...args]); return context.nextSession; },
+        updateSessionCost: async (...args) => { calls.push(['updateSessionCost', ...args]); return context.nextSession; }
       }
     },
+    getProfitCurrencyRates: () => null,
+    formatAdaptiveProfitText: (value) => `${value}c`,
     escapeHTML: (value) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
     itemSlotHTML: () => '<span class="item-slot"></span>',
     timeAgo: () => 'now',
@@ -168,7 +209,7 @@ function createDrawer({ session, editing = false, armedId = null, overrides = {}
     ...overrides
   });
   harness = context;
-  return { context, state, elements, nodes, toggle, calls, timers };
+  return { context, state, elements, nodes, costNodes, toggle, calls, timers };
 }
 
 function sessionWith(lootEntries) {
@@ -220,14 +261,15 @@ test('edit mode adds a quantity box and a remove button to each row with an id, 
   assert.equal(toggle.textContent, 'sessions.lootEditDone');
 });
 
-test('the toggle is hidden when no entry has an id, and editing switches off with the last one', () => {
-  const { context, state, toggle } = createDrawer({ session: sessionWith([LOOT[3]]), editing: true });
+test('a run whose loot has no ids keeps Edit for its cost, with the loot rows read-only', () => {
+  const { context, state, toggle, elements } = createDrawer({ session: sessionWith([LOOT[3]]), editing: true });
 
   context.renderSessionDrawer();
 
-  assert.equal(toggle.classList.contains('hidden'), true);
-  assert.equal(state.sessionLootEditing, false);
-  assert.equal(toggle.textContent, 'sessions.lootEdit');
+  assert.equal(toggle.classList.contains('hidden'), false);
+  assert.equal(state.sessionLootEditing, true);
+  assert.equal(toggle.textContent, 'sessions.lootEditDone');
+  assert.doesNotMatch(elements.sessionDrawerLoot.innerHTML, /session-drawer-loot-qty|session-drawer-loot-remove/);
 });
 
 test('an armed row shows the confirm text in place of the trash icon', () => {
@@ -433,11 +475,11 @@ test('after removing the last row focus goes to the previous row, and with no ed
   only.state.sessionLootArmedId = 'a';
   only.context.handleSessionLootClick({ target: fakeNode({ className: 'session-drawer-loot-remove', lootId: 'a' }) });
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(only.state.sessionLootEditing, false, 'no editable entry is left');
-  // The toggle is hidden with nothing left to edit, so focus lands on the close button instead.
-  assert.equal(only.toggle.classList.contains('hidden'), true);
-  assert.equal(only.toggle.focused, false);
-  assert.equal(only.elements.sessionDrawerClose.focused, true);
+  // The run's cost can still be changed, so editing stays on and focus goes to the toggle, not the close button.
+  assert.equal(only.state.sessionLootEditing, true);
+  assert.equal(only.toggle.classList.contains('hidden'), false);
+  assert.equal(only.toggle.focused, true);
+  assert.equal(only.elements.sessionDrawerClose.focused, false);
   assert.equal(toggle.focused, false);
 });
 
@@ -576,4 +618,277 @@ test('art that arrives later redraws the drawer through redrawSessionLoot, and o
   state.selectedSession = null;
   redraw();
   assert.equal(renders.length, 2);
+});
+
+const withCost = (costChaos, extra = {}) => ({ ...sessionWith(LOOT), costChaos, ...extra });
+const withRate = (divineChaos) => ({ getProfitCurrencyRates: () => ({ divineChaos }) });
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+test('edit mode turns the Cost fact into an amount box with a unit, and the Divine option needs a known rate', () => {
+  const normal = createDrawer({ session: withCost(150) });
+  normal.context.renderSessionDrawer();
+  assert.doesNotMatch(normal.elements.sessionDrawerSummary.innerHTML, /session-drawer-cost-input/);
+  assert.match(normal.elements.sessionDrawerSummary.innerHTML, /<dt>sessions\.cost<\/dt><dd>chaos:150<\/dd>/);
+
+  const known = createDrawer({ session: withCost(150), editing: true, overrides: withRate(150) });
+  known.context.renderSessionDrawer();
+  assert.match(known.elements.sessionDrawerSummary.innerHTML, /value="150" data-baseline="150" data-unit="chaos" aria-label="sessions\.costAria"/);
+  assert.match(known.elements.sessionDrawerSummary.innerHTML, /aria-label="sessions\.costUnitAria"/);
+  assert.deepEqual(known.costNodes.unit.options, ['chaos', 'divine']);
+  assert.equal(known.costNodes.unit.value, 'chaos');
+
+  const unknown = createDrawer({ session: withCost(150), editing: true });
+  unknown.context.renderSessionDrawer();
+  assert.deepEqual(unknown.costNodes.unit.options, ['chaos'], 'no Divine option while the rate is unknown');
+
+  known.context.handleSessionLootEditToggle();
+  assert.equal(known.costNodes.input, null, 'Done puts the plain value back');
+});
+
+test('a run whose Divine cost found no price says what was not counted, until a cost is set', () => {
+  const pending = { costPending: { amount: 2, unit: 'divine' } };
+  const finished = createDrawer({ session: withCost(0, pending) });
+  finished.context.renderSessionDrawer();
+  assert.match(finished.elements.sessionDrawerSummary.innerHTML, /<dd>chaos:0<span class="session-drawer-cost-note">sessions\.costNotCounted<\/span><\/dd>/);
+
+  const running = createDrawer({ session: withCost(0, { ...pending, status: 'active', startedAt: '2026-11-09T10:00:00.000Z' }) });
+  running.context.renderSessionDrawer();
+  assert.match(running.elements.sessionDrawerSummary.innerHTML, /session-drawer-cost-note">dashboard\.costPendingDivine</);
+
+  // Edit swaps the note for the cost box, and a cost set by hand needs no note.
+  const editing = createDrawer({ session: withCost(0, pending), editing: true });
+  editing.context.renderSessionDrawer();
+  assert.doesNotMatch(editing.elements.sessionDrawerSummary.innerHTML, /session-drawer-cost-note/);
+  const settled = createDrawer({ session: withCost(150, pending) });
+  settled.context.renderSessionDrawer();
+  assert.doesNotMatch(settled.elements.sessionDrawerSummary.innerHTML, /session-drawer-cost-note/);
+});
+
+test('the box shows the cost in the unit picked, to four decimals for Divine', () => {
+  const { context, state, costNodes } = createDrawer({ session: withCost(100), editing: true, overrides: withRate(150) });
+  state.sessionCostUnit = 'divine';
+  context.renderSessionDrawer();
+  assert.equal(costNodes.input.value, '0.6667');
+  assert.equal(costNodes.input.dataset.unit, 'divine');
+  assert.equal(costNodes.unit.value, 'divine');
+
+  // Without a rate the stored Divine pick cannot apply.
+  const noRate = createDrawer({ session: withCost(100), editing: true });
+  noRate.state.sessionCostUnit = 'divine';
+  noRate.context.renderSessionDrawer();
+  assert.equal(noRate.costNodes.input.value, '100');
+  assert.equal(noRate.costNodes.unit.value, 'chaos');
+});
+
+test('a cost box that loses focus saves the cost in chaos, the drawer follows and the app refreshes', async () => {
+  const { context, state, costNodes, calls } = createDrawer({ session: withCost(50), editing: true });
+  context.renderSessionDrawer();
+  context.nextSession = withCost(200.5);
+  context.document.activeElement = costNodes.input;
+
+  costNodes.input.value = ' 200,5 ';
+  context.handleSessionCostChange({ type: 'focusout', target: costNodes.input, relatedTarget: null });
+  assert.equal(state.sessionCostBusy, true);
+  assert.equal(costNodes.input.disabled, true, 'the box locks while main writes');
+  await tick();
+
+  assert.deepEqual(plain(calls), [
+    ['updateSessionCost', 'run-1', 200.5],
+    ['announce', 'sessions.costChanged|200.5c'],
+    ['refresh', { includeSessions: true, immediate: true }]
+  ]);
+  assert.equal(state.selectedSession, context.nextSession);
+  assert.equal(state.sessionCostBusy, false);
+  assert.equal(costNodes.input.value, '200.5');
+  assert.equal(costNodes.input.disabled, false);
+  assert.equal(costNodes.input.focused, true, 'focus stays on the box');
+});
+
+test('Enter commits the cost and keeps focus on the box; other keys do nothing', async () => {
+  const { context, costNodes, calls } = createDrawer({ session: withCost(50), editing: true });
+  context.renderSessionDrawer();
+  context.nextSession = withCost(75);
+  context.document.activeElement = costNodes.input;
+  costNodes.input.value = '75';
+
+  let prevented = false;
+  context.handleSessionCostKeydown({ key: 'Tab', target: costNodes.input, preventDefault() { prevented = true; } });
+  assert.deepEqual(plain(calls), []);
+  context.handleSessionCostKeydown({ key: 'Enter', target: costNodes.input, preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  await tick();
+
+  assert.deepEqual(plain(calls)[0], ['updateSessionCost', 'run-1', 75]);
+  assert.equal(costNodes.input.focused, true);
+});
+
+test('an amount read in Divine is converted with the rate and saved in chaos', async () => {
+  const { context, costNodes, calls } = createDrawer({ session: withCost(50), editing: true, overrides: withRate(150) });
+  context.renderSessionDrawer();
+  context.nextSession = withCost(300);
+  costNodes.unit.value = 'divine';
+  costNodes.input.value = '2';
+
+  context.handleSessionCostChange({ type: 'focusout', target: costNodes.unit, relatedTarget: null });
+  await tick();
+
+  assert.deepEqual(plain(calls)[0], ['updateSessionCost', 'run-1', 300]);
+});
+
+test('a cost that is not a number from 0 to 10000000, or is unchanged, goes back and makes no call', () => {
+  const { context, costNodes, calls } = createDrawer({ session: withCost(150), editing: true, overrides: withRate(150) });
+  context.renderSessionDrawer();
+
+  for (const typed of ['abc', '-5', '1e3', '1.2.3', '10000001', '150', '150.00', '150,0']) {
+    costNodes.input.value = typed;
+    context.handleSessionCostChange({ type: 'focusout', target: costNodes.input, relatedTarget: null });
+    assert.equal(costNodes.input.value, '150', `"${typed}" shows the stored cost again`);
+  }
+  // In Divine the cap follows the rate: 10000000 chaos is 66666.6667 Divine.
+  costNodes.unit.value = 'divine';
+  costNodes.input.value = '66667';
+  context.handleSessionCostChange({ type: 'focusout', target: costNodes.input, relatedTarget: null });
+  assert.equal(costNodes.input.value, '150');
+  assert.deepEqual(plain(calls), []);
+});
+
+test('an empty box saves no cost, as zero', async () => {
+  const { context, costNodes, calls } = createDrawer({ session: withCost(150), editing: true });
+  context.renderSessionDrawer();
+  context.nextSession = withCost(0);
+  costNodes.input.value = '';
+  context.handleSessionCostChange({ type: 'focusout', target: costNodes.input, relatedTarget: null });
+  await tick();
+  // An empty box is the stored cost's own value being cleared, which main takes as zero.
+  assert.deepEqual(plain(calls)[0], ['updateSessionCost', 'run-1', 0]);
+});
+
+test('moving from the amount to its unit does not commit, and leaving the unit does', async () => {
+  const { context, costNodes, calls } = createDrawer({ session: withCost(50), editing: true, overrides: withRate(150) });
+  context.renderSessionDrawer();
+  context.nextSession = withCost(150);
+  costNodes.input.value = '1';
+  costNodes.unit.value = 'divine';
+
+  context.handleSessionCostChange({ type: 'focusout', target: costNodes.input, relatedTarget: costNodes.unit });
+  assert.deepEqual(plain(calls), []);
+  context.handleSessionCostChange({ type: 'focusout', target: costNodes.unit, relatedTarget: null });
+  await tick();
+  assert.deepEqual(plain(calls)[0], ['updateSessionCost', 'run-1', 150]);
+});
+
+test('switching the unit of an untouched box shows the same cost in it, and a typed amount stays as typed', () => {
+  const { context, state, costNodes, calls } = createDrawer({ session: withCost(150), editing: true, overrides: withRate(150) });
+  context.renderSessionDrawer();
+  context.document.activeElement = costNodes.unit;
+
+  costNodes.unit.value = 'divine';
+  context.handleSessionCostUnitChange({ target: costNodes.unit });
+  assert.equal(state.sessionCostUnit, 'divine');
+  assert.equal(costNodes.input.value, '1');
+  assert.equal(costNodes.unit.value, 'divine');
+  assert.equal(costNodes.unit.focused, true, 'focus stays on the unit');
+  assert.deepEqual(plain(calls), [], 'a unit switch alone saves nothing');
+
+  costNodes.input.value = '3';
+  const typed = costNodes.input;
+  costNodes.unit.value = 'chaos';
+  context.handleSessionCostUnitChange({ target: costNodes.unit });
+  assert.equal(state.sessionCostUnit, 'chaos');
+  assert.equal(costNodes.input, typed, 'the drawer is not redrawn');
+  assert.equal(costNodes.input.value, '3');
+});
+
+test('a redraw keeps the cost being typed and the focus on its box, and saves nothing', () => {
+  const { context, costNodes, calls } = createDrawer({ session: withCost(50), editing: true });
+  context.renderSessionDrawer();
+  context.document.activeElement = costNodes.input;
+  costNodes.input.value = '77';
+
+  context.redrawSessionLoot();
+
+  assert.equal(costNodes.input.value, '77');
+  assert.equal(costNodes.input.focused, true);
+  assert.deepEqual(plain(calls), []);
+});
+
+test('a failed cost change shows the error toast and puts the stored cost back', async () => {
+  const { context, state, costNodes, calls } = createDrawer({ session: withCost(50), editing: true });
+  context.renderSessionDrawer();
+  context.window.electronAPI.updateSessionCost = async () => { throw new Error('Cost must be a number from 0 to 10000000'); };
+  context.document.activeElement = costNodes.input;
+  costNodes.input.value = '99';
+
+  context.handleSessionCostChange({ type: 'focusout', target: costNodes.input, relatedTarget: null });
+  await tick();
+
+  assert.deepEqual(plain(calls), [['toast', 'toast.costUpdateError', 'friendly:Cost must be a number from 0 to 10000000:toast.tryAgain', 'error']]);
+  assert.equal(state.sessionCostBusy, false);
+  assert.equal(state.selectedSession.costChaos, 50);
+  assert.equal(costNodes.input.value, '50');
+  assert.equal(costNodes.input.disabled, false);
+});
+
+test('a cost change and a loot change do not run at the same time', async () => {
+  const { context, state, costNodes, nodes, calls } = createDrawer({ session: withCost(50), editing: true });
+  context.renderSessionDrawer();
+  let finish;
+  context.window.electronAPI.updateSessionCost = (...args) => {
+    calls.push(['updateSessionCost', ...args]);
+    return new Promise((resolve) => { finish = resolve; });
+  };
+  costNodes.input.value = '60';
+  context.handleSessionCostChange({ type: 'focusout', target: costNodes.input, relatedTarget: null });
+  assert.equal(state.sessionCostBusy, true);
+
+  // A loot box committed meanwhile is ignored, and so is a second cost commit.
+  const box = nodes.qty[0];
+  box.value = '9';
+  context.handleSessionLootChange({ type: 'focusout', target: box, relatedTarget: null });
+  context.handleSessionCostChange({ type: 'focusout', target: costNodes.input, relatedTarget: null });
+  assert.deepEqual(plain(calls), [['updateSessionCost', 'run-1', 60]]);
+
+  context.nextSession = withCost(60);
+  finish(context.nextSession);
+  await tick();
+  assert.equal(state.sessionCostBusy, false);
+
+  // And while a loot row saves, a cost commit shows the stored cost again.
+  state.sessionLootBusyId = 'a';
+  costNodes.input.value = '70';
+  context.handleSessionCostChange({ type: 'focusout', target: costNodes.input, relatedTarget: null });
+  assert.equal(costNodes.input.value, '60');
+});
+
+test('the cost of the running map reaches the Dashboard card too', async () => {
+  const running = withCost(50, { status: 'active' });
+  const updates = [];
+  const { context, state, costNodes } = createDrawer({
+    session: running,
+    editing: true,
+    overrides: { updateActiveSessionUI: () => updates.push('card') }
+  });
+  state.currentSession = { ...running, lootPending: true };
+  context.renderSessionDrawer();
+  context.nextSession = withCost(80, { status: 'active' });
+  costNodes.input.value = '80';
+
+  context.handleSessionCostChange({ type: 'focusout', target: costNodes.input, relatedTarget: null });
+  await tick();
+
+  assert.equal(state.currentSession.costChaos, 80);
+  assert.equal(state.currentSession.lootPending, true, 'what only the renderer knows stays');
+  assert.deepEqual(updates, ['card']);
+});
+
+test('the cost boxes are wired once on the drawer summary, and use the app strings', () => {
+  const source = fs.readFileSync(appJsPath, 'utf8');
+  assert.match(source, /sessionDrawerSummary\.addEventListener\('keydown', handleSessionCostKeydown\)/);
+  assert.match(source, /sessionDrawerSummary\.addEventListener\('focusout', handleSessionCostChange\)/);
+  assert.match(source, /sessionDrawerSummary\.addEventListener\('change', handleSessionCostUnitChange\)/);
+  assert.match(source, /onSessionCostUpdated\(\(session\) =>/);
+  const stringsSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'translations.js'), 'utf8');
+  for (const key of ['sessions.costAria', 'sessions.costUnitAria', 'sessions.costChanged', 'sessions.costNotCounted', 'toast.costUpdateError']) {
+    assert.equal(stringsSource.split(`'${key}'`).length - 1, 2, `${key} has an en and a tr string`);
+  }
 });

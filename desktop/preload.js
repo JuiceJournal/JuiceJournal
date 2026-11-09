@@ -48,10 +48,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCustomFarmTypes: () => ipcRenderer.invoke('get-custom-farm-types'),
   saveCustomFarmType: (input) => ipcRenderer.invoke('save-custom-farm-type', input),
   deleteCustomFarmType: (farmTypeId) => ipcRenderer.invoke('delete-custom-farm-type', farmTypeId),
+  getFarmTypeCosts: () => ipcRenderer.invoke('get-farm-type-costs'),
+  setFarmTypeCost: (farmTypeId, cost) => ipcRenderer.invoke('set-farm-type-cost', farmTypeId, cost),
   getSessionDetails: (sessionId) => ipcRenderer.invoke('get-session-details', sessionId),
   updateSessionDetails: (sessionId, payload) => ipcRenderer.invoke('update-session-details', sessionId, payload),
   updateLoot: (sessionId, lootId, changes) => ipcRenderer.invoke('update-loot', sessionId, lootId, changes),
   deleteLoot: (sessionId, lootId) => ipcRenderer.invoke('delete-loot', sessionId, lootId),
+  updateSessionCost: (sessionId, costChaos) => ipcRenderer.invoke('update-session-cost', sessionId, costChaos),
   getSessions: (params) => ipcRenderer.invoke('get-sessions', params),
   getDashboardStats: (context) => ipcRenderer.invoke('get-dashboard-stats', context),
 
@@ -122,6 +125,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onSessionLootUpdated: (callback) => {
     ipcRenderer.on('session-loot-updated', (event, data) => callback(data));
   },
+  onSessionCostUpdated: (callback) => {
+    ipcRenderer.on('session-cost-updated', (event, data) => callback(data));
+  },
   onInventoryReadStatus: (callback) => {
     ipcRenderer.on('inventory-read-status', (event, data) => callback(data));
   },
@@ -180,7 +186,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeAllListeners: (channel) => {
     const ALLOWED_CHANNELS = [
       'map-entered', 'map-exited', 'session-started', 'session-ended', 'session-loot-updated',
-      'loot-added', 'inventory-read-status',
+      'session-cost-updated', 'loot-added', 'inventory-read-status',
       'audit-trail-updated', 'navigate', 'tray-action', 'stash-snapshot-taken',
       'profit-calculated', 'prices-updated', 'game-version-changed', 'game-closed',
       'game-session-entered', 'game-session-left', 'character-log-line',

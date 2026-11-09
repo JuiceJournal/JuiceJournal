@@ -53,6 +53,13 @@ const state = {
   sessionLootArmTimer: null,
   sessionLootBusyId: null,
   sessionLootRedrawing: false,
+  // The unit the Cost box of the open run reads in, and whether a cost save is running.
+  sessionCostUnit: 'chaos',
+  sessionCostBusy: false,
+  // Entry costs of the signed-in profile by farm type id, as typed: { amount, unit }.
+  farmTypeCosts: {},
+  farmTypeCostBusy: false,
+  renderedFarmTypeCostId: null,
   auditTrail: [],
   // True while main says the signed-in profile's journal cannot be read; Dashboard and Sessions show the notice.
   journalUnreadable: false,
@@ -201,6 +208,10 @@ const elements = {
   sessionFarmTypeSelect: document.getElementById('session-farm-type-select'),
   clearFarmTypeBtn: document.getElementById('clear-farm-type-btn'),
   manageFarmTypesBtn: document.getElementById('manage-farm-types-btn'),
+  entryCostInput: document.getElementById('session-entry-cost-input'),
+  entryCostUnit: document.getElementById('session-entry-cost-unit'),
+  entryCostHint: document.getElementById('session-entry-cost-hint'),
+  entryCostError: document.getElementById('session-entry-cost-error'),
   customFarmGroup: document.getElementById('custom-farm-types-group'),
   customFarmList: document.getElementById('custom-farm-list'),
   customFarmAddBtn: document.getElementById('custom-farm-add-btn'),
@@ -1582,6 +1593,9 @@ function renderFarmTypeSelector() {
   elements.sessionFarmTypeSelect.value = selectedFarmTypeId;
   elements.sessionFarmTypeSelect.disabled = hasActiveSession;
   elements.clearFarmTypeBtn.disabled = hasActiveSession || !selectedFarmTypeId;
+  if (typeof renderFarmTypeCost === 'function') {
+    renderFarmTypeCost(selectedFarmTypeId);
+  }
 }
 
 async function handleFarmTypeSelectionChange() {
@@ -1605,6 +1619,104 @@ async function handleFarmTypeSelectionClear() {
     await window.electronAPI.setActiveFarmType(null);
   }
   renderFarmTypeSelector();
+}
+
+// Comma or dot decimals; an empty box means no cost. Null when the text is not a number from 0 to max.
+function parseCostAmount(value, max) {
+  const text = String(value ?? '').trim().replace(',', '.');
+  if (!text) return 0;
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) return null;
+  const amount = Number(text);
+  return amount <= max ? amount : null;
+}
+
+function setFarmTypeCostError(key) {
+  if (!elements.entryCostError) return;
+  elements.entryCostError.hidden = !key;
+  elements.entryCostError.textContent = key ? window.t(key) : '';
+  elements.entryCostInput?.setAttribute('aria-invalid', key ? 'true' : 'false');
+}
+
+// Shows the entry cost kept for the farm type. A box the player is in keeps what was typed, as the farm type
+// list can redraw under the cursor; `sync` puts the stored amount and unit back instead.
+function renderFarmTypeCost(farmTypeId = state.farmType?.selectedFarmTypeId || '', { sync = false } = {}) {
+  const input = elements.entryCostInput;
+  const unit = elements.entryCostUnit;
+  if (!input || !unit) return;
+
+  const farmType = farmTypeId ? getFarmTypeModel().getFarmTypeById(farmTypeId) : null;
+  const changedType = farmTypeId !== state.renderedFarmTypeCostId;
+  const inBox = document.activeElement === input || document.activeElement === unit;
+  input.disabled = !farmTypeId;
+  unit.disabled = !farmTypeId;
+  if (elements.entryCostHint) {
+    elements.entryCostHint.textContent = farmType
+      ? window.t('dashboard.entryCostHint', { farmType: farmType.label })
+      : window.t('dashboard.entryCostPick');
+  }
+  if (sync || changedType || !inBox) {
+    const entry = farmTypeId ? state.farmTypeCosts?.[farmTypeId] : null;
+    input.value = entry ? String(entry.amount) : '';
+    unit.value = entry?.unit === 'divine' ? 'divine' : 'chaos';
+  }
+  if (changedType) setFarmTypeCostError(null);
+  state.renderedFarmTypeCostId = farmTypeId;
+}
+
+async function loadFarmTypeCosts() {
+  if (!window.electronAPI?.getFarmTypeCosts) return;
+  state.farmTypeCosts = await window.electronAPI.getFarmTypeCosts().catch(() => ({})) || {};
+  renderFarmTypeCost();
+}
+
+// A change updates a map that is running too, so the live card follows through the session-cost-updated event.
+async function handleFarmTypeCostCommit() {
+  const input = elements.entryCostInput;
+  const unit = elements.entryCostUnit;
+  const farmTypeId = state.farmType?.selectedFarmTypeId || '';
+  if (!input || !unit || !farmTypeId || input.disabled || state.farmTypeCostBusy) return;
+
+  // 10000 is the largest amount main keeps per farm type.
+  const amount = parseCostAmount(input.value, 10000);
+  if (amount === null) {
+    setFarmTypeCostError('dashboard.entryCostInvalid');
+    return;
+  }
+  const stored = state.farmTypeCosts?.[farmTypeId] || null;
+  const unitValue = unit.value === 'divine' ? 'divine' : 'chaos';
+  if (amount === (stored?.amount ?? 0) && (amount === 0 || unitValue === stored.unit)) {
+    // Unchanged: the box goes back to the stored text. The unit stays, so a unit picked before typing is kept.
+    input.value = stored ? String(stored.amount) : '';
+    setFarmTypeCostError(null);
+    return;
+  }
+
+  state.farmTypeCostBusy = true;
+  try {
+    const result = await window.electronAPI.setFarmTypeCost(farmTypeId, { amount, unit: unitValue });
+    if (result?.ok) {
+      state.farmTypeCosts = result.costs || {};
+      setFarmTypeCostError(null);
+      renderFarmTypeCost(farmTypeId, { sync: true });
+    } else {
+      setFarmTypeCostError(result?.error === 'COST_INVALID' ? 'dashboard.entryCostInvalid' : 'dashboard.entryCostSaveError');
+    }
+  } catch (error) {
+    setFarmTypeCostError('dashboard.entryCostSaveError');
+  } finally {
+    state.farmTypeCostBusy = false;
+  }
+}
+
+// The box commits on Enter or when focus leaves it; Escape puts the stored cost back.
+function handleFarmTypeCostKeydown(event) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    handleFarmTypeCostCommit();
+  } else if (event.key === 'Escape') {
+    setFarmTypeCostError(null);
+    renderFarmTypeCost(undefined, { sync: true });
+  }
 }
 
 async function loadCustomFarmTypes() {
@@ -1866,6 +1978,7 @@ async function init() {
   // Before the selection: a custom farm type counts as supported only once its list has loaded.
   await loadCustomFarmTypes();
   await loadActiveFarmTypeSelection();
+  await loadFarmTypeCosts();
   populateStrategyPresets();
 
   // Set language from settings and apply translations
@@ -2702,6 +2815,14 @@ function setupEventListeners() {
   if (elements.manageFarmTypesBtn) {
     elements.manageFarmTypesBtn.addEventListener('click', openCustomFarmSettings);
   }
+  if (elements.entryCostInput) {
+    elements.entryCostInput.addEventListener('keydown', handleFarmTypeCostKeydown);
+    elements.entryCostInput.addEventListener('focusout', handleFarmTypeCostCommit);
+    elements.entryCostInput.addEventListener('input', () => setFarmTypeCostError(null));
+  }
+  if (elements.entryCostUnit) {
+    elements.entryCostUnit.addEventListener('change', handleFarmTypeCostCommit);
+  }
   if (elements.customFarmForm) {
     elements.customFarmAddBtn?.addEventListener('click', () => openCustomFarmForm());
     elements.customFarmCancelBtn?.addEventListener('click', () => {
@@ -2723,6 +2844,11 @@ function setupEventListeners() {
   if (elements.sessionDrawerBackdrop) elements.sessionDrawerBackdrop.addEventListener('click', closeSessionDrawer);
   if (elements.sessionDrawerSave) elements.sessionDrawerSave.addEventListener('click', handleSessionMetadataSave);
   if (elements.sessionDrawerLootEdit) elements.sessionDrawerLootEdit.addEventListener('click', handleSessionLootEditToggle);
+  if (elements.sessionDrawerSummary) {
+    elements.sessionDrawerSummary.addEventListener('keydown', handleSessionCostKeydown);
+    elements.sessionDrawerSummary.addEventListener('focusout', handleSessionCostChange);
+    elements.sessionDrawerSummary.addEventListener('change', handleSessionCostUnitChange);
+  }
   if (elements.sessionDrawerLoot) {
     elements.sessionDrawerLoot.addEventListener('click', handleSessionLootClick);
     elements.sessionDrawerLoot.addEventListener('keydown', handleSessionLootKeydown);
@@ -2956,6 +3082,21 @@ function setupIPCListeners() {
     }
     await refreshTrackerData({ includeSessions: true, immediate: true });
   });
+
+  // A change to the farm type's entry cost reached the map that is running.
+  if (window.electronAPI.onSessionCostUpdated) {
+    window.electronAPI.onSessionCostUpdated((session) => {
+      if (state.currentSession?.id === session?.id) {
+        state.currentSession = { ...state.currentSession, ...session };
+        updateActiveSessionUI();
+      }
+      if (state.selectedSession?.id === session?.id) {
+        state.selectedSession = session;
+        redrawSessionLoot();
+      }
+      refreshTrackerData({ includeSessions: true });
+    });
+  }
 
   if (window.electronAPI.onInventoryReadStatus) {
     window.electronAPI.onInventoryReadStatus(setInventoryReadStatus);
@@ -3393,6 +3534,7 @@ async function handlePoeOAuthLogin() {
       if (typeof loadCustomFarmTypes === 'function') {
         await loadCustomFarmTypes();
         await loadActiveFarmTypeSelection();
+        await loadFarmTypeCosts();
         renderFarmTypeSelector();
       }
       await loadMapResultHistory();
@@ -3434,6 +3576,7 @@ function showSignedOutWindow() {
   state.currentUser = null;
   if (typeof loadCustomFarmTypes === 'function') {
     window.farmTypeModel?.setCustomFarmTypes?.([]);
+    state.farmTypeCosts = {};
     closeCustomFarmForm();
     renderCustomFarmTypes();
   }
@@ -4284,6 +4427,10 @@ function formatMapResultProfitHTML(result = {}, iconSize = 16, options = {}) {
   if (result?.profitUnavailable) {
     return `<span class="profit-unavailable">${window.t('mapResult.notCalculated')}</span>`;
   }
+  // No loot was counted, so the map has no profit to show, even when its entry cost would make the number a loss.
+  if (result?.noLoot) {
+    return `<span class="profit-unavailable">${window.t('toast.mapNoLoot')}</span>`;
+  }
 
   const formatProfit = typeof profitCurrencyHTML === 'function'
     ? profitCurrencyHTML
@@ -4298,7 +4445,7 @@ function formatMapResultProfitHTML(result = {}, iconSize = 16, options = {}) {
 }
 
 function getMapResultProfitTier(result = {}) {
-  if (result?.profitUnavailable || typeof getProfitTierFor !== 'function') {
+  if (result?.profitUnavailable || result?.noLoot || typeof getProfitTierFor !== 'function') {
     return '';
   }
 
@@ -5280,6 +5427,9 @@ function updateActiveSessionUI() {
   if (costChaos > 0) {
     metaParts.push(`${window.t('dashboard.liveLoot')} ${formatProfit(totalLootChaos, 14, poeVersion, rateOptions)}`);
     metaParts.push(`${window.t('sessions.cost')} ${formatProfit(costChaos, 14, poeVersion, rateOptions)}`);
+  } else if (Number(session.costPending?.amount) > 0) {
+    // The Divine rate was unknown at the start; the cost lands when the map ends, if the rate is known by then.
+    metaParts.push(window.t('dashboard.costPendingDivine', { amount: escapeHTML(String(session.costPending.amount)) }));
   }
 
   const html = `
@@ -7858,16 +8008,26 @@ function renderSessionDrawer({ keepForm = false } = {}) {
   const memeFor = typeof profitMemeHTML === 'function' ? profitMemeHTML : () => '';
   const rateOptions = { league: session.league };
   const fact = (labelKey, value) => `<div><dt>${window.t(labelKey)}</dt><dd>${value}</dd></div>`;
+  // A Divine cost waits for a Divine price. A run that ended without one keeps a cost of 0 until it is set by hand,
+  // so the Cost fact says what was left out.
+  const pendingCostAmount = cost === 0 ? Number(session.costPending?.amount) : 0;
+  const costNote = pendingCostAmount > 0
+    ? `<span class="session-drawer-cost-note">${window.t(session.status === 'active' ? 'dashboard.costPendingDivine' : 'sessions.costNotCounted', {
+      amount: escapeHTML(String(session.costPending.amount))
+    })}</span>`
+    : '';
 
   elements.sessionDrawerTitle.textContent = session.mapName || window.t('misc.unknownMap');
   elements.sessionDrawerLootCount.textContent = String(lootQuantity);
-  // Only entries with an id can be edited; runs saved before ids existed stay read-only.
+  // Only entries with an id can be edited; runs saved before ids existed keep their loot read-only. Every run's entry
+  // cost can be changed, so Edit shows even for a run with no loot.
   const hasEditableLoot = lootEntries.some((loot) => loot.id);
-  if (!hasEditableLoot) state.sessionLootEditing = false;
+  const canEdit = hasEditableLoot || Boolean(session.id);
+  if (!canEdit) state.sessionLootEditing = false;
   const lootEditing = Boolean(state.sessionLootEditing);
   if (elements.sessionDrawerLootEdit) {
     // The label says what a click does next, so the button carries no pressed state as well.
-    elements.sessionDrawerLootEdit.classList.toggle('hidden', !hasEditableLoot);
+    elements.sessionDrawerLootEdit.classList.toggle('hidden', !canEdit);
     elements.sessionDrawerLootEdit.textContent = window.t(lootEditing ? 'sessions.lootEditDone' : 'sessions.lootEdit');
   }
   // Profit leads the run; the rest is a compact fact list, so the loot stays above the fold.
@@ -7888,7 +8048,7 @@ function renderSessionDrawer({ keepForm = false } = {}) {
     </div>
     <dl class="session-drawer-facts">
       ${fact('sessions.game', contextLabel)}
-      ${fact('sessions.cost', formatProfit(cost, 14, poeVersion, rateOptions))}
+      ${fact('sessions.cost', lootEditing ? sessionCostEditHTML(session) : `${formatProfit(cost, 14, poeVersion, rateOptions)}${costNote}`)}
       ${fact('sessions.totalLoot', formatProfit(totalLoot, 14, poeVersion, rateOptions))}
       ${fact('sessions.startedAt', session.startedAt ? new Date(session.startedAt).toLocaleString() : '-')}
       ${fact('sessions.endedAt', session.endedAt ? new Date(session.endedAt).toLocaleString() : '-')}
@@ -7992,11 +8152,17 @@ function resetSessionLootEditing() {
   clearSessionLootArm();
   state.sessionLootEditing = false;
   state.sessionLootBusyId = null;
+  state.sessionCostUnit = 'chaos';
 }
 
 // A redraw replaces the rows, so the control the player was on is found again by its loot id. A box keeps what was
 // typed in it, as a price update can redraw while the player types.
 function getFocusedSessionLootControl(node = document.activeElement) {
+  // The cost boxes sit in the summary, above the rows.
+  if (node && elements.sessionDrawerSummary?.contains?.(node)) {
+    if (node.classList.contains('session-drawer-cost-input')) return { kind: 'cost', value: node.value };
+    if (node.classList.contains('session-drawer-cost-unit')) return { kind: 'costUnit' };
+  }
   if (!node || !elements.sessionDrawerLoot.contains(node) || !node.dataset?.lootId) return null;
   return node.classList.contains('session-drawer-loot-remove')
     ? { kind: 'remove', lootId: node.dataset.lootId }
@@ -8006,7 +8172,9 @@ function getFocusedSessionLootControl(node = document.activeElement) {
 function focusSessionLootControl(target) {
   if (!target) return;
   let node = null;
-  if (target.kind === 'toggle') {
+  if (target.kind === 'cost' || target.kind === 'costUnit') {
+    node = elements.sessionDrawerSummary.querySelector(target.kind === 'cost' ? '.session-drawer-cost-input' : '.session-drawer-cost-unit');
+  } else if (target.kind === 'toggle') {
     // With no editable entry left the toggle is hidden, so focus goes to the drawer's close button.
     node = elements.sessionDrawerLootEdit?.classList.contains('hidden') ? elements.sessionDrawerClose : elements.sessionDrawerLootEdit;
   } else {
@@ -8014,7 +8182,7 @@ function focusSessionLootControl(target) {
     node = [...elements.sessionDrawerLoot.querySelectorAll(selector)].find((control) => control.dataset.lootId === target.lootId);
   }
   if (!node) return;
-  if (target.kind === 'qty' && target.value !== undefined) node.value = target.value;
+  if ((target.kind === 'qty' || target.kind === 'cost') && target.value !== undefined) node.value = target.value;
   if (!node.disabled) node.focus();
 }
 
@@ -8115,7 +8283,7 @@ function handleSessionLootChange(event) {
 
 async function changeSessionLoot(lootId, { quantity, remove = false } = {}, focusBefore = getFocusedSessionLootControl()) {
   const session = state.selectedSession;
-  if (!session?.id || state.sessionLootBusyId) return;
+  if (!session?.id || state.sessionLootBusyId || state.sessionCostBusy) return;
 
   const entries = Array.isArray(session.lootEntries) ? session.lootEntries : [];
   const item = entries.find((loot) => loot.id === lootId)?.itemName || window.t('misc.unknownItem');
@@ -8156,6 +8324,118 @@ async function changeSessionLoot(lootId, { quantity, remove = false } = {}, focu
   announceStatus(remove
     ? window.t('sessions.lootRemoved', { item })
     : window.t('sessions.lootQuantityChanged', { item, count: quantity }));
+  await refreshTrackerData({ includeSessions: true, immediate: true });
+}
+
+// The Divine rate a run's cost converts with; null while it is unknown, which hides the Divine option.
+function getSessionCostDivineRate(session) {
+  const rates = typeof getProfitCurrencyRates === 'function'
+    ? getProfitCurrencyRates(session.poeVersion || state.settings.poeVersion || 'poe1', session.league)
+    : null;
+  const rate = Number(rates?.divineChaos);
+  return rate > 0 ? rate : null;
+}
+
+// The Cost fact in Edit mode: an amount and its unit. The box keeps the text it was drawn with, so an untouched box
+// is told from an edited one even when a Divine amount does not round-trip exactly.
+function sessionCostEditHTML(session) {
+  const cost = parseFloat(session.costChaos || 0) || 0;
+  const rate = getSessionCostDivineRate(session);
+  const unit = rate && state.sessionCostUnit === 'divine' ? 'divine' : 'chaos';
+  const text = String(Number((unit === 'divine' ? cost / rate : cost).toFixed(unit === 'divine' ? 4 : 2)));
+  const disabledAttr = state.sessionCostBusy ? ' disabled' : '';
+  const option = (value, name) => `<option value="${value}"${value === unit ? ' selected' : ''}>${name}</option>`;
+  return `<span class="session-drawer-cost-edit"><input type="text" class="session-drawer-cost-input" inputmode="decimal" autocomplete="off" maxlength="12" value="${text}" data-baseline="${text}" data-unit="${unit}" aria-label="${window.t('sessions.costAria')}"${disabledAttr}><select class="session-drawer-cost-unit" aria-label="${window.t('sessions.costUnitAria')}"${disabledAttr}>${option('chaos', 'Chaos Orb')}${rate ? option('divine', 'Divine Orb') : ''}</select></span>`;
+}
+
+function getSessionCostControls() {
+  const summary = elements.sessionDrawerSummary;
+  return {
+    input: summary?.querySelector?.('.session-drawer-cost-input'),
+    unit: summary?.querySelector?.('.session-drawer-cost-unit')
+  };
+}
+
+// Like the loot quantity box, the cost commits on Enter or when focus leaves it, not on each keystroke.
+function handleSessionCostKeydown(event) {
+  if (event.key !== 'Enter' || !event.target?.closest?.('.session-drawer-cost-input')) return;
+  event.preventDefault();
+  handleSessionCostChange(event);
+}
+
+function handleSessionCostChange(event) {
+  if (!event.target?.closest?.('.session-drawer-cost-input, .session-drawer-cost-unit')) return;
+  const { input, unit } = getSessionCostControls();
+  const session = state.selectedSession;
+  if (!input || !unit || !session?.id) return;
+  // A running save locks the boxes, which can move focus out of them, and a rebuild fires focusout too. Neither is a commit.
+  if (state.sessionCostBusy || (event.type === 'focusout' && state.sessionLootRedrawing)) return;
+  // Moving between the amount and its unit is not leaving the cost.
+  if (event.type === 'focusout' && (event.relatedTarget === input || event.relatedTarget === unit)) return;
+
+  const rate = getSessionCostDivineRate(session);
+  const unitName = unit.value === 'divine' && rate ? 'divine' : 'chaos';
+  const factor = unitName === 'divine' ? rate : 1;
+  // 10000000 chaos is the largest cost main accepts.
+  const amount = parseCostAmount(input.value, 10000000 / factor);
+  const costChaos = amount === null ? null : Math.round(amount * factor * 100) / 100;
+  const untouched = input.value.trim() === input.dataset.baseline && unitName === input.dataset.unit;
+  // While a loot row saves, a cost cannot, so the box shows its stored cost again.
+  if (costChaos === null || untouched || state.sessionLootBusyId
+    || Math.abs(costChaos - (parseFloat(session.costChaos || 0) || 0)) < 0.005) {
+    input.value = input.dataset.baseline;
+    unit.value = input.dataset.unit;
+    return;
+  }
+  // Focus leaving a box commits it; the control focus moved to gets it back once the drawer is redrawn.
+  const focus = getFocusedSessionLootControl(event.type === 'focusout' ? event.relatedTarget : event.target);
+  changeSessionCost(costChaos, focus);
+}
+
+// With the box untouched the unit switch shows the same cost in the other unit; with typed text the text stays and
+// reads in the new unit when it commits.
+function handleSessionCostUnitChange(event) {
+  if (!event.target?.closest?.('.session-drawer-cost-unit')) return;
+  const { input, unit } = getSessionCostControls();
+  state.sessionCostUnit = unit.value === 'divine' ? 'divine' : 'chaos';
+  if (input && input.value.trim() === input.dataset.baseline) redrawSessionLoot({ kind: 'costUnit' });
+}
+
+async function changeSessionCost(costChaos, focusBefore = getFocusedSessionLootControl()) {
+  const session = state.selectedSession;
+  if (!session?.id || state.sessionCostBusy || state.sessionLootBusyId) return;
+
+  state.sessionCostBusy = true;
+  const { input, unit } = getSessionCostControls();
+  if (input) input.disabled = true;
+  if (unit) unit.disabled = true;
+
+  let updated = null;
+  try {
+    updated = await window.electronAPI.updateSessionCost(session.id, costChaos);
+    // The player may have opened another run while main was writing.
+    if (state.selectedSession?.id === session.id) state.selectedSession = updated;
+    if (state.currentSession?.id === updated.id) {
+      state.currentSession = { ...state.currentSession, ...updated };
+      if (typeof updateActiveSessionUI === 'function') updateActiveSessionUI();
+    }
+  } catch (error) {
+    showToast(window.t('toast.costUpdateError'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
+  } finally {
+    state.sessionCostBusy = false;
+  }
+
+  // The box shows the stored cost again, so it drops what was typed, whether the save worked or not.
+  let focus = getFocusedSessionLootControl() || focusBefore;
+  if (focus?.kind === 'cost') focus = { kind: 'cost' };
+  redrawSessionLoot(focus);
+  if (!updated) return;
+
+  announceStatus(window.t('sessions.costChanged', {
+    cost: typeof formatAdaptiveProfitText === 'function'
+      ? formatAdaptiveProfitText(costChaos, session.poeVersion, { league: session.league })
+      : String(costChaos)
+  }));
   await refreshTrackerData({ includeSessions: true, immediate: true });
 }
 

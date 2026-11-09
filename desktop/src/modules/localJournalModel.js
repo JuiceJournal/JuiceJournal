@@ -16,6 +16,10 @@
   const LOOT_SOURCES = new Set(['manual', 'ocr', 'api', 'inventory']);
   const PERIOD_DAYS = { weekly: 7, monthly: 30 };
   const MAX_LOOT_QUANTITY = 1000000;
+  const MAX_COST_CHAOS = 10000000;
+  // 'farmType' is the cost the map started with; 'manual' is one the player set for this map.
+  const COST_SOURCES = new Set(['farmType', 'manual']);
+  const COST_UNITS = new Set(['chaos', 'divine']);
 
   function journalError(message, code) {
     return Object.assign(new Error(message), { code });
@@ -82,6 +86,14 @@
     return session;
   }
 
+  // The typed cost of a map that could not be converted to chaos yet, because the divine rate was unknown.
+  function normalizeCostPending(value) {
+    const amount = Number(value?.amount);
+    return Number.isFinite(amount) && amount > 0 && amount <= MAX_COST_CHAOS && COST_UNITS.has(value.unit)
+      ? { amount, unit: value.unit }
+      : null;
+  }
+
   function startSession(journal, input = {}, { id, now }) {
     const current = normalizeJournal(journal);
     if (getActiveSession(current)) {
@@ -96,6 +108,7 @@
     const timestamp = now.toISOString();
     const farmTypeId = normalizeOptionalText(input.farmTypeId ?? input.mapType, 50);
     const mapTier = Number.parseInt(input.mapTier, 10);
+    const costChaos = Math.min(Math.max(0, toNumber(input.costChaos)), MAX_COST_CHAOS);
     const session = {
       id,
       mapName,
@@ -106,13 +119,16 @@
       notes: normalizeOptionalText(input.notes, 2000),
       league: normalizeOptionalText(input.league, 50) || 'Standard',
       poeVersion: input.poeVersion === 'poe2' ? 'poe2' : 'poe1',
-      costChaos: Math.max(0, toNumber(input.costChaos)),
+      costChaos,
+      costSource: COST_SOURCES.has(input.costSource) ? input.costSource : null,
+      costPending: normalizeCostPending(input.costPending),
       durationSec: null,
       startedAt: toIsoDate(input.startedAt) || timestamp,
       endedAt: null,
       status: 'active',
       totalLootChaos: 0,
-      profitChaos: 0,
+      // Profit is loot minus cost, so a map starts at minus its cost.
+      profitChaos: 0 - costChaos,
       createdAt: timestamp,
       updatedAt: timestamp,
       lootEntries: []
@@ -158,6 +174,29 @@
     }
 
     return { journal: replaceSession(current, updated), session: updated };
+  }
+
+  // Sets the cost of one map and moves its profit by the opposite of the change. That holds for every kind of session:
+  // one whose totals came from a stash diff keeps them, and one whose totals follow the loot keeps profit == total - cost.
+  // `pending` keeps a typed cost that could not be converted yet; without it the pending cost is cleared.
+  function updateCost(journal, sessionId, costChaos, { source = 'manual', now, pending = null }) {
+    if (typeof costChaos !== 'number' || !Number.isFinite(costChaos) || costChaos < 0 || costChaos > MAX_COST_CHAOS) {
+      throw journalError('Cost must be a number from 0 to 10000000', 'COST_INVALID');
+    }
+
+    const current = normalizeJournal(journal);
+    const session = requireSession(current, sessionId);
+    const delta = costChaos - toNumber(session.costChaos);
+    const updated = {
+      ...session,
+      costChaos,
+      costSource: COST_SOURCES.has(source) ? source : 'manual',
+      costPending: normalizeCostPending(pending),
+      profitChaos: toNumber(session.profitChaos) - delta,
+      updatedAt: now.toISOString()
+    };
+
+    return { journal: replaceSession(current, updated), session: updated, delta };
   }
 
   // Each entry needs an itemName; adding loot recalculates the session totals like the server did.
@@ -338,6 +377,7 @@
   }
 
   return {
+    MAX_COST_CHAOS,
     addLoot,
     deleteLoot,
     endSession,
@@ -348,6 +388,7 @@
     listSessions,
     normalizeJournal,
     startSession,
+    updateCost,
     updateLoot,
     updateSession
   };

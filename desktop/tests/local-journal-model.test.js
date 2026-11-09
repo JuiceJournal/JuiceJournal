@@ -11,6 +11,7 @@ const {
   listRecentLoot,
   listSessions,
   startSession,
+  updateCost,
   updateLoot,
   updateSession
 } = require('../src/modules/localJournalModel');
@@ -51,17 +52,42 @@ test('startSession creates an active session in the server shape', () => {
     league: 'Mirage',
     poeVersion: 'poe1',
     costChaos: 10,
+    costSource: null,
+    costPending: null,
     durationSec: null,
     startedAt: '2026-10-21T11:50:00.000Z',
     endedAt: null,
     status: 'active',
     totalLootChaos: 0,
-    profitChaos: 0,
+    profitChaos: -10,
     createdAt: NOW.toISOString(),
     updatedAt: NOW.toISOString(),
     lootEntries: []
   });
   assert.equal(getActiveSession(journal).id, 'session-1');
+});
+
+test('startSession keeps the cost source and a pending cost, and starts the profit at minus the cost', () => {
+  const farmType = startedJournal({ costChaos: 12.5, costSource: 'farmType' }).session;
+  assert.equal(farmType.costSource, 'farmType');
+  assert.equal(farmType.profitChaos, -12.5);
+  assert.equal(farmType.totalLootChaos, 0);
+
+  const pending = startedJournal({ costChaos: 0, costSource: 'farmType', costPending: { amount: 2, unit: 'divine' } }).session;
+  assert.deepEqual(pending.costPending, { amount: 2, unit: 'divine' });
+  assert.equal(Object.is(pending.profitChaos, 0), true);
+
+  const invalid = startedJournal({ costSource: 'other', costPending: { amount: -1, unit: 'exalted' } }).session;
+  assert.equal(invalid.costSource, null);
+  assert.equal(invalid.costPending, null);
+});
+
+test('a map without loot ends at minus its cost, and loot counts against the cost', () => {
+  const { journal } = startedJournal({ costChaos: 20 });
+  assert.equal(endSession(journal, 'session-1', {}, { now: NOW }).session.profitChaos, -20);
+
+  const looted = addLoot(journal, 'session-1', [{ itemName: 'Divine Orb', chaosValue: 150 }], { createId: idFactory('loot'), now: NOW });
+  assert.equal(looted.session.profitChaos, 130);
 });
 
 test('startSession refuses a second active session and a missing map name', () => {
@@ -376,4 +402,76 @@ test('only an id string names a loot entry, so entries without an id cannot be e
     assert.throws(() => deleteLoot(journal, 'session-1', lootId, { now: NOW }), { code: 'LOOT_NOT_FOUND' }, String(lootId));
     assert.throws(() => updateLoot(journal, 'session-1', lootId, { quantity: 2 }, { now: NOW }), { code: 'LOOT_NOT_FOUND' }, String(lootId));
   }
+});
+
+test('updateCost sets the cost and moves the profit by the opposite change, active or finished', () => {
+  const later = new Date('2026-10-21T13:00:00.000Z');
+  for (const end of [false, true]) {
+    const { journal } = lootJournal({ end });
+    const result = updateCost(journal, 'session-1', 25.5, { now: later });
+
+    assert.equal(result.delta, 15.5);
+    assert.equal(result.session.costChaos, 25.5);
+    assert.equal(result.session.costSource, 'manual');
+    assert.equal(result.session.totalLootChaos, 205);
+    assert.equal(result.session.profitChaos, 179.5);
+    assert.equal(result.session.updatedAt, later.toISOString());
+    assert.equal(getSession(result.journal, 'session-1'), result.session);
+
+    // A lower cost raises the profit again.
+    assert.equal(updateCost(result.journal, 'session-1', 0, { now: later }).session.profitChaos, 205);
+  }
+});
+
+test('updateCost keeps stash totals, and the loot rule keeps following the loot afterwards', () => {
+  const { journal, session } = lootJournal();
+  const ended = endSession(journal, 'session-1', { totalLootChaos: 900, profitChaos: 850 }, { now: NOW });
+
+  const { session: updated, delta } = updateCost(ended.journal, 'session-1', 30, { now: NOW });
+  assert.equal(delta, 20);
+  assert.equal(updated.totalLootChaos, 900);
+  assert.equal(updated.profitChaos, 830);
+
+  // A loot-derived map still passes the totalsFollowLoot rule after its cost changed.
+  const derived = endSession(lootJournal().journal, 'session-1', {}, { now: NOW });
+  const recosted = updateCost(derived.journal, 'session-1', 50, { now: NOW });
+  const edited = updateLoot(recosted.journal, 'session-1', session.lootEntries[0].id, { quantity: 1 }, { now: NOW });
+  assert.equal(edited.totalsFollowLoot, true);
+  assert.equal(edited.session.profitChaos, edited.session.totalLootChaos - 50);
+});
+
+test('updateCost sets the source and clears or keeps a pending cost', () => {
+  const pendingJournal = startedJournal({ costChaos: 0, costSource: 'farmType', costPending: { amount: 2, unit: 'divine' } });
+
+  const settled = updateCost(pendingJournal.journal, 'session-1', 600, { source: 'farmType', now: NOW });
+  assert.equal(settled.session.costSource, 'farmType');
+  assert.equal(settled.session.costPending, null);
+  assert.equal(settled.session.profitChaos, -600);
+
+  const kept = updateCost(pendingJournal.journal, 'session-1', 0, { source: 'farmType', now: NOW, pending: { amount: 3, unit: 'divine' } });
+  assert.deepEqual(kept.session.costPending, { amount: 3, unit: 'divine' });
+
+  const manual = updateCost(pendingJournal.journal, 'session-1', 5, { now: NOW });
+  assert.equal(manual.session.costSource, 'manual');
+  assert.equal(manual.session.costPending, null);
+});
+
+test('updateCost refuses a cost that is not a finite number from 0 to the cap, and an unknown session', () => {
+  const { journal } = startedJournal();
+
+  for (const cost of [-1, Number.NaN, Infinity, 10000001, '5', null, undefined]) {
+    assert.throws(() => updateCost(journal, 'session-1', cost, { now: NOW }), { code: 'COST_INVALID' }, String(cost));
+  }
+  assert.equal(updateCost(journal, 'session-1', 10000000, { now: NOW }).session.costChaos, 10000000);
+  assert.throws(() => updateCost(journal, 'missing', 5, { now: NOW }), { code: 'SESSION_NOT_FOUND' });
+});
+
+test('the stats count the changed cost and profit of a finished map', () => {
+  const ended = endSession(lootJournal().journal, 'session-1', {}, { now: NOW });
+  const { journal } = updateCost(ended.journal, 'session-1', 40, { now: NOW });
+
+  const { summary } = getPersonalStats(journal, { period: 'daily', now: new Date('2026-10-21T14:00:00.000Z') });
+  assert.equal(summary.totalCost, 40);
+  assert.equal(summary.totalLoot, 205);
+  assert.equal(summary.totalProfit, 165);
 });

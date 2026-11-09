@@ -156,6 +156,10 @@ function loadFunctions(functionNames, contextOverrides = {}) {
     },
     // Ending a map asks the inventory watcher whether it can count the map's loot; most tests have none.
     ...(functionNames.includes('endCurrentSession') ? { inventoryWatcher: null } : {}),
+    // Starting a map asks for its entry cost; these tests start maps without one.
+    ...(functionNames.includes('startNewSession')
+      ? { resolveStartCost: async () => ({ costChaos: 0, costSource: null, costPending: null }) }
+      : {}),
     ...contextOverrides
   });
 
