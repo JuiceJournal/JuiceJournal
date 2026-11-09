@@ -3032,6 +3032,9 @@ function setupIPCListeners() {
     if (data?.runtimeSession) {
       setRuntimeSessionState(data.runtimeSession);
     }
+    // A start prompt still waiting belongs to the map just left, so it ends at once and starts nothing.
+    state.mapExitCount = (state.mapExitCount || 0) + 1;
+    state.stopStartMapPrompt?.();
     refreshTrackerData({ includeSessions: true });
   });
 
@@ -3299,7 +3302,7 @@ async function handleMapEnteredEvent(data = {}) {
     && !state.currentSession
     && !state.mapSessionPromptActive;
 
-  // A start prompt (overlay or desktop modal) names the map; without one the Active map card is enough.
+  // The start prompt names the map; without one the Active map card is enough.
   if (!shouldPromptForSession) {
     return;
   }
@@ -3308,6 +3311,10 @@ async function handleMapEnteredEvent(data = {}) {
     ? data.mapName.trim()
     : null;
 
+  const trackerContext = typeof getSelectedTrackerContext === 'function'
+    ? getSelectedTrackerContext()
+    : {};
+  const mapExitCount = state.mapExitCount || 0;
   state.mapSessionPromptActive = true;
   let startPromptOverlayShown = false;
   try {
@@ -3315,9 +3322,6 @@ async function handleMapEnteredEvent(data = {}) {
       let stopWaitingForOverlayResult = () => {};
       let startOverlayResultTimeout = () => {};
       try {
-        const trackerContext = typeof getSelectedTrackerContext === 'function'
-          ? getSelectedTrackerContext()
-          : {};
         const farmTypeId = trackerContext?.farmTypeId || null;
         let farmType = null;
         let farmTypeOptions = [];
@@ -3379,6 +3383,7 @@ async function handleMapEnteredEvent(data = {}) {
           })
           : null;
 
+        state.stopStartMapPrompt = () => stopWaitingForOverlayResult();
         const overlayState = await window.electronAPI.showStartMapPromptOverlay({
           mapName: detectedMapName || data.mapName || null,
           poeVersion: trackerContext?.poeVersion || null,
@@ -3420,7 +3425,7 @@ async function handleMapEnteredEvent(data = {}) {
         }
 
         // Unanswered, or not shown yet (e.g. behind a map-result card): take the prompt down before the
-        // desktop modal opens so it cannot surface later and swallow clicks nobody is listening for.
+        // map starts so it cannot surface later and swallow clicks nobody is listening for.
         if (window.electronAPI?.hideStartMapPromptOverlay) {
           await window.electronAPI.hideStartMapPromptOverlay();
           startPromptOverlayShown = false;
@@ -3431,9 +3436,20 @@ async function handleMapEnteredEvent(data = {}) {
       }
     }
 
+    // A map started meanwhile (the tray, the Dashboard) or a map already left takes no automatic start.
+    if (state.currentSession || (state.mapExitCount || 0) !== mapExitCount) {
+      return;
+    }
+
+    // A map entry never opens the desktop modal over the game. A prompt left unanswered, or one the overlay could not
+    // show, starts the map with the farm type it offered: the player's own pick on the Dashboard.
     await handleStartSession({
       defaultMapName: detectedMapName,
-      source: 'map-detected'
+      source: 'map-detected-auto',
+      sessionDetails: {
+        mapName: detectedMapName || window.t('misc.unknownMap'),
+        farmTypeId: trackerContext?.farmTypeId || null
+      }
     });
   } finally {
     if (startPromptOverlayShown && window.electronAPI?.hideStartMapPromptOverlay) {
@@ -3443,6 +3459,7 @@ async function handleMapEnteredEvent(data = {}) {
         console.warn('Failed to hide start-map overlay prompt', error);
       }
     }
+    state.stopStartMapPrompt = null;
     state.mapSessionPromptActive = false;
   }
 }
@@ -5443,7 +5460,7 @@ function updateActiveSessionUI() {
     stopSessionClock();
     renderedActiveSessionHTML = null;
     renderedActiveSessionItems = null;
-    // Auto-start opens the start prompt on map entry, so the hint mentions it only while that setting is on.
+    // Auto-start starts a map on entry, so the hint mentions it only while that setting is on.
     const idleHint = state.settings?.autoStartSession
       ? `${window.t('dashboard.idleHint')} ${window.t('dashboard.idleHintAutoStart')}`
       : window.t('dashboard.idleHint');

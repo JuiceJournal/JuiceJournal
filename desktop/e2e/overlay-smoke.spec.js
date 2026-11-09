@@ -442,6 +442,8 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText(SMOKE_USER.selectedCharacter.name);
 
     // The start-map prompt is mouse-only: no text input, farm type picked from buttons, map name from the prompt.
+    // Each chip shows the entry cost its farm type applies, as typed on the Dashboard.
+    expect(await page.evaluate(() => window.electronAPI.setFarmTypeCost('expedition', { amount: 1.5, unit: 'divine' }))).toMatchObject({ ok: true });
     await page.evaluate(() => {
       window.__overlayPromptResults = [];
       window.electronAPI.onStartMapPromptOverlayResult((result) => window.__overlayPromptResults.push(result));
@@ -454,7 +456,13 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText('Cemetery Map');
     await expect(overlayWindow.locator('[data-overlay-start-form] input, [data-overlay-start-form] select')).toHaveCount(0);
     await expect(overlayWindow.locator('[data-farm-type-id]')).toHaveCount(3);
+    await expect(overlayWindow.locator('[data-farm-type-id="expedition"] .jj-chip-cost')).toHaveText('1.5 div');
+    const costNote = overlayWindow.locator('[data-overlay-start-cost-note]');
+    // A farm type without a cost says where to set it; the overlay takes no typing.
+    await overlayWindow.locator('[data-farm-type-id="ritual"]').click();
+    await expect(costNote).toHaveText('No entry cost yet: set it on the Dashboard.');
     await overlayWindow.locator('[data-farm-type-id="expedition"]').click();
+    await expect(costNote).toBeHidden();
     await expect(overlayWindow.locator('[data-farm-type-id="expedition"]')).toHaveAttribute('aria-pressed', 'true');
     await expect(overlayWindow.locator('[data-farm-type-id=""]')).toHaveAttribute('aria-pressed', 'false');
     await overlayWindow.locator('[data-overlay-start-submit]').click();

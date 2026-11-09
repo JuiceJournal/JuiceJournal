@@ -1250,7 +1250,7 @@ test('a failed map start or end checks the journal notice again', async () => {
   assert.equal(journalChecks, 2);
 });
 
-test('map-entered events prompt for a session with the detected map instead of silently auto-starting', async () => {
+test('map-entered events start the detected map without opening the desktop modal when the overlay cannot ask', async () => {
   const startCalls = [];
   const runtimeSnapshots = [];
   const toasts = [];
@@ -1288,8 +1288,12 @@ test('map-entered events prompt for a session with the detected map instead of s
       areaName: 'Tower'
     }
   }]);
-  assert.deepEqual(startCalls, [{ defaultMapName: 'Tower', source: 'map-detected' }]);
-  // The start prompt names the map, so no 'Map Entered' toast doubles it.
+  assert.deepEqual(JSON.parse(JSON.stringify(startCalls)), [{
+    defaultMapName: 'Tower',
+    source: 'map-detected-auto',
+    sessionDetails: { mapName: 'Tower', farmTypeId: null }
+  }]);
+  // The overlay names the map, so no 'Map Entered' toast doubles it.
   assert.deepEqual(toasts, []);
 });
 
@@ -1324,7 +1328,7 @@ test('map-entered events without a start prompt raise no toast', async () => {
   }
 });
 
-test('map-entered events show an in-game start-map overlay prompt before opening the desktop modal', async () => {
+test('map-entered events start the map with the offered farm type when the overlay prompt could not be shown', async () => {
   const overlayPrompts = [];
   const overlayOptions = [];
   const startCalls = [];
@@ -1390,10 +1394,14 @@ test('map-entered events show an in-game start-map overlay prompt before opening
     },
     { hidden: true, beforeDesktopModal: true }
   ]);
-  // Main gets the renderer's own close time, so the overlay counts down to the real close.
+  // Main gets the renderer's own close time, so the overlay counts down to the real start.
   assert.deepEqual(JSON.parse(JSON.stringify(overlayOptions)), [{ expiresInMs: 7000 }]);
   assert.match(fs.readFileSync(appJsPath, 'utf8'), /const START_MAP_PROMPT_OVERLAY_MS = 7000;/);
-  assert.deepEqual(startCalls, [{ defaultMapName: 'Channel', source: 'map-detected' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(startCalls)), [{
+    defaultMapName: 'Channel',
+    source: 'map-detected-auto',
+    sessionDetails: { mapName: 'Channel', farmTypeId: 'breach' }
+  }]);
 });
 
 test('map-entered events can start a session from the in-game start-map overlay selection', async () => {
@@ -1471,7 +1479,7 @@ test('map-entered events can start a session from the in-game start-map overlay 
   }]);
 });
 
-test('map-entered events fall back to the desktop modal when the in-game prompt is not answered quickly', async () => {
+test('map-entered events start the map with the offered farm type when the overlay prompt is not answered, not the desktop modal', async () => {
   const overlayPrompts = [];
   const startCalls = [];
   const timeoutDelays = [];
@@ -1552,7 +1560,55 @@ test('map-entered events fall back to the desktop modal when the in-game prompt 
     { hidden: true, beforeDesktopModal: true }
   ]);
   assert.deepEqual(timeoutDelays, [{ delay: 7000, promptShown: true }]);
-  assert.deepEqual(startCalls, [{ defaultMapName: 'Dunes Map', source: 'map-detected' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(startCalls)), [{
+    defaultMapName: 'Dunes Map',
+    source: 'map-detected-auto',
+    sessionDetails: { mapName: 'Dunes Map', farmTypeId: 'breach' }
+  }]);
+});
+
+test('a map started meanwhile, or a map left before the prompt is answered, takes no automatic start', async () => {
+  const cases = [
+    ['started from the tray', (state) => { state.currentSession = { id: 'tray-session' }; }],
+    ['left', (state) => { state.mapExitCount = 1; state.stopStartMapPrompt(); }]
+  ];
+
+  for (const [name, during] of cases) {
+    const startCalls = [];
+    const hidden = [];
+    const state = { currentSession: null, settings: { autoStartSession: true }, farmType: { selectedFarmTypeId: 'breach' } };
+    const context = loadFunctions(['handleMapEnteredEvent'], {
+      START_MAP_PROMPT_OVERLAY_MS: 7000,
+      state,
+      setRuntimeSessionState: () => {},
+      showToast: () => {},
+      getSelectedTrackerContext: () => ({ poeVersion: 'poe2', league: 'Fate of the Vaal', farmTypeId: 'breach' }),
+      getFarmTypeModel: () => ({ listFarmTypes: () => [{ id: 'breach', label: 'Breach' }] }),
+      window: {
+        t: (key) => key,
+        electronAPI: {
+          showStartMapPromptOverlay: async () => {
+            // While the card waits: no setTimeout here, so only this can end the wait.
+            queueMicrotask(() => {
+              during(state);
+              state.stopStartMapPrompt?.();
+            });
+            return { visibility: 'visible', mode: 'start-map-prompt' };
+          },
+          hideStartMapPromptOverlay: async () => hidden.push(true),
+          onStartMapPromptOverlayResult: () => () => {}
+        }
+      },
+      handleStartSession: async (options) => startCalls.push(options)
+    });
+
+    await context.handleMapEnteredEvent({ mapName: 'Channel' });
+
+    assert.deepEqual(startCalls, [], name);
+    assert.ok(hidden.length > 0, `${name}: the card is taken down`);
+    assert.equal(state.stopStartMapPrompt, null, name);
+    assert.equal(state.mapSessionPromptActive, false, name);
+  }
 });
 
 test('dashboard summary requests stats for the active character league', async () => {

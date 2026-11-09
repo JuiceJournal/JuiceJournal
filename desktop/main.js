@@ -93,8 +93,8 @@ const CHARACTER_PROMPT_OVERLAY_DURATION_MS = 8_000;
 const CHARACTER_PROMPT_LOAD_FALLBACK_MS = 10_000;
 // A prompt not shown this long after Play belongs to no area any more and is dropped.
 const CHARACTER_PROMPT_QUEUE_MS = 60_000;
-// The renderer closes an unanswered start prompt itself; if it never does (it reloaded), main hides the prompt
-// this long after it should have closed, so "closes in 0s" cannot stay on screen.
+// The renderer answers an unanswered start prompt itself by starting the map; if it never does (it reloaded), main
+// hides the prompt this long after its countdown ended, so "starts in 0s" cannot stay on screen.
 const START_MAP_PROMPT_OVERLAY_GRACE_MS = 3_000;
 const OVERLAY_CLICKABLE_MODES = new Set(['start-map-prompt', 'map-result', 'character-prompt']);
 const MAX_AUDIT_TRAIL_ENTRIES = 200;
@@ -3492,13 +3492,19 @@ function normalizeStartMapPromptFarmTypeOptions(value) {
 function showStartMapPromptOverlay(prompt = {}, options = {}) {
   const createdAt = options.now ?? Date.now();
   const expiresInMs = Number(options.expiresInMs);
+  const costs = getStoredFarmTypeCosts();
   overlayStartMapPromptState = {
     mapName: normalizeStartMapPromptText(prompt.mapName, 'Unknown Map'),
     farmTypeId: normalizeStartMapPromptText(prompt.farmTypeId || prompt.farm_type_id),
     farmType: normalizeStartMapPromptText(prompt.farmType),
     poeVersion: normalizeStartMapPromptText(prompt.poeVersion || prompt.gameVersion),
     league: normalizeStartMapPromptText(prompt.league),
-    farmTypeOptions: normalizeStartMapPromptFarmTypeOptions(prompt.farmTypeOptions),
+    // Each farm type shows the entry cost it applies, as typed: the overlay takes no typing, so the cost is set on the
+    // Dashboard.
+    farmTypeOptions: normalizeStartMapPromptFarmTypeOptions(prompt.farmTypeOptions).map((option) => {
+      const cost = costs[option.id];
+      return cost ? { ...option, cost: cost.unit === 'divine' ? `${cost.amount} div` : `${cost.amount}c` } : option;
+    }),
     source: normalizeStartMapPromptText(prompt.source, 'map-detected'),
     createdAt,
     // The renderer closes an unanswered prompt after expiresInMs; the overlay counts down to this.
