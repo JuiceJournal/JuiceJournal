@@ -4105,7 +4105,19 @@ function getSelectedTrackerContext() {
   };
 }
 
-function deriveCurrentMapResult(profitReport = null) {
+// Adds entry cost to a stash diff's result as an input. `entryCostChaos` keeps how much of the run's cost it holds.
+function addStashEntryCost(mapResult, costChaos) {
+  const netProfit = (Number(mapResult.netProfit) || 0) - costChaos;
+  return {
+    ...mapResult,
+    inputValue: (Number(mapResult.inputValue) || 0) + costChaos,
+    netProfit,
+    profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral',
+    entryCostChaos: (Number(mapResult.entryCostChaos) || 0) + costChaos
+  };
+}
+
+function deriveCurrentMapResult(profitReport = null, session = state.currentSession) {
   const { deriveMapResult } = getMapResultModel();
   const { listFarmTypes, getFarmTypeById } = getFarmTypeModel();
   const capturedContext = stashState.mapResultContext || {};
@@ -4130,7 +4142,7 @@ function deriveCurrentMapResult(profitReport = null) {
     || trackerContext.poeVersion;
   const runtimeSession = capturedContext.runtimeSession || state.runtimeSession;
 
-  return deriveMapResult({
+  const mapResult = deriveMapResult({
     farmType,
     runtimeSession,
     beforeSnapshot: stashState.beforeSnapshot,
@@ -4140,6 +4152,39 @@ function deriveCurrentMapResult(profitReport = null) {
     accountName,
     poeVersion
   });
+  // The stash is read once the map is open, after the map device took the map, so the diff does not see the run's
+  // entry cost. It is added for the run being ended; a diff with no run id is that run's, as its completion is.
+  const costChaos = Number(session?.costChaos) || 0;
+  if (!mapResult || costChaos <= 0 || (mapResult.sessionId && mapResult.sessionId !== session.id)) {
+    return mapResult;
+  }
+
+  return addStashEntryCost(mapResult, costChaos);
+}
+
+// Main settles a Divine cost that waited for a price when the map ends, and the cost can change while the stash is
+// read. The result already shown and saved, and the stash panel, take the same change, so they match the run.
+async function settleStashResultCost(endedSession, report = null) {
+  const mapResult = stashState.lastMapResult;
+  const restChaos = (Number(endedSession?.costChaos) || 0) - (Number(mapResult?.entryCostChaos) || 0);
+  if (!mapResult || !endedSession || !restChaos) {
+    return;
+  }
+
+  stashState.lastMapResult = addStashEntryCost(mapResult, restChaos);
+  if (report) {
+    renderProfitReport(report, { entryCostChaos: stashState.lastMapResult.entryCostChaos });
+  }
+  try {
+    await window.electronAPI.showMapResultOverlay(stashState.lastMapResult);
+  } catch (error) {
+    console.warn('Failed to show map result overlay', error);
+  }
+  try {
+    await persistMapResultHistory(stashState.lastMapResult);
+  } catch (error) {
+    console.warn('Failed to save the map result with its settled cost', error);
+  }
 }
 
 function getSessionNumber(value, fallback = 0) {
@@ -4301,13 +4346,15 @@ function shouldEndSessionAfterStashProfit(mapResult = {}) {
   return poeVersion === 'poe1';
 }
 
-async function completeCurrentSessionAfterStashProfit(mapResult = {}) {
+async function completeCurrentSessionAfterStashProfit(mapResult = {}, report = null) {
   if (!shouldEndSessionAfterStashProfit(mapResult)) {
     return null;
   }
 
   try {
-    return await window.electronAPI.endSession(buildSessionCompletionPayloadFromMapResult(mapResult));
+    const endedSession = await window.electronAPI.endSession(buildSessionCompletionPayloadFromMapResult(mapResult));
+    await settleStashResultCost(endedSession, report);
+    return endedSession;
   } catch (error) {
     console.warn('Failed to end PoE1 session after stash profit calculation', error);
     return null;
@@ -4337,6 +4384,11 @@ function buildSessionCompletionPayloadFromMapResult(mapResult = {}) {
 
   if (durationSeconds > 0) {
     payload.durationSeconds = Math.round(durationSeconds);
+  }
+  // Main takes off the part of the run's entry cost that the profit does not hold yet.
+  const entryCostChaos = getSessionNumber(mapResult.entryCostChaos, 0);
+  if (entryCostChaos > 0) {
+    payload.entryCostChaos = entryCostChaos;
   }
 
   return payload;
@@ -6944,7 +6996,7 @@ async function completePoe1SessionWithStashProfit() {
     if (isEmptyProfitReport(report)) {
       report = await hydratePoe1StashSnapshotsForSession(previousSession) || report;
     }
-    stashState.lastMapResult = deriveCurrentMapResult(report);
+    stashState.lastMapResult = deriveCurrentMapResult(report, previousSession);
 
     if (stashState.lastMapResult) {
       const trackerContext = typeof getSelectedTrackerContext === 'function'
@@ -6966,7 +7018,7 @@ async function completePoe1SessionWithStashProfit() {
       };
     }
 
-    renderProfitReport(report);
+    renderProfitReport(report, { entryCostChaos: Number(stashState.lastMapResult?.entryCostChaos) || 0 });
 
     if (!stashState.lastMapResult || Number(stashState.lastMapResult.durationSeconds || 0) <= 0) {
       throw new Error('Unable to derive a completed map result from the stash diff');
@@ -6981,9 +7033,10 @@ async function completePoe1SessionWithStashProfit() {
     }
 
     await persistMapResultHistory(stashState.lastMapResult);
-    await window.electronAPI.endSession(
+    const endedSession = await window.electronAPI.endSession(
       buildSessionCompletionPayloadFromMapResult(stashState.lastMapResult)
     );
+    await settleStashResultCost(endedSession, report);
 
     state.currentSession = null;
     updateActiveSessionUI();
@@ -7708,7 +7761,7 @@ async function handleCalculateProfit() {
         profitCurrencyRates: rates
       };
     }
-    renderProfitReport(report);
+    renderProfitReport(report, { entryCostChaos: Number(stashState.lastMapResult?.entryCostChaos) || 0 });
     if (stashState.lastMapResult && Number(stashState.lastMapResult.durationSeconds || 0) > 0) {
       let mapResultPersisted = false;
       if (typeof window.electronAPI?.showMapResultOverlay === 'function') {
@@ -7727,7 +7780,7 @@ async function handleCalculateProfit() {
       }
 
       if (mapResultPersisted) {
-        await completeCurrentSessionAfterStashProfit(stashState.lastMapResult);
+        await completeCurrentSessionAfterStashProfit(stashState.lastMapResult, report);
       }
     }
   } catch (error) {
@@ -7737,11 +7790,13 @@ async function handleCalculateProfit() {
   }
 }
 
-function renderProfitReport(report) {
+function renderProfitReport(report, { entryCostChaos = 0 } = {}) {
   if (isStashTrackingUnavailable()) return;
   if (!elements.stashProfitResult) return;
 
   const { summary, gained, lost } = report;
+  // The run's entry cost left before the stash was read, so it counts with the losses, as on the map result.
+  const netProfitChaos = Number(summary.netProfitChaos || 0) - entryCostChaos;
 
   // Show result section
   elements.stashProfitResult.classList.remove('hidden');
@@ -7751,7 +7806,7 @@ function renderProfitReport(report) {
 
   // Main profit value
   if (elements.profitChaosValue) {
-    const val = Number(summary.netProfitChaos || 0);
+    const val = netProfitChaos;
     const poeVersion = stashState.lastMapResult?.poeVersion || getSelectedTrackerContext().poeVersion;
     const rates = {
       ...(getProfitCurrencyRates(poeVersion, stashState.lastMapResult?.league || getSelectedTrackerContext().league) || {}),
@@ -7769,7 +7824,7 @@ function renderProfitReport(report) {
   }
 
   if (elements.profitDivineValue) {
-    const divineValue = Number(summary.netProfitDivine || 0);
+    const divineValue = Number(summary.netProfitDivine || 0) - (Number(summary.divinePrice) > 0 ? entryCostChaos / Number(summary.divinePrice) : 0);
     elements.profitDivineValue.textContent = `${divineValue.toFixed(1)} div`;
   }
 
@@ -7778,7 +7833,7 @@ function renderProfitReport(report) {
   }
 
   if (elements.profitLostValue) {
-    elements.profitLostValue.textContent = `-${Math.round(summary.totalLostChaos)}c`;
+    elements.profitLostValue.textContent = `-${Math.round(Number(summary.totalLostChaos || 0) + entryCostChaos)}c`;
   }
 
   // Render item list
@@ -7810,7 +7865,7 @@ function renderProfitReport(report) {
 
   // Update status badge
   if (elements.stashTrackerStatus) {
-    const val = Number(summary.netProfitChaos || 0);
+    const val = netProfitChaos;
     const poeVersion = stashState.lastMapResult?.poeVersion || getSelectedTrackerContext().poeVersion;
     const rates = {
       ...(getProfitCurrencyRates(poeVersion, stashState.lastMapResult?.league || getSelectedTrackerContext().league) || {}),

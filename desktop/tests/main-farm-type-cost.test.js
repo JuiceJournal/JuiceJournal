@@ -324,15 +324,35 @@ test('ending a map settles its pending cost first, so the loot profit counts it'
   assert.equal(messages[0].payload.costChaos, 500);
 });
 
-test('ending a map with a stash diff keeps the stash profit and does not fold the cost into it', async () => {
+test('a stash diff\'s profit loses the part of the run\'s entry cost it does not hold yet', async () => {
+  // The stash is read after the map device took the map, so the diff alone (shutdown) holds none of the cost.
+  const raw = startPendingSession({ costChaos: 10, costPending: null });
+  const rawEnd = loadEndMap(raw, { currentSession: raw.journal.sessions[0] }).context;
+  const rawEnded = await rawEnd.endCurrentSession({ endedAt: ENDED_AT, totalLootChaos: 900, profitChaos: 850 });
+  assert.equal(rawEnded.costChaos, 10);
+  assert.equal(rawEnded.totalLootChaos, 900);
+  assert.equal(rawEnded.profitChaos, 840);
+  assert.equal(raw.journal.sessions[0].profitChaos, 840);
+
+  // The renderer's result holds the cost already and says so.
+  const held = startPendingSession({ costChaos: 10, costPending: null });
+  const heldEnd = loadEndMap(held, { currentSession: held.journal.sessions[0] }).context;
+  const heldEnded = await heldEnd.endCurrentSession({ endedAt: ENDED_AT, totalLootChaos: 900, profitChaos: 840, entryCostChaos: 10 });
+  assert.equal(heldEnded.profitChaos, 840);
+  assert.equal(held.journal.sessions[0].profitChaos, 840);
+});
+
+test('a Divine cost settled when a stash diff ends the map comes off its profit', async () => {
   const backend = startPendingSession();
   const { context } = loadEndMap(backend, { currentSession: backend.journal.sessions[0] });
 
+  // The renderer knew no cost yet, so its result holds none.
   const ended = await context.endCurrentSession({ endedAt: ENDED_AT, totalLootChaos: 900, profitChaos: 850 });
 
   assert.equal(ended.costChaos, 500);
   assert.equal(ended.totalLootChaos, 900);
-  assert.equal(ended.profitChaos, 850);
+  assert.equal(ended.profitChaos, 350);
+  assert.equal(backend.journal.sessions[0].profitChaos, 350);
 });
 
 test('ending a map without loot reports no loot even though its cost makes the profit negative', async () => {
@@ -491,8 +511,8 @@ test('editSessionCost rewrites the saved result of a finished map in place', () 
 });
 
 test('editSessionCost moves a stash-derived result by the cost change and keeps its stash input', () => {
-  // A shutdown saves a stash-diff result under the run's id: its input is the stash losses, not the cost.
-  const stashResult = storedResult({ inputValue: 80, outputValue: 900, netProfit: 820, topOutputs: [], lootItemCount: undefined });
+  // A shutdown saves a stash-diff result under the run's id: its input is the stash losses plus the cost.
+  const stashResult = storedResult({ inputValue: 80, outputValue: 900, netProfit: 820, entryCostChaos: 10, topOutputs: [], lootItemCount: undefined });
   const backend = createEditBackend({ results: [stashResult], stashTotals: { totalLootChaos: 900, profitChaos: 820 } });
   const context = loadFunctions(EDIT_COST_FUNCTIONS, { ...backend.context, currentSession: null });
 
@@ -503,6 +523,7 @@ test('editSessionCost moves a stash-derived result by the cost change and keeps 
   assert.equal(backend.stored.key[0].inputValue, 95);
   assert.equal(backend.stored.key[0].outputValue, 900);
   assert.equal(backend.stored.key[0].netProfit, 805);
+  assert.equal(backend.stored.key[0].entryCostChaos, 25);
 });
 
 test('editSessionCost finds a stash diff result saved under its snapshot time, not the run end time', () => {
