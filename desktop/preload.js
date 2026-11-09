@@ -178,6 +178,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('start-map-prompt-overlay-result', listener);
     return () => ipcRenderer.removeListener('start-map-prompt-overlay-result', listener);
   },
+  onStartMapPromptOverlayEngaged: (callback) => {
+    ipcRenderer.on('start-map-prompt-overlay-engaged', () => callback());
+  },
   onCharacterPromptOverlayResult: (callback) => {
     ipcRenderer.on('character-prompt-overlay-result', (event, data) => callback(data));
   },
@@ -191,7 +194,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'profit-calculated', 'prices-updated', 'game-version-changed', 'game-closed',
       'game-session-entered', 'game-session-left', 'character-log-line',
       'app-update-state-changed',
-      'start-map-prompt-overlay-result', 'character-prompt-overlay-result'
+      'start-map-prompt-overlay-result', 'start-map-prompt-overlay-engaged', 'character-prompt-overlay-result'
     ];
     if (channel && ALLOWED_CHANNELS.includes(channel)) {
       ipcRenderer.removeAllListeners(channel);

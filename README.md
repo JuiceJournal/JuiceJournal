@@ -67,7 +67,7 @@ Juice Journal reads the game's log file and uses the official Path of Exile API.
 - It does **not** send keys or mouse input to the game.
 - It does **not** modify game files or settings.
 
-The overlay is a separate always-on-top window. It never takes keyboard focus, so clicking it leaves the game in the foreground. It shows over **Windowed** and **Windowed Fullscreen**; in our tests it also showed over Path of Exile 2 in **Fullscreen with DirectX 12**. Use Windowed Fullscreen if it does not appear.
+The overlay is a separate always-on-top window. It takes the keyboard only while you type an entry cost on its start card, and gives it back to the game after; otherwise clicking it leaves the game in the foreground. It shows over **Windowed** and **Windowed Fullscreen**; in our tests it also showed over Path of Exile 2 in **Fullscreen with DirectX 12**. Use Windowed Fullscreen if it does not appear.
 
 ## Getting started
 

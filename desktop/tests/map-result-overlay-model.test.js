@@ -191,7 +191,9 @@ test('main sizes the overlay window to the map result card and keeps the other m
   assert.equal(bounds({ mode: 'map-result' }).height, 112);
   assert.equal(bounds({ mode: 'runtime' }).height, 112);
   assert.equal(bounds({ mode: 'inventory-status' }).height, 112);
-  assert.deepEqual(bounds({ mode: 'start-map-prompt' }), { width: 440, height: 286, x: 2096, y: 24 });
+  // The start prompt has room for the entry cost box under its farm types.
+  assert.deepEqual(bounds({ mode: 'start-map-prompt' }), { width: 440, height: 350, x: 2096, y: 24 });
+  assert.deepEqual(bounds({ mode: 'character-prompt' }), { width: 440, height: 286, x: 2096, y: 24 });
 });
 
 test('map result overlay card height is 112 plus the measured height of the listed drops', () => {

@@ -210,6 +210,7 @@ test('overlay state model shows a start-map prompt for detected map entries', ()
       { id: 'breach', label: 'Breach' },
       { id: 'expedition', label: 'Expedition' }
     ],
+    createdAt: null,
     expiresAt: null
   });
 });
@@ -312,12 +313,23 @@ test('prompts that answer themselves count down to it, and the start prompt keep
   const costed = deriveOverlayState({
     enabled: true,
     now,
-    startMapPrompt: { mapName: 'Channel', farmTypeOptions: [{ id: 'breach', label: 'Breach', cost: '1.2 div' }, { id: 'ritual', label: 'Ritual', cost: ' ' }] }
+    startMapPrompt: {
+      mapName: 'Channel',
+      createdAt: now,
+      farmTypeOptions: [
+        { id: 'breach', label: 'Breach', cost: '1.2 div', costAmount: 1.2, costUnit: 'divine' },
+        { id: 'ritual', label: 'Ritual', cost: ' ' },
+        { id: 'expedition', label: 'Expedition', cost: '35c', costAmount: 35, costUnit: 'other' }
+      ]
+    }
   });
+  // The amount and unit as typed fill the card's cost box; the prompt keeps its first show time across its countdown.
   assert.deepEqual(JSON.parse(JSON.stringify(costed.startMapPrompt.farmTypeOptions)), [
-    { id: 'breach', label: 'Breach', cost: '1.2 div' },
-    { id: 'ritual', label: 'Ritual' }
+    { id: 'breach', label: 'Breach', cost: '1.2 div', costAmount: 1.2, costUnit: 'divine' },
+    { id: 'ritual', label: 'Ritual' },
+    { id: 'expedition', label: 'Expedition', cost: '35c', costAmount: 35, costUnit: 'chaos' }
   ]);
+  assert.equal(costed.startMapPrompt.createdAt, now);
 
   const character = deriveOverlayState({
     enabled: true,

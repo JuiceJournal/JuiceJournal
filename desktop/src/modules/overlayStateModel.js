@@ -73,7 +73,14 @@
         const id = normalizeString(entry.id);
         const label = normalizeString(entry.label, id);
         const cost = normalizeString(entry.cost);
-        return id ? { id, label, ...(cost ? { cost } : {}) } : null;
+        const costAmount = Number(entry.costAmount);
+        // The amount and unit as typed fill the card's cost box; the label is what the chip shows.
+        return id ? {
+          id,
+          label,
+          ...(cost ? { cost } : {}),
+          ...(cost && Number.isFinite(costAmount) ? { costAmount, costUnit: entry.costUnit === 'divine' ? 'divine' : 'chaos' } : {})
+        } : null;
       })
       .filter(Boolean);
   }
@@ -260,6 +267,7 @@
       league,
       poeVersion,
       farmTypeOptions,
+      createdAt: normalizeTimestamp(startMapPrompt.createdAt),
       expiresAt: normalizeTimestamp(startMapPrompt.expiresAt)
     };
   }

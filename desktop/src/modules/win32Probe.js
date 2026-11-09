@@ -55,6 +55,7 @@ function loadApi() {
       CloseHandle: kernel32.func('int32_t __stdcall CloseHandle(intptr_t handle)'),
       FindWindowExW: user32.func('intptr_t __stdcall FindWindowExW(intptr_t parent, intptr_t after, str16 className, str16 title)'),
       GetForegroundWindow: user32.func('intptr_t __stdcall GetForegroundWindow()'),
+      SetForegroundWindow: user32.func('int32_t __stdcall SetForegroundWindow(intptr_t hwnd)'),
       GetWindowThreadProcessId: user32.func('uint32_t __stdcall GetWindowThreadProcessId(intptr_t hwnd, _Out_ uint32_t *pid)'),
       IsWindowVisible: user32.func('int32_t __stdcall IsWindowVisible(intptr_t hwnd)'),
       IsIconic: user32.func('int32_t __stdcall IsIconic(intptr_t hwnd)'),
@@ -150,29 +151,38 @@ function scanProcesses(names = []) {
 }
 
 /**
- * Find the first visible top-level window of `className` owned by one of `pids`.
- * Returns its client rectangle in physical screen pixels, or null.
+ * Find the first visible top-level window of `className` owned by one of `pids`. Returns its handle, or 0.
  */
-function findProcessWindow(pids = [], className = 'POEWindowClass') {
-  const win = loadApi();
+function findProcessWindowHandle(win, pids, className) {
   const wanted = new Set(pids.map(Number).filter(Boolean));
-  if (!win || wanted.size === 0) {
-    return null;
+  if (wanted.size === 0) {
+    return 0;
   }
 
   let hwnd = 0;
   for (let index = 0; index < MAX_WINDOWS_PER_CLASS; index += 1) {
     hwnd = win.FindWindowExW(0, hwnd, className, null);
     if (!hwnd) {
-      return null;
+      return 0;
     }
 
     const owner = [0];
     win.GetWindowThreadProcessId(hwnd, owner);
-    if (!wanted.has(owner[0]) || !win.IsWindowVisible(hwnd)) {
-      continue;
+    if (wanted.has(owner[0]) && win.IsWindowVisible(hwnd)) {
+      return hwnd;
     }
+  }
 
+  return 0;
+}
+
+/**
+ * The client rectangle, in physical screen pixels, of the first visible `className` window of `pids`, or null.
+ */
+function findProcessWindow(pids = [], className = 'POEWindowClass') {
+  const win = loadApi();
+  const hwnd = win ? findProcessWindowHandle(win, pids, className) : 0;
+  if (hwnd) {
     const rect = {};
     const origin = { x: 0, y: 0 };
     if (!win.GetClientRect(hwnd, rect) || !win.ClientToScreen(hwnd, origin)) {
@@ -189,6 +199,20 @@ function findProcessWindow(pids = [], className = 'POEWindowClass') {
   }
 
   return null;
+}
+
+/**
+ * Bring the first visible `className` window of `pids` to the foreground. Windows allows it while this process is in
+ * the foreground, as it is right after the overlay had the keyboard. Returns whether it worked.
+ */
+function focusProcessWindow(pids = [], className = 'POEWindowClass') {
+  const win = loadApi();
+  const hwnd = win ? findProcessWindowHandle(win, pids, className) : 0;
+  // A minimized game stays minimized: bringing it forward would not restore it.
+  if (!hwnd || win.IsIconic(hwnd)) {
+    return false;
+  }
+  return Boolean(win.SetForegroundWindow(hwnd));
 }
 
 /**
@@ -260,6 +284,7 @@ module.exports = {
   getLoadError,
   scanProcesses,
   findProcessWindow,
+  focusProcessWindow,
   getForegroundProcessId,
   PROCESSENTRY32W_SIZE
 };
