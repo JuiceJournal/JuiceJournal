@@ -151,8 +151,7 @@ function scanProcesses(names = []) {
 }
 
 /**
- * Find the first visible top-level window of `className` owned by one of `pids`.
- * Returns its client rectangle in physical screen pixels, or null.
+ * Find the first visible top-level window of `className` owned by one of `pids`. Returns its handle, or 0.
  */
 function findProcessWindowHandle(win, pids, className) {
   const wanted = new Set(pids.map(Number).filter(Boolean));
@@ -177,6 +176,9 @@ function findProcessWindowHandle(win, pids, className) {
   return 0;
 }
 
+/**
+ * The client rectangle, in physical screen pixels, of the first visible `className` window of `pids`, or null.
+ */
 function findProcessWindow(pids = [], className = 'POEWindowClass') {
   const win = loadApi();
   const hwnd = win ? findProcessWindowHandle(win, pids, className) : 0;
@@ -206,7 +208,11 @@ function findProcessWindow(pids = [], className = 'POEWindowClass') {
 function focusProcessWindow(pids = [], className = 'POEWindowClass') {
   const win = loadApi();
   const hwnd = win ? findProcessWindowHandle(win, pids, className) : 0;
-  return Boolean(hwnd && win.SetForegroundWindow(hwnd));
+  // A minimized game stays minimized: bringing it forward would not restore it.
+  if (!hwnd || win.IsIconic(hwnd)) {
+    return false;
+  }
+  return Boolean(win.SetForegroundWindow(hwnd));
 }
 
 /**

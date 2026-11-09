@@ -60,4 +60,4 @@ The session keeps this profit however it ends: as you leave the map, with the En
 - It does not send keys or mouse input to the game.
 - It does not write to game files or the game's settings.
 
-The in-game overlay is a separate, always-on-top window. It does not take keyboard focus, so the game stays in the foreground when you click it.
+The in-game overlay is a separate, always-on-top window. It takes the keyboard only while you type in the start card's cost box, and gives it back to the game after; otherwise the game stays in the foreground when you click it.

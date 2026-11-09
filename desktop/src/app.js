@@ -3295,7 +3295,7 @@ function showLoginModal() {
   showLoginSignIn();
 }
 
-// The overlay start prompt is mouse-only, so the player gets the spec'd 7 s once it is on screen.
+// The player gets the spec'd 7 s once the overlay start prompt is on screen; working on it stops the count.
 const START_MAP_PROMPT_OVERLAY_MS = 7000;
 
 async function handleMapEnteredEvent(data = {}) {

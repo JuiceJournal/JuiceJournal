@@ -497,6 +497,7 @@ test('main overlay never becomes focusable and only clickable modes take mouse i
   const calls = [];
   const bounds = { x: 10, y: 20, width: 360, height: 112 };
   const context = loadFunctions(['applyOverlayWindowVisibility'], {
+    overlayKeyboardLent: false,
     OVERLAY_CLICKABLE_MODES: new Set(['start-map-prompt', 'map-result']),
     overlayWindowIgnoresMouse: true,
     overlayWindow: createOverlayWindowMock(calls, { bounds }),
@@ -519,6 +520,7 @@ test('main overlay applies bounds only when they change', () => {
   const calls = [];
   let nextBounds = { x: 10, y: 20, width: 360, height: 112 };
   const context = loadFunctions(['applyOverlayWindowVisibility'], {
+    overlayKeyboardLent: false,
     OVERLAY_CLICKABLE_MODES: new Set(['start-map-prompt', 'map-result']),
     overlayWindowIgnoresMouse: true,
     overlayWindow: createOverlayWindowMock(calls, { visible: true, bounds: { ...nextBounds } }),
@@ -588,13 +590,14 @@ test('overlay has no mouse forwarding hook, no focus toggle outside the cost box
 
   assert.doesNotMatch(source, /forward:\s*true/);
   // The overlay takes the keyboard only when the player clicks the start card's cost box: one place lends it, only
-  // when asked for the keyboard, and nothing that draws or shows the overlay makes it focusable.
-  assert.equal((source.match(/overlayWindow\.setFocusable\(true\)/g) || []).length, 1);
-  assert.match(functionBody('engageStartMapPromptOverlay'), /if \(keyboard && overlayWindow[^\n]*\n\s+overlayKeyboardLent = true;\n\s+overlayWindow\.setFocusable\(true\);/);
+  // when asked for the keyboard. No other setFocusable call passes anything but false, and the overlay is focused once.
+  assert.equal((source.match(/setFocusable\((?!false\))/g) || []).length, 1);
+  assert.equal((source.match(/overlayWindow\.focus\(/g) || []).length, 1);
+  assert.match(functionBody('engageStartMapPromptOverlay'), /if \(keyboard && overlayWindow[\s\S]*?overlayKeyboardLent = true;\n\s+overlayWindow\.setFocusable\(true\);\n\s+overlayWindow\.focus\(\);/);
   for (const name of ['applyOverlayWindowVisibility', 'updateOverlayWindow', 'showStartMapPromptOverlay', 'createOverlayWindow']) {
     assert.doesNotMatch(functionBody(name), /setFocusable\(true\)|\.focus\(\)/, name);
   }
-  assert.match(source, /focusable: false,/);
+  assert.match(functionBody('createOverlayWindow'), /focusable: false,/);
   assert.doesNotMatch(source, /executeJavaScript/);
   assert.doesNotMatch(source, /set-overlay-pointer-passthrough/);
   assert.doesNotMatch(overlayPreload, /setOverlayPointerPassthrough/);
@@ -1309,6 +1312,7 @@ test('main logout clears desktop auth state', () => {
   const context = loadFunctions([
     'handleLogout'
   ], {
+    releaseStartMapPromptKeyboard: () => {},
     poeApiClient: {
       clearTokens() {
         poeClearCalls += 1;

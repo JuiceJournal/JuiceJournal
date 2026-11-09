@@ -466,6 +466,8 @@
   }
 
   function selectFarmType(farmTypeId) {
+    // The farm type already picked keeps what was typed for it.
+    if (farmTypeId === selectedFarmTypeId) return;
     selectedFarmTypeId = farmTypeId;
     if (el.startFarmTypes) {
       Array.prototype.forEach.call(el.startFarmTypes.querySelectorAll('[data-farm-type-id]'), function (button) {
@@ -682,11 +684,14 @@
       if (!payload) return;
       setStartMapPromptBusy(true);
       root.electronAPI.confirmStartMapPromptOverlay(payload).then(function (result) {
+        setStartMapPromptBusy(false);
         if (result && result.ok === false) {
           startCostError = 'dashboard.entryCostSaveError';
           renderStartCostNote();
+          // The box still has the keyboard, so the player can fix the amount.
+          if (el.startCostInput && !el.startCostInput.disabled) el.startCostInput.focus();
         }
-      }).finally(function () { setStartMapPromptBusy(false); });
+      }, function () { setStartMapPromptBusy(false); });
     });
   }
 

@@ -385,7 +385,7 @@ test('main start-map overlay confirmation forwards the selected map details to t
 });
 
 // The start card's main side: engaging it, lending and returning the keyboard, and saving a typed cost.
-function loadStartCardMain({ saveResult = { ok: true } } = {}) {
+function loadStartCardMain({ saveResult = { ok: true }, gameInFront = true, focusGameThrows = false } = {}) {
   const calls = [];
   const overlayWindow = {
     isDestroyed: () => false,
@@ -416,7 +416,14 @@ function loadStartCardMain({ saveResult = { ok: true } } = {}) {
     mainWindow: { isDestroyed: () => false, webContents: { send: (channel, payload) => calls.push(['send', channel, payload && JSON.parse(JSON.stringify(payload))]) } },
     updateOverlayWindow: () => calls.push(['update', context.overlayStartMapPromptState && context.overlayStartMapPromptState.expiresAt]),
     getGameProcessIds: () => [4242],
-    win32Probe: { focusProcessWindow: (pids) => { calls.push(['focusGame', pids]); return true; } },
+    isGameWindowInFront: () => gameInFront,
+    win32Probe: {
+      focusProcessWindow: (pids) => {
+        calls.push(['focusGame', pids]);
+        if (focusGameThrows) throw new Error('user32 unavailable');
+        return true;
+      }
+    },
     setStoredFarmTypeCost: (farmTypeId, cost) => { calls.push(['saveCost', farmTypeId, JSON.parse(JSON.stringify(cost))]); return saveResult; }
   });
   return { context, calls };
@@ -463,6 +470,68 @@ test('a cost typed on the start card is saved for the farm type before the map s
   const noFarm = plain.context.confirmStartMapPromptOverlay({ farmTypeId: null, cost: { amount: 5, unit: 'chaos' } });
   assert.equal(noFarm.costSaved, undefined);
   assert.equal(plain.calls.some(([name]) => name === 'saveCost'), false);
+});
+
+test('the keyboard goes back to the game on a farm type click, and only to a game that had it', () => {
+  const lent = loadStartCardMain();
+  lent.context.engageStartMapPromptOverlay({ keyboard: true });
+  lent.calls.length = 0;
+  lent.context.engageStartMapPromptOverlay({ keyboard: false });
+  assert.deepEqual(lent.calls, [['setFocusable', false], ['focusGame', [4242]]]);
+
+  // The player had another window in front when they clicked the box: it is not taken from them afterwards.
+  const away = loadStartCardMain({ gameInFront: false });
+  away.context.engageStartMapPromptOverlay({ keyboard: true });
+  away.calls.length = 0;
+  assert.equal(away.context.releaseStartMapPromptKeyboard(), true);
+  assert.deepEqual(away.calls, [['setFocusable', false]]);
+
+  // A probe that throws costs nothing but the focus: the card still closes.
+  const broken = loadStartCardMain({ focusGameThrows: true });
+  broken.context.engageStartMapPromptOverlay({ keyboard: true });
+  broken.context.cancelStartMapPromptOverlay();
+  assert.equal(broken.context.overlayStartMapPromptState, null);
+});
+
+test('a confirm that arrives after the start card closed saves no cost', () => {
+  const { context, calls } = loadStartCardMain();
+  context.overlayStartMapPromptState = null;
+
+  const result = context.confirmStartMapPromptOverlay({ farmTypeId: 'ritual', cost: { amount: 35, unit: 'chaos' } });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { ok: false, error: 'PROMPT_CLOSED' });
+  assert.deepEqual(calls, []);
+});
+
+test('the overlay gives the keyboard back when another card replaces the start card or the overlay hides', () => {
+  for (const nextState of [{ visibility: 'visible', mode: 'map-result' }, { visibility: 'hidden', mode: 'start-map-prompt' }]) {
+    const calls = [];
+    const overlayWindow = {
+      isDestroyed: () => false,
+      isVisible: () => true,
+      hide: () => calls.push(['hide']),
+      setIgnoreMouseEvents: () => {},
+      getBounds: () => ({ x: 0, y: 0, width: 360, height: 112 }),
+      setBounds: () => {},
+      showInactive: () => {},
+      setFocusable: (value) => calls.push(['setFocusable', value])
+    };
+    const context = loadFunctions(['releaseStartMapPromptKeyboard', 'applyOverlayWindowVisibility'], {
+      overlayWindow,
+      overlayKeyboardLent: true,
+      overlayKeyboardReturnsToGame: true,
+      overlayWindowIgnoresMouse: false,
+      OVERLAY_CLICKABLE_MODES: new Set(['start-map-prompt', 'map-result', 'character-prompt']),
+      getOverlayWindowBounds: () => ({ x: 0, y: 0, width: 360, height: 112 }),
+      getGameProcessIds: () => [4242],
+      win32Probe: { focusProcessWindow: (pids) => calls.push(['focusGame', pids]) }
+    });
+
+    context.applyOverlayWindowVisibility(nextState);
+
+    assert.deepEqual(calls.slice(0, 2), [['setFocusable', false], ['focusGame', [4242]]], nextState.mode + '/' + nextState.visibility);
+    assert.equal(context.overlayKeyboardLent, false);
+  }
 });
 
 test('a cost main cannot save keeps the start card up and starts nothing', () => {

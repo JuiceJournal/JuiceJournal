@@ -702,6 +702,11 @@ test('the start card\'s cost box shows the selected farm type\'s cost as typed, 
   await card.settle();
   assert.deepEqual(card.calls.at(-1), ['confirm', { farmTypeId: 'ritual', cost: { amount: 35.5, unit: 'chaos' } }]);
 
+  // Clicking the farm type already picked keeps what was typed.
+  card.input.value = '40';
+  card.pick('ritual');
+  assert.equal(card.input.value, '40');
+
   // No farm type has no cost box.
   card.pick('');
   assert.equal(card.input.disabled, true);
@@ -727,9 +732,13 @@ test('an unreadable or unsaved cost keeps the start card up and says why', async
 
   card.input.value = '3';
   card.answerConfirm(() => ({ ok: false, error: 'COST_INVALID' }));
+  card.calls.length = 0;
   card.submit();
   await card.settle();
   assert.equal(card.note.textContent, 'Could not save the entry cost.');
+  // The box gets the keyboard back, enabled, so the amount can be fixed.
+  assert.equal(card.input.disabled, false);
+  assert.deepEqual(card.calls.at(-1), ['focus-input']);
 });
 
 test('the cost box borrows the keyboard on a click and Esc gives it back to the game', async () => {
