@@ -3045,6 +3045,11 @@ function setupIPCListeners() {
     refreshTrackerData({ includeSessions: true });
   });
 
+  // The player is working on the start card (a farm type, the cost box): it waits for Start or Cancel.
+  window.electronAPI.onStartMapPromptOverlayEngaged?.(() => {
+    state.pauseStartMapPrompt?.();
+  });
+
   // Session olaylari
   window.electronAPI.onSessionStarted((session) => {
     state.currentSession = session;
@@ -3297,7 +3302,7 @@ function showLoginModal() {
   showLoginSignIn();
 }
 
-// The overlay start prompt is mouse-only, so the player gets the spec'd 7 s once it is on screen.
+// The player gets the spec'd 7 s once the overlay start prompt is on screen; working on it stops the count.
 const START_MAP_PROMPT_OVERLAY_MS = 7000;
 
 async function handleMapEnteredEvent(data = {}) {
@@ -3328,6 +3333,7 @@ async function handleMapEnteredEvent(data = {}) {
     if (window.electronAPI?.showStartMapPromptOverlay) {
       let stopWaitingForOverlayResult = () => {};
       let startOverlayResultTimeout = () => {};
+      let pauseOverlayResultTimeout = () => {};
       try {
         const farmTypeId = trackerContext?.farmTypeId || null;
         let farmType = null;
@@ -3382,15 +3388,24 @@ async function handleMapEnteredEvent(data = {}) {
               settle(result);
             }) || (() => {});
 
+            let paused = false;
             startOverlayResultTimeout = () => {
-              if (!settled && typeof setTimeout === 'function') {
+              if (!settled && !paused && typeof setTimeout === 'function') {
                 timeoutId = setTimeout(() => settle(null), START_MAP_PROMPT_OVERLAY_MS);
+              }
+            };
+            pauseOverlayResultTimeout = () => {
+              paused = true;
+              if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutId = null;
               }
             };
           })
           : null;
 
         state.stopStartMapPrompt = () => stopWaitingForOverlayResult();
+        state.pauseStartMapPrompt = () => pauseOverlayResultTimeout();
         const overlayState = await window.electronAPI.showStartMapPromptOverlay({
           mapName: detectedMapName || data.mapName || null,
           poeVersion: trackerContext?.poeVersion || null,
@@ -3413,6 +3428,10 @@ async function handleMapEnteredEvent(data = {}) {
             const overlayMapName = typeof overlayResult.mapName === 'string' && overlayResult.mapName.trim()
               ? overlayResult.mapName.trim()
               : detectedMapName;
+            // A cost typed on the card is the farm type's now, so the Dashboard field shows it too.
+            if (overlayResult.costSaved && typeof loadFarmTypeCosts === 'function') {
+              await loadFarmTypeCosts();
+            }
             await handleStartSession({
               defaultMapName: detectedMapName,
               source: 'map-detected-overlay',
@@ -3467,6 +3486,7 @@ async function handleMapEnteredEvent(data = {}) {
       }
     }
     state.stopStartMapPrompt = null;
+    state.pauseStartMapPrompt = null;
     state.mapSessionPromptActive = false;
   }
 }

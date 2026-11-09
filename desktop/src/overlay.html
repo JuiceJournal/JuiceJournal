@@ -341,7 +341,7 @@
       height: 16px;
     }
 
-    /* ── Prompt forms (mouse only: the overlay never takes focus) ── */
+    /* ── Prompt forms (mouse only; the start card's cost box takes the keyboard while the player types) ── */
     .jj-form {
       display: grid;
       gap: 8px;
@@ -392,6 +392,44 @@
       font-weight: 600;
       letter-spacing: normal;
       text-transform: none;
+    }
+
+    .jj-start-note[data-tone="error"] {
+      color: rgb(var(--loss-rgb));
+    }
+
+    .jj-cost-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .jj-cost-input {
+      width: 96px;
+      min-height: 28px;
+      padding: 0 10px;
+      border: none;
+      border-radius: var(--bevel-sm);
+      background: var(--plate-raised);
+      box-shadow: inset 0 0 0 1px var(--line-strong);
+      color: var(--text-bright);
+      font-family: var(--font);
+      font-size: 12.5px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: normal;
+      text-transform: none;
+      pointer-events: auto;
+    }
+
+    .jj-cost-input:focus {
+      outline: none;
+      box-shadow: inset 0 0 0 1px var(--ember-hot);
+    }
+
+    .jj-cost-input:disabled {
+      opacity: 0.5;
+      cursor: default;
     }
 
     .jj-chip[aria-pressed="true"] {
@@ -506,6 +544,16 @@
         <div class="jj-field">
           <span data-i18n="dashboard.farmType">Farm Type</span>
           <div class="jj-chips" role="group" aria-label="Farm type" data-i18n-aria="dashboard.farmType" data-overlay-start-farm-types></div>
+        </div>
+        <div class="jj-field">
+          <span data-i18n="dashboard.entryCost">Entry cost</span>
+          <div class="jj-cost-row">
+            <input class="jj-cost-input" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" maxlength="12" placeholder="0" aria-label="Entry cost of the selected farm type" data-i18n-aria="dashboard.entryCostAria" data-overlay-start-cost-input>
+            <div class="jj-chips" role="group" aria-label="Entry cost currency" data-i18n-aria="dashboard.entryCostUnitAria" data-overlay-start-cost-units>
+              <button class="jj-chip" type="button" data-cost-unit="chaos" aria-pressed="true">c</button>
+              <button class="jj-chip" type="button" data-cost-unit="divine" aria-pressed="false">div</button>
+            </div>
+          </div>
           <span class="jj-start-note" data-overlay-start-cost-note hidden></span>
         </div>
         <div class="jj-form-actions">

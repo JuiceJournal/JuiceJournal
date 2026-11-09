@@ -441,8 +441,8 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     await expect(overlayWindow.locator('main[data-overlay-mode="runtime"]')).toBeVisible({ timeout: 2000 });
     await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText(SMOKE_USER.selectedCharacter.name);
 
-    // The start-map prompt is mouse-only: no text input, farm type picked from buttons, map name from the prompt.
-    // Each chip shows the entry cost its farm type applies, as typed on the Dashboard.
+    // The start-map prompt: farm type picked from buttons, map name from the prompt, and one text box, for the entry
+    // cost. Each chip shows the entry cost its farm type applies, as typed on the Dashboard.
     expect(await page.evaluate(() => window.electronAPI.setFarmTypeCost('expedition', { amount: 1.5, unit: 'divine' }))).toMatchObject({ ok: true });
     await page.evaluate(() => {
       window.__overlayPromptResults = [];
@@ -454,21 +454,35 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     });
     await expect(overlayWindow.locator('main[data-overlay-mode="start-map-prompt"]')).toBeVisible();
     await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText('Cemetery Map');
-    await expect(overlayWindow.locator('[data-overlay-start-form] input, [data-overlay-start-form] select')).toHaveCount(0);
+    await expect(overlayWindow.locator('[data-overlay-start-form] select')).toHaveCount(0);
+    const costBox = overlayWindow.locator('[data-overlay-start-cost-input]');
+    await expect(overlayWindow.locator('[data-overlay-start-form] input')).toHaveCount(1);
     await expect(overlayWindow.locator('[data-farm-type-id]')).toHaveCount(3);
     await expect(overlayWindow.locator('[data-farm-type-id="expedition"] .jj-chip-cost')).toHaveText('1.5 div');
     const costNote = overlayWindow.locator('[data-overlay-start-cost-note]');
-    // A farm type without a cost says where to set it; the overlay takes no typing.
+    // No farm type has no cost box; a farm type without a cost asks for one.
+    await expect(costBox).toBeDisabled();
+    await expect(costNote).toHaveText('Pick a farm type to set its entry cost.');
     await overlayWindow.locator('[data-farm-type-id="ritual"]').click();
-    await expect(costNote).toHaveText('No entry cost yet: set it on the Dashboard.');
+    await expect(costBox).toHaveValue('');
+    await expect(costNote).toHaveText('No entry cost yet: click the box and type it.');
+    // The box shows the farm type's cost as typed, in its unit.
     await overlayWindow.locator('[data-farm-type-id="expedition"]').click();
+    await expect(costBox).toHaveValue('1.5');
+    await expect(overlayWindow.locator('[data-cost-unit="divine"]')).toHaveAttribute('aria-pressed', 'true');
     await expect(costNote).toBeHidden();
     await expect(overlayWindow.locator('[data-farm-type-id="expedition"]')).toHaveAttribute('aria-pressed', 'true');
     await expect(overlayWindow.locator('[data-farm-type-id=""]')).toHaveAttribute('aria-pressed', 'false');
-    await overlayWindow.locator('[data-overlay-start-submit]').click();
+    // A click in the box lends it the keyboard; Enter saves the cost for the farm type and starts the map.
+    await costBox.click();
+    await expect(costBox).toBeFocused();
+    await expect(costNote).toHaveText('Enter saves it and starts the map, Esc goes back to the game.');
+    await costBox.fill('2,5');
+    await costBox.press('Enter');
     await expect.poll(() => page.evaluate(() => window.__overlayPromptResults)).toEqual([
-      { action: 'confirm', mapName: 'Cemetery Map', farmTypeId: 'expedition', source: 'map-detected' }
+      { action: 'confirm', mapName: 'Cemetery Map', farmTypeId: 'expedition', source: 'map-detected', costSaved: true }
     ]);
+    expect(await page.evaluate(() => window.electronAPI.getFarmTypeCosts())).toMatchObject({ expedition: { amount: 2.5, unit: 'divine' } });
 
     // The overlay's aria-labels follow the language main sends with each state push.
     await expect(overlayWindow.locator('[data-overlay-start-farm-types]')).toHaveAttribute('aria-label', 'Farm type');

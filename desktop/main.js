@@ -124,6 +124,8 @@ const IPC_RENDERER_SCOPES = Object.freeze({
   'get-overlay-cursor-position': ['main', 'overlay'],
   'confirm-start-map-prompt-overlay': ['overlay'],
   'cancel-start-map-prompt-overlay': ['overlay'],
+  'engage-start-map-prompt-overlay': ['overlay'],
+  'release-start-map-prompt-keyboard': ['overlay'],
   'choose-character-prompt-overlay': ['overlay'],
   'get-cached-icon': ['overlay']
 });
@@ -482,6 +484,10 @@ let inventoryReadStatus = { kind: 'none', at: null, profileId: null };
 let inventoryReadBlocked = false;
 let lastInventoryTickAt = 0;
 let overlayStartMapPromptState = null;
+// The start card holds the keyboard only while the player types a cost in it.
+let overlayKeyboardLent = false;
+// Whether the game had the keyboard when the cost box took it, so it gets it back.
+let overlayKeyboardReturnsToGame = false;
 let overlayCharacterPromptState = null;
 let overlayCharacterPromptTimer = null;
 // The prompt asked for at Play, until the game is in the world (see queueCharacterPromptOverlay).
@@ -3394,9 +3400,12 @@ function getOverlayWindowBounds(overlayState = {}) {
   const workArea = display.workArea || display.bounds;
   const isInteractivePrompt = overlayState.mode === 'start-map-prompt' || overlayState.mode === 'character-prompt';
   const width = isInteractivePrompt ? 440 : 360;
-  const height = isInteractivePrompt
-    ? 286
-    : overlayState.mode === 'map-result' ? getMapResultCardHeight(overlayState.mapResult?.result) : 112;
+  // The start prompt has the entry cost box under its farm types.
+  const height = overlayState.mode === 'start-map-prompt'
+    ? 350
+    : isInteractivePrompt
+      ? 286
+      : overlayState.mode === 'map-result' ? getMapResultCardHeight(overlayState.mapResult?.result) : 112;
 
   return {
     width,
@@ -3439,6 +3448,13 @@ function createOverlayWindow() {
 
   overlayWindow.setIgnoreMouseEvents(true);
   overlayWindowIgnoresMouse = true;
+  // A player who clicks back into the game while typing a cost takes the keyboard back themselves.
+  overlayWindow.on('blur', () => {
+    if (overlayKeyboardLent) {
+      overlayKeyboardLent = false;
+      overlayWindow.setFocusable(false);
+    }
+  });
   overlayWindow.setAlwaysOnTop(true, 'screen-saver');
   hardenWindowNavigation(overlayWindow, TRUSTED_RENDERER_FILES.overlay);
   attachRendererErrorCapture(overlayWindow, 'overlay');
@@ -3449,6 +3465,7 @@ function createOverlayWindow() {
   overlayWindow.on('closed', () => {
     overlayWindow = null;
     overlayWindowIgnoresMouse = null;
+    overlayKeyboardLent = false;
   });
 
   return overlayWindow;
@@ -3555,11 +3572,12 @@ function showStartMapPromptOverlay(prompt = {}, options = {}) {
     farmType: normalizeStartMapPromptText(prompt.farmType),
     poeVersion: normalizeStartMapPromptText(prompt.poeVersion || prompt.gameVersion),
     league: normalizeStartMapPromptText(prompt.league),
-    // Each farm type shows the entry cost it applies, as typed: the overlay takes no typing, so the cost is set on the
-    // Dashboard.
+    // Each farm type shows the entry cost it applies, as typed; the card's cost box starts from it.
     farmTypeOptions: normalizeStartMapPromptFarmTypeOptions(prompt.farmTypeOptions).map((option) => {
       const cost = costs[option.id];
-      return cost ? { ...option, cost: cost.unit === 'divine' ? `${cost.amount} div` : `${cost.amount}c` } : option;
+      return cost
+        ? { ...option, cost: cost.unit === 'divine' ? `${cost.amount} div` : `${cost.amount}c`, costAmount: cost.amount, costUnit: cost.unit }
+        : option;
     }),
     source: normalizeStartMapPromptText(prompt.source, 'map-detected'),
     createdAt,
@@ -3608,7 +3626,22 @@ function emitStartMapPromptOverlayResult(result) {
 }
 
 function confirmStartMapPromptOverlay(payload = {}) {
+  // A click that lands after the card was answered or taken down (the map already started) changes nothing.
+  if (!overlayStartMapPromptState) {
+    return { ok: false, error: 'PROMPT_CLOSED' };
+  }
+
   const result = normalizeStartMapPromptResult(payload, overlayStartMapPromptState, 'confirm');
+  // A cost typed on the card is the farm type's from now on, as on the Dashboard, and the map starts with it. One
+  // that cannot be saved keeps the card up, so the player sees why.
+  if (result.farmTypeId && payload.cost && typeof payload.cost === 'object') {
+    const saved = setStoredFarmTypeCost(result.farmTypeId, { amount: payload.cost.amount, unit: payload.cost.unit });
+    if (!saved.ok) {
+      return { ok: false, error: saved.error };
+    }
+    result.costSaved = true;
+  }
+  releaseStartMapPromptKeyboard();
   overlayStartMapPromptState = null;
   updateOverlayWindow();
   return emitStartMapPromptOverlayResult(result);
@@ -3616,14 +3649,65 @@ function confirmStartMapPromptOverlay(payload = {}) {
 
 function cancelStartMapPromptOverlay() {
   const result = normalizeStartMapPromptResult({}, overlayStartMapPromptState, 'cancel');
+  releaseStartMapPromptKeyboard();
   overlayStartMapPromptState = null;
   updateOverlayWindow();
   return emitStartMapPromptOverlayResult(result);
 }
 
 function hideStartMapPromptOverlay() {
+  releaseStartMapPromptKeyboard();
   overlayStartMapPromptState = null;
   return updateOverlayWindow();
+}
+
+// A player who works on the card (a farm type, the cost box) is answering it, so it stops counting down and the app
+// waits for Start or Cancel. Typing a cost needs the keyboard, which the overlay only takes for the cost box.
+function engageStartMapPromptOverlay({ keyboard = false } = {}) {
+  if (!overlayStartMapPromptState) {
+    return false;
+  }
+
+  if (overlayStartMapPromptState.expiresAt) {
+    overlayStartMapPromptState = { ...overlayStartMapPromptState, expiresAt: null };
+    if (mainWindow && (typeof mainWindow.isDestroyed !== 'function' || !mainWindow.isDestroyed())) {
+      mainWindow.webContents.send('start-map-prompt-overlay-engaged');
+    }
+    updateOverlayWindow();
+  }
+
+  if (keyboard && overlayWindow && !overlayWindow.isDestroyed()) {
+    if (!overlayKeyboardLent) {
+      overlayKeyboardReturnsToGame = isGameWindowInFront();
+    }
+    overlayKeyboardLent = true;
+    overlayWindow.setFocusable(true);
+    overlayWindow.focus();
+  } else if (!keyboard) {
+    // A click elsewhere on the card (a farm type) ends the typing.
+    releaseStartMapPromptKeyboard();
+  }
+  return true;
+}
+
+// The game had the keyboard before the cost box took it, so it gets it back.
+function releaseStartMapPromptKeyboard() {
+  if (!overlayKeyboardLent) {
+    return false;
+  }
+
+  overlayKeyboardLent = false;
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.setFocusable(false);
+  }
+  if (overlayKeyboardReturnsToGame) {
+    try {
+      win32Probe.focusProcessWindow(getGameProcessIds());
+    } catch {
+      // The player clicks the game to take the keyboard back.
+    }
+  }
+  return true;
 }
 
 function clearCharacterPromptOverlay() {
@@ -3800,6 +3884,11 @@ function applyOverlayWindowVisibility(overlayState) {
     return;
   }
 
+  // The cost box lends the keyboard only while the start card shows; any other card gives it back to the game.
+  if (overlayKeyboardLent && (overlayState.visibility === 'hidden' || overlayState.mode !== 'start-map-prompt')) {
+    releaseStartMapPromptKeyboard();
+  }
+
   if (overlayState.visibility === 'hidden') {
     if (overlayWindow.isVisible()) {
       overlayWindow.hide();
@@ -3807,8 +3896,8 @@ function applyOverlayWindowVisibility(overlayState) {
     return;
   }
 
-  // The window is never focusable, so clicking the prompt or the result card leaves the game in the
-  // foreground. Passive states are fully click-through.
+  // The window is not focusable (only the start card's cost box borrows the keyboard, while the player types), so
+  // clicking the prompt or the result card leaves the game in the foreground. Passive states are fully click-through.
   const ignoreMouse = !OVERLAY_CLICKABLE_MODES.has(overlayState.mode);
   if (overlayWindowIgnoresMouse !== ignoreMouse) {
     overlayWindow.setIgnoreMouseEvents(ignoreMouse);
@@ -5075,6 +5164,9 @@ function handleLogout() {
   }
   overlayMapResultState = null;
   clearOverlayMapResultDismissTimer();
+  // A start card still up goes too: its buttons need a signed-in player.
+  releaseStartMapPromptKeyboard();
+  overlayStartMapPromptState = null;
   updateOverlayWindow({ character: null });
   // The device's Path of Exile connection belongs to the signed-in player.
   if (poeApiClient) {
@@ -5913,6 +6005,13 @@ function setupIPC() {
     assertDesktopUserAuthenticated();
     return cancelStartMapPromptOverlay();
   });
+
+  ipcMain.handle('engage-start-map-prompt-overlay', async (event, options = {}) => {
+    assertDesktopUserAuthenticated();
+    return engageStartMapPromptOverlay({ keyboard: options?.keyboard === true });
+  });
+
+  ipcMain.handle('release-start-map-prompt-keyboard', async () => releaseStartMapPromptKeyboard());
 
   ipcMain.handle('set-overlay-character', async (event, character) => {
     assertDesktopUserAuthenticated();

@@ -11,6 +11,8 @@
     startForm: document.querySelector('[data-overlay-start-form]'),
     startFarmTypes: document.querySelector('[data-overlay-start-farm-types]'),
     startCostNote: document.querySelector('[data-overlay-start-cost-note]'),
+    startCostInput: document.querySelector('[data-overlay-start-cost-input]'),
+    startCostUnits: document.querySelector('[data-overlay-start-cost-units]'),
     startSubmit: document.querySelector('[data-overlay-start-submit]'),
     startCancel: document.querySelector('[data-overlay-start-cancel]'),
     characterForm: document.querySelector('[data-overlay-character-form]'),
@@ -19,12 +21,17 @@
   };
 
   var lastRenderedMode = 'runtime';
-  // The overlay never takes focus, so the prompt is mouse-only: the map name comes from the prompt state
-  // and the farm type is picked from buttons.
+  // The overlay takes the keyboard only for the cost box, so the rest of the prompt is mouse-only: the map name comes
+  // from the prompt state and the farm type is picked from buttons.
   var startPromptKey = null;
   var renderedChipsKey = null;
   var selectedFarmTypeId = '';
   var startFarmTypeOptions = [];
+  // The cost box starts from the selected farm type's cost; only a change is saved.
+  var startCostUnit = 'chaos';
+  var startCostBaseline = { text: '', unit: 'chaos' };
+  var startCostError = '';
+  var startCostTyping = false;
   var renderedCharactersKey = null;
   var promptedCharacterId = '';
   // Main pushes state only on events, so a running map or session counts up here: one 1 Hz timer that only
@@ -251,7 +258,12 @@
       if (!entry || typeof entry !== 'object') return null;
       var id = String(entry.id || '').trim();
       var cost = String(entry.cost || '').trim();
-      return id ? { id: id, label: String(entry.label || id).trim(), cost: cost } : null;
+      var option = { id: id, label: String(entry.label || id).trim(), cost: cost };
+      if (cost && typeof entry.costAmount === 'number' && isFinite(entry.costAmount)) {
+        option.costAmount = entry.costAmount;
+        option.costUnit = entry.costUnit === 'divine' ? 'divine' : 'chaos';
+      }
+      return id ? option : null;
     }).filter(Boolean);
   }
 
@@ -358,11 +370,11 @@
     var prompt = (state.startMapPrompt && typeof state.startMapPrompt === 'object') ? state.startMapPrompt : {};
     var opts = normalizeFarmTypeOptions(prompt.farmTypeOptions);
     // A new prompt (entering the prompt mode, or another map entry) resets the selection to its default and takes
-    // clicks again.
-    var promptKey = String(prompt.mapName || '') + '|' + String(prompt.farmTypeId || '') + '|' + String(prompt.expiresAt || '');
-    if (lastRenderedMode !== 'start-map-prompt' || promptKey !== startPromptKey) {
+    // clicks again. Working on the card stops its countdown but keeps it the same prompt.
+    var promptKey = String(prompt.mapName || '') + '|' + String(prompt.farmTypeId || '') + '|' + String(prompt.createdAt || prompt.expiresAt || '');
+    var newPrompt = lastRenderedMode !== 'start-map-prompt' || promptKey !== startPromptKey;
+    if (newPrompt) {
       startPromptKey = promptKey;
-      setStartMapPromptBusy(false);
       renderedChipsKey = null;
       selectedFarmTypeId = opts.some(function (e) { return e.id === prompt.farmTypeId; }) ? prompt.farmTypeId : '';
     }
@@ -383,25 +395,88 @@
       }).join('');
     }
     startFarmTypeOptions = opts;
+    if (newPrompt) {
+      fillStartCost();
+      setStartMapPromptBusy(false);
+    } else {
+      renderStartCostNote();
+    }
+  }
+
+  function getSelectedStartOption() {
+    return startFarmTypeOptions.filter(function (e) { return e.id === selectedFarmTypeId; })[0] || null;
+  }
+
+  // The box shows the selected farm type's cost as typed; a cost is kept per farm type, so No farm type has none.
+  function fillStartCost() {
+    var selected = getSelectedStartOption();
+    var hasAmount = Boolean(selected) && typeof selected.costAmount === 'number';
+    startCostUnit = hasAmount && selected.costUnit === 'divine' ? 'divine' : 'chaos';
+    startCostBaseline = { text: hasAmount ? String(selected.costAmount) : '', unit: startCostUnit };
+    startCostError = '';
+    if (el.startCostInput) {
+      el.startCostInput.value = startCostBaseline.text;
+      el.startCostInput.disabled = !selected;
+    }
+    renderStartCostUnits();
     renderStartCostNote();
   }
 
-  // A farm type without an entry cost says where one is set; the overlay takes no typing.
+  function renderStartCostUnits() {
+    if (!el.startCostUnits) return;
+    var noFarmType = !getSelectedStartOption();
+    Array.prototype.forEach.call(el.startCostUnits.querySelectorAll('[data-cost-unit]'), function (button) {
+      button.setAttribute('aria-pressed', button.getAttribute('data-cost-unit') === startCostUnit ? 'true' : 'false');
+      button.disabled = noFarmType;
+    });
+  }
+
+  // One line under the box: an error, the keys while typing, or what is missing.
   function renderStartCostNote() {
     if (!el.startCostNote) return;
-    var selected = startFarmTypeOptions.filter(function (e) { return e.id === selectedFarmTypeId; })[0];
-    var missing = Boolean(selected) && !selected.cost;
-    el.startCostNote.hidden = !missing;
-    el.startCostNote.textContent = missing ? root.t('overlay.noEntryCost') : '';
+    var selected = getSelectedStartOption();
+    var key = startCostError
+      || (!selected ? 'overlay.entryCostPickFarmType' : '')
+      || (startCostTyping ? 'overlay.entryCostKeys' : '')
+      || (selected.cost ? '' : 'overlay.noEntryCost');
+    el.startCostNote.hidden = !key;
+    el.startCostNote.textContent = key ? root.t(key) : '';
+    el.startCostNote.setAttribute('data-tone', startCostError ? 'error' : 'hint');
+  }
+
+  // The same rule as the Dashboard field: empty is 0, a comma is a decimal point, and 10000 is the most.
+  function parseStartCost(text) {
+    var value = String(text || '').trim().replace(',', '.');
+    if (!value) return 0;
+    if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)) return null;
+    var amount = Number(value);
+    return amount <= 10000 ? amount : null;
+  }
+
+  function engageStartMapPrompt(keyboard) {
+    if (typeof root.electronAPI === 'undefined' || typeof root.electronAPI.engageStartMapPromptOverlay !== 'function') {
+      return Promise.resolve(false);
+    }
+    return root.electronAPI.engageStartMapPromptOverlay({ keyboard: Boolean(keyboard) });
+  }
+
+  // The keyboard goes to the cost box only while it is wanted there.
+  function focusStartCost() {
+    engageStartMapPrompt(true).then(function (engaged) {
+      if (engaged && el.startCostInput && !el.startCostInput.disabled) el.startCostInput.focus();
+    });
   }
 
   function selectFarmType(farmTypeId) {
+    // The farm type already picked keeps what was typed for it.
+    if (farmTypeId === selectedFarmTypeId) return;
     selectedFarmTypeId = farmTypeId;
-    if (!el.startFarmTypes) return;
-    Array.prototype.forEach.call(el.startFarmTypes.querySelectorAll('[data-farm-type-id]'), function (button) {
-      button.setAttribute('aria-pressed', button.getAttribute('data-farm-type-id') === farmTypeId ? 'true' : 'false');
-    });
-    renderStartCostNote();
+    if (el.startFarmTypes) {
+      Array.prototype.forEach.call(el.startFarmTypes.querySelectorAll('[data-farm-type-id]'), function (button) {
+        button.setAttribute('aria-pressed', button.getAttribute('data-farm-type-id') === farmTypeId ? 'true' : 'false');
+      });
+    }
+    fillStartCost();
   }
 
   /* ── Mode: Character Prompt ── */
@@ -517,13 +592,28 @@
   }
 
   /* ── IPC helpers ── */
+  // A changed cost goes with the farm type; an unreadable one keeps the card up and says why.
   function getStartMapPromptPayload() {
-    return { farmTypeId: selectedFarmTypeId || null };
+    var payload = { farmTypeId: selectedFarmTypeId || null };
+    if (!el.startCostInput || !getSelectedStartOption()) return payload;
+    var text = String(el.startCostInput.value || '').trim();
+    if (text === startCostBaseline.text && startCostUnit === startCostBaseline.unit) return payload;
+    var amount = parseStartCost(text);
+    if (amount === null) {
+      startCostError = 'dashboard.entryCostInvalid';
+      renderStartCostNote();
+      return null;
+    }
+    payload.cost = { amount: amount, unit: startCostUnit };
+    return payload;
   }
 
   function setStartMapPromptBusy(busy) {
     var chips = el.startFarmTypes ? Array.prototype.slice.call(el.startFarmTypes.querySelectorAll('button')) : [];
     chips.concat([el.startSubmit, el.startCancel]).filter(Boolean).forEach(function (e) { e.disabled = busy; });
+    var units = el.startCostUnits ? Array.prototype.slice.call(el.startCostUnits.querySelectorAll('button')) : [];
+    var noFarmType = !getSelectedStartOption();
+    units.concat([el.startCostInput]).filter(Boolean).forEach(function (e) { e.disabled = busy || noFarmType; });
   }
 
   /* ── Event bindings ── */
@@ -546,7 +636,45 @@
   if (el.startFarmTypes) {
     el.startFarmTypes.addEventListener('click', function (event) {
       var button = event.target && event.target.closest ? event.target.closest('[data-farm-type-id]') : null;
-      if (button) selectFarmType(button.getAttribute('data-farm-type-id') || '');
+      if (!button) return;
+      selectFarmType(button.getAttribute('data-farm-type-id') || '');
+      engageStartMapPrompt(false);
+    });
+  }
+
+  if (el.startCostInput) {
+    el.startCostInput.addEventListener('mousedown', focusStartCost);
+    el.startCostInput.addEventListener('focus', function () {
+      startCostTyping = true;
+      renderStartCostNote();
+    });
+    el.startCostInput.addEventListener('blur', function () {
+      startCostTyping = false;
+      renderStartCostNote();
+    });
+    el.startCostInput.addEventListener('input', function () {
+      if (!startCostError) return;
+      startCostError = '';
+      renderStartCostNote();
+    });
+    // Enter submits the form; Esc gives the keyboard back to the game and leaves the card waiting.
+    el.startCostInput.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      el.startCostInput.blur();
+      if (typeof root.electronAPI !== 'undefined' && typeof root.electronAPI.releaseStartMapPromptKeyboard === 'function') {
+        root.electronAPI.releaseStartMapPromptKeyboard();
+      }
+    });
+  }
+
+  if (el.startCostUnits) {
+    el.startCostUnits.addEventListener('click', function (event) {
+      var button = event.target && event.target.closest ? event.target.closest('[data-cost-unit]') : null;
+      if (!button || button.disabled) return;
+      startCostUnit = button.getAttribute('data-cost-unit') === 'divine' ? 'divine' : 'chaos';
+      renderStartCostUnits();
+      focusStartCost();
     });
   }
 
@@ -554,8 +682,18 @@
     el.startForm.addEventListener('submit', function (event) {
       event.preventDefault();
       if (typeof root.electronAPI === 'undefined' || typeof root.electronAPI.confirmStartMapPromptOverlay !== 'function') return;
+      var payload = getStartMapPromptPayload();
+      if (!payload) return;
       setStartMapPromptBusy(true);
-      root.electronAPI.confirmStartMapPromptOverlay(getStartMapPromptPayload()).finally(function () { setStartMapPromptBusy(false); });
+      root.electronAPI.confirmStartMapPromptOverlay(payload).then(function (result) {
+        setStartMapPromptBusy(false);
+        if (result && result.ok === false) {
+          startCostError = 'dashboard.entryCostSaveError';
+          renderStartCostNote();
+          // The box still has the keyboard, so the player can fix the amount.
+          if (el.startCostInput && !el.startCostInput.disabled) el.startCostInput.focus();
+        }
+      }, function () { setStartMapPromptBusy(false); });
     });
   }
 

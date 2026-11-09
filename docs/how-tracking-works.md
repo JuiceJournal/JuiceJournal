@@ -16,7 +16,7 @@ From the log it reads:
 
 Chat lines are skipped. Party members also appear in the name lines, so a name only counts when it matches one of your own characters.
 
-When you enter a map and no map is running, the app starts one (Settings → Path of Exile → **Start maps on entry**, on by default). If the overlay is on, it first shows a card for 7 seconds. There you can pick another farm type, each with its entry cost, or press Cancel to skip the map. If you do nothing, the map starts with the farm type selected on the Dashboard. If you leave the map before then, nothing starts. The main window never opens over the game for this.
+When you enter a map and no map is running, the app starts one (Settings → Path of Exile → **Start maps on entry**, on by default). If the overlay is on, it first shows a card for 7 seconds. There you can pick another farm type, type its entry cost in the cost box (the overlay takes the keyboard only while you type there; Enter starts the map, Esc goes back to the game), or press Cancel to skip the map. A cost typed there is saved for that farm type, as on the Dashboard. Once you click on the card it waits for Start or Cancel. If you do nothing, the map starts with the farm type selected on the Dashboard. If you leave the map before then, nothing starts. The main window never opens over the game for this.
 
 ## Your characters: Path of Exile API
 
@@ -61,4 +61,4 @@ The session keeps this profit however it ends: as you leave the map, with the En
 - It does not send keys or mouse input to the game.
 - It does not write to game files or the game's settings.
 
-The in-game overlay is a separate, always-on-top window. It does not take keyboard focus, so the game stays in the foreground when you click it.
+The in-game overlay is a separate, always-on-top window. It takes the keyboard only while you type in the start card's cost box, and gives it back to the game after; otherwise the game stays in the foreground when you click it.

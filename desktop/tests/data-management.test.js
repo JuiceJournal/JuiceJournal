@@ -1324,6 +1324,7 @@ function loadDeleteAll(t, { functions = [], settings = {}, overrides = {} } = {}
       stashAnalyzer: { clearAll: record('stashAnalyzer.clearAll') },
       overlayMapResultState: { result: true },
       clearOverlayMapResultDismissTimer: record('clearOverlayMapResultDismissTimer'),
+      releaseStartMapPromptKeyboard: () => {},
       updateOverlayWindow: record('updateOverlayWindow'),
       persistPoeClientTokens: (tokens) => spies.persistedPoeTokens.push(tokens),
       ...Object.fromEntries(NOT_CALLED.map((name) => [name, () => forbidden.push(name)])),

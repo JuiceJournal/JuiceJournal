@@ -1567,6 +1567,57 @@ test('map-entered events start the map with the offered farm type when the overl
   }]);
 });
 
+test('a start card the player works on waits for their answer instead of starting the map on its own', async () => {
+  const startCalls = [];
+  const timers = [];
+  const costLoads = [];
+  let overlayResultHandler = null;
+  const state = { currentSession: null, settings: { autoStartSession: true }, farmType: { selectedFarmTypeId: 'breach' } };
+  const context = loadFunctions(['handleMapEnteredEvent'], {
+    START_MAP_PROMPT_OVERLAY_MS: 7000,
+    state,
+    setRuntimeSessionState: () => {},
+    showToast: () => {},
+    setTimeout: (callback, delay) => { timers.push({ callback, delay, cleared: false }); return timers.length; },
+    clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].cleared = true; },
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe2', league: 'Fate of the Vaal', farmTypeId: 'breach' }),
+    getFarmTypeModel: () => ({ listFarmTypes: () => [{ id: 'breach', label: 'Breach' }, { id: 'ritual', label: 'Ritual' }] }),
+    loadFarmTypeCosts: async () => costLoads.push(true),
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        showStartMapPromptOverlay: async () => ({ visibility: 'visible', mode: 'start-map-prompt' }),
+        hideStartMapPromptOverlay: async () => {},
+        onStartMapPromptOverlayResult: (callback) => {
+          overlayResultHandler = callback;
+          return () => { overlayResultHandler = null; };
+        }
+      }
+    },
+    handleStartSession: async (options) => startCalls.push(JSON.parse(JSON.stringify(options)))
+  });
+
+  const entered = context.handleMapEnteredEvent({ mapName: 'Channel' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(timers.length, 1);
+
+  // The player clicked the card (main sent start-map-prompt-overlay-engaged): the 7 s no longer start the map.
+  state.pauseStartMapPrompt();
+  assert.equal(timers[0].cleared, true);
+  assert.deepEqual(startCalls, []);
+
+  overlayResultHandler({ action: 'confirm', mapName: 'Channel', farmTypeId: 'ritual', costSaved: true });
+  await entered;
+
+  assert.deepEqual(costLoads, [true], 'the Dashboard field shows the cost typed on the card');
+  assert.deepEqual(startCalls, [{
+    defaultMapName: 'Channel',
+    source: 'map-detected-overlay',
+    sessionDetails: { mapName: 'Channel', farmTypeId: 'ritual' }
+  }]);
+  assert.equal(state.pauseStartMapPrompt, null);
+});
+
 test('a map started meanwhile, or a map left before the prompt is answered, takes no automatic start', async () => {
   const cases = [
     ['started from the tray', (state) => { state.currentSession = { id: 'tray-session' }; }],
