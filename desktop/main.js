@@ -4911,6 +4911,10 @@ function handleGameClosed(version, at = new Date()) {
   };
 
   console.log(`[GameDetector] ${gameLabel} closed`);
+  // A start card still up has no game to start a map in: it goes, and the cancel ends the window's wait for it.
+  if (overlayStartMapPromptState) {
+    cancelStartMapPromptOverlay();
+  }
   if (mainWindow) {
     mainWindow.webContents.send('game-closed', payload);
   }
@@ -5199,9 +5203,14 @@ function handleLogout() {
   }
   overlayMapResultState = null;
   clearOverlayMapResultDismissTimer();
-  // A start card still up goes too: its buttons need a signed-in player.
+  // A "Playing as" prompt, shown or still waiting for the area to load, lists this account's characters.
+  dropPendingCharacterPrompt();
+  clearCharacterPromptOverlay();
+  // A start card still up goes too: its buttons need a signed-in player, and the cancel ends the window's wait for it.
+  if (overlayStartMapPromptState) {
+    cancelStartMapPromptOverlay();
+  }
   releaseStartMapPromptKeyboard();
-  overlayStartMapPromptState = null;
   updateOverlayWindow({ character: null });
   // The device's Path of Exile connection belongs to the signed-in player.
   if (poeApiClient) {

@@ -1662,6 +1662,105 @@ test('a map started meanwhile, or a map left before the prompt is answered, take
   }
 });
 
+// A start card the player worked on: its countdown is off, so only an answer or an event ends the wait.
+function loadEngagedStartCardWait({ functions = [], electronAPI = {}, overrides = {} } = {}) {
+  const startCalls = [];
+  const hidden = [];
+  const timers = [];
+  const handlers = {};
+  const state = { currentSession: null, settings: { autoStartSession: true }, farmType: { selectedFarmTypeId: 'breach' } };
+  const context = loadFunctions(['handleMapEnteredEvent', ...functions], {
+    START_MAP_PROMPT_OVERLAY_MS: 7000,
+    state,
+    setRuntimeSessionState: () => {},
+    showToast: () => {},
+    setTimeout: (callback, delay) => { timers.push({ callback, delay, cleared: false }); return timers.length; },
+    clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].cleared = true; },
+    getSelectedTrackerContext: () => ({ poeVersion: 'poe2', league: 'Fate of the Vaal', farmTypeId: 'breach' }),
+    getFarmTypeModel: () => ({ listFarmTypes: () => [{ id: 'breach', label: 'Breach' }, { id: 'ritual', label: 'Ritual' }] }),
+    loadFarmTypeCosts: async () => {},
+    window: {
+      t: (key) => key,
+      electronAPI: {
+        showStartMapPromptOverlay: async () => ({ visibility: 'visible', mode: 'start-map-prompt' }),
+        hideStartMapPromptOverlay: async () => hidden.push(true),
+        onStartMapPromptOverlayResult: (callback) => {
+          handlers.overlayResult = callback;
+          return () => { handlers.overlayResult = null; };
+        },
+        ...electronAPI
+      }
+    },
+    handleStartSession: async (options) => startCalls.push(JSON.parse(JSON.stringify(options))),
+    ...overrides
+  });
+
+  return {
+    context,
+    state,
+    startCalls,
+    hidden,
+    timers,
+    handlers,
+    // Resolves once the card waits; `entered` (wrapped, so awaiting this does not wait for it) settles when the wait ends.
+    async enterAndEngage() {
+      const entered = context.handleMapEnteredEvent({ mapName: 'Channel' });
+      await new Promise((resolve) => setImmediate(resolve));
+      state.pauseStartMapPrompt();
+      assert.equal(timers[0].cleared, true);
+      return { entered };
+    }
+  };
+}
+
+test('a start card main took down (the game closed, the player signed out) starts nothing and asks for no second hide', async () => {
+  const wait = loadEngagedStartCardWait();
+  const { entered } = await wait.enterAndEngage();
+
+  wait.handlers.overlayResult({ action: 'cancel', mapName: 'Channel', farmTypeId: null, source: 'map-detected' });
+  await entered;
+
+  assert.deepEqual(wait.startCalls, []);
+  // Main closed the card before it answered, and after a sign-out it would refuse the call.
+  assert.deepEqual(wait.hidden, []);
+  assert.equal(wait.state.stopStartMapPrompt, null);
+  assert.equal(wait.state.mapSessionPromptActive, false, 'the next map can ask again');
+});
+
+test('a map started from the tray or the Dashboard ends the wait of a start card the player worked on', async () => {
+  const listeners = {};
+  const wait = loadEngagedStartCardWait({
+    functions: ['setupIPCListeners'],
+    electronAPI: {
+      onMapEntered: () => {},
+      onMapExited: () => {},
+      onSessionStarted: (handler) => { listeners.sessionStarted = handler; },
+      onSessionEnded: () => {},
+      onSessionLootUpdated: () => {},
+      onLootAdded: () => {},
+      onNavigate: () => {}
+    },
+    overrides: {
+      showMapResultToast: () => {},
+      updateActiveSessionUI: () => {},
+      ensureSessionClock: () => {},
+      refreshTrackerData: async () => {},
+      isPageActive: () => false
+    }
+  });
+  wait.context.setupIPCListeners();
+  await wait.enterAndEngage();
+
+  // Main drops the card without an answer when a map starts another way.
+  listeners.sessionStarted({ id: 'tray-session', mapName: 'Channel' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(wait.state.mapSessionPromptActive, false, 'the next map can ask again');
+  assert.equal(wait.state.stopStartMapPrompt, null);
+  assert.deepEqual(wait.startCalls, []);
+  assert.equal(wait.state.currentSession.id, 'tray-session');
+});
+
 test('dashboard summary requests stats for the active character league', async () => {
   const dashboardRequests = [];
   const context = loadFunctions(['loadDashboardStats'], {
