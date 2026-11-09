@@ -34,6 +34,9 @@ const state = {
   // Levels from level-up lines in Client.txt, by game and character id, newer than the character lists.
   loggedLevelsByGame: {},
   poeDeviceConnected: false,
+  // When the device sign-in ends and whether GGG renews it, from main; see schedulePoeDeviceExpiry.
+  poeDeviceExpiresAt: null,
+  poeDeviceRenewable: false,
   // Whether the device sign-in may read stashes (account:stashes); the built-in sign-in does not ask for it.
   poeStashAccess: false,
   runtimeSession: null,
@@ -193,6 +196,7 @@ const elements = {
   characterPickerField: document.getElementById('character-picker-field'),
   characterPicker: document.getElementById('character-picker'),
   characterConnectBtn: document.getElementById('character-connect-btn'),
+  characterConnectNote: document.getElementById('character-connect-note'),
   activeSession: document.getElementById('active-session'),
   sessionFarmTypeSelect: document.getElementById('session-farm-type-select'),
   clearFarmTypeBtn: document.getElementById('clear-farm-type-btn'),
@@ -381,6 +385,9 @@ let activeCharacterRefreshRequestId = 0;
 // Each Data tab load gets a number, so an older, slower answer never overwrites a newer one.
 let dataSummaryRequestId = 0;
 let characterReconcileTimer = null;
+let poeDeviceExpiryTimer = null;
+// How long before a device sign-in ends the character card starts to say so.
+const POE_DEVICE_WARN_MS = 30 * 60 * 1000;
 // GGG moved the `current` flag about 10 minutes after Play in a live PoE2 test (2026-10-21).
 const CHARACTER_RECONCILE_DELAY_MS = 11 * 60 * 1000;
 
@@ -1529,8 +1536,14 @@ function renderCharacterSummaryCard() {
     }));
     elements.characterPicker.value = isReady ? summary.id : '';
   }
+  const poeNote = getPoeDeviceNote();
   if (elements.characterConnectBtn) {
-    elements.characterConnectBtn.hidden = !state.currentUser || state.poeDeviceConnected === true;
+    elements.characterConnectBtn.hidden = !state.currentUser || (state.poeDeviceConnected === true && !poeNote?.endsSoon);
+  }
+  if (elements.characterConnectNote) {
+    elements.characterConnectNote.hidden = !poeNote;
+    elements.characterConnectNote.textContent = poeNote?.text || '';
+    elements.characterConnectNote.dataset.tone = poeNote?.tone || '';
   }
   if (elements.characterGameVersion) {
     const version = normalizePoeVersion(summary.poeVersion)
@@ -3426,7 +3439,7 @@ function showSignedOutWindow() {
   }
   state.deviceCharactersByGame = {};
   state.loggedLevelsByGame = {};
-  state.poeDeviceConnected = false;
+  endPoeDeviceConnection();
   state.poeStashAccess = false;
   state.currentSession = null;
   state.sessions = [];
@@ -3700,7 +3713,11 @@ async function refreshDeviceCharacters(poeVersion) {
   if (state.currentUser?.id !== profileId) {
     return false;
   }
-  state.poeDeviceConnected = Boolean(result?.connected);
+  if (result?.connected) {
+    state.poeDeviceConnected = true;
+  } else {
+    endPoeDeviceConnection();
+  }
   renderPoeLinkStatus();
   if (!Array.isArray(result?.characters)) {
     renderCharacterSummaryCard();
@@ -3730,13 +3747,78 @@ async function refreshDeviceCharacters(poeVersion) {
 async function syncPoeDeviceConnection() {
   const status = await window.electronAPI.getPoeAuthStatus().catch(() => null);
   state.poeDeviceConnected = Boolean(status?.authenticated);
+  state.poeDeviceExpiresAt = state.poeDeviceConnected && Number.isFinite(status?.expiresAt) ? status.expiresAt : null;
+  state.poeDeviceRenewable = status?.renewable === true;
   state.poeStashAccess = status?.stashAccess === true;
+  schedulePoeDeviceExpiry();
   applyDashboardCapabilities();
   renderPoeLinkStatus();
   renderCharacterSummaryCard();
   if (state.poeDeviceConnected) {
     await refreshDeviceCharacters(state.account?.activePoeVersion);
   }
+}
+
+// The end of a device sign-in, as a clock time in the player's locale.
+function formatPoeDeviceEnd() {
+  return new Date(state.poeDeviceExpiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// What the character card says about the device sign-in. Nothing while GGG renews it by itself. Otherwise until when it
+// lasts, that it ends soon (with Reconnect offered early), or that it ended and the character list and levels need a
+// Reconnect to be brought up to date.
+function getPoeDeviceNote(now = Date.now()) {
+  if (!state.currentUser) {
+    return null;
+  }
+  if (!state.poeDeviceConnected) {
+    return { tone: 'warn', text: window.t('dashboard.poeReconnectNote') };
+  }
+  if (state.poeDeviceRenewable || !Number.isFinite(state.poeDeviceExpiresAt)) {
+    return null;
+  }
+  const time = formatPoeDeviceEnd();
+  return state.poeDeviceExpiresAt - now <= POE_DEVICE_WARN_MS
+    ? { tone: 'warn', text: window.t('dashboard.poeConnectionEndsSoon', { time }), endsSoon: true }
+    : { tone: 'muted', text: window.t('dashboard.poeConnectionUntil', { time }) };
+}
+
+// The device sign-in ended here (Disconnect, sign-out, or a fetch that found it gone): its end timer goes with it, so no
+// "connection ended" notice comes later.
+function endPoeDeviceConnection() {
+  state.poeDeviceConnected = false;
+  state.poeDeviceExpiresAt = null;
+  schedulePoeDeviceExpiry();
+}
+
+// A sign-in GGG does not renew ends at a fixed time: the card warns shortly before, and once it ends it asks for Reconnect
+// at once instead of at the next character fetch.
+function schedulePoeDeviceExpiry() {
+  clearTimeout(poeDeviceExpiryTimer);
+  poeDeviceExpiryTimer = null;
+  const expiresAt = state.poeDeviceExpiresAt;
+  if (!state.poeDeviceConnected || state.poeDeviceRenewable || !Number.isFinite(expiresAt)) {
+    return;
+  }
+
+  const now = Date.now();
+  const warnAt = expiresAt - POE_DEVICE_WARN_MS;
+  if (now < warnAt) {
+    poeDeviceExpiryTimer = setTimeout(() => {
+      renderCharacterSummaryCard();
+      renderPoeLinkStatus();
+      schedulePoeDeviceExpiry();
+    }, warnAt - now);
+    return;
+  }
+  poeDeviceExpiryTimer = setTimeout(async () => {
+    await syncPoeDeviceConnection();
+    if (state.currentUser && !state.poeDeviceConnected) {
+      showToast(window.t('toast.poeConnectionEnded'), window.t('dashboard.poeReconnectNote'), 'warning', {
+        action: { label: window.t('dashboard.connectDevice'), onSelect: handleConnectPoeDevice }
+      });
+    }
+  }, Math.max(0, expiresAt - now) + 1000);
 }
 
 // The card and Settings both connect; one sign-in at a time, since a second loopback flow would wait for nothing.
@@ -3752,10 +3834,12 @@ async function handleConnectPoeDevice() {
     if (!result?.success) {
       // The reply carries main's error code, so a different account says how to switch instead of try again.
       showToast(window.t('toast.poeConnectFailed'), getUserFacingErrorMessage(result, 'toast.tryAgain'), 'error');
+      // Another account's approval drops the sign-in this one had, so the card reads main's state again.
+      await syncPoeDeviceConnection();
       return;
     }
-    state.poeDeviceConnected = true;
-    await refreshDeviceCharacters(state.account?.activePoeVersion);
+    // Asks main again, so the card learns when the new sign-in ends.
+    await syncPoeDeviceConnection();
   } catch (error) {
     showToast(window.t('toast.poeConnectFailed'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
   } finally {
@@ -3824,7 +3908,9 @@ function renderPoeLinkStatus() {
   if (state.poeDeviceConnected) {
     elements.poeLinkStatus.textContent = window.t('settings.poeLinked');
     elements.poeAccountName.textContent = state.currentUser.accountName || window.t('settings.poeLinked');
-    elements.poeLinkMode.textContent = window.t('settings.poeLiveMode');
+    elements.poeLinkMode.textContent = !state.poeDeviceRenewable && Number.isFinite(state.poeDeviceExpiresAt)
+      ? window.t('settings.poeLiveUntil', { time: formatPoeDeviceEnd() })
+      : window.t('settings.poeLiveMode');
     if (elements.poeConnectBtn) elements.poeConnectBtn.classList.add('hidden');
     if (elements.poeDisconnectBtn) elements.poeDisconnectBtn.classList.remove('hidden');
     return;
@@ -3844,7 +3930,7 @@ async function handlePoeDisconnect() {
 
   try {
     await window.electronAPI.disconnectPoeDevice();
-    state.poeDeviceConnected = false;
+    endPoeDeviceConnection();
     renderPoeLinkStatus();
     renderCharacterSummaryCard();
     // The link status line shows it; the announcer reads it out, since the hidden button took focus with it.

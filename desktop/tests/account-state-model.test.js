@@ -794,12 +794,17 @@ test('renderer logout clears normalized account state', async () => {
     lastMapResult: { id: 'map-result-1' },
     pricesSynced: true
   };
-  const context = loadFunctions(['handleLogout', 'showSignedOutWindow'], {
+  const clearedTimers = [];
+  const pendingEndTimer = { id: 'poe-device-end' };
+  state.poeDeviceExpiresAt = Date.now() + 60_000;
+  const context = loadFunctions(['handleLogout', 'showSignedOutWindow', 'endPoeDeviceConnection', 'schedulePoeDeviceExpiry'], {
     state,
     stashState,
     clearActiveCharacterRefreshTimers: () => calls.push(['clearActiveCharacterRefreshTimers']),
-    clearTimeout: () => {},
+    clearTimeout: (timer) => clearedTimers.push(timer),
     characterReconcileTimer: null,
+    poeDeviceExpiryTimer: pendingEndTimer,
+    POE_DEVICE_WARN_MS: 30 * 60 * 1000,
     window: {
       electronAPI: {
         logout: async () => calls.push(['logout'])
@@ -822,6 +827,9 @@ test('renderer logout clears normalized account state', async () => {
   assert.equal(state.account, null);
   assert.equal(state.currentUser, null);
   assert.equal(state.poeDeviceConnected, false);
+  // The device sign-in's end timer goes too, so no "connection ended" notice reaches the sign-in screen.
+  assert.equal(state.poeDeviceExpiresAt, null);
+  assert.ok(clearedTimers.includes(pendingEndTimer));
   assert.equal(Array.isArray(state.mapResults), true);
   assert.equal(state.mapResults.length, 0);
   // A failed load before sign-out must not leave the Last Map Result card in its error state.

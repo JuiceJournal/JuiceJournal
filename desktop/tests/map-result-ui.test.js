@@ -1116,6 +1116,7 @@ test('poe device status refresh records stash access and re-applies the stash ca
       }
     },
     applyDashboardCapabilities: () => calls.push(['applyDashboardCapabilities', state.poeStashAccess]),
+    schedulePoeDeviceExpiry: () => {},
     renderPoeLinkStatus: () => {},
     renderCharacterSummaryCard: () => {},
     refreshDeviceCharacters: async () => {}

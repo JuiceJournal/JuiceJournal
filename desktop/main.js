@@ -1784,6 +1784,12 @@ function collectBugReportInput() {
       clientTxtFound: isValidPoePath(poePath) && fs.existsSync(poePath)
     },
     signedIn: Boolean(profile),
+    // Whether GGG renews this device sign-in, and how long it has left: never the tokens themselves.
+    poeDevice: {
+      connected: Boolean(poeApiClient?.isAuthenticated()),
+      renewable: Boolean(poeApiClient?.canRenew()),
+      hoursLeft: poeApiClient?.tokenExpiresAt ? Math.max(0, Math.round((poeApiClient.tokenExpiresAt - Date.now()) / 360000) / 10) : null
+    },
     sessionActive: currentSession?.status === 'active',
     localData: {
       journalBytes,
@@ -5757,6 +5763,9 @@ function setupIPC() {
     return {
       authenticated: poeApiClient.isAuthenticated(),
       expired: poeApiClient.isTokenExpired(),
+      // When this device sign-in ends, unless GGG gave a refresh token that renews it.
+      expiresAt: poeApiClient.tokenExpiresAt || null,
+      renewable: poeApiClient.canRenew(),
       stashAccess: poeApiClient.hasScope('account:stashes')
     };
   });

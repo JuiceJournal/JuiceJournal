@@ -377,6 +377,7 @@ const REPORT_INPUT = {
     autoStartSession: true
   },
   signedIn: true,
+  poeDevice: { connected: true, renewable: false, hoursLeft: 7.5 },
   sessionActive: false,
   localData: { journalBytes: 48213, mapResults: 37, activityEntries: 112 },
   errors: [],
@@ -410,6 +411,7 @@ test('buildBugReportText prints the fixed English layout with no trailing newlin
     'Read inventory hotkey: F9',
     'Notifications: on, sound: off, auto-start session: on',
     'Signed in (local profile): yes',
+    'Path of Exile on this device: connected yes, renews itself no, hours left 7.5',
     'Active session: none',
     'Local data: journal.json 48213 bytes, map results 37, activity entries 112',
     '',
@@ -571,4 +573,14 @@ test('the issue URL parameters match the bug report issue form', () => {
     }
   }
   assert.equal(params.get('template'), path.basename(templatePath));
+});
+
+test('buildBugReportText says whether the Path of Exile sign-in renews itself and how many hours it has left', () => {
+  const line = (poeDevice) => buildReport({ poeDevice }).split('\n').find((entry) => entry.startsWith('Path of Exile on this device:'));
+
+  assert.equal(line({ connected: true, renewable: true, hoursLeft: 9.9 }), 'Path of Exile on this device: connected yes, renews itself yes, hours left 9.9');
+  assert.equal(line({ connected: true, renewable: false, hoursLeft: 0 }), 'Path of Exile on this device: connected yes, renews itself no, hours left 0');
+  assert.equal(line({ connected: false, renewable: false, hoursLeft: null }), 'Path of Exile on this device: connected no, renews itself no, hours left n/a');
+  // An older caller without the field still gets a full line.
+  assert.equal(line(undefined), 'Path of Exile on this device: connected no, renews itself no, hours left n/a');
 });
