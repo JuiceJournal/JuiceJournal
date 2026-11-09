@@ -11,6 +11,7 @@ const {
   listRecentLoot,
   listSessions,
   markLootUnread,
+  dropUnreadCandidate,
   startSession,
   updateCost,
   updateLoot,
@@ -499,4 +500,31 @@ test('addLoot keeps stash totals, says whether the totals follow the loot, and m
   assert.equal(marked.session.profitChaos, 840);
   assert.equal(getSession(marked.journal, 's1').lootUnread, true);
   assert.throws(() => markLootUnread(ended.journal, 'nope', { now: NOW }), { code: 'SESSION_NOT_FOUND' });
+});
+
+test('a run keeps what its unread cells looked like until the player names one', () => {
+  const started = startSession({ sessions: [] }, { mapName: 'Dunes Map', poeVersion: 'poe2', league: 'Rites' }, { id: 's1', now: NOW });
+  const looked = [
+    { names: ['Essence of Ruin', 'Greater Essence of Ruin', 'Extra'], quantity: '2' },
+    { names: [], quantity: 1 },
+    { names: ['Essence of the Body'], quantity: 0 }
+  ];
+
+  const marked = markLootUnread(started.journal, 's1', { now: NOW, unreadCandidates: looked });
+  assert.deepEqual(marked.session.lootUnreadCandidates, [
+    { names: ['Essence of Ruin', 'Greater Essence of Ruin'], quantity: 2 },
+    { names: ['Essence of the Body'], quantity: 1 }
+  ]);
+
+  const added = addLoot(marked.journal, 's1', [{ itemName: 'Exalted Orb', chaosValue: 5 }], {
+    createId: () => 'l1', now: NOW, lootUnread: true, unreadCandidates: [{ names: ['Omen of Light'], quantity: 1 }]
+  });
+  assert.equal(added.session.lootUnreadCandidates.length, 3);
+
+  const named = dropUnreadCandidate(added.journal, 's1', { index: 0, name: 'Greater Essence of Ruin' }, { now: NOW });
+  assert.deepEqual(named.session.lootUnreadCandidates.map((entry) => entry.names[0]), ['Essence of the Body', 'Omen of Light']);
+  // An index that moved is found by its name; a name no group holds changes nothing.
+  const byName = dropUnreadCandidate(named.journal, 's1', { index: 0, name: 'Omen of Light' }, { now: NOW });
+  assert.deepEqual(byName.session.lootUnreadCandidates.map((entry) => entry.names[0]), ['Essence of the Body']);
+  assert.equal(dropUnreadCandidate(byName.journal, 's1', { index: 0, name: 'Chaos Orb' }, { now: NOW }).session, byName.session);
 });

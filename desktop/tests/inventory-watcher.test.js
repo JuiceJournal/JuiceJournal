@@ -75,8 +75,8 @@ function setup(overrides = {}) {
       log.artLoads += 1;
       return { coarse: new Uint8Array(0), fine: new Uint8Array(0) };
     },
-    onGain: (sessionId, items, mapCount, unread) => log.gains.push({ sessionId, items, mapCount, ...(unread ? { unread } : {}) }),
-    onUnreadLoot: (sessionId) => log.unread.push(sessionId),
+    onGain: (sessionId, items, mapCount, unread, candidates) => log.gains.push({ sessionId, items, mapCount, ...(unread ? { unread, candidates } : {}) }),
+    onUnreadLoot: (sessionId, candidates) => log.unread.push(candidates && candidates.length ? [sessionId, candidates] : sessionId),
     onStatus: (kind) => log.statuses.push(kind),
     onRead: (kind) => log.reads.push(kind),
     now: () => env.now
@@ -578,9 +578,9 @@ test('a map whose only new items were left unread is marked so, and a gain says 
   readBaseline(context, { 'Exalted Orb': 1 });
   watcher.mapEntered();
   watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' });
-  setRead({ open: true, items: { 'Exalted Orb': 1 }, extraCells: { '3,0': { unknown: true } } });
+  setRead({ open: true, items: { 'Exalted Orb': 1 }, extraCells: { '3,0': { unknown: true, candidates: ['Essence of Ruin', 'Greater Essence of Ruin'], quantity: 1 } } });
   watcher.tick();
-  assert.deepEqual(log.unread, ['s1']);
+  assert.deepEqual(log.unread, [['s1', [{ names: ['Essence of Ruin', 'Greater Essence of Ruin'], quantity: 1 }]]]);
   assert.deepEqual(log.gains, []);
 
   // The unread cell from the last map is not new any more; another one is.
@@ -588,6 +588,6 @@ test('a map whose only new items were left unread is marked so, and a gain says 
   watcher.sessionEnded({ id: 's2', poeVersion: 'poe2' });
   setRead({ open: true, items: { 'Exalted Orb': 3 }, extraCells: { '3,0': { unknown: true }, '4,0': { unknown: true } } });
   watcher.tick();
-  assert.deepEqual(log.gains, [{ sessionId: 's2', items: [{ name: 'Exalted Orb', quantity: 2 }], mapCount: 1, unread: true }]);
-  assert.deepEqual(log.unread, ['s1']);
+  assert.deepEqual(log.gains, [{ sessionId: 's2', items: [{ name: 'Exalted Orb', quantity: 2 }], mapCount: 1, unread: true, candidates: [] }]);
+  assert.equal(log.unread.length, 1);
 });

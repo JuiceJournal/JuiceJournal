@@ -59,7 +59,9 @@ class InventoryWatcher {
    *   while the loaded prices are not that game's current league
    * @param {function(string, Array, number, boolean): void} deps.onGain - Session id, its new items, how many maps they
    *   cover, and whether new items were left unread
-   * @param {function(string): void} [deps.onUnreadLoot] - Session id of a finished map whose only new items were unread
+   * @param {function(string, Array, boolean): void} [deps.onUnreadLoot] - Session id of a finished map whose only new
+   *   items were unread, what they looked like ({ names, quantity } each), and whether some had no clear look; onGain gets
+   *   the same two after `unread`
    * @param {function(string): void} deps.onStatus - Something the player should be told, see the kinds below
    * @param {function(string, object=): void} [deps.onRead] - What the last read came to, for the Dashboard's status line:
    *   saved, noBaseline, noGain, gain (each with { characterKey }); resolution when the window turns to a size reading
@@ -197,11 +199,13 @@ class InventoryWatcher {
     } else if (outcome.items.length === 0) {
       this.deps.onRead('noGain', { characterKey });
       this.deps.onStatus('noGain');
-      if (outcome.unread && this.deps.onUnreadLoot) this.deps.onUnreadLoot(outcome.sessionId);
+      if (outcome.unread && this.deps.onUnreadLoot) {
+        this.deps.onUnreadLoot(outcome.sessionId, outcome.unreadCandidates || [], Boolean(outcome.unreadOther));
+      }
     } else {
       this.deps.onRead('gain', { characterKey });
       this.deps.onStatus('reading');
-      this.deps.onGain(outcome.sessionId, outcome.items, outcome.mapCount, Boolean(outcome.unread));
+      this.deps.onGain(outcome.sessionId, outcome.items, outcome.mapCount, Boolean(outcome.unread), outcome.unreadCandidates || [], Boolean(outcome.unreadOther));
     }
   }
 

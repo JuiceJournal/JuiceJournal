@@ -41,6 +41,9 @@ function loadFunctions(functionNames, contextOverrides = {}) {
 const DRAWER_FUNCTIONS = [
   'renderSessionDrawer',
   'sessionLootAddHTML',
+  'sessionLootCandidatesHTML',
+  'handleSessionLootCandidateClick',
+  'dismissSessionLootCandidate',
   'handleSessionLootAddSubmit',
   'sortSessionLoot',
   'clearSessionLootArm',
@@ -899,7 +902,8 @@ test('a run with unread loot says so, and edit mode adds a row for adding an ite
   const unread = { ...sessionWith(LOOT), lootUnread: true };
   const viewing = createDrawer({ session: unread });
   viewing.context.renderSessionDrawer();
-  assert.match(viewing.elements.sessionDrawerLoot.innerHTML, /<p class="session-drawer-loot-note">sessions\.lootUnread<\/p>/);
+  // No look to offer (gear, say): the note asks for Edit only.
+  assert.match(viewing.elements.sessionDrawerLoot.innerHTML, /<p class="session-drawer-loot-note">sessions\.lootUnreadByHand<\/p>/);
   assert.doesNotMatch(viewing.elements.sessionDrawerLoot.innerHTML, /data-session-loot-add/);
 
   const editing = createDrawer({ session: unread, editing: true });
@@ -943,4 +947,51 @@ test('adding an item by hand sends it to main, clears the row and says it was ad
   await submit(form('Essence of Ruin', '1'));
   assert.equal(drawer.state.sessionLootAddError, 'toast.lootAddError');
   assert.equal(drawer.state.sessionLootAddBusy, false);
+});
+
+test('an unread cell shows what it looked like, and one click adds that item and drops its candidates', async () => {
+  const run = { ...sessionWith(LOOT), lootUnread: true, lootUnreadCandidates: [{ names: ['Essence <of> Ruin', 'Greater Essence of Ruin'], quantity: 2 }] };
+  const drawer = createDrawer({ session: run });
+  drawer.context.renderSessionDrawer();
+  const html = drawer.elements.sessionDrawerLoot.innerHTML;
+  assert.match(html, /sessions\.lootLookedLike/);
+  assert.match(html, /data-candidate-index="0" data-candidate-name="Essence &lt;of&gt; Ruin" data-candidate-quantity="2"/);
+  assert.match(html, />Greater Essence of Ruin x2<\/button>/);
+
+  const added = [];
+  drawer.context.window.electronAPI.addSessionLoot = async (sessionId, item) => {
+    added.push([sessionId, item]);
+    return { ...run, lootUnreadCandidates: [], lootEntries: [{ id: 'hand-1', itemName: item.itemName, quantity: item.quantity, chaosValue: 0 }, ...run.lootEntries] };
+  };
+  const button = { disabled: false, dataset: { candidateName: 'Greater Essence of Ruin', candidateQuantity: '2', candidateIndex: '0' } };
+  await drawer.context.handleSessionLootCandidateClick({ target: { closest: (selector) => (selector === '.session-drawer-loot-candidate' ? button : null) } });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(added)), [['run-1', { itemName: 'Greater Essence of Ruin', quantity: 2, candidate: 0 }]]);
+  assert.deepEqual(drawer.state.selectedSession.lootUnreadCandidates, []);
+  assert.ok(drawer.calls.some(([kind, text]) => kind === 'announce' && text === 'sessions.lootAddedNoPrice|Greater Essence of Ruin'));
+  assert.doesNotMatch(drawer.elements.sessionDrawerLoot.innerHTML, /data-candidate-index/);
+
+  // A click that is not on a candidate does nothing.
+  await drawer.context.handleSessionLootCandidateClick({ target: { closest: () => null } });
+  assert.equal(added.length, 1);
+});
+
+test('a look that is not loot can be dismissed, and the note then asks for Edit only', async () => {
+  const run = { ...sessionWith(LOOT), lootUnread: true, lootUnreadCandidates: [{ names: ['Essence of Ruin', 'Greater Essence of Ruin'], quantity: 1 }] };
+  const drawer = createDrawer({ session: run });
+  drawer.context.renderSessionDrawer();
+  assert.match(drawer.elements.sessionDrawerLoot.innerHTML, /session-drawer-loot-candidate-dismiss" data-candidate-index="0" data-candidate-name="Essence of Ruin"/);
+  assert.match(drawer.elements.sessionDrawerLoot.innerHTML, /sessions\.lootUnread<\/p>/);
+
+  const dismissed = [];
+  drawer.context.window.electronAPI.dismissLootCandidate = async (sessionId, look) => {
+    dismissed.push([sessionId, look]);
+    return { ...run, lootUnreadCandidates: [] };
+  };
+  const dismiss = { disabled: false, dataset: { candidateIndex: '0', candidateName: 'Essence of Ruin' } };
+  await drawer.context.handleSessionLootCandidateClick({ target: { closest: (selector) => (selector.includes('dismiss') ? dismiss : null) } });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(dismissed)), [['run-1', { index: 0, name: 'Essence of Ruin' }]]);
+  // Every look settled and nothing else unread: the note goes.
+  assert.doesNotMatch(drawer.elements.sessionDrawerLoot.innerHTML, /data-candidate-index|session-drawer-loot-note/);
 });

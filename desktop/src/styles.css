@@ -2934,6 +2934,34 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   line-height: 1.4;
 }
 
+/* What an unread cell looked like: one click adds that item. */
+.session-drawer-loot-candidates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: -0.2rem 0 0.6rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.session-drawer-loot-candidate-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 0;
+  border-radius: var(--bevel-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.session-drawer-loot-candidate-dismiss:hover {
+  color: var(--text);
+}
+
 /* Edit mode's row for adding an item by hand: name, quantity, Add. */
 .session-drawer-loot-add {
   display: flex;

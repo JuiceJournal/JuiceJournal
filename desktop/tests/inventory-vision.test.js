@@ -315,6 +315,33 @@ test('an omen counts only when it is clearly itself, whatever it is worth', () =
   assert.equal(vision.readCell(cell, alone).name, 'Omen of Refreshment');
 });
 
+test('an essence counts only when it is far ahead of every look-alike, and so does a cell an essence is next to', () => {
+  const cell = liftedCell();
+  const { margin } = vision.matchCell(cell, lookAlikeLibrary({ name: 'Greater Essence of Ice', value: 0.01 }));
+  assert.ok(margin >= 2.3 && margin < 5, `ahead by ${margin}: only the essence bar refuses it`);
+
+  assert.equal(vision.readCell(cell, lookAlikeLibrary({ name: 'Greater Essence of Ice', value: 0.01 })), null);
+  // A cheap item whose next picture is an essence could be that essence.
+  assert.equal(vision.readCell(cell, lookAlikeLibrary({ name: 'Chaos Shard', value: 0.01, twinName: 'Essence of Ice' })), null);
+  assert.equal(vision.readCell(cell, lookAlikeLibrary({ name: 'Chaos Shard', value: 0.01 })).name, 'Chaos Shard');
+
+  // With no look-alike in the library the essence reads.
+  const alone = [{ ...makeArt('Greater Essence of Ice', 1), value: 0.01 }, { ...makeArt('Third', 3), value: 0.01 }];
+  assert.equal(vision.readCell(cell, alone).name, 'Greater Essence of Ice');
+});
+
+test('an unread cell that looks like an item says which two it looked like, with its stack size', () => {
+  const image = blankGrid();
+  paintCell(image, 2, 1, 1);
+  paintDigit(image, 2, 1, '3');
+  drawGridLines(image);
+
+  const { items, cells } = vision.readInventory(image, GRID, lookAlikeLibrary({ name: 'Greater Essence of Ice', value: 0.01 }));
+
+  assert.deepEqual(items, {});
+  assert.deepEqual(cells['1,2'], { unknown: true, candidates: ['Greater Essence of Ice', 'Twin'], quantity: 3 });
+});
+
 test('a cheap item only a little ahead of the next picture must also be close to its own art', () => {
   const library = (share) => lookAlikeLibrary({ name: 'Lesser Storm Rune', value: 0.01, share });
   const unclear = vision.matchCell(liftedCell(10), library(0.04));
