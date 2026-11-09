@@ -2860,6 +2860,7 @@ function setupEventListeners() {
     elements.sessionDrawerLoot.addEventListener('focusout', handleSessionLootChange);
     elements.sessionDrawerLoot.addEventListener('input', handleSessionLootAddInput);
     elements.sessionDrawerLoot.addEventListener('submit', handleSessionLootAddSubmit);
+    elements.sessionDrawerLoot.addEventListener('click', handleSessionLootCandidateClick);
   }
   if (elements.farmingHubVersionFilter) elements.farmingHubVersionFilter.addEventListener('change', loadFarmingHubRuns);
   if (elements.farmingHubLeagueFilter) elements.farmingHubLeagueFilter.addEventListener('change', loadFarmingHubRuns);
@@ -8193,7 +8194,12 @@ function renderSessionDrawer({ keepForm = false } = {}) {
   }
 
   // New items the inventory read could not name are not in the totals; Edit can add them.
-  const unreadNote = session.lootUnread ? `<p class="session-drawer-loot-note">${window.t('sessions.lootUnread')}</p>` : '';
+  const candidateGroups = session.lootUnread ? sessionLootCandidatesHTML(session) : '';
+  // Once its looks are settled, a run says no more unless some unread loot had none (or it predates the looks).
+  const byHand = session.lootUnread && (session.lootUnreadOther || !Array.isArray(session.lootUnreadCandidates));
+  const unreadNote = candidateGroups || byHand
+    ? `<p class="session-drawer-loot-note">${window.t(candidateGroups ? 'sessions.lootUnread' : 'sessions.lootUnreadByHand')}</p>${candidateGroups}`
+    : '';
   const addRow = lootEditing ? sessionLootAddHTML() : '';
   if (!lootEntries.length) {
     elements.sessionDrawerLoot.innerHTML = `${unreadNote}${addRow}<p class="empty-state">${window.t('sessions.detailEmptyLoot')}</p>`;
@@ -8239,6 +8245,76 @@ function renderSessionDrawer({ keepForm = false } = {}) {
     // Through redrawSessionLoot, so the focus and what was typed in a quantity box survive.
     () => { if (state.selectedSession?.id === session.id) redrawSessionLoot(); }
   );
+}
+
+// What each unread cell looked like, as buttons: one click adds that item, so the player names it and nothing is guessed.
+function sessionLootCandidatesHTML(session) {
+  const groups = Array.isArray(session.lootUnreadCandidates) ? session.lootUnreadCandidates : [];
+  const disabledAttr = state.sessionLootAddBusy ? ' disabled' : '';
+  return groups.map((group, index) => {
+    const quantity = Math.max(1, parseInt(group?.quantity, 10) || 1);
+    const buttons = (Array.isArray(group?.names) ? group.names : []).map((name) => {
+      const label = escapeHTML(name);
+      return `<button type="button" class="btn btn-secondary btn-small session-drawer-loot-candidate" data-candidate-index="${index}" data-candidate-name="${label}" data-candidate-quantity="${quantity}" aria-label="${window.t('sessions.lootCandidateAria', { item: label, count: quantity })}"${disabledAttr}>${label}${quantity > 1 ? ` x${quantity}` : ''}</button>`;
+    }).join('');
+    if (!buttons) return '';
+    const first = escapeHTML(group.names[0]);
+    const dismiss = `<button type="button" class="btn-icon session-drawer-loot-candidate-dismiss" data-candidate-index="${index}" data-candidate-name="${first}" aria-label="${window.t('sessions.lootCandidateDismissAria')}"${disabledAttr}><svg class="icon" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#close"/></svg></button>`;
+    return buttons ? `<div class="session-drawer-loot-candidates"><span>${window.t('sessions.lootLookedLike')}</span>${buttons}${dismiss}</div>` : '';
+  }).join('');
+}
+
+async function handleSessionLootCandidateClick(event) {
+  const dismiss = event.target?.closest?.('.session-drawer-loot-candidate-dismiss');
+  if (dismiss) {
+    await dismissSessionLootCandidate(dismiss);
+    return;
+  }
+  const button = event.target?.closest?.('.session-drawer-loot-candidate');
+  const session = state.selectedSession;
+  if (!button || button.disabled || !session?.id || state.sessionLootAddBusy) return;
+  const itemName = button.dataset.candidateName;
+  const quantity = Math.max(1, parseInt(button.dataset.candidateQuantity, 10) || 1);
+  const candidate = parseInt(button.dataset.candidateIndex, 10);
+
+  state.sessionLootAddBusy = true;
+  let added = null;
+  try {
+    const updated = await window.electronAPI.addSessionLoot(session.id, { itemName, quantity, candidate });
+    if (state.selectedSession?.id === session.id) state.selectedSession = updated;
+    if (state.currentSession?.id === updated.id) {
+      state.currentSession = { ...state.currentSession, ...updated };
+      updateActiveSessionUI();
+    }
+    added = (updated.lootEntries || [])[0] || null;
+  } catch (error) {
+    showToast(window.t('toast.lootAddError'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
+  } finally {
+    state.sessionLootAddBusy = false;
+  }
+
+  redrawSessionLoot();
+  if (!added) return;
+  announceStatus(window.t(Number(added.chaosValue) > 0 ? 'sessions.lootAdded' : 'sessions.lootAddedNoPrice', { item: itemName }));
+  await refreshTrackerData({ includeSessions: true, immediate: true });
+}
+
+async function dismissSessionLootCandidate(button) {
+  const session = state.selectedSession;
+  if (button.disabled || !session?.id || state.sessionLootAddBusy) return;
+  state.sessionLootAddBusy = true;
+  try {
+    const updated = await window.electronAPI.dismissLootCandidate(session.id, {
+      index: parseInt(button.dataset.candidateIndex, 10),
+      name: button.dataset.candidateName
+    });
+    if (state.selectedSession?.id === session.id) state.selectedSession = updated;
+  } catch (error) {
+    showToast(window.t('toast.lootAddError'), getUserFacingErrorMessage(error, 'toast.tryAgain'), 'error');
+  } finally {
+    state.sessionLootAddBusy = false;
+  }
+  redrawSessionLoot();
 }
 
 // Edit mode's row for an item the inventory read did not name. Names come from the run's league prices when they are

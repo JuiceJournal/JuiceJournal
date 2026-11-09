@@ -45,6 +45,13 @@ const VALUABLE_SCORE = 17;
 // nothing. Real omen reads were at least 9.1 ahead and scored at most 11.8; sibling reads were at most 4.8 ahead.
 const OMEN_MARGIN = 5;
 const OMEN_SCORE = 14;
+// Essences are look-alikes too: the tiers of one essence differ little, and essences of one colour as well. Each
+// essence drawn from the game's art onto a real empty cell read as itself, but as little as 0.4 ahead of a sibling (real
+// screenshots: 2.2 to 5.0); with itself left out it read as a sibling up to 4.0 ahead. Measured on 204 rendered cells
+// with every essence's art in the library, 2026-11-09. So an essence, or a cell an essence is next to, counts only far
+// ahead; any other is left for the player, who gets the two it looked like.
+const ESSENCE_MARGIN = 5;
+const ESSENCE_PATTERN = /Essence of /;
 // Any other cell that is only a little ahead of the next picture must also be close to its own: what it shows may be a
 // valuable item missing from the price list. Such wrong reads were at most 2.2 ahead and scored at least 14.8. At worst
 // this leaves a cheap item unread.
@@ -467,8 +474,7 @@ function matchCell(cell, art) {
  * pixels, coarse at COARSE_SIZE and fine at FINE_ART_SIZE, and value in Divine Orbs. Returns { name, quantity } or null
  * for an item it does not hold or cannot tell apart clearly enough.
  */
-function readCell(cell, art) {
-  const match = matchCell(cell, art);
+function readCell(cell, art, match = matchCell(cell, art)) {
   if (!match || match.score >= ACCEPT_SCORE || match.margin < ACCEPT_MARGIN) return null;
 
   const name = match.names.length > 1 ? pickFromSameArt(match.names, readTierBars(cell)) : match.names[0];
@@ -480,10 +486,24 @@ function readCell(cell, art) {
   const valuable = !isCheap(name) || (match.runnerUp !== null && !isCheap(match.runnerUp));
   if (valuable && (match.margin < VALUABLE_MARGIN || match.score > VALUABLE_SCORE)) return null;
   if (/^Omen /.test(name) && (match.margin < OMEN_MARGIN || match.score > OMEN_SCORE)) return null;
+  if ((ESSENCE_PATTERN.test(name) || ESSENCE_PATTERN.test(match.runnerUp || '')) && match.margin < ESSENCE_MARGIN) return null;
   if (!valuable && match.margin < CLEAR_MARGIN && match.score > CLEAR_SCORE) return null;
 
   const { quantity, digits } = readStackSize(cell);
   return quantity === null ? null : { name, quantity, digits };
+}
+
+// An occupied cell left unread. One that looks like an item gets the two items it looked most like, with its stack size,
+// so the player can name it with one click. Gear and the like match nothing that close. A stack whose digits do not
+// read, or tiers sharing one picture that the bars do not tell apart, get no candidates: one click would add a wrong
+// number or a tier worth many times more or less.
+function unreadCell(cell, match) {
+  if (!match || match.score >= ACCEPT_SCORE) return { unknown: true };
+  const { quantity } = readStackSize(cell);
+  const best = match.names.length > 1 ? pickFromSameArt(match.names, readTierBars(cell)) : match.names[0];
+  if (quantity === null || !best) return { unknown: true };
+  const candidates = [best, match.runnerUp].filter((name, index, list) => name && list.indexOf(name) === index);
+  return { unknown: true, candidates, quantity };
 }
 
 function hashCell(cell) {
@@ -527,16 +547,17 @@ function readInventory(image, grid, art, cache = null) {
       if (cache && cache.has(key)) {
         read = cache.get(key);
       } else {
-        read = readCell(cell, art);
+        const match = matchCell(cell, art);
+        read = readCell(cell, art, match) || unreadCell(cell, match);
         if (cache) cache.set(key, read);
       }
-      if (read) {
+      if (read.name) {
         items[read.name] = (items[read.name] || 0) + read.quantity;
         cells[position] = read;
       } else {
         // Both side borders hidden is a tooltip or a held item over the cell, not an item left unread. An item's own
         // picture hides at most the one border inside it.
-        cells[position] = isCellCovered(image, grid, col, row) ? { unknown: true, covered: true } : { unknown: true };
+        cells[position] = isCellCovered(image, grid, col, row) ? { unknown: true, covered: true } : read;
       }
     }
   }

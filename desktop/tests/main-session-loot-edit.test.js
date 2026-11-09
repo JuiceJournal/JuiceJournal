@@ -191,7 +191,7 @@ test('the loot edit channels are main-window only and wired through preload', ()
 
 function loadAddByHand(backend, { league = 'Mirage', currentSession = null, overlayEnabled = true } = {}) {
   const calls = [];
-  const context = loadFunctions(['addSessionLootByHand', 'markSessionLootUnread', 'updateSessionMapResult'], {
+  const context = loadFunctions(['addSessionLootByHand', 'dismissUnreadCandidate', 'markSessionLootUnread', 'updateSessionMapResult'], {
     ...backend.context,
     currentSession,
     crypto: { randomUUID: () => 'hand-1' },
@@ -262,4 +262,68 @@ test('a map whose only new items were unread is marked so, and the window keeps 
   const quiet = loadAddByHand(backend, { overlayEnabled: false });
   quiet.context.markSessionLootUnread('session-1');
   assert.deepEqual(quiet.calls[1], ['notify', 'Dunes Map', 'mapLootUnreadBody']);
+});
+
+test('an item added by hand for an unread look settles that look too, and a look can be dismissed', () => {
+  const backend = createBackend();
+  backend.journal = localJournal.markLootUnread(backend.journal, 'session-1', {
+    now: NOW,
+    unreadCandidates: [{ names: ['Essence of Ruin', 'Greater Essence of Ruin'], quantity: 2 }, { names: ['Omen of Light'], quantity: 1 }]
+  }).journal;
+  const { context } = loadAddByHand(backend);
+
+  // Added with Edit, not its button: the look that names it goes all the same.
+  const updated = context.addSessionLootByHand('session-1', { itemName: 'Greater Essence of Ruin', quantity: 2 });
+  assert.deepEqual(JSON.parse(JSON.stringify(updated.lootUnreadCandidates)), [{ names: ['Omen of Light'], quantity: 1 }]);
+
+  const dismissed = context.dismissUnreadCandidate('session-1', { index: 0, name: 'Omen of Light' });
+  assert.deepEqual(JSON.parse(JSON.stringify(dismissed.lootUnreadCandidates)), []);
+  assert.deepEqual(JSON.parse(JSON.stringify(backend.journal.sessions[0].lootUnreadCandidates)), []);
+  assert.throws(() => context.dismissUnreadCandidate('session-1', { index: 0 }), { code: 'LOOT_INVALID' });
+});
+
+test('naming an unread cell by its candidate adds the item and drops that cell\'s candidates', () => {
+  const backend = createBackend();
+  backend.journal = localJournal.markLootUnread(backend.journal, 'session-1', {
+    now: NOW,
+    unreadCandidates: [{ names: ['Essence of Ruin', 'Greater Essence of Ruin'], quantity: 2 }, { names: ['Omen of Light'], quantity: 1 }]
+  }).journal;
+  const { context } = loadAddByHand(backend);
+
+  const updated = context.addSessionLootByHand('session-1', { itemName: 'Essence of Ruin', quantity: 2, candidate: 0 });
+
+  assert.equal(updated.lootEntries[0].itemName, 'Essence of Ruin');
+  assert.deepEqual(JSON.parse(JSON.stringify(updated.lootUnreadCandidates)), [{ names: ['Omen of Light'], quantity: 1 }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(backend.journal.sessions[0].lootUnreadCandidates)), [{ names: ['Omen of Light'], quantity: 1 }]);
+});
+
+test('the reader gets every essence\'s art for PoE 2, also of essences the league\'s prices leave out', () => {
+  const { POE2_ESSENCE_ART } = require('../src/modules/essenceArt');
+  const listed = POE2_ESSENCE_ART[0];
+  const context = loadFunctions(['listPricedInventoryItems'], {
+    POE2_ESSENCE_ART,
+    resolveLeagueContext: () => ({ league: 'Rites' }),
+    loadSessionPrices: async () => {},
+    priceService: {
+      poeVersion: 'poe2',
+      league: 'Rites',
+      fullySynced: true,
+      getStatus: () => ({ itemCount: 2 }),
+      listItems: () => [{ name: listed.name, icon: 'priced.png', divineValue: 2 }, { name: 'Exalted Orb', icon: 'ex.png', divineValue: 0.01 }]
+    }
+  });
+
+  const { complete, items } = context.listPricedInventoryItems('poe2');
+
+  assert.equal(complete, true);
+  assert.equal(items.length, 2 + POE2_ESSENCE_ART.length - 1);
+  assert.equal(items.find((item) => item.name === listed.name).icon, 'priced.png', 'a priced essence keeps its price');
+  const unpriced = items.find((item) => item.name === 'Essence of the Body');
+  assert.equal(unpriced.divineValue, null);
+  assert.match(unpriced.icon, /^https:\/\/web\.poecdn\.com\/gen\/image\//);
+  assert.ok(POE2_ESSENCE_ART.every((entry) => entry.icon.startsWith('https://web.poecdn.com/gen/image/')), 'icons come only from the game\'s CDN');
+  assert.equal(new Set(POE2_ESSENCE_ART.map((entry) => entry.name)).size, POE2_ESSENCE_ART.length);
+
+  // PoE 1 and prices still loading get nothing extra.
+  assert.equal(context.listPricedInventoryItems('poe1').items.length, 0);
 });

@@ -51,10 +51,76 @@ function diffInventory(before = EMPTY_READ, after = EMPTY_READ) {
     .filter((item) => item.quantity > 0);
 }
 
-// Something unread in a cell that was empty before the map is loot the reader could not name, such as gear or an
-// item it was not sure of. It counts no gain, so the player is told instead.
+const hasLook = (cell) => Boolean(cell.unknown && !cell.covered && Array.isArray(cell.candidates) && cell.candidates.length);
+
+// How many items a read holds that could be any of `names`: stacks read by name and unread stacks that looked like one.
+function couldBe(read, names) {
+  let total = 0;
+  for (const cell of Object.values(read.cells)) {
+    if (cell.name && names.includes(cell.name)) total += cell.quantity || 1;
+    else if (hasLook(cell) && cell.candidates.some((name) => names.includes(name))) total += cell.quantity || 1;
+  }
+  return total;
+}
+
+/**
+ * What the map left unread: { candidates, other }. Any doubt counts less, so a one-click offer is made in one case only:
+ * an unread stack in a cell that was empty before the map, that looked like items nothing in the baseline could be (so
+ * it is not a stack moved there). Its offer is its own look and stack size. Anything else that may be unread loot is
+ * `other`, for the note only: an unread stack that grew or changed in place, a new one that could be a moved stack and
+ * outgrew what the baseline held of its names, a stack that grew where the named count does not trust it (unread before,
+ * or first seen without digits), something unread with no look in a cell that was empty or held a known stack, and offers
+ * past the ten a run keeps. A tooltip over a cell (covered) tells nothing.
+ */
+function unreadLoot(before = EMPTY_READ, after = EMPTY_READ) {
+  const offers = new Map();
+  let other = false;
+  for (const [position, cell] of Object.entries(after.cells)) {
+    const earlier = before.cells[position];
+    if (cell.unknown && !cell.covered) {
+      if (!hasLook(cell)) {
+        // New, or where a stack the reader named or recognised stood: what the cell holds now is not known.
+        if (!earlier || earlier.name || hasLook(earlier)) other = true;
+        continue;
+      }
+      if (earlier) {
+        const earlierNames = earlier.name ? [earlier.name] : (hasLook(earlier) ? earlier.candidates : []);
+        const same = earlierNames.some((name) => cell.candidates.includes(name));
+        if (!same || (cell.quantity || 1) > (earlier.quantity || 0)) other = true;
+        continue;
+      }
+      if (couldBe(before, cell.candidates) > 0) {
+        if (couldBe(after, cell.candidates) > couldBe(before, cell.candidates)) other = true;
+        continue;
+      }
+      const key = JSON.stringify(cell.candidates);
+      const offer = offers.get(key) || { names: cell.candidates.slice(0, 2), quantity: 0 };
+      offer.quantity += cell.quantity || 1;
+      offers.set(key, offer);
+    } else if (cell.name && earlier && cell.quantity > (earlier.quantity || 0)
+      && ((earlier.unknown && !earlier.covered) || (earlier.name === cell.name && !earlier.digits && cell.digits))) {
+      // A stack that grew where the named count does not trust the growth: it was unread before, or first seen without
+      // its digits.
+      other = true;
+    }
+  }
+  const candidates = [...offers.values()];
+  if (candidates.length > 10) other = true;
+  return { candidates: candidates.slice(0, 10), other };
+}
+
+function unreadCandidates(before = EMPTY_READ, after = EMPTY_READ) {
+  return unreadLoot(before, after).candidates;
+}
+
 function hasNewUnreadItem(before = EMPTY_READ, after = EMPTY_READ) {
-  return Object.entries(after.cells).some(([position, cell]) => cell.unknown && !cell.covered && !before.cells[position]);
+  const { candidates, other } = unreadLoot(before, after);
+  return candidates.length > 0 || other;
+}
+
+function unreadOutcome(before, after) {
+  const { candidates, other } = unreadLoot(before, after);
+  return { unread: candidates.length > 0 || other, unreadCandidates: candidates, unreadOther: other };
 }
 
 function noteMapEntered(state, characterKey) {
@@ -99,7 +165,7 @@ function applyInventoryRead(state, { characterKey, read }) {
         sessionId: pending.sessionId,
         items: diffInventory(pending.baseline, read),
         mapCount: Math.max(1, mapCount),
-        unread: hasNewUnreadItem(pending.baseline, read)
+        ...unreadOutcome(pending.baseline, read)
       }
       : { type: 'noBaseline', sessionId: pending.sessionId }
   };
@@ -110,6 +176,8 @@ module.exports = {
   getCharacterKey,
   diffInventory,
   hasNewUnreadItem,
+  unreadCandidates,
+  unreadLoot,
   noteMapEntered,
   markSessionEnded,
   applyInventoryRead

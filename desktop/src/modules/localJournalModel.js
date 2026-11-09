@@ -201,7 +201,7 @@
 
   // Each entry needs an itemName. Adding loot recalculates the session totals like the server did, unless they came
   // from a stash diff (see retotalSession). `lootUnread` marks that the read that found this loot left new items unread.
-  function addLoot(journal, sessionId, entries = [], { createId, now, lootUnread = false }) {
+  function addLoot(journal, sessionId, entries = [], { createId, now, lootUnread = false, unreadCandidates = [], unreadOther = false }) {
     const current = normalizeJournal(journal);
     const session = requireSession(current, sessionId);
     const timestamp = now.toISOString();
@@ -230,15 +230,49 @@
 
     const allLoot = [...lootEntries, ...(session.lootEntries || [])];
     const { session: retotaled, totalsFollowLoot } = retotalSession(session, allLoot, timestamp);
-    const updated = lootUnread ? { ...retotaled, lootUnread: true } : retotaled;
+    const updated = lootUnread ? withUnread(retotaled, unreadCandidates, unreadOther) : retotaled;
 
     return { journal: replaceSession(current, updated), lootEntries, session: updated, totalsFollowLoot };
   }
 
   // The read after a finished map found only items it could not name, so the run says some loot was not read.
-  function markLootUnread(journal, sessionId, { now }) {
+  function markLootUnread(journal, sessionId, { now, unreadCandidates = [], unreadOther = false }) {
     const current = normalizeJournal(journal);
-    const updated = { ...requireSession(current, sessionId), lootUnread: true, updatedAt: now.toISOString() };
+    const updated = { ...withUnread(requireSession(current, sessionId), unreadCandidates, unreadOther), updatedAt: now.toISOString() };
+    return { journal: replaceSession(current, updated), session: updated };
+  }
+
+  // What the unread cells looked like is kept with the run until the player names them; ten at most. `lootUnreadOther`
+  // says some unread loot had nothing to offer, so the run keeps saying so after the looks are settled.
+  function withUnread(session, unreadCandidates, unreadOther = false) {
+    const kept = Array.isArray(session.lootUnreadCandidates) ? session.lootUnreadCandidates : [];
+    const added = (Array.isArray(unreadCandidates) ? unreadCandidates : [])
+      .map((entry) => ({
+        names: (Array.isArray(entry?.names) ? entry.names : []).map((name) => normalizeOptionalText(name, 200)).filter(Boolean).slice(0, 2),
+        quantity: Math.min(1000000, Math.max(1, Number.parseInt(entry?.quantity, 10) || 1))
+      }))
+      .filter((entry) => entry.names.length > 0);
+    const lootUnreadCandidates = [...kept, ...added].slice(0, 10);
+    return {
+      ...session,
+      lootUnread: true,
+      lootUnreadCandidates,
+      ...(unreadOther || session.lootUnreadOther ? { lootUnreadOther: true } : {})
+    };
+  }
+
+  // The player named or dismissed an unread look, so its group goes: the group at `index` when it holds `name`, else the
+  // first that holds it. A group whose index moved since the window drew it is found by its name instead.
+  function dropUnreadCandidate(journal, sessionId, { index = null, name }, { now }) {
+    const current = normalizeJournal(journal);
+    const session = requireSession(current, sessionId);
+    const list = Array.isArray(session.lootUnreadCandidates) ? session.lootUnreadCandidates : [];
+    const holds = (entry) => Array.isArray(entry?.names) && entry.names.includes(name);
+    const target = Number.isInteger(index) && holds(list[index]) ? index : list.findIndex(holds);
+    if (target === -1) {
+      return { journal: current, session };
+    }
+    const updated = { ...session, lootUnreadCandidates: list.filter((entry, position) => position !== target), updatedAt: now.toISOString() };
     return { journal: replaceSession(current, updated), session: updated };
   }
 
@@ -382,6 +416,7 @@
     MAX_COST_CHAOS,
     addLoot,
     markLootUnread,
+    dropUnreadCandidate,
     deleteLoot,
     endSession,
     getActiveSession,

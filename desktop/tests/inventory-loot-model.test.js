@@ -6,6 +6,8 @@ const {
   getCharacterKey,
   diffInventory,
   hasNewUnreadItem,
+  unreadCandidates,
+  unreadLoot,
   noteMapEntered,
   markSessionEnded,
   applyInventoryRead
@@ -92,7 +94,7 @@ test('the first read after a map gives its gain against the last read before it'
 
   const { state: next, outcome } = applyInventoryRead(state, { characterKey: KEY, read: read({ 'Exalted Orb': 2 }) });
 
-  assert.deepEqual(outcome, { type: 'gain', sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }], mapCount: 1, unread: false });
+  assert.deepEqual(outcome, { type: 'gain', sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }], mapCount: 1, unread: false, unreadCandidates: [], unreadOther: false });
   assert.equal(next.pending, null);
   assert.equal(next.mapsSinceRead[KEY], 0);
 });
@@ -111,7 +113,7 @@ test('a map with an empty start still has a baseline', () => {
 
   const { outcome } = applyInventoryRead(state, { characterKey: KEY, read: read({ 'Regal Orb': 1 }) });
 
-  assert.deepEqual(outcome, { type: 'gain', sessionId: 's1', items: [{ name: 'Regal Orb', quantity: 1 }], mapCount: 1, unread: false });
+  assert.deepEqual(outcome, { type: 'gain', sessionId: 's1', items: [{ name: 'Regal Orb', quantity: 1 }], mapCount: 1, unread: false, unreadCandidates: [], unreadOther: false });
 });
 
 test('a map with no earlier read reports that instead of counting the whole inventory', () => {
@@ -150,7 +152,7 @@ test('a read after several maps goes to the newest one and says how many it cove
 
   const { outcome } = applyInventoryRead(state, { characterKey: KEY, read: read({ 'Exalted Orb': 4 }) });
 
-  assert.deepEqual(outcome, { type: 'gain', sessionId: 's2', items: [{ name: 'Exalted Orb', quantity: 3 }], mapCount: 2, unread: false });
+  assert.deepEqual(outcome, { type: 'gain', sessionId: 's2', items: [{ name: 'Exalted Orb', quantity: 3 }], mapCount: 2, unread: false, unreadCandidates: [], unreadOther: false });
 });
 
 test('a map played without a session counts towards the covered maps', () => {
@@ -196,5 +198,75 @@ test('a new item left unread is reported with the map, but not a covered cell or
   let state = applyInventoryRead(createInventoryLootState(), { characterKey: key, read: before }).state;
   state = markSessionEnded(state, { sessionId: 's1', characterKey: key });
   const { outcome } = applyInventoryRead(state, { characterKey: key, read: essence });
-  assert.deepEqual(outcome, { type: 'gain', sessionId: 's1', items: [], mapCount: 1, unread: true });
+  // Unread with no look: the player is told, with nothing to click.
+  assert.deepEqual(outcome, { type: 'gain', sessionId: 's1', items: [], mapCount: 1, unread: true, unreadCandidates: [], unreadOther: true });
+});
+
+const looks = (cells) => ({ items: {}, cells });
+const plain = (result) => JSON.parse(JSON.stringify(result));
+
+test('only a new unread stack in an empty cell, that nothing before the map could be, gets a one-click offer', () => {
+  const ruin = ['Essence of Ruin', 'Greater Essence of Ruin'];
+  const body = ['Essence of the Body', 'Essence of Flames'];
+  const result = unreadLoot(
+    { items: { 'Exalted Orb': 1 }, cells: { '0,0': { name: 'Exalted Orb', quantity: 1, digits: true } } },
+    looks({ '1,0': { unknown: true, candidates: ruin, quantity: 2 }, '2,0': { unknown: true, candidates: body, quantity: 1 }, '3,0': { unknown: true, candidates: ruin, quantity: 1 } })
+  );
+  // Each look is offered with its own names; two stacks of one look add up.
+  assert.deepEqual(plain(result), { candidates: [{ names: ruin, quantity: 3 }, { names: body, quantity: 1 }], other: false });
+  assert.equal(hasNewUnreadItem(looks({}), looks({ '1,0': { unknown: true, candidates: ruin, quantity: 1 } })), true);
+});
+
+test('a stack that may have been there before is only told: grown or changed in place, moved, read by name before or after', () => {
+  const pair = ['A', 'B'];
+  const told = { candidates: [], other: true };
+  // Grown in place, or its look changed pair with the digits.
+  assert.deepEqual(plain(unreadLoot(looks({ '0,0': { unknown: true, candidates: pair, quantity: 3 } }), looks({ '0,0': { unknown: true, candidates: pair, quantity: 5 } }))), told);
+  assert.deepEqual(plain(unreadLoot(looks({ '0,0': { unknown: true, candidates: pair, quantity: 5 } }), looks({ '0,0': { unknown: true, candidates: ['A', 'C'], quantity: 7 } }))), told);
+  // First seen without digits (1), then with them (5): how many are new is not known.
+  assert.deepEqual(plain(unreadLoot(looks({ '0,0': { unknown: true, candidates: pair, quantity: 1 } }), looks({ '0,0': { unknown: true, candidates: pair, quantity: 5 } }))), told);
+  // Read by name before, unread after; something else before; covered before.
+  assert.deepEqual(plain(unreadLoot({ items: { A: 5 }, cells: { '0,0': { name: 'A', quantity: 5, digits: true } } }, looks({ '0,0': { unknown: true, candidates: pair, quantity: 7 } }))), told);
+  assert.deepEqual(plain(unreadLoot({ items: { C: 2 }, cells: { '0,0': { name: 'C', quantity: 2, digits: true } } }, looks({ '0,0': { unknown: true, candidates: pair, quantity: 2 } }))), told);
+  assert.deepEqual(plain(unreadLoot(looks({ '0,0': { unknown: true, covered: true } }), looks({ '0,0': { unknown: true, candidates: pair, quantity: 4 } }))), told);
+  // Unread before, read by name after and grown: the named path trusts none of it.
+  assert.deepEqual(plain(unreadLoot(looks({ '0,0': { unknown: true, candidates: pair, quantity: 5 } }), { items: { A: 7 }, cells: { '0,0': { name: 'A', quantity: 7, digits: true } } })), told);
+  // A new cell whose look the baseline holds elsewhere, and more of it than before: maybe moved, maybe loot.
+  assert.deepEqual(plain(unreadLoot(looks({ '0,1': { unknown: true, candidates: pair, quantity: 2 } }), looks({ '0,1': { unknown: true, candidates: pair, quantity: 2 }, '2,4': { unknown: true, candidates: pair, quantity: 1 } }))), told);
+});
+
+test('a stack only moved, the same stacks again, or a stack that shrank leave nothing unread', () => {
+  const pair = ['A', 'B'];
+  const quiet = { candidates: [], other: false };
+  assert.deepEqual(plain(unreadLoot(looks({ '0,1': { unknown: true, candidates: pair, quantity: 8 } }), looks({ '2,4': { unknown: true, candidates: pair, quantity: 8 } }))), quiet);
+  assert.deepEqual(plain(unreadLoot(looks({ '0,0': { unknown: true, candidates: pair, quantity: 4 } }), looks({ '0,0': { unknown: true, candidates: pair, quantity: 4 } }))), quiet);
+  assert.deepEqual(plain(unreadLoot(looks({ '0,0': { unknown: true, candidates: pair, quantity: 4 } }), looks({ '0,0': { unknown: true, candidates: pair, quantity: 2 } }))), quiet);
+});
+
+test('a named gain the reader does not trust never leaks into an offer, and offers past ten are told', () => {
+  // P held something unread before and reads as A x5 now; Q is a new unread stack that could be A. Only Q is offered,
+  // and P's untrusted growth is told.
+  const result = unreadLoot(
+    looks({ '0,0': { unknown: true } }),
+    { items: { A: 5 }, cells: { '0,0': { name: 'A', quantity: 5, digits: true }, '0,1': { unknown: true, candidates: ['A', 'B'], quantity: 1 } } }
+  );
+  assert.deepEqual(plain(result), { candidates: [{ names: ['A', 'B'], quantity: 1 }], other: true });
+
+  // A single orb first seen without digits, now a stack of 12: the named count trusts none of it, so the player is told.
+  const digits = unreadLoot(
+    { items: { 'Exalted Orb': 1 }, cells: { '0,0': { name: 'Exalted Orb', quantity: 1, digits: false } } },
+    { items: { 'Exalted Orb': 12 }, cells: { '0,0': { name: 'Exalted Orb', quantity: 12, digits: true } } }
+  );
+  assert.deepEqual(plain(digits), { candidates: [], other: true });
+
+  // A named stack whose cell no longer reads at all.
+  const lost = unreadLoot({ items: { A: 5 }, cells: { '0,0': { name: 'A', quantity: 5, digits: true } } }, looks({ '0,0': { unknown: true } }));
+  assert.deepEqual(plain(lost), { candidates: [], other: true });
+
+  const many = looks({});
+  for (let col = 0; col < 12; col += 1) many.cells[`3,${col}`] = { unknown: true, candidates: [`Look ${col}`, `Twin ${col}`], quantity: 1 };
+  const found = unreadLoot(looks({}), many);
+  assert.equal(found.candidates.length, 10);
+  assert.equal(found.other, true);
+  assert.deepEqual(plain(unreadCandidates(looks({}), many)[0]), { names: ['Look 0', 'Twin 0'], quantity: 1 });
 });

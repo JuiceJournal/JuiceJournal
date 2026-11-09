@@ -32,6 +32,7 @@ const StashAnalyzer = require('./src/modules/stashAnalyzer');
 const GameDetector = require('./src/modules/gameDetector');
 const win32Probe = require('./src/modules/win32Probe');
 const InventoryWatcher = require('./src/modules/inventoryWatcher');
+const { POE2_ESSENCE_ART } = require('./src/modules/essenceArt');
 const { COARSE_SIZE: INVENTORY_COARSE_SIZE, FINE_ART_SIZE: INVENTORY_FINE_ART_SIZE } = require('./src/modules/inventoryVision');
 const {
   createRuntimeSessionState,
@@ -1366,8 +1367,8 @@ function addLootToCurrentSession(items, source) {
 
 // The read after a finished map found new items it could not name and nothing it could. The map's result card says so,
 // so the player can add them by hand in the run detail.
-function markSessionLootUnread(sessionId) {
-  const { journal, session } = localJournal.markLootUnread(readJournal(), sessionId, { now: new Date() });
+function markSessionLootUnread(sessionId, unreadCandidates = [], unreadOther = false) {
+  const { journal, session } = localJournal.markLootUnread(readJournal(), sessionId, { now: new Date(), unreadCandidates, unreadOther });
   writeJournal(journal);
   // The result the window saves again from this keeps saying no loot was counted, rather than a loss of the cost.
   const update = { ...session, noLoot: !(session.lootEntries || []).length };
@@ -1381,9 +1382,26 @@ function markSessionLootUnread(sessionId) {
   return update;
 }
 
+// The player says an unread look was not loot (or not one of the two it looked like); its buttons go.
+function dismissUnreadCandidate(sessionId, { index, name } = {}) {
+  if (typeof name !== 'string' || !name) {
+    throw Object.assign(new Error('Name the look to dismiss'), { code: 'LOOT_INVALID' });
+  }
+  const { journal, session } = localJournal.dropUnreadCandidate(readJournal(), sessionId, {
+    index: Number.isInteger(index) ? index : null,
+    name
+  }, { now: new Date() });
+  writeJournal(journal);
+  if (currentSession?.id === session.id) {
+    currentSession = session;
+  }
+  return session;
+}
+
 // The run detail adds an item the inventory read did not name. Its price comes from the loaded list only when that is
 // the run's own league: another league's price would be written into the run's history for good, so it is kept at 0.
-function addSessionLootByHand(sessionId, { itemName, quantity } = {}) {
+// `candidate` is the unread cell the player named from the run detail's buttons; its candidates go with the add.
+function addSessionLootByHand(sessionId, { itemName, quantity, candidate } = {}) {
   const name = typeof itemName === 'string' ? itemName.trim() : '';
   const count = typeof quantity === 'number' ? quantity : NaN;
   if (!name || name.length > 200 || !Number.isInteger(count) || count < 1 || count > 1_000_000) {
@@ -1396,7 +1414,7 @@ function addSessionLootByHand(sessionId, { itemName, quantity } = {}) {
   }
   const priced = priceService.poeVersion === session.poeVersion && priceService.league === session.league;
   const info = priced ? priceService.getPriceInfo(name) : null;
-  const { journal, session: updated, totalsFollowLoot } = localJournal.addLoot(readJournal(), sessionId, [{
+  let { journal, session: updated, totalsFollowLoot } = localJournal.addLoot(readJournal(), sessionId, [{
     itemName: name,
     itemType: priceService.getItemType(name),
     quantity: count,
@@ -1405,6 +1423,11 @@ function addSessionLootByHand(sessionId, { itemName, quantity } = {}) {
     icon: info?.icon || null,
     source: 'manual'
   }], { createId: () => crypto.randomUUID(), now: new Date() });
+  // An item added for an unread look, by its button or by hand, settles that look.
+  ({ journal, session: updated } = localJournal.dropUnreadCandidate(journal, sessionId, {
+    index: Number.isInteger(candidate) ? candidate : null,
+    name
+  }, { now: new Date() }));
   writeJournal(journal);
   if (currentSession?.id === updated.id) {
     currentSession = updated;
@@ -4088,7 +4111,17 @@ function listPricedInventoryItems(game) {
     && priceService.league === league
     && priceService.fullySynced
     && priceService.getStatus().itemCount > 0;
-  return { complete, items: complete ? priceService.listItems() : [] };
+  if (!complete) {
+    return { complete, items: [] };
+  }
+  // Every essence's art, also of those the league's prices leave out, so one of those reads as itself (with no price)
+  // and not as a sibling. With no price the reader holds it to the valuable bar.
+  const items = priceService.listItems();
+  const priced = new Set(items.map((item) => item.name));
+  const essences = game === 'poe2'
+    ? POE2_ESSENCE_ART.filter((entry) => !priced.has(entry.name)).map((entry) => ({ name: entry.name, icon: entry.icon, divineValue: null }))
+    : [];
+  return { complete, items: [...items, ...essences] };
 }
 
 function getInventoryIconPath(iconUrl) {
@@ -4127,15 +4160,15 @@ function createInventoryWatcher() {
       return current ? new Map(priceService.listItems().map((item) => [item.name, item.divineValue])) : null;
     },
     loadArt: loadInventoryArt,
-    onUnreadLoot: (sessionId) => {
+    onUnreadLoot: (sessionId, candidates, other) => {
       try {
-        markSessionLootUnread(sessionId);
+        markSessionLootUnread(sessionId, candidates, other);
       } catch (error) {
         console.warn('Could not mark the map as having unread loot', error);
       }
     },
-    onGain: (sessionId, items, mapCount, unread) => {
-      addInventoryLoot(sessionId, items, mapCount, unread).catch((error) => {
+    onGain: (sessionId, items, mapCount, unread, candidates, other) => {
+      addInventoryLoot(sessionId, items, mapCount, unread, candidates, other).catch((error) => {
         console.warn('Could not add the inventory loot to the map', error);
         noteInventoryRead('saveFailed');
         showInventoryStatus('saveFailed');
@@ -4304,7 +4337,7 @@ function sendInventoryReadStatus() {
 }
 
 // A map's inventory loot arrives after it ended, from the first read back outside the map.
-async function addInventoryLoot(sessionId, items, mapCount = 1, unread = false) {
+async function addInventoryLoot(sessionId, items, mapCount = 1, unread = false, unreadCandidates = [], unreadOther = false) {
   const session = localJournal.getSession(readJournal(), sessionId);
   await withTimeout(loadSessionPrices(session), SESSION_PRICES_WAIT_MS).catch(() => null);
   // Another league's prices would be written into this map's history for good; no price counts as 0.
@@ -4321,7 +4354,9 @@ async function addInventoryLoot(sessionId, items, mapCount = 1, unread = false) 
   const { journal, session: updated } = localJournal.addLoot(readJournal(), sessionId, entries, {
     createId: () => crypto.randomUUID(),
     now: new Date(),
-    lootUnread: unread
+    lootUnread: unread,
+    unreadCandidates,
+    unreadOther
   });
   writeJournal(journal);
   if (mainWindow) {
@@ -5479,9 +5514,17 @@ function setupIPC() {
     }
   });
 
+  ipcMain.handle('dismiss-loot-candidate', async (event, sessionId, look = {}) => {
+    try {
+      return dismissUnreadCandidate(sessionId, { index: look?.index, name: look?.name });
+    } catch (error) {
+      throw toRendererError(error, 'Failed to dismiss');
+    }
+  });
+
   ipcMain.handle('add-session-loot', async (event, sessionId, item = {}) => {
     try {
-      return addSessionLootByHand(sessionId, { itemName: item?.itemName, quantity: item?.quantity });
+      return addSessionLootByHand(sessionId, { itemName: item?.itemName, quantity: item?.quantity, candidate: item?.candidate });
     } catch (error) {
       throw toRendererError(error, 'Failed to add loot');
     }
