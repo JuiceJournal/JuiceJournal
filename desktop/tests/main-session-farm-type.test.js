@@ -248,8 +248,10 @@ test('main start-map overlay prompt state can be shown and cleared independently
     'normalizeStartMapPromptText',
     'normalizeStartMapPromptFarmTypeOptions',
     'showStartMapPromptOverlay',
+    'releaseStartMapPromptKeyboard',
     'hideStartMapPromptOverlay'
   ], {
+    overlayKeyboardLent: false,
     overlayStartMapPromptState: null,
     START_MAP_PROMPT_OVERLAY_GRACE_MS: 3000,
     // The chips show each farm type's entry cost as typed.
@@ -283,7 +285,7 @@ test('main start-map overlay prompt state can be shown and cleared independently
     poeVersion: 'poe2',
     league: 'Fate of the Vaal',
     farmTypeOptions: [
-      { id: 'breach', label: 'Breach', cost: '1.2 div' },
+      { id: 'breach', label: 'Breach', cost: '1.2 div', costAmount: 1.2, costUnit: 'divine' },
       { id: 'expedition', label: 'Expedition' }
     ],
     source: 'map-detected',
@@ -302,7 +304,7 @@ test('main start-map overlay prompt state can be shown and cleared independently
       poeVersion: 'poe2',
       league: 'Fate of the Vaal',
       farmTypeOptions: [
-        { id: 'breach', label: 'Breach', cost: '1.2 div' },
+        { id: 'breach', label: 'Breach', cost: '1.2 div', costAmount: 1.2, costUnit: 'divine' },
         { id: 'expedition', label: 'Expedition' }
       ],
       source: 'map-detected',
@@ -332,8 +334,10 @@ test('main start-map overlay confirmation forwards the selected map details to t
     'normalizeStartMapPromptFarmTypeOptions',
     'normalizeStartMapPromptResult',
     'emitStartMapPromptOverlayResult',
+    'releaseStartMapPromptKeyboard',
     'confirmStartMapPromptOverlay'
   ], {
+    overlayKeyboardLent: false,
     overlayStartMapPromptState: {
       mapName: 'Channel',
       farmTypeId: 'breach',
@@ -378,6 +382,108 @@ test('main start-map overlay confirmation forwards the selected map details to t
       source: 'map-detected'
     }]
   ]);
+});
+
+// The start card's main side: engaging it, lending and returning the keyboard, and saving a typed cost.
+function loadStartCardMain({ saveResult = { ok: true } } = {}) {
+  const calls = [];
+  const overlayWindow = {
+    isDestroyed: () => false,
+    setFocusable: (value) => calls.push(['setFocusable', value]),
+    focus: () => calls.push(['focus'])
+  };
+  const context = loadFunctions([
+    'normalizeStartMapPromptText',
+    'normalizeStartMapPromptFarmTypeOptions',
+    'normalizeStartMapPromptResult',
+    'emitStartMapPromptOverlayResult',
+    'engageStartMapPromptOverlay',
+    'releaseStartMapPromptKeyboard',
+    'confirmStartMapPromptOverlay',
+    'cancelStartMapPromptOverlay',
+    'hideStartMapPromptOverlay'
+  ], {
+    overlayWindow,
+    overlayKeyboardLent: false,
+    overlayStartMapPromptState: {
+      mapName: 'Channel',
+      farmTypeId: 'breach',
+      farmTypeOptions: [{ id: 'breach', label: 'Breach' }, { id: 'ritual', label: 'Ritual' }],
+      source: 'map-detected',
+      createdAt: 1000,
+      expiresAt: 8000
+    },
+    mainWindow: { isDestroyed: () => false, webContents: { send: (channel, payload) => calls.push(['send', channel, payload && JSON.parse(JSON.stringify(payload))]) } },
+    updateOverlayWindow: () => calls.push(['update', context.overlayStartMapPromptState && context.overlayStartMapPromptState.expiresAt]),
+    getGameProcessIds: () => [4242],
+    win32Probe: { focusProcessWindow: (pids) => { calls.push(['focusGame', pids]); return true; } },
+    setStoredFarmTypeCost: (farmTypeId, cost) => { calls.push(['saveCost', farmTypeId, JSON.parse(JSON.stringify(cost))]); return saveResult; }
+  });
+  return { context, calls };
+}
+
+test('working on the start card stops its countdown once, and only the cost box lends the overlay the keyboard', () => {
+  const { context, calls } = loadStartCardMain();
+
+  assert.equal(context.engageStartMapPromptOverlay({ keyboard: false }), true);
+  assert.deepEqual(calls, [['send', 'start-map-prompt-overlay-engaged', undefined], ['update', null]]);
+  assert.equal(context.overlayStartMapPromptState.expiresAt, null);
+  assert.equal(context.overlayStartMapPromptState.createdAt, 1000, 'the same prompt');
+
+  calls.length = 0;
+  context.engageStartMapPromptOverlay({ keyboard: true });
+  assert.deepEqual(calls, [['setFocusable', true], ['focus']], 'no second engaged event');
+
+  calls.length = 0;
+  assert.equal(context.releaseStartMapPromptKeyboard(), true);
+  assert.deepEqual(calls, [['setFocusable', false], ['focusGame', [4242]]]);
+  assert.equal(context.releaseStartMapPromptKeyboard(), false, 'nothing to give back twice');
+
+  // Without a prompt there is nothing to engage.
+  context.overlayStartMapPromptState = null;
+  calls.length = 0;
+  assert.equal(context.engageStartMapPromptOverlay({ keyboard: true }), false);
+  assert.deepEqual(calls, []);
+});
+
+test('a cost typed on the start card is saved for the farm type before the map starts, and the game gets the keyboard back', () => {
+  const { context, calls } = loadStartCardMain();
+  context.engageStartMapPromptOverlay({ keyboard: true });
+  calls.length = 0;
+
+  const result = context.confirmStartMapPromptOverlay({ farmTypeId: 'ritual', cost: { amount: 35, unit: 'chaos', extra: 1 } });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { action: 'confirm', mapName: 'Channel', farmTypeId: 'ritual', source: 'map-detected', costSaved: true });
+  assert.deepEqual(calls.slice(0, 3), [['saveCost', 'ritual', { amount: 35, unit: 'chaos' }], ['setFocusable', false], ['focusGame', [4242]]]);
+  assert.equal(context.overlayStartMapPromptState, null);
+  assert.deepEqual(calls.at(-1), ['send', 'start-map-prompt-overlay-result', JSON.parse(JSON.stringify(result))]);
+
+  // No farm type, no cost to save.
+  const plain = loadStartCardMain();
+  const noFarm = plain.context.confirmStartMapPromptOverlay({ farmTypeId: null, cost: { amount: 5, unit: 'chaos' } });
+  assert.equal(noFarm.costSaved, undefined);
+  assert.equal(plain.calls.some(([name]) => name === 'saveCost'), false);
+});
+
+test('a cost main cannot save keeps the start card up and starts nothing', () => {
+  const { context, calls } = loadStartCardMain({ saveResult: { ok: false, error: 'COST_INVALID' } });
+
+  const result = context.confirmStartMapPromptOverlay({ farmTypeId: 'breach', cost: { amount: 99999, unit: 'chaos' } });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { ok: false, error: 'COST_INVALID' });
+  assert.notEqual(context.overlayStartMapPromptState, null);
+  assert.equal(calls.some(([name, channel]) => name === 'send' && channel === 'start-map-prompt-overlay-result'), false);
+});
+
+test('cancelling or hiding the start card gives the keyboard back to the game', () => {
+  for (const close of ['cancelStartMapPromptOverlay', 'hideStartMapPromptOverlay']) {
+    const { context, calls } = loadStartCardMain();
+    context.engageStartMapPromptOverlay({ keyboard: true });
+    calls.length = 0;
+    context[close]();
+    assert.deepEqual(calls.slice(0, 2), [['setFocusable', false], ['focusGame', [4242]]], close);
+    assert.equal(context.overlayStartMapPromptState, null, close);
+  }
 });
 
 test('main session start surfaces journal failures to the renderer', async () => {

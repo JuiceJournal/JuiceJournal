@@ -576,13 +576,25 @@ test('main overlay falls back to the primary display when the game window lookup
   assert.equal(context.getOverlayDisplay(), primary);
 });
 
-test('overlay has no mouse forwarding hook, focus toggle or script injection path', () => {
-  const source = fs.readFileSync(mainJsPath, 'utf8');
+test('overlay has no mouse forwarding hook, no focus toggle outside the cost box, and no script injection path', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8').replace(/\r\n/g, '\n');
   const overlayPreload = fs.readFileSync(path.join(__dirname, '..', 'overlay-preload.js'), 'utf8');
   const mainPreload = fs.readFileSync(preloadJsPath, 'utf8');
+  const functionBody = (name) => {
+    const start = source.indexOf(`\nfunction ${name}(`);
+    assert.notEqual(start, -1, name);
+    return source.slice(start, source.indexOf('\n}\n', start));
+  };
 
   assert.doesNotMatch(source, /forward:\s*true/);
-  assert.doesNotMatch(source, /overlayWindow\.setFocusable/);
+  // The overlay takes the keyboard only when the player clicks the start card's cost box: one place lends it, only
+  // when asked for the keyboard, and nothing that draws or shows the overlay makes it focusable.
+  assert.equal((source.match(/overlayWindow\.setFocusable\(true\)/g) || []).length, 1);
+  assert.match(functionBody('engageStartMapPromptOverlay'), /if \(keyboard && overlayWindow[^\n]*\n\s+overlayKeyboardLent = true;\n\s+overlayWindow\.setFocusable\(true\);/);
+  for (const name of ['applyOverlayWindowVisibility', 'updateOverlayWindow', 'showStartMapPromptOverlay', 'createOverlayWindow']) {
+    assert.doesNotMatch(functionBody(name), /setFocusable\(true\)|\.focus\(\)/, name);
+  }
+  assert.match(source, /focusable: false,/);
   assert.doesNotMatch(source, /executeJavaScript/);
   assert.doesNotMatch(source, /set-overlay-pointer-passthrough/);
   assert.doesNotMatch(overlayPreload, /setOverlayPointerPassthrough/);

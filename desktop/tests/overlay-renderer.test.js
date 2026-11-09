@@ -618,11 +618,142 @@ test('the start prompt chips show each farm type\'s entry cost, and a farm type 
 
   prompt('ritual');
   assert.equal(note.hidden, false);
-  assert.equal(note.textContent, 'No entry cost yet: set it on the Dashboard.');
+  assert.equal(note.textContent, 'No entry cost yet: click the box and type it.');
 
-  // No farm type has no cost to set.
+  // A cost is kept per farm type, so No farm type asks for one first.
   prompt(null);
-  assert.equal(note.hidden, true);
+  assert.equal(note.hidden, false);
+  assert.equal(note.textContent, 'Pick a farm type to set its entry cost.');
+});
+
+// The start card with its cost box, wired to a fake electronAPI that records what the overlay asks main for.
+function loadCostCard() {
+  const overlay = loadOverlay({
+    extraSelectors: [
+      '[data-overlay-start-form]', '[data-overlay-start-farm-types]', '[data-overlay-start-cost-note]',
+      '[data-overlay-start-cost-input]', '[data-overlay-start-cost-units]', '[data-overlay-start-submit]', '[data-overlay-start-cancel]'
+    ]
+  });
+  const calls = [];
+  const unitButtons = ['chaos', 'divine'].map((unit) => {
+    const button = createElement('button');
+    button.setAttribute('data-cost-unit', unit);
+    return button;
+  });
+  const units = overlay.elements['[data-overlay-start-cost-units]'];
+  units.querySelectorAll = (selector) => (selector === 'button' || selector === '[data-cost-unit]' ? unitButtons : []);
+  const input = overlay.elements['[data-overlay-start-cost-input]'];
+  input.value = '';
+  input.focus = () => { calls.push(['focus-input']); input.listeners.focus?.(); };
+  input.blur = () => { calls.push(['blur-input']); input.listeners.blur?.(); };
+  let confirmAnswer = (payload) => ({ action: 'confirm', ...payload });
+  overlay.window.electronAPI = {
+    confirmStartMapPromptOverlay: async (payload) => { calls.push(['confirm', JSON.parse(JSON.stringify(payload))]); return confirmAnswer(payload); },
+    engageStartMapPromptOverlay: async (options) => { calls.push(['engage', JSON.parse(JSON.stringify(options))]); return true; },
+    releaseStartMapPromptKeyboard: async () => { calls.push(['release']); return true; }
+  };
+  overlay.renderState({
+    visibility: 'visible',
+    mode: 'start-map-prompt',
+    startMapPrompt: {
+      mapName: 'Burial Chambers',
+      farmTypeId: 'breach',
+      createdAt: 1000,
+      farmTypeOptions: [
+        { id: 'breach', label: 'Breach', cost: '1.2 div', costAmount: 1.2, costUnit: 'divine' },
+        { id: 'ritual', label: 'Ritual' }
+      ]
+    }
+  });
+  const pick = (farmTypeId) => overlay.elements['[data-overlay-start-farm-types]'].listeners.click({
+    target: { closest: () => ({ getAttribute: () => farmTypeId }) }
+  });
+  const submit = () => overlay.elements['[data-overlay-start-form]'].listeners.submit({ preventDefault() {} });
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+  return {
+    overlay,
+    calls,
+    input,
+    unitButtons,
+    note: overlay.elements['[data-overlay-start-cost-note]'],
+    pick,
+    submit,
+    settle,
+    answerConfirm(answer) { confirmAnswer = answer; }
+  };
+}
+
+test('the start card\'s cost box shows the selected farm type\'s cost as typed, and only a change is sent with Start', async () => {
+  const card = loadCostCard();
+  assert.equal(card.input.value, '1.2');
+  assert.equal(card.input.disabled, false);
+  assert.deepEqual(card.unitButtons.map((b) => b.getAttribute('aria-pressed')), ['false', 'true']);
+
+  card.submit();
+  await card.settle();
+  assert.deepEqual(card.calls.at(-1), ['confirm', { farmTypeId: 'breach' }]);
+
+  // A farm type without a cost starts empty; a typed amount, with a comma, goes with the farm type.
+  card.pick('ritual');
+  assert.equal(card.input.value, '');
+  assert.deepEqual(card.calls.at(-1), ['engage', { keyboard: false }], 'picking a farm type stops the countdown');
+  card.input.value = '35,5';
+  card.submit();
+  await card.settle();
+  assert.deepEqual(card.calls.at(-1), ['confirm', { farmTypeId: 'ritual', cost: { amount: 35.5, unit: 'chaos' } }]);
+
+  // No farm type has no cost box.
+  card.pick('');
+  assert.equal(card.input.disabled, true);
+  assert.equal(card.unitButtons[0].disabled, true);
+  card.submit();
+  await card.settle();
+  assert.deepEqual(card.calls.at(-1), ['confirm', { farmTypeId: null }]);
+});
+
+test('an unreadable or unsaved cost keeps the start card up and says why', async () => {
+  const card = loadCostCard();
+  card.input.value = 'abc';
+  const before = card.calls.length;
+  card.submit();
+  await card.settle();
+  assert.equal(card.calls.length, before, 'nothing is sent');
+  assert.equal(card.note.textContent, 'Enter a number from 0 to 10000.');
+  assert.equal(card.note.getAttribute('data-tone'), 'error');
+
+  // Typing clears the error.
+  card.input.listeners.input();
+  assert.notEqual(card.note.getAttribute('data-tone'), 'error');
+
+  card.input.value = '3';
+  card.answerConfirm(() => ({ ok: false, error: 'COST_INVALID' }));
+  card.submit();
+  await card.settle();
+  assert.equal(card.note.textContent, 'Could not save the entry cost.');
+});
+
+test('the cost box borrows the keyboard on a click and Esc gives it back to the game', async () => {
+  const card = loadCostCard();
+
+  card.input.listeners.mousedown();
+  await card.settle();
+  assert.deepEqual(card.calls.slice(0, 2), [['engage', { keyboard: true }], ['focus-input']]);
+  assert.equal(card.note.textContent, 'Enter saves it and starts the map, Esc goes back to the game.');
+
+  let prevented = false;
+  card.input.listeners.keydown({ key: 'Escape', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.deepEqual(card.calls.slice(2), [['blur-input'], ['release']]);
+  // Other keys are the box's own.
+  card.input.listeners.keydown({ key: '5', preventDefault() { assert.fail('only Esc is taken'); } });
+
+  // A unit click picks the unit and asks for the keyboard, since the amount comes next.
+  card.overlay.elements['[data-overlay-start-cost-units]'].listeners.click({
+    target: { closest: () => card.unitButtons[0] }
+  });
+  await card.settle();
+  assert.deepEqual(card.unitButtons.map((b) => b.getAttribute('aria-pressed')), ['true', 'false']);
+  assert.deepEqual(card.calls.slice(-2), [['engage', { keyboard: true }], ['focus-input']]);
 });
 
 test('a map with no loot and no baseline says it was not counted, in the warning tone, and asks for the inventory before the next map', () => {
