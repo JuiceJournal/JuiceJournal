@@ -2461,6 +2461,21 @@ test('renderer shows unavailable profit results as not calculated', () => {
   assert.equal(elements.lastMapResultProfit.innerHTML, '<span class="profit-unavailable">mapResult.notCalculated</span>');
 });
 
+test('a map with no loot counted shows that, not its entry cost as a loss, and takes no profit tier', () => {
+  const context = loadFunctions(['formatMapResultProfitHTML', 'getMapResultProfitTier'], {
+    window: { t: (key) => key },
+    state: { settings: { poeVersion: 'poe2' } },
+    getProfitTierFor: () => 'loss',
+    profitCurrencyHTML: () => {
+      throw new Error('a no-loot result has no value to format');
+    }
+  });
+  const result = { noLoot: true, netProfit: -120, poeVersion: 'poe2', durationSeconds: 300 };
+
+  assert.equal(context.formatMapResultProfitHTML(result, 22, { signed: true }), '<span class="profit-unavailable">toast.mapNoLoot</span>');
+  assert.equal(context.getMapResultProfitTier(result), '');
+});
+
 test('renderer tags the latest map result with its loot-filter profit tier', () => {
   const elements = {
     lastMapResultCard: { dataset: { resultState: 'empty' } },
@@ -4599,6 +4614,34 @@ test('a run with a cost lists loot and cost, and the idle card goes back to wait
   assert.equal(harness.elements.sessionBadge.textContent, 'dashboard.waiting');
   assert.equal(harness.badgeClasses.has('is-active'), false);
   assert.match(harness.html(), /dashboard\.noActiveMap/);
+});
+
+test('a map that starts with a cost shows its loss at once, never a +0, with the cost beside it', () => {
+  const harness = createActiveSessionHarness({ ...RUNNING_SESSION, costChaos: 50, profitChaos: -50, totalLootChaos: 0, lootEntries: [] });
+
+  harness.context.updateActiveSessionUI();
+
+  const html = harness.html();
+  assert.match(html, /data-profit-tier="loss">[^<]*<span class="value-chip">-50\.0 /);
+  assert.doesNotMatch(html, /\+0/);
+  assert.match(html, /dashboard\.liveLoot <span class="value-chip">0 [\s\S]*sessions\.cost <span class="value-chip">50\.0 /);
+});
+
+test('a map whose cost waits for the Divine rate says so', () => {
+  const pendingIn = (unit) => {
+    const harness = createActiveSessionHarness({ ...RUNNING_SESSION, costChaos: 0, profitChaos: 0, costPending: { amount: 1.5, unit } });
+    harness.context.updateActiveSessionUI();
+    return harness.html();
+  };
+
+  assert.match(pendingIn('divine'), /dashboard\.costPendingDivine/);
+  assert.doesNotMatch(pendingIn('divine'), /sessions\.cost <span/);
+
+  // Once the cost is known the chip gives way to the cost.
+  const settled = createActiveSessionHarness({ ...RUNNING_SESSION, costChaos: 150, profitChaos: -150, costPending: null });
+  settled.context.updateActiveSessionUI();
+  assert.doesNotMatch(settled.html(), /dashboard\.costPending/);
+  assert.match(settled.html(), /sessions\.cost <span class="value-chip">1\.50 /);
 });
 
 test('the idle map card shows the mascot and the next step, and mentions auto-start only while it is on', () => {

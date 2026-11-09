@@ -46,6 +46,7 @@ const { buildFarmPublishPayload } = require('./src/modules/farmPublishPayloadMod
 const { deriveOverlayState } = require('./src/modules/overlayStateModel');
 const {
   listFarmTypes,
+  getFarmTypeById,
   isCustomFarmTypeId,
   normalizeCustomFarmTypes,
   createCustomFarmType,
@@ -97,6 +98,8 @@ const CHARACTER_PROMPT_QUEUE_MS = 60_000;
 const START_MAP_PROMPT_OVERLAY_GRACE_MS = 3_000;
 const OVERLAY_CLICKABLE_MODES = new Set(['start-map-prompt', 'map-result', 'character-prompt']);
 const MAX_AUDIT_TRAIL_ENTRIES = 200;
+const FARM_TYPE_COST_UNITS = ['chaos', 'divine'];
+const MAX_FARM_TYPE_COST_AMOUNT = 10_000;
 // Local error log (logs/errors.jsonl). A trim keeps at most 50 lines and half the cap, so it rarely runs.
 const ERROR_LOG_MAX_BYTES = 128 * 1024;
 const ERROR_LOG_KEEP_LINES = 50;
@@ -1007,6 +1010,129 @@ function getStoredCustomFarmTypes() {
   return storeKey ? normalizeCustomFarmTypes(store.get(storeKey)) : [];
 }
 
+// Each profile keeps the entry cost typed for each farm type, as typed: { [farmTypeId]: { amount, unit } }.
+function getFarmTypeCostsStoreKey(profileId = getActiveProfile()?.id) {
+  return profileId ? `farmTypeCosts:${profileId}` : null;
+}
+
+function normalizeFarmTypeCostEntry(entry) {
+  const amount = entry?.amount;
+  return typeof amount === 'number' && Number.isFinite(amount) && amount > 0 && amount <= MAX_FARM_TYPE_COST_AMOUNT
+    && FARM_TYPE_COST_UNITS.includes(entry.unit)
+    ? { amount, unit: entry.unit }
+    : null;
+}
+
+function getStoredFarmTypeCosts() {
+  const storeKey = getFarmTypeCostsStoreKey();
+  const stored = storeKey ? store.get(storeKey) : null;
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
+    return {};
+  }
+
+  return Object.fromEntries(Object.entries(stored)
+    .map(([farmTypeId, entry]) => [farmTypeId, normalizeFarmTypeCostEntry(entry)])
+    .filter(([, entry]) => entry));
+}
+
+// A deleted custom farm type of the profile still counts: its cost can be read back and edited.
+function isKnownFarmTypeCostId(farmTypeId) {
+  return isCustomFarmTypeId(farmTypeId)
+    ? getStoredCustomFarmTypes().some((farmType) => farmType.id === farmTypeId)
+    : Boolean(getFarmTypeById(farmTypeId));
+}
+
+function setStoredFarmTypeCost(farmTypeId, input) {
+  const storeKey = getFarmTypeCostsStoreKey();
+  if (!storeKey || !isKnownFarmTypeCostId(farmTypeId)) {
+    return { ok: false, error: 'FARM_TYPE_NOT_FOUND' };
+  }
+
+  const { amount, unit } = input && typeof input === 'object' ? input : {};
+  if (!FARM_TYPE_COST_UNITS.includes(unit)) {
+    return { ok: false, error: 'COST_UNIT_INVALID' };
+  }
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0 || amount > MAX_FARM_TYPE_COST_AMOUNT) {
+    return { ok: false, error: 'COST_INVALID' };
+  }
+
+  const costs = { ...getStoredFarmTypeCosts() };
+  if (amount === 0) {
+    delete costs[farmTypeId];
+  } else {
+    costs[farmTypeId] = { amount, unit };
+  }
+  store.set(storeKey, costs);
+  return { ok: true, costs };
+}
+
+async function getDivineChaosRate(poeVersion, league) {
+  const rates = await getProfitCurrencyRates({ poeVersion, league, cacheOnly: true });
+  return normalizePositiveRate(rates?.divineChaos);
+}
+
+// A cost typed in divine needs the divine rate; null means it cannot be converted yet.
+function convertFarmTypeCostToChaos(entry, divineChaos) {
+  const chaos = entry.unit === 'divine' ? (divineChaos ? entry.amount * divineChaos : null) : entry.amount;
+  return chaos === null ? null : Math.min(Math.round(chaos * 100) / 100, localJournal.MAX_COST_CHAOS);
+}
+
+// An explicit cost wins; otherwise the map takes its farm type's cost, kept pending while the divine rate is unknown.
+async function resolveStartCost(input, farmTypeId, poeVersion, league) {
+  const explicit = input.costChaos;
+  if (explicit !== undefined && explicit !== null && explicit !== '' && Number.isFinite(Number(explicit))) {
+    return { costChaos: Number(explicit), costSource: 'manual', costPending: null };
+  }
+
+  const entry = farmTypeId ? getStoredFarmTypeCosts()[farmTypeId] : null;
+  if (!entry) {
+    return { costChaos: 0, costSource: null, costPending: null };
+  }
+
+  const divineChaos = entry.unit === 'divine' ? await getDivineChaosRate(poeVersion, league) : null;
+  const costChaos = convertFarmTypeCostToChaos(entry, divineChaos);
+  return costChaos === null
+    ? { costChaos: 0, costSource: 'farmType', costPending: entry }
+    : { costChaos, costSource: 'farmType', costPending: null };
+}
+
+// A map started while the divine rate was unknown takes its farm type's cost once the rate is known.
+async function settleCostPending(journal, session) {
+  const costChaos = convertFarmTypeCostToChaos(session.costPending, await getDivineChaosRate(session.poeVersion, session.league));
+  if (costChaos === null) {
+    return { journal, session };
+  }
+
+  return localJournal.updateCost(journal, session.id, costChaos, { source: 'farmType', now: new Date() });
+}
+
+// A farm type's new cost also reaches the map running of that type, unless the player set that map's cost by hand.
+async function applyFarmTypeCostToRunningSession(farmTypeId, entry) {
+  const running = currentSession;
+  if (!running || running.farmTypeId !== farmTypeId || running.costSource === 'manual') {
+    return;
+  }
+
+  const divineChaos = entry?.unit === 'divine' ? await getDivineChaosRate(running.poeVersion, running.league) : null;
+  const costChaos = entry ? convertFarmTypeCostToChaos(entry, divineChaos) : 0;
+  // The rate lookup waits, and the map may have ended meanwhile.
+  if (currentSession?.id !== running.id) {
+    return;
+  }
+
+  const { journal, session } = localJournal.updateCost(readJournal(), running.id, costChaos ?? 0, {
+    source: 'farmType',
+    now: new Date(),
+    pending: costChaos === null ? entry : null
+  });
+  writeJournal(journal);
+  currentSession = session;
+  updateOverlayWindow();
+  if (mainWindow) {
+    mainWindow.webContents.send('session-cost-updated', session);
+  }
+}
+
 function getActiveFarmTypeId() {
   const farmTypeId = normalizeStoredFarmTypeId(store.get('activeFarmTypeId'));
   // Every profile shares this key, but a custom farm type belongs to one of them.
@@ -1268,6 +1394,60 @@ function updateSessionMapResult(session) {
     lootItemCount: lootEntries.reduce((sum, loot) => sum + (parseInt(loot.quantity || 1, 10) || 1), 0)
   });
   store.set(storeKey, results.map((result, resultIndex) => (resultIndex === index ? nextResult : result)));
+}
+
+// A run's saved result has the id its end time gives it, except a stash diff's, whose id comes from the stash snapshot
+// that closed the run. Both carry the run's id, and a run saves one result, so the newest with that id is its result.
+function findSessionMapResultIndex(results, session) {
+  const exactIndex = results.findIndex((result) => result?.id === `map-result-${session.id}-${Date.parse(session.endedAt)}`);
+  return exactIndex !== -1 ? exactIndex : results.findIndex((result) => result?.sessionId === session.id);
+}
+
+// A cost change moves the saved result of a finished map by the same amount, whether or not its totals follow the loot.
+// Its input is the cost itself for a map the loot produced; a stash diff's result keeps its stash losses and moves by the change.
+function updateSessionMapResultCost(session, costDelta) {
+  const storeKey = getMapResultsStoreKey();
+  if (!storeKey || !session?.id) {
+    return;
+  }
+
+  const results = getStoredMapResults();
+  const index = findSessionMapResultIndex(results, session);
+  if (index === -1) {
+    return;
+  }
+
+  // The stored profit, top items and status are dropped so the ledger normalizer derives them from the new values.
+  const { profitChaos, topLootItems, calculationStatus, ...stored } = results[index];
+  const storedInput = Number(stored.inputValue);
+  const inputValue = !Number.isFinite(storedInput) || Math.abs(storedInput - (session.costChaos - costDelta)) <= 0.01
+    ? session.costChaos
+    : Math.max(0, storedInput + costDelta);
+  const netProfit = (Number(stored.netProfit) || 0) - costDelta;
+  const nextResult = normalizeMapResultForLedger({
+    ...stored,
+    inputValue,
+    netProfit,
+    profitState: netProfit > 0 ? 'positive' : netProfit < 0 ? 'negative' : 'neutral'
+  });
+  store.set(storeKey, results.map((result, resultIndex) => (resultIndex === index ? nextResult : result)));
+}
+
+// Sets the cost of one run by hand, active or finished, and keeps main's copies of the run in step.
+function editSessionCost(sessionId, costChaos) {
+  const { journal, session, delta } = localJournal.updateCost(readJournal(), sessionId, costChaos, {
+    source: 'manual',
+    now: new Date()
+  });
+  writeJournal(journal);
+  if (currentSession?.id === session.id) {
+    currentSession = session;
+    updateOverlayWindow();
+  }
+  if (session.status !== 'active' && delta !== 0) {
+    updateSessionMapResultCost(session, delta);
+  }
+  return session;
 }
 
 // Fixes one loot entry of a run, active or finished, and keeps main's copies of the run in step.
@@ -4048,6 +4228,8 @@ async function startNewSession(input = {}) {
       await endCurrentSession();
     }
 
+    const cost = await resolveStartCost(input, farmTypeId, poeVersion, league);
+
     // Session olustur
     const { journal, session } = localJournal.startSession(readJournal(), {
       mapName,
@@ -4055,7 +4237,9 @@ async function startNewSession(input = {}) {
       farmTypeId,
       strategyTag: input.strategyTag || null,
       notes: input.notes || null,
-      costChaos: input.costChaos || 0,
+      costChaos: cost.costChaos,
+      costSource: cost.costSource,
+      costPending: cost.costPending,
       poeVersion,
       league,
       startedAt: input.startedAt
@@ -4121,12 +4305,12 @@ function shouldAutoEndSessionOnMapExit(session = {}) {
   }
 
   const totalLootChaos = getSessionValueNumber(session, 'totalLootChaos', 'total_loot_chaos');
-  const profitChaos = getSessionValueNumber(session, 'profitChaos', 'profit_chaos');
 
   // With stash access, PoE1 profit is finalized by the stash before/after diff. If no
   // loot has been recorded yet, keep the session open after leaving the map so
-  // the player can dump loot and calculate the stash diff first.
-  return totalLootChaos !== 0 || profitChaos !== 0;
+  // the player can dump loot and calculate the stash diff first. The profit says nothing
+  // about it: a map with an entry cost starts below zero.
+  return totalLootChaos !== 0 || (session.lootEntries?.length ?? 0) > 0;
 }
 
 async function resolveShutdownSessionCompletion(session = {}) {
@@ -4215,11 +4399,14 @@ async function finalizeActiveSessionOnShutdown() {
 async function endCurrentSession(options = {}) {
   try {
     const requestedSessionId = options.sessionId || options.id || null;
-    const journal = readJournal();
-    const activeSession = currentSession || (requestedSessionId
+    let journal = readJournal();
+    let activeSession = currentSession || (requestedSessionId
       ? localJournal.getSession(journal, requestedSessionId)
       : localJournal.getActiveSession(journal));
     if (!activeSession) return;
+    if (activeSession.costPending) {
+      ({ journal, session: activeSession } = await settleCostPending(journal, activeSession));
+    }
 
     const endedAt = options.endedAt || new Date().toISOString();
     const explicitDurationSeconds = Number(options.durationSeconds);
@@ -4252,10 +4439,13 @@ async function endCurrentSession(options = {}) {
 
     // The OS notice names the map; the in-app result and the overlay card carry the rest.
     const profit = Math.round(parseFloat(session.profitChaos) || 0);
+    // The entry cost makes a map without loot a loss, so the loot decides whether there is a profit to report. A stash
+    // diff's totals are final and keep their own profit: the entry cost is not folded into them.
+    const hasLoot = completionPayload.profitChaos !== undefined || Number(session.totalLootChaos) > 0 || session.lootEntries?.length;
     let outcome;
-    if (profit < 0) {
+    if (hasLoot && profit < 0) {
       outcome = t('mapLossBody', { value: Math.abs(profit) });
-    } else if (profit > 0 || completionPayload.profitChaos !== undefined || session.lootEntries?.length) {
+    } else if (hasLoot) {
       outcome = t('mapProfitBody', { value: profit > 0 ? `+${profit}` : String(profit) });
     } else {
       // Nothing was counted from the inventory or read from the stash, so there is no profit to report. The window and the overlay read this too.
@@ -4829,7 +5019,7 @@ function getRendererSettings() {
   // The renderer sees only the signed-in profile's character cache. Map results
   // and custom farm types reach it per profile through their own IPC.
   Object.keys(allSettings)
-    .filter((key) => key.startsWith('lastKnownAccountState:') || key.startsWith('mapResults:') || key.startsWith('customFarmTypes:'))
+    .filter((key) => key.startsWith('lastKnownAccountState:') || key.startsWith('mapResults:') || key.startsWith('customFarmTypes:') || key.startsWith('farmTypeCosts:'))
     .forEach((key) => delete allSettings[key]);
   const accountStateKey = getAccountStateStoreKey();
   allSettings.lastKnownAccountState = (accountStateKey && store.get(accountStateKey)) || null;
@@ -5038,6 +5228,21 @@ function setupIPC() {
 
   ipcMain.handle('get-custom-farm-types', () => getStoredCustomFarmTypes());
 
+  ipcMain.handle('get-farm-type-costs', () => getStoredFarmTypeCosts());
+
+  ipcMain.handle('set-farm-type-cost', async (event, farmTypeId, input) => {
+    try {
+      assertDesktopUserAuthenticated();
+      const result = setStoredFarmTypeCost(farmTypeId, input);
+      if (result.ok) {
+        await applyFarmTypeCostToRunningSession(farmTypeId, result.costs[farmTypeId] || null);
+      }
+      return result;
+    } catch (error) {
+      throw toRendererError(error, 'Failed to save the farm type cost');
+    }
+  });
+
   ipcMain.handle('save-custom-farm-type', (event, input) => {
     assertDesktopUserAuthenticated();
     return saveCustomFarmType(input);
@@ -5077,6 +5282,15 @@ function setupIPC() {
       return session;
     } catch (error) {
       throw toRendererError(error, 'Failed to update session details');
+    }
+  });
+
+  ipcMain.handle('update-session-cost', async (event, sessionId, costChaos) => {
+    try {
+      assertDesktopUserAuthenticated();
+      return editSessionCost(sessionId, costChaos);
+    } catch (error) {
+      throw toRendererError(error, 'Failed to update the cost');
     }
   });
 

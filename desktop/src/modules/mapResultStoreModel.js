@@ -95,7 +95,8 @@
       return result.calculationStatus;
     }
 
-    if (result.profitUnavailable) {
+    // A map with no loot counted has no profit to report, so its entry cost alone is not published as a loss.
+    if (result.profitUnavailable || result.noLoot) {
       return 'notCalculated';
     }
 

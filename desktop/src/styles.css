@@ -1404,10 +1404,13 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   border-radius: var(--bevel-sm);
 }
 
-.session-card[data-session-state="idle"] .session-farm-field {
+.session-card[data-session-state="idle"] .session-setup {
   grid-area: 2 / 1;
-  margin-bottom: 0;
   padding: 1rem 1rem 0;
+}
+
+.session-card[data-session-state="idle"] .session-cost-field {
+  margin-bottom: 0;
 }
 
 .session-card[data-session-state="idle"] #active-session {
@@ -2923,6 +2926,55 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   margin: 0;
 }
 
+/* Edit mode turns the Cost fact into an amount box and its unit, side by side. */
+.session-drawer-cost-edit {
+  display: flex;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.session-drawer-cost-input,
+.session-drawer-cost-unit {
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--bevel-sm);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-drawer-cost-input {
+  flex: 1 1 4rem;
+  width: 4rem;
+}
+
+.session-drawer-cost-unit {
+  flex: 0 0 auto;
+}
+
+.session-drawer-cost-input:focus {
+  outline: none;
+  border-color: var(--border-gold);
+  box-shadow: 0 0 0 3px rgb(var(--brass-rgb) / 0.1);
+}
+
+.session-drawer-cost-input:disabled,
+.session-drawer-cost-unit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.session-drawer-cost-note {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
 .session-drawer-loot-remove {
   display: inline-flex;
   flex: 0 0 auto;
@@ -3091,6 +3143,35 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 
 .input-with-btn input {
   flex: 1;
+}
+
+/* The unit select keeps its own width, so the amount box takes the rest of the row. */
+.session-cost-row input {
+  min-width: 0;
+}
+
+.session-cost-row select {
+  flex: 0 0 9rem;
+  width: 9rem;
+}
+
+.session-cost-hint,
+.session-cost-error {
+  margin: 0.4rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.session-cost-hint {
+  color: var(--text-muted);
+}
+
+.session-cost-error {
+  color: rgb(var(--loss-rgb));
+}
+
+.session-cost-field input[aria-invalid="true"] {
+  border-color: rgb(var(--loss-rgb) / 0.6);
 }
 
 /* PoE Version Select */

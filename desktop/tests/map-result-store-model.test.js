@@ -303,6 +303,11 @@ test('map result store model separates computed zero from unavailable profit', (
   assert.equal(zeroResult.profitChaos, 0);
   assert.equal(unavailableResult.calculationStatus, 'notCalculated');
   assert.equal(unavailableResult.profitChaos, null);
+
+  // No loot counted: the entry cost alone is not a calculated loss.
+  const noLootResult = normalizeMapResultForLedger({ id: 'no-loot-1', netProfit: -40, inputValue: 40, noLoot: true });
+  assert.equal(noLootResult.calculationStatus, 'notCalculated');
+  assert.equal(noLootResult.profitChaos, null);
 });
 
 test('renderer saves the latest map result and stores returned history in state', async () => {

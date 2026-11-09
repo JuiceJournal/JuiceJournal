@@ -335,14 +335,28 @@
                   <span class="card-badge" id="session-badge" data-i18n="dashboard.waiting">Bekleniyor</span>
                 </div>
               </div>
-              <div class="form-group session-farm-field">
-                <label for="session-farm-type-select" data-i18n="dashboard.farmType">Farm type</label>
-                <div class="input-with-btn">
-                  <select id="session-farm-type-select">
-                    <option value="" data-i18n="dashboard.noFarmType">No farm type</option>
-                  </select>
-                  <button id="clear-farm-type-btn" class="btn btn-secondary btn-small" type="button" data-i18n="dashboard.clearFarmType">Clear</button>
-                  <button id="manage-farm-types-btn" class="btn btn-secondary btn-small" type="button" data-i18n="customFarm.manage">Manage</button>
+              <div class="session-setup">
+                <div class="form-group session-farm-field">
+                  <label for="session-farm-type-select" data-i18n="dashboard.farmType">Farm type</label>
+                  <div class="input-with-btn">
+                    <select id="session-farm-type-select">
+                      <option value="" data-i18n="dashboard.noFarmType">No farm type</option>
+                    </select>
+                    <button id="clear-farm-type-btn" class="btn btn-secondary btn-small" type="button" data-i18n="dashboard.clearFarmType">Clear</button>
+                    <button id="manage-farm-types-btn" class="btn btn-secondary btn-small" type="button" data-i18n="customFarm.manage">Manage</button>
+                  </div>
+                </div>
+                <div class="form-group session-cost-field">
+                  <label for="session-entry-cost-input" data-i18n="dashboard.entryCost">Entry cost</label>
+                  <div class="input-with-btn session-cost-row">
+                    <input id="session-entry-cost-input" type="text" inputmode="decimal" autocomplete="off" maxlength="12" disabled aria-describedby="session-entry-cost-hint session-entry-cost-error" data-i18n-aria="dashboard.entryCostAria">
+                    <select id="session-entry-cost-unit" disabled data-i18n-aria="dashboard.entryCostUnitAria">
+                      <option value="chaos">Chaos Orb</option>
+                      <option value="divine">Divine Orb</option>
+                    </select>
+                  </div>
+                  <p id="session-entry-cost-hint" class="session-cost-hint"></p>
+                  <p id="session-entry-cost-error" class="session-cost-error" role="alert" hidden></p>
                 </div>
               </div>
               <div id="active-session">

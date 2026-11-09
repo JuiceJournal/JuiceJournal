@@ -426,7 +426,7 @@ test('every Turkish desktop string is ASCII', () => {
 
 test('desktop index.html options and placeholders are localized', () => {
   // Option labels and placeholders that stay the same in every language: game names, language names and sample input.
-  const fixedOptionLabels = new Set(['PoE 1', 'PoE 2', 'Turkce', 'English', 'Standard']);
+  const fixedOptionLabels = new Set(['PoE 1', 'PoE 2', 'Turkce', 'English', 'Standard', 'Chaos Orb', 'Divine Orb']);
   const fixedPlaceholders = new Set(['Dunes Map, City Square Map', 'Standard', 'C:/Path of Exile/logs/Client.txt']);
   const html = read(path.join(desktopDir, 'src', 'index.html'));
 
