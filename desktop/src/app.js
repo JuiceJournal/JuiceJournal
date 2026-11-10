@@ -3996,11 +3996,13 @@ function schedulePoeDeviceExpiry() {
   const now = Date.now();
   const warnAt = expiresAt - POE_DEVICE_WARN_MS;
   if (now < warnAt) {
+    // A timer asked to wait longer than 2^31 - 1 ms (24.8 days) runs early, at once or soon after, and this one would
+    // then set itself again without end. It waits that long at most, and sets itself for what is left.
     poeDeviceExpiryTimer = setTimeout(() => {
       renderCharacterSummaryCard();
       renderPoeLinkStatus();
       schedulePoeDeviceExpiry();
-    }, warnAt - now);
+    }, Math.min(warnAt - now, 2 ** 31 - 1));
     return;
   }
   poeDeviceExpiryTimer = setTimeout(async () => {

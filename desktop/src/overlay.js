@@ -669,12 +669,19 @@
   }
 
   if (el.startCostUnits) {
+    // A unit click leaves the keyboard where it is. Taken from the game, the keys of the next fight would be typed
+    // into the box and Enter would start the map with them as its cost. Pressing a unit does not move the focus, so a
+    // box the player is typing in keeps it.
+    el.startCostUnits.addEventListener('mousedown', function (event) {
+      event.preventDefault();
+    });
     el.startCostUnits.addEventListener('click', function (event) {
       var button = event.target && event.target.closest ? event.target.closest('[data-cost-unit]') : null;
       if (!button || button.disabled) return;
       startCostUnit = button.getAttribute('data-cost-unit') === 'divine' ? 'divine' : 'chaos';
       renderStartCostUnits();
-      focusStartCost();
+      // The box already holds the card while the player types in it, and asking main would end the typing.
+      if (!startCostTyping) engageStartMapPrompt(false);
     });
   }
 

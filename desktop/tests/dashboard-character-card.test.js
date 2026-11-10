@@ -722,6 +722,29 @@ test('device expiry timer fires 30 minutes before the end, when more than 30 min
   assert.equal(timers[0].delay, 4.5 * HOUR_MS);
 });
 
+test('a sign-in that ends more than 24.8 days away is waited for in steps a timer can hold, and warns at the same moment', () => {
+  const { context, state, clock, timers } = loadExpiryScheduler();
+  const LONGEST_TIMER_MS = 2 ** 31 - 1;
+  state.poeDeviceExpiresAt = clock.now + 40 * 24 * HOUR_MS;
+  const warnAt = state.poeDeviceExpiresAt - POE_DEVICE_WARN_MS;
+
+  // A timer asked to wait longer than this runs at once, and this one would then set itself again without end.
+  context.schedulePoeDeviceExpiry();
+  assert.equal(timers[0].delay, LONGEST_TIMER_MS);
+
+  clock.now += timers[0].delay;
+  timers[0].callback();
+  assert.equal(timers.length, 2);
+  assert.equal(timers[1].delay, warnAt - clock.now);
+  assert.ok(timers[1].delay > 0 && timers[1].delay <= LONGEST_TIMER_MS);
+
+  // With 30 minutes left the next timer is the one for the end.
+  clock.now += timers[1].delay;
+  timers[1].callback();
+  assert.equal(timers.length, 3);
+  assert.equal(timers[2].delay, POE_DEVICE_WARN_MS + 1000);
+});
+
 test('device expiry timer fires one second after the end, when 30 minutes or less are left', () => {
   const { context, clock, timers } = loadExpiryScheduler();
 

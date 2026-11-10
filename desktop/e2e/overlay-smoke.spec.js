@@ -473,10 +473,26 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     await expect(costNote).toBeHidden();
     await expect(overlayWindow.locator('[data-farm-type-id="expedition"]')).toHaveAttribute('aria-pressed', 'true');
     await expect(overlayWindow.locator('[data-farm-type-id=""]')).toHaveAttribute('aria-pressed', 'false');
+    // Whether main lets the overlay window take the keyboard, which is what the cost box borrows from the game.
+    const overlayTakesKeyboard = () => electronApp.evaluate(({ BrowserWindow }) => (
+      BrowserWindow.getAllWindows().find((window) => /Overlay$/.test(window.getTitle())).isFocusable()
+    ));
+    // A unit click picks the unit and leaves the keyboard with the game: the box is not typed in.
+    await overlayWindow.locator('[data-cost-unit="chaos"]').click();
+    await expect(overlayWindow.locator('[data-cost-unit="chaos"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(costBox).not.toBeFocused();
+    await expect(costNote).toBeHidden();
+    expect(await overlayTakesKeyboard()).toBe(false);
     // A click in the box lends it the keyboard; Enter saves the cost for the farm type and starts the map.
     await costBox.click();
     await expect(costBox).toBeFocused();
     await expect(costNote).toHaveText('Enter saves it and starts the map, Esc goes back to the game.');
+    expect(await overlayTakesKeyboard()).toBe(true);
+    // While the player types there, a unit click changes the unit and the box keeps the keyboard.
+    await overlayWindow.locator('[data-cost-unit="divine"]').click();
+    await expect(overlayWindow.locator('[data-cost-unit="divine"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(costBox).toBeFocused();
+    expect(await overlayTakesKeyboard()).toBe(true);
     await costBox.fill('2,5');
     await costBox.press('Enter');
     await expect.poll(() => page.evaluate(() => window.__overlayPromptResults)).toEqual([
