@@ -755,14 +755,42 @@ test('the cost box borrows the keyboard on a click and Esc gives it back to the 
   assert.deepEqual(card.calls.slice(2), [['blur-input'], ['release']]);
   // Other keys are the box's own.
   card.input.listeners.keydown({ key: '5', preventDefault() { assert.fail('only Esc is taken'); } });
+});
 
-  // A unit click picks the unit and asks for the keyboard, since the amount comes next.
-  card.overlay.elements['[data-overlay-start-cost-units]'].listeners.click({
-    target: { closest: () => card.unitButtons[0] }
-  });
+test('a unit click leaves the keyboard where it is: with the game, or in the box while the player types there', async () => {
+  const card = loadCostCard();
+  const units = card.overlay.elements['[data-overlay-start-cost-units]'];
+  const clickUnit = (index) => units.listeners.click({ target: { closest: () => card.unitButtons[index] } });
+  const pressed = () => card.unitButtons.map((b) => b.getAttribute('aria-pressed'));
+
+  // The game has the keyboard: the unit is picked and the countdown stops, and the keys stay with the game. Taken into
+  // the box, the keys of the next fight would be typed there and Enter would start the map with them as its cost.
+  clickUnit(0);
   await card.settle();
-  assert.deepEqual(card.unitButtons.map((b) => b.getAttribute('aria-pressed')), ['true', 'false']);
-  assert.deepEqual(card.calls.slice(-2), [['engage', { keyboard: true }], ['focus-input']]);
+  assert.deepEqual(pressed(), ['true', 'false']);
+  assert.deepEqual(card.calls, [['engage', { keyboard: false }]]);
+
+  // Pressing a unit never moves the focus, so a box the player is typing in keeps it.
+  let prevented = false;
+  units.listeners.mousedown({ preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+
+  // While the player types in the box a unit click changes the unit and nothing else. Asking main again would hand
+  // the keyboard back to the game in the middle of the amount.
+  card.input.listeners.mousedown();
+  await card.settle();
+  card.calls.length = 0;
+  clickUnit(1);
+  await card.settle();
+  assert.deepEqual(pressed(), ['false', 'true']);
+  assert.deepEqual(card.calls, []);
+
+  // Once the typing has ended (Esc), a unit click goes to main again, without the keyboard.
+  card.input.listeners.keydown({ key: 'Escape', preventDefault() {} });
+  card.calls.length = 0;
+  clickUnit(0);
+  await card.settle();
+  assert.deepEqual(card.calls, [['engage', { keyboard: false }]]);
 });
 
 test('a map with no loot and no baseline says it was not counted, in the warning tone, and asks for the inventory before the next map', () => {
