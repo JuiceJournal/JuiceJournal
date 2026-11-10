@@ -4142,6 +4142,12 @@ function loadInventoryArt(iconPath) {
 }
 
 function createInventoryWatcher() {
+  // The item values, with the price list they were built from. The watcher asks on every read, once a second, and
+  // working them out reads the settings file and copies the list, so it gets the same map back until the list changes.
+  // Prices that are not this league's are not kept: those are asked about again on every read.
+  // So the league setting is looked at again only when the list changes. One that moves away meanwhile leaves the
+  // watcher with the values it has, as an answer of null would, and art that joins then is held to them as well.
+  let itemValues = null;
   return new InventoryWatcher({
     isEnabled: () => store.get('inventoryReadEnabled') !== false,
     getProfileId: () => getActiveProfile()?.id || null,
@@ -4155,9 +4161,15 @@ function createInventoryWatcher() {
     listPricedItems: listPricedInventoryItems,
     getIconPath: getInventoryIconPath,
     getItemValues: (game) => {
+      if (itemValues?.game === game && itemValues.revision === priceService.revision) {
+        return itemValues.values;
+      }
       const { league } = resolveLeagueContext({ poeVersion: game });
       const current = priceService.poeVersion === game && priceService.league === league && priceService.fullySynced;
-      return current ? new Map(priceService.listItems().map((item) => [item.name, item.divineValue])) : null;
+      itemValues = current
+        ? { game, revision: priceService.revision, values: new Map(priceService.listItems().map((item) => [item.name, item.divineValue])) }
+        : null;
+      return itemValues ? itemValues.values : null;
     },
     loadArt: loadInventoryArt,
     onUnreadLoot: (sessionId, candidates, other) => {

@@ -506,7 +506,6 @@ test('each read holds items to their current price, and a price of 0 counts as n
   prices['Omen of Light'] = 10.8;
   readBaseline(context, {});
   assert.deepEqual(values(), [['Exalted Orb', 0.002], ['Omen of Light', 10.8]]);
-  assert.equal(context.watcher.cellCache.size, 0, 'a cell decided under the old prices is decided again');
 
   // Another league loaded for the Currency page leaves the values as they were.
   current = false;
@@ -519,6 +518,64 @@ test('each read holds items to their current price, and a price of 0 counts as n
   delete prices['Exalted Orb'];
   readBaseline(context, {});
   assert.deepEqual(values(), [['Exalted Orb', null], ['Omen of Light', 0.3]]);
+});
+
+test('art that joins late is held to the values the watcher is handed, not to the price it was queued with', () => {
+  let lateIconArrived = false;
+  const context = setup({
+    pricedItems: [{ name: 'Exalted Orb', icon: 'exalted-url', divineValue: 0.002 }, { name: 'Omen of Light', icon: 'light-url', divineValue: 10.8 }],
+    iconFor: (url) => (url === 'light-url' && !lateIconArrived ? null : '/icons/any.png')
+  });
+  // Main hands the same map back until the price list changes, also while the league setting points elsewhere.
+  const handed = new Map([['Exalted Orb', 0.002], ['Omen of Light', 0.3]]);
+  context.watcher.deps.getItemValues = () => handed;
+  const values = () => context.watcher.art.list.map(({ name, value }) => [name, value]);
+
+  // Reading starts without the icon that has not arrived.
+  readBaseline(context, {});
+  context.env.now += 15_000;
+  readBaseline(context, {});
+  assert.deepEqual(values(), [['Exalted Orb', 0.002]]);
+
+  lateIconArrived = true;
+  readBaseline(context, {});
+  assert.deepEqual(values(), [['Exalted Orb', 0.002], ['Omen of Light', 0.3]]);
+});
+
+test('cached cells are decided again only when a price crosses the valuable bar', () => {
+  const prices = { 'Exalted Orb': 0.002, 'Omen of Light': 0 };
+  const context = setup({
+    pricedItems: [{ name: 'Exalted Orb', icon: 'exalted-url', divineValue: 0.002 }, { name: 'Omen of Light', icon: 'light-url', divineValue: 0 }],
+    iconFor: () => '/icons/any.png'
+  });
+  context.watcher.deps.getItemValues = () => new Map(Object.entries(prices));
+  // Whether a cell cached before a read is still there after it.
+  const keptCachedCell = () => {
+    context.watcher.cellCache.set('cell', { name: 'Exalted Orb', quantity: 1 });
+    readBaseline(context, {});
+    return context.watcher.cellCache.size === 1;
+  };
+  readBaseline(context, {});
+
+  // A read takes one thing from a price: whether it is known and under 0.5 Divine Orbs. A price sync moves almost
+  // every price a little, and none of these moves can change what a cell reads as.
+  prices['Exalted Orb'] = 0.3;
+  assert.equal(keptCachedCell(), true, 'cheap to cheap');
+  prices['Omen of Light'] = 10.8;
+  assert.equal(keptCachedCell(), true, 'not known to valuable: both are held to the valuable bar');
+  prices['Omen of Light'] = 0.6;
+  assert.equal(keptCachedCell(), true, 'valuable to valuable');
+  assert.deepEqual(context.watcher.art.list.map(({ name, value }) => [name, value]), [['Exalted Orb', 0.3], ['Omen of Light', 0.6]]);
+
+  prices['Exalted Orb'] = 0.5;
+  assert.equal(keptCachedCell(), false, 'cheap to valuable');
+  prices['Exalted Orb'] = 0.49;
+  assert.equal(keptCachedCell(), false, 'valuable to cheap');
+  delete prices['Exalted Orb'];
+  assert.equal(keptCachedCell(), false, 'cheap to not known');
+  prices['Exalted Orb'] = 0.1;
+  assert.equal(keptCachedCell(), false, 'not known to cheap');
+  assert.equal(keptCachedCell(), true, 'nothing moved');
 });
 
 test('every read outcome tells which character it was for', () => {

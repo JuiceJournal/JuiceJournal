@@ -39,6 +39,10 @@ const ACCEPT_MARGIN = 1;
 // whose value is not known counts as valuable. Measured on one real screenshot at three sizes and on rendered cells
 // with the true item left out: real right reads were at least 6.7 ahead and scored at most 16.1.
 const VALUABLE_DIVINE = 0.5;
+// Whether a price in Divine Orbs is known and under that bar. This is all a read takes from a price.
+function isCheapValue(value) {
+  return Number.isFinite(value) && value < VALUABLE_DIVINE;
+}
 const VALUABLE_MARGIN = 5.8;
 const VALUABLE_SCORE = 17;
 // Omens are one family of look-alikes, cheap and dear mixed, and a missing omen reads as a sibling whose own value says
@@ -479,10 +483,7 @@ function readCell(cell, art, match = matchCell(cell, art)) {
 
   const name = match.names.length > 1 ? pickFromSameArt(match.names, readTierBars(cell)) : match.names[0];
   if (!name) return null;
-  const isCheap = (itemName) => {
-    const value = art.find((entry) => entry.name === itemName)?.value;
-    return Number.isFinite(value) && value < VALUABLE_DIVINE;
-  };
+  const isCheap = (itemName) => isCheapValue(art.find((entry) => entry.name === itemName)?.value);
   const valuable = !isCheap(name) || (match.runnerUp !== null && !isCheap(match.runnerUp));
   if (valuable && (match.margin < VALUABLE_MARGIN || match.score > VALUABLE_SCORE)) return null;
   if (/^Omen /.test(name) && (match.margin < OMEN_MARGIN || match.score > OMEN_SCORE)) return null;
@@ -577,6 +578,7 @@ module.exports = {
   isOccupied,
   matchCell,
   readCell,
+  isCheapValue,
   readStackSize,
   readTierBars,
   findStackGlyphs,
