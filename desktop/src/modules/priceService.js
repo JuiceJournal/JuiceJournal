@@ -230,6 +230,9 @@ class PriceService {
     this.syncQueue = Promise.resolve();
     // Bumped by clearCache, so a sync that was running then drops what it fetched.
     this.cacheGeneration = 0;
+    // Bumped whenever the list, its game, its league or its completeness changes, so a reader that keeps something
+    // worked out from the list can tell when to work it out again.
+    this.revision = 0;
     // poe.ninja's league list per game: poeVersion → { data, fetchedAt }
     this.indexStates = new Map();
     // Called with the list after a sync that read every type it asked for, so main can keep it for the next launch.
@@ -257,7 +260,11 @@ class PriceService {
   }
 
   setPoeVersion(version) {
-    this.poeVersion = version === 'poe2' ? 'poe2' : 'poe1';
+    const poeVersion = version === 'poe2' ? 'poe2' : 'poe1';
+    if (poeVersion !== this.poeVersion) {
+      this.revision += 1;
+    }
+    this.poeVersion = poeVersion;
     registry.setPoeVersion(this.poeVersion);
   }
 
@@ -429,6 +436,7 @@ class PriceService {
     this.lastFullSync = Date.now();
     this.league = league;
     this.fullySynced = options.full !== false && readEveryType && withinDeadline;
+    this.revision += 1;
     if (readEveryType && withinDeadline && prices.size > 0 && this.onSynced) {
       this.onSynced(this._toSnapshot());
     }
@@ -473,6 +481,7 @@ class PriceService {
           this.syncedTypes = new Set();
           this.league = null;
           this.fullySynced = false;
+          this.revision += 1;
         }
         this.setPoeVersion(version);
         keptLastPrices = Boolean((await this.syncPrices(league, { full }))?.failed);
@@ -753,6 +762,7 @@ class PriceService {
    */
   clearCache() {
     this.cacheGeneration += 1;
+    this.revision += 1;
     this.cache.clear();
     this.priceMap.clear();
     this.syncedTypes = new Set();

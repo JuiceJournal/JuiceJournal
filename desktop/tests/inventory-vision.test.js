@@ -307,6 +307,23 @@ test('a cell that could be a valuable item counts only when its art is far ahead
   assert.equal(vision.readCell(cell, alone).name, 'Perfect Storm Rune');
 });
 
+test('a price changes a read only by crossing the valuable bar, so a read cached under other prices on the same side stands', () => {
+  const cell = liftedCell();
+  const read = (value, twinValue = 0.01) => vision.readCell(cell, lookAlikeLibrary({ name: 'Perfect Storm Rune', value, twinValue }))?.name || null;
+
+  for (const cheap of [0.0001, 0.1, 0.49]) {
+    assert.equal(vision.isCheapValue(cheap), true, String(cheap));
+    assert.equal(read(cheap), 'Perfect Storm Rune', `the item at ${cheap}`);
+    assert.equal(read(0.1, cheap), 'Perfect Storm Rune', `its look-alike at ${cheap}`);
+  }
+  for (const valuable of [0.5, 0.6, 15, 400, null, NaN]) {
+    assert.equal(vision.isCheapValue(valuable), false, String(valuable));
+    assert.equal(read(valuable), null, `the item at ${valuable}`);
+    assert.equal(read(0.1, valuable), null, `its look-alike at ${valuable}`);
+  }
+  assert.equal(vision.isCheapValue(undefined), false);
+});
+
 test('an omen counts only when it is clearly itself, whatever it is worth', () => {
   const cell = liftedCell();
   assert.equal(vision.readCell(cell, lookAlikeLibrary({ name: 'Omen of Refreshment', value: 0.02 })), null);

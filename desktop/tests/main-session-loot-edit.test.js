@@ -327,3 +327,153 @@ test('the reader gets every essence\'s art for PoE 2, also of essences the leagu
   // PoE 1 and prices still loading get nothing extra.
   assert.equal(context.listPricedInventoryItems('poe1').items.length, 0);
 });
+
+// The item values main hands the inventory watcher, over a price service and a league setting the test moves.
+function loadWatcherItemValues(priceService) {
+  const settings = { league: 'Rites', reads: 0 };
+  const context = loadFunctions(['createInventoryWatcher'], {
+    InventoryWatcher: class { constructor(deps) { this.deps = deps; } },
+    resolveLeagueContext: () => {
+      settings.reads += 1;
+      return { league: settings.league };
+    },
+    priceService,
+    isGameWindowInFront: () => true,
+    getGameWindowRect: () => null,
+    listPricedInventoryItems: () => ({ complete: false, items: [] }),
+    getInventoryIconPath: () => null,
+    loadInventoryArt: () => null,
+    showInventoryStatus() {}
+  });
+  const { getItemValues } = context.createInventoryWatcher().deps;
+  // As a plain object, since the map comes from the other context.
+  return { settings, getItemValues, readValues: (game) => { const values = getItemValues(game); return values && Object.fromEntries(values); } };
+}
+
+test('the watcher gets the same item values back until the price list changes, with no settings read and no copy in between', () => {
+  const prices = { exalted: 0.01 };
+  let copies = 0;
+  const priceService = {
+    poeVersion: 'poe2',
+    league: 'Rites',
+    fullySynced: true,
+    revision: 4,
+    listItems: () => {
+      copies += 1;
+      return [{ name: 'Exalted Orb', icon: 'ex.png', divineValue: prices.exalted }];
+    }
+  };
+  const { settings, getItemValues, readValues } = loadWatcherItemValues(priceService);
+
+  const first = getItemValues('poe2');
+  assert.deepEqual(Object.fromEntries(first), { 'Exalted Orb': 0.01 });
+  for (let tick = 0; tick < 5; tick += 1) assert.equal(getItemValues('poe2'), first);
+  assert.deepEqual([settings.reads, copies], [1, 1], 'a tick between price changes reads no settings and copies no list');
+
+  // A league setting that moves away from the loaded league is not looked at until the list changes. The watcher keeps
+  // the values it has when it is handed none, and these are the ones it has; art that joins meanwhile is held to them.
+  settings.league = 'Standard';
+  assert.equal(getItemValues('poe2'), first);
+  settings.league = 'Rites';
+
+  // A sync lands.
+  prices.exalted = 0.7;
+  priceService.revision += 1;
+  assert.deepEqual(readValues('poe2'), { 'Exalted Orb': 0.7 });
+  assert.deepEqual(readValues('poe2'), { 'Exalted Orb': 0.7 });
+  assert.deepEqual([settings.reads, copies], [2, 2]);
+
+  // The Currency page loads another league. Prices that are not this league's are not remembered, so a league setting
+  // that moves to them is seen on the next read.
+  priceService.league = 'Standard';
+  priceService.revision += 1;
+  assert.equal(getItemValues('poe2'), null);
+  assert.equal(getItemValues('poe2'), null);
+  settings.league = 'Standard';
+  assert.deepEqual(readValues('poe2'), { 'Exalted Orb': 0.7 });
+
+  // The other game has no prices loaded, and asking for it does not hand out this game's.
+  assert.equal(getItemValues('poe1'), null);
+  assert.deepEqual(readValues('poe2'), { 'Exalted Orb': 0.7 });
+});
+
+test('the remembered item values leave the art the reader holds with what working them out on every read would, through syncs and league and game switches', async (t) => {
+  const PriceService = require('../src/modules/priceService');
+  const service = new PriceService();
+  // A PoE 1 sync sleeps after each item overview; that pacing is not waited for here.
+  const realSetTimeout = global.setTimeout;
+  t.mock.method(global, 'setTimeout', (callback, delay, ...args) => realSetTimeout(callback, delay === 300 ? 0 : delay, ...args));
+  const divineInChaos = { Rites: 100, Standard: 300, Mirage: 150 };
+  let pause = null;
+  service._fetchCurrencyOverview = async (league, type) => {
+    if (type !== 'Currency') return { lines: [] };
+    if (pause) {
+      pause.reach();
+      await pause.released;
+    }
+    return { lines: [{ currencyTypeName: 'Divine Orb', chaosEquivalent: divineInChaos[league] }, { currencyTypeName: 'Exalted Orb', chaosEquivalent: 1 }] };
+  };
+  service._fetchItemOverview = async () => ({ lines: [] });
+  const { settings, readValues } = loadWatcherItemValues(service);
+
+  // The watcher keeps the values it has when it is handed none. `fresh` is that with the values worked out on every
+  // read, as before they were remembered.
+  let fresh = null;
+  let remembered = null;
+  const steps = [];
+  const read = (step) => {
+    const current = service.poeVersion === 'poe2' && service.league === settings.league && service.fullySynced;
+    if (current) fresh = Object.fromEntries(service.listItems().map((item) => [item.name, item.divineValue]));
+    for (let tick = 0; tick < 2; tick += 1) {
+      remembered = readValues('poe2') || remembered;
+      assert.deepEqual(remembered, fresh, step);
+    }
+    steps.push([step, current, fresh && fresh['Exalted Orb']]);
+  };
+  // Runs a sync and reads while its Currency overview is still on the way, then once it has landed.
+  const syncAndRead = async (step, start) => {
+    let reach;
+    let release;
+    const reached = new Promise((resolve) => { reach = resolve; });
+    pause = { reach, released: new Promise((resolve) => { release = resolve; }) };
+    const sync = start();
+    await reached;
+    read(`${step}, still fetching`);
+    pause = null;
+    release();
+    await sync;
+    read(step);
+  };
+
+  read('nothing loaded');
+  await syncAndRead('the first load', () => service.ensureSynced('Rites', 'poe2', { full: true }));
+  divineInChaos.Rites = 125;
+  await syncAndRead('a forced sync of the same league', () => service.ensureSynced('Rites', 'poe2', { full: true, force: true }));
+  divineInChaos.Rites = 80;
+  await syncAndRead('a quick sync of the same league', () => service.ensureSynced('Rites', 'poe2', { full: false, force: true }));
+  await syncAndRead('a full sync after it', () => service.ensureSynced('Rites', 'poe2', { full: true }));
+  await syncAndRead('another league for the Currency page', () => service.ensureSynced('Standard', 'poe2', { full: true }));
+  settings.league = 'Standard';
+  read('the league setting moves to the loaded league');
+  settings.league = 'Rites';
+  read('and back, with the other league still loaded');
+  divineInChaos.Rites = 90;
+  await syncAndRead('the session loads its league again', () => service.ensureSynced('Rites', 'poe2', { full: true }));
+  settings.league = 'Standard';
+  read('the league setting moves away from the loaded league');
+  settings.league = 'Rites';
+  read('and back');
+  service.setPoeVersion('poe1');
+  service.clearCache();
+  read('the other game starts');
+  await syncAndRead('the other game loads its prices', () => service.ensureSynced('Mirage', 'poe1', { full: true }));
+  service.setPoeVersion('poe2');
+  service.clearCache();
+  read('this game starts again');
+  divineInChaos.Rites = 200;
+  await syncAndRead('and loads its prices', () => service.ensureSynced('Rites', 'poe2', { full: true }));
+
+  // The walk did go through both states and four different price lists of the session's league.
+  assert.ok(steps.some(([, current]) => current) && steps.some(([, current]) => !current));
+  assert.ok(new Set(steps.filter(([, current]) => current).map(([, , exalted]) => exalted)).size >= 4);
+});

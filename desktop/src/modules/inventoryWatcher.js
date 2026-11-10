@@ -12,6 +12,7 @@ const {
   getGridRect,
   hasInventoryLayout,
   isMeasuredWindow,
+  isCheapValue,
   readInventory
 } = require('./inventoryVision');
 const {
@@ -156,12 +157,13 @@ class InventoryWatcher {
     let changed = false;
     for (const entry of this.art.list) {
       const value = toArtValue(values.get(entry.name));
-      if (value !== entry.value) {
-        entry.value = value;
+      if (isCheapValue(value) !== isCheapValue(entry.value)) {
         changed = true;
       }
+      entry.value = value;
     }
-    // A cell decided under the old values is decided again.
+    // A read takes one thing from a price: which side of the valuable bar it is on. A cell decided with an item on
+    // the other side is decided again; a sync that only moves prices leaves the cells as they are.
     if (changed) this.cellCache.clear();
   }
 

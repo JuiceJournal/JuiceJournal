@@ -822,6 +822,66 @@ test('a Sync that misses some overviews takes what it read and keeps the last pr
   assert.equal(service.fullySynced, false);
 });
 
+test('the revision moves whenever the list, its game, its league or its completeness changes, and only then', async (t) => {
+  t.mock.method(console, 'error', () => {});
+  const { service } = loadPacedSync(t);
+  let last = service.revision;
+  const moved = () => {
+    const changed = service.revision !== last;
+    last = service.revision;
+    return changed;
+  };
+  const expire = () => { for (const entry of service.cache.values()) entry.fetchedAt = 0; };
+  assert.equal(Number.isInteger(last), true);
+
+  await service.ensureSynced('Mirage', 'poe1', { full: true });
+  assert.equal(moved(), true, 'a sync that lands');
+  await service.ensureSynced('Mirage', 'poe1', { full: true });
+  assert.equal(moved(), false, 'a league that is already loaded');
+  service.setPoeVersion('poe1');
+  assert.equal(moved(), false, 'the game it already holds');
+
+  expire();
+  await service.ensureSynced('Mirage', 'poe1', { full: true, force: true });
+  assert.equal(moved(), true, 'a forced sync of the same league');
+  await service.ensureSynced('Mirage', 'poe1', { full: false, force: true });
+  assert.equal(service.fullySynced, false);
+  assert.equal(moved(), true, 'a quick sync, which leaves the list incomplete');
+
+  expire();
+  const get = service.client.get;
+  service.client.get = async () => { throw new Error('poe.ninja is down'); };
+  const failed = await service.ensureSynced('Mirage', 'poe1', { full: true, force: true });
+  assert.equal(failed.syncFailed, true);
+  assert.equal(moved(), false, 'a sync that read nothing and kept the list');
+  service.client.get = get;
+
+  await service.ensureSynced('Standard', 'poe1', { full: true });
+  assert.equal(moved(), true, 'another league');
+  service.clearCache();
+  assert.equal(moved(), true, 'a clear');
+  service.setPoeVersion('poe2');
+  assert.equal(moved(), true, 'another game');
+});
+
+test('the revision has already moved while another league\'s sync is still fetching and the old list is gone', async () => {
+  const { service, reached, release } = createPausedSync();
+  service._addPrice('Divine Orb', { chaosValue: 100, category: 'currency' });
+  service.league = 'Rise of the Abyssal';
+  const loaded = service.revision;
+
+  const sync = service.ensureSynced('Standard', 'poe2', { full: true });
+  await reached;
+  assert.equal(service.league, null);
+  assert.notEqual(service.revision, loaded);
+  const emptied = service.revision;
+
+  release();
+  await sync;
+  assert.equal(service.league, 'Standard');
+  assert.notEqual(service.revision, emptied);
+});
+
 test('a Sync that read every type drops what poe.ninja no longer lists', async (t) => {
   const { service } = loadPacedSync(t);
   await service.ensureSynced('Mirage', 'poe1', { full: true });
