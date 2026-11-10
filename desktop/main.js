@@ -331,6 +331,41 @@ const store = new Store({
   },
 });
 
+// conf reads and parses the whole settings file on every read, and the app asks who is signed in and whether inventory
+// reading is on every second it is open. The parsed settings stand while the file keeps its size and time, as the parsed
+// journal does, so an edit from outside is read again. One object serves every caller: nothing may change what it gets
+// from here.
+function loadParsedSettings() {
+  let stats = null;
+  try {
+    stats = fs.statSync(store.path);
+  } catch {
+    // A missing or locked file: conf answers for it below.
+  }
+  const parsed = store.parsedSettings;
+  if (stats && parsed && parsed.mtimeMs === stats.mtimeMs && parsed.size === stats.size) {
+    return parsed.settings;
+  }
+  const settings = store.store;
+  store.parsedSettings = stats ? { mtimeMs: stats.mtimeMs, size: stats.size, settings } : null;
+  return settings;
+}
+
+// One setting for a path that runs every second. Everything else asks the store, which hands out a copy of its own.
+function readParsedSetting(key) {
+  return loadParsedSettings()[key];
+}
+
+// A write of this app drops the parsed settings. The file's time alone would not always tell: Windows stamps files by a
+// clock that may tick only every 15 ms or so, so two writes can leave one time, and one size.
+function watchSettingsWrites() {
+  store.events.on('change', () => {
+    store.parsedSettings = null;
+  });
+}
+
+watchSettingsWrites();
+
 // From here on, the startup migrations included, errors go to logs/errors.jsonl.
 installErrorCapture();
 
@@ -389,14 +424,14 @@ function getLeagueKeyForVersion(version) {
   return version === 'poe2' ? 'defaultLeaguePoe2' : 'defaultLeaguePoe1';
 }
 
-function getLegacyDefaultLeagueForVersion(version) {
-  const legacyLeague = store.get('defaultLeague');
+function getLegacyDefaultLeagueForVersion(version, readSetting = (key) => store.get(key)) {
+  const legacyLeague = readSetting('defaultLeague');
   if (typeof legacyLeague !== 'string' || !legacyLeague.trim()) {
     return null;
   }
 
-  const legacyVersion = normalizePoeVersion(store.get('lastDetectedPoeVersion'))
-    || normalizePoeVersion(store.get('poeVersion'))
+  const legacyVersion = normalizePoeVersion(readSetting('lastDetectedPoeVersion'))
+    || normalizePoeVersion(readSetting('poeVersion'))
     || 'poe1';
 
   return legacyVersion === version ? legacyLeague.trim() : null;
@@ -953,8 +988,9 @@ function hasOnlineAccount() {
   return isOnlineEnabled() && Boolean(apiClient?.token);
 }
 
-function getActiveProfile() {
-  return (store.get('localProfiles') || {})[store.get('activeProfileId')] || null;
+// The paths that run every second pass readParsedSetting as `readSetting`, and only look at what they get.
+function getActiveProfile(readSetting = (key) => store.get(key)) {
+  return (readSetting('localProfiles') || {})[readSetting('activeProfileId')] || null;
 }
 
 // Each Path of Exile account gets one local profile on this machine, found again by GGG's account id.
@@ -2250,19 +2286,19 @@ function getTrackerContextDefaults(overrides = {}) {
   };
 }
 
-function resolveLeagueContext(overrides = {}) {
+function resolveLeagueContext(overrides = {}, readSetting = (key) => store.get(key)) {
   const overrideVersion = overrides.activeVersion || overrides.poeVersion;
   const detectedVersion = gameDetector ? gameDetector.getDetectedGame() : null;
-  const lastDetectedVersion = normalizePoeVersion(store.get('lastDetectedPoeVersion'));
-  const storedVersion = normalizePoeVersion(store.get('poeVersion'));
+  const lastDetectedVersion = normalizePoeVersion(readSetting('lastDetectedPoeVersion'));
+  const storedVersion = normalizePoeVersion(readSetting('poeVersion'));
   const activeVersion = normalizePoeVersion(overrideVersion)
     || normalizePoeVersion(detectedVersion)
     || lastDetectedVersion
     || storedVersion
     || 'poe1';
   const leagueKey = getLeagueKeyForVersion(activeVersion);
-  const storedLeague = store.get(leagueKey);
-  const legacyLeague = getLegacyDefaultLeagueForVersion(activeVersion);
+  const storedLeague = readSetting(leagueKey);
+  const legacyLeague = getLegacyDefaultLeagueForVersion(activeVersion, readSetting);
   const league = String(overrides.league ?? storedLeague ?? legacyLeague ?? 'Standard').trim() || 'Standard';
 
   return {
@@ -3514,8 +3550,8 @@ function normalizeOverlayCharacter(character) {
   return normalized.name || normalized.league ? normalized : null;
 }
 
-function isOverlayEnabled() {
-  return store.get('overlayEnabled') === true;
+function isOverlayEnabled(readSetting = (key) => store.get(key)) {
+  return readSetting('overlayEnabled') === true;
 }
 
 function clearOverlayMapResultDismissTimer() {
@@ -4105,7 +4141,7 @@ function getGameWindowRect() {
 }
 
 function listPricedInventoryItems(game) {
-  const { league } = resolveLeagueContext({ poeVersion: game });
+  const { league } = resolveLeagueContext({ poeVersion: game }, readParsedSetting);
   void loadSessionPrices({ poeVersion: game, league });
   const complete = priceService.poeVersion === game
     && priceService.league === league
@@ -4143,14 +4179,14 @@ function loadInventoryArt(iconPath) {
 
 function createInventoryWatcher() {
   // The item values, with the price list they were built from. The watcher asks on every read, once a second, and
-  // working them out reads the settings file and copies the list, so it gets the same map back until the list changes.
+  // working them out copies the list, so it gets the same map back until the list changes.
   // Prices that are not this league's are not kept: those are asked about again on every read.
   // So the league setting is looked at again only when the list changes. One that moves away meanwhile leaves the
   // watcher with the values it has, as an answer of null would, and art that joins then is held to them as well.
   let itemValues = null;
   return new InventoryWatcher({
-    isEnabled: () => store.get('inventoryReadEnabled') !== false,
-    getProfileId: () => getActiveProfile()?.id || null,
+    isEnabled: () => readParsedSetting('inventoryReadEnabled') !== false,
+    getProfileId: () => getActiveProfile(readParsedSetting)?.id || null,
     getGame: () => (gameDetector ? gameDetector.getDetectedGame() : null),
     isGameInFront: isGameWindowInFront,
     isInMap: () => Boolean(logParser?.currentMap),
@@ -4164,7 +4200,7 @@ function createInventoryWatcher() {
       if (itemValues?.game === game && itemValues.revision === priceService.revision) {
         return itemValues.values;
       }
-      const { league } = resolveLeagueContext({ poeVersion: game });
+      const { league } = resolveLeagueContext({ poeVersion: game }, readParsedSetting);
       const current = priceService.poeVersion === game && priceService.league === league && priceService.fullySynced;
       itemValues = current
         ? { game, revision: priceService.revision, values: new Map(priceService.listItems().map((item) => [item.name, item.divineValue])) }
@@ -4258,7 +4294,7 @@ function showInventoryStatus(kind) {
 function maybeShowFirstReadNudge(characterKey, now = Date.now()) {
   const blocked = !characterKey
     || firstReadNudgeShown.has(characterKey)
-    || !isOverlayEnabled()
+    || !isOverlayEnabled(readParsedSetting)
     || overlayStartMapPromptState
     || overlayCharacterPromptState
     || (overlayMapResultState?.visible && overlayMapResultState.result);
@@ -4388,7 +4424,7 @@ async function addInventoryLoot(sessionId, items, mapCount = 1, unread = false, 
 function syncScanHotkeys() {
   tickInventoryWatcher();
 
-  const enabled = Boolean(getActiveProfile());
+  const enabled = Boolean(getActiveProfile(readParsedSetting));
   let foregroundProcessId = null;
   if (enabled) {
     try {

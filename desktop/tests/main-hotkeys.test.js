@@ -287,6 +287,7 @@ function loadScanHotkeyGate(overrides = {}) {
   const context = loadFunctions(mainJsPath, ['syncScanHotkeys', 'getGameProcessIds'], {
     shouldEnableScanHotkeys: require('../src/modules/hotkeyModel').shouldEnableScanHotkeys,
     getActiveProfile: () => context.activeProfile,
+    readParsedSetting() {},
     activeProfile: { id: 'profile-1' },
     tickInventoryWatcher() {
       operations.push(['tick']);

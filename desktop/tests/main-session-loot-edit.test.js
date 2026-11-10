@@ -303,6 +303,7 @@ test('the reader gets every essence\'s art for PoE 2, also of essences the leagu
   const context = loadFunctions(['listPricedInventoryItems'], {
     POE2_ESSENCE_ART,
     resolveLeagueContext: () => ({ league: 'Rites' }),
+    readParsedSetting() {},
     loadSessionPrices: async () => {},
     priceService: {
       poeVersion: 'poe2',
@@ -337,6 +338,7 @@ function loadWatcherItemValues(priceService) {
       settings.reads += 1;
       return { league: settings.league };
     },
+    readParsedSetting() {},
     priceService,
     isGameWindowInFront: () => true,
     getGameWindowRect: () => null,

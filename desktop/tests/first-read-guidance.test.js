@@ -55,6 +55,7 @@ function load(overrides = {}) {
     overlayMapResultState: null,
     overlayEnabled: true,
     isOverlayEnabled: () => context.overlayEnabled,
+    readParsedSetting() {},
     t: (key) => STRINGS[key],
     showNotification: (title, body) => log.notifications.push([title, body]),
     updateOverlayWindow: () => { log.overlayUpdates += 1; },
