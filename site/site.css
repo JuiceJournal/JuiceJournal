@@ -1,0 +1,324 @@
+/* Juice Journal site. The Ember Forge palette and the profit tiers of the app (desktop/src/tokens.css), kept to what
+   one page needs. */
+:root {
+  --plate-deep: #0d0908;
+  --obsidian: #120d0b;
+  --plate: #1c1411;
+  --plate-raised: #261b16;
+  --ink: #f4ebe0;
+  --ink-bright: #fffaf3;
+  --ash: #c4b2a0;
+  --smoke: #a8947f;
+  --brass: #e8b65a;
+  --brass-light: #f3d08f;
+  --brass-dim: #8a6534;
+  --line: #3d2b21;
+  --line-strong: #6b4a2c;
+  --ember-hot: #ffa04d;
+  --ember-deep: #e8600f;
+  --ember-ink: #1a0d05;
+  --loss: #ff5c7a;
+  --tier-normal: #c8c8c8;
+  --tier-magic: #a0a0ff;
+  --tier-rare: #ffff77;
+  --tier-unique: #f0925a;
+  --tier-mirror: #ff7ae6;
+  --font: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Cinzel', Georgia, serif;
+  --bevel: 10px;
+  --cut: polygon(var(--bevel) 0, calc(100% - var(--bevel)) 0, 100% var(--bevel), 100% calc(100% - var(--bevel)), calc(100% - var(--bevel)) 100%, var(--bevel) 100%, 0 calc(100% - var(--bevel)), 0 var(--bevel));
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--ink);
+  background:
+    radial-gradient(60rem 30rem at 50% -8rem, rgb(255 122 31 / 0.16), transparent 70%),
+    radial-gradient(28rem 18rem at 88% 10rem, rgb(232 182 90 / 0.1), transparent 70%),
+    linear-gradient(180deg, var(--plate) 0, var(--obsidian) 36rem, var(--plate-deep) 100%);
+  background-repeat: no-repeat;
+  background-color: var(--plate-deep);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--brass-light); text-underline-offset: 0.2em; }
+a:hover { color: var(--ink-bright); }
+a:focus-visible { outline: 2px solid var(--ember-hot); outline-offset: 3px; }
+code { font-family: 'Cascadia Mono', Consolas, monospace; font-size: 0.9em; color: var(--brass-light); }
+
+.top, main, .bottom { width: min(100% - 2rem, 70rem); margin-inline: auto; }
+
+/* Header */
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 1.25rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--ink-bright);
+}
+.brand b { color: var(--brass); font-weight: inherit; }
+
+.top nav { display: flex; gap: 1.4rem; font-size: 0.95rem; }
+.top nav a {
+  padding-block: 0.3rem;
+  color: var(--ash);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+.top nav a:hover { color: var(--ink-bright); border-bottom-color: var(--ember-hot); }
+
+/* Hero */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 2rem;
+  padding-block: clamp(2rem, 7vw, 4.5rem) 3rem;
+}
+
+.kicker {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+
+h1 {
+  margin-block: 0.7rem 1.1rem;
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 6.2vw, 4rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: 0.01em;
+  color: var(--ink-bright);
+  background: linear-gradient(180deg, var(--ink-bright) 30%, var(--brass-light));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+/* The word is struck through the way a bricked map feels. */
+h1 .bricked {
+  -webkit-text-fill-color: var(--loss);
+  text-decoration: line-through;
+  text-decoration-thickness: 0.07em;
+  text-decoration-color: rgb(255 92 122 / 0.75);
+}
+
+.lede { max-width: 38rem; font-size: 1.2rem; color: var(--ash); }
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1.25rem; margin-top: 1.75rem; }
+
+.button {
+  --bevel: 7px;
+  display: inline-block;
+  padding: 0.9rem 1.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--ember-ink);
+  background: linear-gradient(180deg, var(--ember-hot), var(--ember-deep));
+  clip-path: var(--cut);
+}
+.button:hover { color: var(--ember-ink); filter: brightness(1.1); }
+.button:focus-visible { outline: none; filter: brightness(1.15); box-shadow: inset 0 0 0 3px var(--ink-bright); }
+
+.link { font-size: 0.95rem; }
+.fine { margin-top: 0.9rem; font-size: 0.9rem; color: var(--smoke); }
+
+.flasks {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-height: 13rem;
+  filter: drop-shadow(0 0 2.5rem rgb(255 122 31 / 0.35));
+}
+.flask { height: auto; }
+.flask-left { transform: rotate(-14deg) translate(1.1rem, -0.4rem); opacity: 0.9; }
+.flask-right { transform: rotate(12deg) translate(-1.1rem, -0.4rem); opacity: 0.9; }
+
+/* Plates: a cut-corner panel with brass brackets at two corners, as on the app's cards. */
+.plate, .card, .tier {
+  position: relative;
+  background: linear-gradient(180deg, rgb(38 27 22 / 0.94), rgb(28 20 17 / 0.94));
+  clip-path: var(--cut);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.plate::before, .card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, var(--brass) 0 1.1rem, transparent 1.1rem) top left / 2.4rem 2.4rem no-repeat,
+    linear-gradient(-45deg, var(--brass) 0 1.1rem, transparent 1.1rem) bottom right / 2.4rem 2.4rem no-repeat;
+  -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  padding: 2px;
+  opacity: 0.7;
+}
+
+.shot { margin-bottom: 1rem; }
+.shot img { display: block; width: 100%; height: auto; }
+.shot figcaption { padding: 0.6rem; font-size: 0.85rem; color: var(--smoke); text-align: center; }
+.plate.shot { padding: 0.5rem 0.5rem 0; box-shadow: inset 0 0 0 1px var(--line-strong); }
+
+/* Sections */
+.section { margin-top: clamp(3rem, 8vw, 5rem); }
+
+h2 {
+  margin-block: 0.5rem 0.8rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3.6vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: var(--ink-bright);
+}
+.section-lede { max-width: 44rem; color: var(--ash); }
+
+/* Tiers: one label per verdict, coloured like a loot filter would colour the drop. */
+.tiers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(17rem, 100%), 1fr));
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  list-style: none;
+}
+.tier {
+  --bevel: 7px;
+  --tone: var(--tier-normal);
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-height: 4.6rem;
+  padding: 0.8rem 1rem;
+  box-shadow: inset 4px 0 0 var(--tone), inset 0 0 0 1px var(--line);
+}
+.tier b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: 0.05em;
+  color: var(--tone);
+}
+.tier span { font-size: 0.95rem; color: var(--ash); }
+.tier img { flex: none; }
+.tier .pip {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  background:
+    linear-gradient(var(--tone), var(--tone)) center / 14px 14px no-repeat;
+  transform: rotate(45deg) scale(0.7);
+  box-shadow: inset 0 0 0 2px var(--tone);
+  opacity: 0.85;
+}
+.tier-loss { --tone: var(--loss); }
+.tier-magic { --tone: var(--tier-magic); }
+.tier-rare { --tone: var(--tier-rare); }
+.tier-unique { --tone: var(--tier-unique); }
+.tier-mirror { --tone: var(--tier-mirror); background: linear-gradient(120deg, rgb(255 122 230 / 0.14), rgb(28 20 17 / 0.94) 55%); }
+
+/* Cards */
+.grid, .split { display: grid; gap: 1rem; }
+.grid { grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr)); margin-top: 1.5rem; }
+.split { grid-template-columns: repeat(auto-fit, minmax(min(19rem, 100%), 1fr)); }
+
+.card { padding: 1.5rem 1.6rem; }
+
+h3 {
+  margin-bottom: 0.6rem;
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--brass-light);
+}
+
+.card p, .card li { color: var(--ash); }
+.card p + p, .card ul + p, .card ol + p { margin-top: 0.8rem; }
+.card ul, .card ol { padding-left: 1.2rem; }
+.card li + li { margin-top: 0.4rem; }
+.card li::marker { color: var(--brass); }
+.card b { color: var(--ink); }
+
+/* The overlay card, shown the way it sits over the game: small, in a corner of something dark and busy. */
+.overlay-section {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 17rem;
+  padding: 2rem 1rem;
+  clip-path: var(--cut);
+  box-shadow: inset 0 0 0 1px var(--line);
+  background:
+    radial-gradient(18rem 10rem at 22% 70%, rgb(255 122 31 / 0.22), transparent 70%),
+    radial-gradient(22rem 12rem at 80% 25%, rgb(160 160 255 / 0.12), transparent 70%),
+    linear-gradient(160deg, #1a1210, #0a0706);
+}
+.overlay-stage {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(115deg, rgb(244 235 224 / 0.025) 0 2px, transparent 2px 26px);
+}
+.overlay { position: relative; margin: 0; }
+.overlay img { width: min(100%, 345px); margin-inline: auto; filter: drop-shadow(0 0.6rem 1.4rem rgb(0 0 0 / 0.6)); }
+
+.install { display: flex; gap: 1.5rem; align-items: flex-start; }
+.install-flask { flex: none; filter: drop-shadow(0 0 1.2rem rgb(255 122 31 / 0.3)); }
+
+.bottom {
+  margin-top: clamp(3rem, 8vw, 5rem);
+  padding-block: 1.75rem 3rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+  color: var(--smoke);
+}
+.bottom p + p { margin-top: 0.4rem; }
+.one-more {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+  color: var(--brass);
+}
+
+@media (max-width: 46rem) {
+  .hero { grid-template-columns: 1fr; }
+  .flasks { order: -1; min-height: 8rem; }
+  .flask-mid { width: 104px; }
+  .flask-left, .flask-right { width: 68px; }
+  .top nav { gap: 1rem; }
+  .install { flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .button { transition: filter 150ms ease; }
+  .flask-mid { animation: bob 5s ease-in-out infinite; }
+  @keyframes bob {
+    50% { transform: translateY(-0.4rem); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}

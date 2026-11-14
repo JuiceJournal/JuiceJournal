@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Juice Journal: a farming journal for Path of Exile</title>
+  <meta name="description" content="A free, open source farming journal and in-game overlay for Path of Exile 1 and 2. It follows your maps from the game's log file and keeps your data on your PC.">
+  <meta name="color-scheme" content="dark">
+  <meta property="og:title" content="Juice Journal">
+  <meta property="og:description" content="Juiced or bricked? A free, open source farming journal and in-game overlay for Path of Exile 1 and 2.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://juicejournal.github.io/JuiceJournal/assets/dashboard.png">
+  <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="fonts/fonts.css">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="./">
+      <img src="assets/mark.svg" alt="" width="36" height="36">
+      <span>Juice <b>Journal</b></span>
+    </a>
+    <nav aria-label="Site">
+      <a href="#verdict">Tiers</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/JuiceJournal/JuiceJournal">Source</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-text">
+        <p class="kicker">Path of Exile 1 and 2 · Windows · free and open source</p>
+        <h1>Juiced or <span class="bricked">bricked</span>?<br>Now you'll know.</h1>
+        <p class="lede">Juice Journal follows your map runs from the game's log file. In Path of Exile 2 it also counts the currency your inventory gained (experimental) and tells you what each map and each farm type really paid. No ads, no account of its own, and your journal stays on your PC.</p>
+        <div class="actions">
+          <a class="button" id="download" href="https://github.com/JuiceJournal/JuiceJournal/releases">Download for Windows</a>
+          <a class="link" href="https://github.com/JuiceJournal/JuiceJournal/releases">All releases</a>
+        </div>
+        <p class="fine" id="download-note">Pre-release. The installer is about 120 MB.</p>
+      </div>
+      <div class="flasks" aria-hidden="true">
+        <img class="flask flask-left" src="assets/reactions/bricked.svg" alt="" width="96" height="96">
+        <img class="flask flask-mid" src="assets/reactions/juiced.svg" alt="" width="150" height="150">
+        <img class="flask flask-right" src="assets/reactions/pog.svg" alt="" width="96" height="96">
+      </div>
+    </section>
+
+    <figure class="shot plate">
+      <img src="assets/dashboard.png" alt="The Dashboard with a Path of Exile 2 character: the farm type and entry cost of the next map, the last map's result and today's totals." width="1440" height="960">
+      <figcaption>The Dashboard, with sample data.</figcaption>
+    </figure>
+
+    <section id="verdict" class="section">
+      <p class="kicker">Every map gets a verdict</p>
+      <h2>Tiered like loot, so one look is enough</h2>
+      <p class="section-lede">A map's profit gets a tier in the colour of an item rarity. The steps are measured in Divine Orbs, so they hold from league to league. The quiet tiers stay quiet; the flasks only show up for the maps you will talk about.</p>
+      <ol class="tiers">
+        <li class="tier tier-loss">
+          <img src="assets/reactions/bricked.svg" alt="" width="44" height="44">
+          <div><b>Bricked</b><span>The map cost more than it gave back.</span></div>
+        </li>
+        <li class="tier tier-normal">
+          <span class="pip" aria-hidden="true"></span>
+          <div><b>Normal</b><span>Under a quarter of a Divine.</span></div>
+        </li>
+        <li class="tier tier-magic">
+          <span class="pip" aria-hidden="true"></span>
+          <div><b>Magic</b><span>A quarter of a Divine or more.</span></div>
+        </li>
+        <li class="tier tier-rare">
+          <img src="assets/reactions/pog.svg" alt="" width="44" height="44">
+          <div><b>Rare</b><span>A Divine or more.</span></div>
+        </li>
+        <li class="tier tier-unique">
+          <img src="assets/reactions/juiced.svg" alt="" width="44" height="44">
+          <div><b>Unique</b><span>Five Divines or more. Juiced.</span></div>
+        </li>
+        <li class="tier tier-mirror">
+          <img src="assets/reactions/mirror.svg" alt="" width="44" height="44">
+          <div><b>Mirror tier</b><span>A Mirror of Kalandra's worth from one map.</span></div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="section">
+      <p class="kicker">What it does</p>
+      <h2>You map. It keeps the books.</h2>
+      <div class="grid">
+        <article class="card">
+          <h3>Maps, timed by themselves</h3>
+          <p>The app reads the game's <code>Client.txt</code> log. A map starts when you enter it and ends when you leave, with the time you spent in it.</p>
+        </article>
+        <article class="card">
+          <h3>Loot from your inventory</h3>
+          <p>In Path of Exile 2, open your inventory before and after a map and the app counts the priced stackable items you gained, with poe.ninja prices. Gear is not counted. An item it is not sure of is left for you to add by hand, never guessed.</p>
+        </article>
+        <article class="card">
+          <h3>Profit per farm type</h3>
+          <p>Tag runs as Breach, Ritual, Expedition or a farm type of your own, and set what a map costs you to enter. The cost comes off the map's profit, so you see which farm is worth your next map.</p>
+        </article>
+        <article class="card">
+          <h3>An overlay over the game</h3>
+          <p>Optional, and off until you turn it on. A card asks for the farm type when you enter a map and shows the result when the map ends. It takes the keyboard only while you type an entry cost on it.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section overlay-section">
+      <div class="overlay-stage" aria-hidden="true"></div>
+      <figure class="shot overlay">
+        <img src="assets/overlay.png" alt="The overlay card after a map: the farm type, the profit and the most valuable item." width="345" height="125" loading="lazy">
+        <figcaption>The result card on the overlay, with sample data.</figcaption>
+      </figure>
+    </section>
+
+    <section class="section split">
+      <article class="card">
+        <h3>What it leaves alone</h3>
+        <ul>
+          <li>It does not inject into the game, hook it or read its memory.</li>
+          <li>It has no account of its own, no telemetry and no ads.</li>
+          <li>Your journal is not uploaded. Without online features the app talks only to pathofexile.com, poe.ninja, the game's image server and GitHub, for sign-in, prices, icons and updates.</li>
+          <li>To count your inventory it reads a small part of the screen. Nothing from the screen is saved or sent.</li>
+        </ul>
+        <p><a href="https://github.com/JuiceJournal/JuiceJournal/blob/master/docs/how-tracking-works.md">How tracking works</a> lists what the app reads, and the <a href="https://github.com/JuiceJournal/JuiceJournal#privacy-and-data">README</a> lists every host it talks to.</p>
+      </article>
+      <article class="card">
+        <h3>Where it stands</h3>
+        <ul>
+          <li>Inventory reading is experimental. It works for Path of Exile 2, with a game window 1440 pixels tall.</li>
+          <li>Path of Exile 1 has no loot source yet: maps and sessions are tracked, profit is not.</li>
+          <li>English and Turkish are complete. Six more languages are partly translated.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section id="install" class="section install card">
+      <img class="install-flask" src="assets/reactions/holy.svg" alt="" width="72" height="72" aria-hidden="true">
+      <div>
+        <h3>Installing</h3>
+        <ol>
+          <li>Download the installer and run it.</li>
+          <li>Windows shows a SmartScreen warning, because the installer has no code signing certificate. Choose <b>More info</b>, then <b>Run anyway</b>.</li>
+          <li>Sign in with your Path of Exile account. The app only reads your character list.</li>
+        </ol>
+        <p>The app checks for new versions itself, and installs one only if its signature matches the key built into the app.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="bottom">
+    <p class="one-more">One more map.</p>
+    <p>MIT licensed. <a href="https://github.com/JuiceJournal/JuiceJournal">Source on GitHub</a> · <a href="https://github.com/JuiceJournal/JuiceJournal/issues">Report a problem</a></p>
+    <p>Juice Journal is a fan project. It is not affiliated with or endorsed by Grinding Gear Games. Path of Exile names, game art and item icons belong to Grinding Gear Games and are not covered by the MIT license.</p>
+  </footer>
+
+  <script>
+    // Points the button at the newest installer. Without an answer it keeps leading to the releases page.
+    fetch('https://api.github.com/repos/JuiceJournal/JuiceJournal/releases?per_page=1')
+      .then(function (response) { return response.ok ? response.json() : []; })
+      .then(function (releases) {
+        var release = releases[0];
+        var installer = release && release.assets.filter(function (asset) { return /\.exe$/.test(asset.name); })[0];
+        if (!installer) return;
+        document.getElementById('download').href = installer.browser_download_url;
+        document.getElementById('download-note').textContent = 'Version ' + release.tag_name.replace(/^v/, '')
+          + (release.prerelease ? ', a pre-release' : '') + '. The installer is ' + Math.round(installer.size / 1048576) + ' MB.';
+      })
+      .catch(function () {});
+  </script>
+</body>
+</html>
