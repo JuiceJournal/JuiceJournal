@@ -1,0 +1,44 @@
+name: Site
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - site/**
+      - desktop/src/assets/fonts/**
+      - desktop/src/assets/brand/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish the site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      # The page uses the app's own fonts, mark and flask emotes, so they are copied in here and not kept twice in the repo.
+      - name: Put the site together
+        run: |
+          mkdir -p _site/fonts
+          cp -r site/. _site/
+          cp desktop/src/assets/fonts/* _site/fonts/
+          cp desktop/src/assets/brand/mark.svg _site/assets/mark.svg
+          cp -r desktop/src/assets/brand/reactions _site/assets/reactions
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v5

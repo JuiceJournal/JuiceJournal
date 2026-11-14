@@ -10,7 +10,9 @@ Juice Journal follows your map runs from the game's log file, recognises the cha
 
 Inspired by [TLI Tracker](https://github.com/Giboork/TLI-tracker-translated) from the Torchlight Infinite community.
 
-> **Status: alpha.** Windows only. There are no installer releases yet; build it from source (see below).
+> **Status: pre-release.** Windows only. Download the installer from [Releases](https://github.com/JuiceJournal/JuiceJournal/releases), or build it from source (see below). Windows shows a SmartScreen warning for it, because the installer has no code signing certificate: choose **More info**, then **Run anyway**.
+>
+> Site: [juicejournal.github.io/JuiceJournal](https://juicejournal.github.io/JuiceJournal/)
 
 ## Features
 
