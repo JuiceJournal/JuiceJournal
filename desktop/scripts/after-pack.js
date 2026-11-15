@@ -1,6 +1,18 @@
 const path = require('node:path');
 const fs = require('node:fs');
 
+// What the exe's Properties window shows. Without a company and a copyright it keeps Electron's own.
+function versionStrings({ productFilename, companyName, year }) {
+  return {
+    CompanyName: companyName,
+    LegalCopyright: `Copyright (C) ${year} ${companyName}`,
+    FileDescription: 'Juice Journal',
+    ProductName: 'Juice Journal',
+    InternalFilename: `${productFilename}.exe`,
+    OriginalFilename: `${productFilename}.exe`
+  };
+}
+
 async function afterPack(context) {
   if (!context || context.electronPlatformName !== 'win32') {
     return;
@@ -26,14 +38,14 @@ async function afterPack(context) {
     'file-version': version,
     'product-version': version,
     'requested-execution-level': 'asInvoker',
-    'version-string': {
-      FileDescription: 'Juice Journal',
-      ProductName: 'Juice Journal',
-      InternalFilename: `${productFilename}.exe`,
-      OriginalFilename: `${productFilename}.exe`
-    }
+    'version-string': versionStrings({
+      productFilename,
+      companyName: context.packager?.appInfo?.companyName || 'JuiceJournal Team',
+      year: new Date().getFullYear()
+    })
   });
 }
 
 module.exports = afterPack;
+module.exports.versionStrings = versionStrings;
 module.exports.default = afterPack;

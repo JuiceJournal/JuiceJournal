@@ -117,6 +117,21 @@ test('desktop build defines an afterPack hook that patches the packaged exe icon
   assert.match(script, /FileDescription:\s*'Juice Journal'/);
 });
 
+test('the packaged exe names the package author as its company, not the Electron default', () => {
+  const { versionStrings } = require(afterPackScriptPath);
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  const strings = versionStrings({ productFilename: 'Juice Journal', companyName: packageJson.author.name, year: 2026 });
+
+  assert.equal(strings.CompanyName, 'JuiceJournal Team');
+  assert.equal(strings.LegalCopyright, 'Copyright (C) 2026 JuiceJournal Team');
+  assert.equal(strings.FileDescription, 'Juice Journal');
+  assert.equal(strings.OriginalFilename, 'Juice Journal.exe');
+
+  const script = fs.readFileSync(afterPackScriptPath, 'utf8');
+  assert.match(script, /companyName: context\.packager\?\.appInfo\?\.companyName/);
+  assert.match(script, /'version-string': versionStrings\(/);
+});
+
 test('desktop package exposes a packaged dev runner for taskbar icon validation', () => {
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 
