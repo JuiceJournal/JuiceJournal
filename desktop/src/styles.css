@@ -3688,6 +3688,52 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 
 .currency-search::placeholder { color: var(--text-muted); }
 
+/* ==================== GUIDE ==================== */
+.guide-header { align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+.guide-search { width: 260px; font-size: 0.85rem; padding-block: 0.45rem; }
+
+.guide-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(26rem, 100%), 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.guide-section {
+  padding: 1rem 1.1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--bevel);
+}
+
+.guide-section-title {
+  margin-bottom: 0.5rem;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.guide-topic { border-top: 1px solid var(--border-light); }
+.guide-topic:first-of-type { border-top: none; }
+
+.guide-question {
+  padding: 0.6rem 0;
+  font-weight: 600;
+  color: var(--text-bright);
+  cursor: pointer;
+}
+.guide-question:hover { color: var(--gold-light); }
+.guide-question:focus-visible { outline: 2px solid var(--ember-hot); outline-offset: 2px; }
+.guide-topic[open] > .guide-question { color: var(--gold-light); }
+
+.guide-answer { padding: 0 0 0.8rem 1.05rem; color: var(--text-secondary); font-size: 0.9rem; }
+.guide-answer p + p { margin-top: 0.5rem; }
+
+.guide-empty { margin-top: 1rem; color: var(--text-muted); }
+
 .currency-search-clear {
   position: absolute;
   right: 0.25rem;
