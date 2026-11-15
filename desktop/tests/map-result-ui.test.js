@@ -3647,6 +3647,38 @@ test('sessions summary hides when the list fails to load', async () => {
   assert.equal(journalChecks, 2);
 });
 
+test('a sessions row with no loot counted says so instead of showing its entry cost as a loss', () => {
+  const elements = { sessionsList: { innerHTML: '' } };
+  const sessions = [
+    { id: 'none-1', mapName: 'Dunes', status: 'completed', poeVersion: 'poe1', durationSec: 60, lootCount: 0, costChaos: 40, profitChaos: -40, noLoot: true },
+    { id: 'loss-1', mapName: 'Mesa', status: 'completed', poeVersion: 'poe1', durationSec: 60, lootCount: 2, costChaos: 40, profitChaos: -30, noLoot: false }
+  ];
+  const context = loadFunctions(['renderSessionsList'], {
+    elements,
+    state: { currentUser: { id: 'user-1' }, sessions },
+    window: { t: (key) => key },
+    closeSessionDrawer() {},
+    getFilteredSessions: () => sessions,
+    getSessionPoeVersion: (session) => session.poeVersion,
+    getSessionFarmTypeId: () => 'breach',
+    getSessionFarmTypeLabel: () => 'Breach',
+    escapeHTML: (value) => String(value),
+    timeAgo: () => 'just now',
+    currencyHTML: (value) => `${value}c`,
+    profitMemeHTML: (tier) => `<meme ${tier}>`,
+    formatDuration: (seconds) => `duration:${seconds}`,
+    getLiveDuration: () => 240,
+    renderSessionsSummary() {}
+  });
+
+  context.renderSessionsList();
+
+  const [uncounted, loss] = elements.sessionsList.innerHTML.split('class="session-item').slice(1);
+  assert.match(uncounted, /<div class="session-profit"><span class="profit-unavailable">toast\.mapNoLoot<\/span><\/div>/);
+  assert.doesNotMatch(uncounted, /data-profit-tier|<meme|-40c/);
+  assert.match(loss, /<div class="session-profit" data-profit-tier="loss">-30c<meme loss><\/div>/);
+});
+
 function loadSessionsSummary({ sessions, versionFilter = 'all', leagueFilter = 'all', tracker = { poeVersion: 'poe1', league: 'Mirage' } }) {
   const elements = {
     sessionsSummary: { innerHTML: '', hidden: true },
@@ -3713,6 +3745,25 @@ test('sessions summary adds up one game and league only and hides without comple
   const empty = loadSessionsSummary({ sessions: sessions.filter((session) => session.status !== 'completed') });
   assert.equal(empty.summary.hidden, true);
   assert.equal(empty.summary.innerHTML, '');
+});
+
+test('sessions summary leaves out runs with no loot counted, and hides when no run was counted', () => {
+  const uncounted = { id: 'u', mapName: 'Dunes', status: 'completed', poeVersion: 'poe1', league: 'Mirage', profitChaos: -40, costChaos: 40, noLoot: true };
+  const sessions = [
+    uncounted,
+    { id: 'a', mapName: 'Mesa', status: 'completed', poeVersion: 'poe1', league: 'Mirage', profitChaos: 120 }
+  ];
+  const { summary } = loadSessionsSummary({ sessions });
+
+  assert.match(summary.innerHTML, /sessions\.summaryMaps<\/span>\s*<span class="sessions-summary-value">1</);
+  assert.match(summary.innerHTML, /sessions\.summaryTotal<\/span>\s*<span class="sessions-summary-value"><chip>120<\/chip>/);
+  assert.match(summary.innerHTML, /sessions\.summaryAverage<\/span>\s*<span class="sessions-summary-value" data-profit-tier="rare"><chip>120<\/chip>/);
+  assert.equal([...summary.innerHTML.matchAll(/class="sessions-summary-run[ "]/g)].length, 1);
+  assert.doesNotMatch(summary.innerHTML, /Dunes/);
+
+  const none = loadSessionsSummary({ sessions: [uncounted] });
+  assert.equal(none.summary.hidden, true);
+  assert.equal(none.summary.innerHTML, '');
 });
 
 test('sessions summary takes each half of its context from a filter, else the tracker, and hides when it is empty', () => {
@@ -4475,11 +4526,11 @@ test('recent loot empty state shows the chest in a slot, not the mascot or game 
   assert.match(signedOut, /dashboard\.noLootHint/);
   assert.doesNotMatch(signedOut, /mark\.svg|assets\/currency/);
 
-  // A signed-in profile without loot gets the same state.
+  // A signed-in PoE 1 profile without loot gets the same state, with the hint for its game.
   context.state.currentUser = { id: 'profile-1' };
   elements.recentLootList.innerHTML = '';
   context.renderRecentLoot();
-  assert.equal(elements.recentLootList.innerHTML, signedOut);
+  assert.equal(elements.recentLootList.innerHTML, signedOut.replace('dashboard.noLootHint<', 'dashboard.noLootHintPoe1<'));
 });
 
 test('recent loot explains how loot is counted for a signed-in PoE 2 profile without loot', () => {
@@ -4504,10 +4555,11 @@ test('recent loot explains how loot is counted for a signed-in PoE 2 profile wit
   assert.match(html, /<ol class="loot-guide-steps">/);
   assert.doesNotMatch(html, /dashboard\.noLoot/);
 
-  // PoE 1 keeps the one-line hint.
+  // PoE 1 gets a one-line hint of its own: loot is added by hand there, and the PoE 2 line would say otherwise.
   context.getResolvedLeagueVersion = () => 'poe1';
   context.renderRecentLoot();
-  assert.match(elements.recentLootList.innerHTML, /dashboard\.noLootHint/);
+  assert.match(elements.recentLootList.innerHTML, /dashboard\.noLootHintPoe1/);
+  assert.doesNotMatch(elements.recentLootList.innerHTML, /dashboard\.noLootHint(?!Poe1)/);
   assert.doesNotMatch(elements.recentLootList.innerHTML, /loot-guide/);
 
   // Signed out keeps it too, whatever the game.
@@ -4671,6 +4723,20 @@ test('the run drawer leads with profit, counts loot by quantity and lists loot b
   assert.equal(elements.sessionDrawerNotes.value, 'typing...');
   assert.match(elements.sessionDrawerSummary.innerHTML, /<span class="session-drawer-label">dashboard\.liveProfit<\/span>/);
   assert.match(elements.sessionDrawerSummary.innerHTML, /class="session-drawer-duration"[^>]*>duration:240</);
+
+  // A finished run with no loot has no profit to show: its entry cost alone is not a loss.
+  context.window.localJournalModel = require('../src/modules/localJournalModel');
+  context.state.selectedSession = { ...context.state.selectedSession, status: 'completed', lootEntries: [], totalLootChaos: 0, costChaos: 40, profitChaos: -40 };
+  context.renderSessionDrawer();
+  assert.match(elements.sessionDrawerSummary.innerHTML, /<span class="session-drawer-profit"><span class="profit-unavailable">toast\.mapNoLoot<\/span><\/span>/);
+  assert.doesNotMatch(elements.sessionDrawerSummary.innerHTML, /data-profit-tier|data-meme/);
+});
+
+test('the window loads the journal model, which says when a run has no loot counted', () => {
+  const html = fs.readFileSync(path.join(desktopDir, 'src', 'index.html'), 'utf8');
+  const scripts = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((match) => match[1]);
+  assert.ok(scripts.includes('modules/localJournalModel.js'));
+  assert.ok(scripts.indexOf('modules/localJournalModel.js') < scripts.indexOf('app.js'));
 });
 
 test('game art in item slots is never recoloured', () => {

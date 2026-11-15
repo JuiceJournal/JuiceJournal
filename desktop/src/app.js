@@ -6002,7 +6002,9 @@ function renderSessionsList() {
         </div>
         <span class="session-stat"><span class="visually-hidden">${window.t('sessions.duration')} </span>${duration}</span>
         <span class="session-stat"><span class="visually-hidden">${window.t('sessions.headItems')} </span>${lootCount}</span>
-        <div class="session-profit" data-profit-tier="${profitTier}">${formatProfit(profit, 16, poeVersion)}${memeFor(profitTier)}</div>
+        ${session.noLoot
+    ? `<div class="session-profit"><span class="profit-unavailable">${window.t('toast.mapNoLoot')}</span></div>`
+    : `<div class="session-profit" data-profit-tier="${profitTier}">${formatProfit(profit, 16, poeVersion)}${memeFor(profitTier)}</div>`}
         ${statusChip}
       </button>
     `;
@@ -6030,7 +6032,8 @@ function renderSessionsSummary(sessions = []) {
   const summary = elements.sessionsSummary;
   if (!summary) return;
 
-  const completed = sessions.filter((session) => session.status === 'completed');
+  // A run with no loot counted has no profit, so it stays out of the totals, the average and the bars.
+  const completed = sessions.filter((session) => session.status === 'completed' && !session.noLoot);
   const context = completed.length ? getSessionsSummaryContext() : null;
   const runs = context ? completed.filter((session) => isSessionInContext(session, context)) : [];
   if (!runs.length) {
@@ -6104,7 +6107,9 @@ function renderRecentLoot() {
       elements.recentLootList.innerHTML = `<div class="loot-guide"><span class="loot-guide-title">${escapeHTML(window.t('dashboard.lootGuideTitle'))}</span><ol class="loot-guide-steps">${step(1)}${step(2)}${step(3)}</ol></div>`;
       return;
     }
-    elements.recentLootList.innerHTML = emptyStateHTML({ art: 'chest', title: window.t('dashboard.noLoot'), hint: window.t('dashboard.noLootHint') });
+    // Path of Exile 1 has no inventory read, so a signed-in PoE 1 player is told where loot is added by hand.
+    const hintKey = state.currentUser && getResolvedLeagueVersion() === 'poe1' ? 'dashboard.noLootHintPoe1' : 'dashboard.noLootHint';
+    elements.recentLootList.innerHTML = emptyStateHTML({ art: 'chest', title: window.t('dashboard.noLoot'), hint: window.t(hintKey) });
     return;
   }
 
@@ -8111,6 +8116,8 @@ function renderSessionDrawer({ keepForm = false } = {}) {
     : (session.durationSec ? formatDuration(session.durationSec) : '-');
 
   const lootQuantity = lootEntries.reduce((sum, loot) => sum + (parseInt(loot.quantity || 0, 10) || 0), 0);
+  // A finished run with no loot has no profit to show: its entry cost alone is not a loss.
+  const noLoot = Boolean(window.localJournalModel?.isUncountedRun(session));
   const profitLabel = session.status === 'active' ? 'dashboard.liveProfit' : 'dashboard.profit';
   const memeFor = typeof profitMemeHTML === 'function' ? profitMemeHTML : () => '';
   const rateOptions = { league: session.league };
@@ -8143,8 +8150,10 @@ function renderSessionDrawer({ keepForm = false } = {}) {
       <div class="session-drawer-hero-main">
         <span class="session-drawer-label">${window.t(profitLabel)}</span>
         <div class="session-drawer-profit-row">
-          <span class="session-drawer-profit" data-profit-tier="${profitTier}">${formatProfit(profit, 18, poeVersion, { ...rateOptions, signed: true })}</span>
-          ${memeFor(profitTier)}
+          ${noLoot
+    ? `<span class="session-drawer-profit"><span class="profit-unavailable">${window.t('toast.mapNoLoot')}</span></span>`
+    : `<span class="session-drawer-profit" data-profit-tier="${profitTier}">${formatProfit(profit, 18, poeVersion, { ...rateOptions, signed: true })}</span>
+          ${memeFor(profitTier)}`}
         </div>
       </div>
       <div class="session-drawer-hero-side">

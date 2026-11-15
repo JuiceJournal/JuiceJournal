@@ -213,6 +213,24 @@ test('log parser keeps PoE1 league side instances inside the active map', async 
   assert.equal(exits[0].location, 'Canal Hideout');
 });
 
+test('log parser exits PoE1 maps when the player returns to an act town', async () => {
+  for (const town of ['The Forest Encampment', 'The Bridge Encampment', 'Oriath Docks', 'The Rogue Harbour']) {
+    const parser = new LogParser('Client.txt', { poeVersion: 'poe1', instanceExitDelayMs: 20 });
+    const exits = [];
+    parser.on('mapExited', (payload) => exits.push(payload));
+
+    parser.parseLine('2026/05/06 18:00:00 123456 abc [INFO Client 123] : Generating level 83 area "MapDunes" with seed 1');
+    parser.parseLine('2026/05/06 18:02:00 123456 abc [INFO Client 123] : Connecting to instance server...');
+    parser.parseLine('2026/05/06 18:02:01 123456 abc [INFO Client 123] : Generating level 68 area "2_7_town" with seed 1');
+    parser.parseLine(`2026/05/06 18:02:02 123456 abc [INFO Client 123] : You have entered ${town}.`);
+    await wait(30);
+
+    assert.equal(exits.length, 1, town);
+    assert.equal(exits[0].location, town);
+    assert.equal(parser.getCurrentMap().mapName, null, town);
+  }
+});
+
 test('log parser keeps PoE1 same-seed map re-entry inside the active map', async () => {
   const parser = new LogParser('Client.txt', {
     poeVersion: 'poe1',

@@ -807,5 +807,8 @@ test('dashboard has no scan button: End Map is the last action and its labels re
       'overlay.itemScanned', 'overlay.itemsScanned', 'toast.mapNoLoot', 'settings.dataFolderDesc']) {
       assert.doesNotMatch(dictionary[key], /\bscan|\bocr|\btara(ma|n|di)/i, key);
     }
+    // A PoE 1 player is not told about the PoE 2 inventory read.
+    assert.match(dictionary['dashboard.noLootHintPoe1'], /Path of Exile 1/);
+    assert.doesNotMatch(dictionary['dashboard.noLootHintPoe1'], /Path of Exile 2/);
   }
 });

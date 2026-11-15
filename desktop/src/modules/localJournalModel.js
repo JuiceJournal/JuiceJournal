@@ -44,10 +44,29 @@
     return { sessions: Array.isArray(journal?.sessions) ? journal.sessions : [] };
   }
 
-  // List rows drop the loot entries but keep the item count the Sessions list shows.
+  // A finished run with no loot has no profit to report: its entry cost alone is not a loss. A stash diff's totals are
+  // final and carry no loot entries, so a run whose profit is anything but minus its cost was calculated. A cost edit
+  // moves the profit by the change, so the two are compared to a hundredth. A list row has the item count in place of
+  // the entries.
+  function isUncountedRun(session) {
+    if (!session || session.status === 'active') {
+      return false;
+    }
+
+    const hasLoot = Array.isArray(session.lootEntries) ? session.lootEntries.length > 0 : toNumber(session.lootCount) > 0;
+    return !hasLoot
+      && toNumber(session.totalLootChaos) === 0
+      && Math.abs(toNumber(session.profitChaos) + toNumber(session.costChaos)) <= 0.01;
+  }
+
+  // List rows drop the loot entries but keep the item count the Sessions list shows, and say when nothing was counted.
   function withoutLoot(session) {
     const { lootEntries, ...summary } = session;
-    return { ...summary, lootCount: (lootEntries || []).reduce((sum, loot) => sum + toNumber(loot.quantity), 0) };
+    return {
+      ...summary,
+      lootCount: (lootEntries || []).reduce((sum, loot) => sum + toNumber(loot.quantity), 0),
+      noLoot: isUncountedRun(session)
+    };
   }
 
   function sumLootChaos(lootEntries) {
@@ -392,8 +411,11 @@
         && startedAtMs <= now.getTime()
         && matchesContext(session, { poeVersion, league });
     });
-    const totalProfit = sessions.reduce((sum, session) => sum + toNumber(session.profitChaos), 0);
+    // Profit and its averages cover the runs whose loot was counted; the rest would each read as a loss of the entry cost.
+    const counted = sessions.filter((session) => !isUncountedRun(session));
+    const totalProfit = counted.reduce((sum, session) => sum + toNumber(session.profitChaos), 0);
     const totalDuration = sessions.reduce((sum, session) => sum + toNumber(session.durationSec), 0);
+    const countedDuration = counted.reduce((sum, session) => sum + toNumber(session.durationSec), 0);
 
     return {
       period,
@@ -406,8 +428,8 @@
         totalLoot: sessions.reduce((sum, session) => sum + toNumber(session.totalLootChaos), 0),
         totalProfit,
         totalDuration,
-        avgProfitPerMap: sessions.length ? totalProfit / sessions.length : 0,
-        avgProfitPerHour: totalDuration > 0 ? totalProfit / (totalDuration / 3600) : 0
+        avgProfitPerMap: counted.length ? totalProfit / counted.length : 0,
+        avgProfitPerHour: countedDuration > 0 ? totalProfit / (countedDuration / 3600) : 0
       }
     };
   }
@@ -422,6 +444,7 @@
     getActiveSession,
     getPersonalStats,
     getSession,
+    isUncountedRun,
     listRecentLoot,
     listSessions,
     normalizeJournal,
