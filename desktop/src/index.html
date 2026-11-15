@@ -50,6 +50,10 @@
           <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#gear"/></svg>
           <span data-i18n="nav.settings">Ayarlar</span>
         </button>
+        <button class="nav-btn" data-page="guide">
+          <svg class="icon" width="14" height="14" aria-hidden="true"><use href="assets/icons.svg#info"/></svg>
+          <span data-i18n="nav.guide">Guide</span>
+        </button>
       </nav>
       <div class="user-info">
         <span id="username">Misafir</span>
@@ -1161,6 +1165,22 @@
           </div>
         </div>
       </section>
+
+      <!-- Guide Page: drawn by guide.js -->
+      <section id="guide-page" class="page">
+        <div class="page-header guide-header">
+          <div>
+            <h2 data-i18n="guide.title">Guide</h2>
+            <p class="page-subtitle" data-i18n="guide.intro">Short answers to what new players ask first.</p>
+          </div>
+          <div class="currency-search-field">
+            <svg class="icon currency-search-glyph" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#search"/></svg>
+            <input type="search" id="guide-search" class="currency-search guide-search" autocomplete="off" placeholder="Search the guide" data-i18n-placeholder="guide.search" aria-label="Search the guide" data-i18n-aria="guide.searchAria">
+          </div>
+        </div>
+        <div id="guide-list" class="guide-list"></div>
+        <p id="guide-empty" class="guide-empty" data-i18n="guide.empty" hidden>Nothing in the guide matches that.</p>
+      </section>
     </main>
 
     <!-- Toast Notifications -->
@@ -1178,6 +1198,8 @@
   <script src="modules/profitCurrencyModel.js"></script>
   <script src="modules/profitTierModel.js"></script>
   <script src="modules/currencyRowWindowModel.js"></script>
+  <script src="modules/guideModel.js"></script>
   <script src="app.js"></script>
+  <script src="guide.js"></script>
 </body>
 </html>
