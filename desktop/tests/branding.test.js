@@ -130,7 +130,8 @@ test('desktop development script runs plain Electron', () => {
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 
   assert.equal(packageJson.scripts.dev, 'electron . --dev');
-  assert.equal(packageJson.author?.name, 'Furkan Tasci');
+  // Windows shows the author as the publisher under Installed apps.
+  assert.equal(packageJson.author?.name, 'JuiceJournal Team');
   assert.equal(fs.existsSync(path.join(desktopDir, 'scripts', 'start-dev.js')), false);
 });
 
