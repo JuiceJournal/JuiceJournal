@@ -8,6 +8,7 @@ const {
   getActiveSession,
   getPersonalStats,
   getSession,
+  isUncountedRun,
   listRecentLoot,
   listSessions,
   markLootUnread,
@@ -527,4 +528,58 @@ test('a run keeps what its unread cells looked like until the player names one',
   const byName = dropUnreadCandidate(named.journal, 's1', { index: 0, name: 'Omen of Light' }, { now: NOW });
   assert.deepEqual(byName.session.lootUnreadCandidates.map((entry) => entry.names[0]), ['Essence of the Body']);
   assert.equal(dropUnreadCandidate(byName.journal, 's1', { index: 0, name: 'Chaos Orb' }, { now: NOW }).session, byName.session);
+});
+
+test('a finished run with no loot is uncounted: its entry cost alone is not a loss', () => {
+  const started = startedJournal({ costChaos: 40 }).journal;
+  assert.equal(isUncountedRun(getSession(started, 'session-1')), false, 'a running map shows its live profit');
+
+  const ended = endSession(started, 'session-1', {}, { now: NOW });
+  assert.equal(ended.session.profitChaos, -40);
+  assert.equal(isUncountedRun(ended.session), true);
+  assert.equal(listSessions(ended.journal).sessions[0].noLoot, true);
+
+  const withLoot = addLoot(ended.journal, 'session-1', [{ itemName: 'Chaos Orb', quantity: 5, chaosValue: 1 }], { createId: idFactory('loot'), now: NOW });
+  assert.equal(isUncountedRun(withLoot.session), false);
+  assert.equal(listSessions(withLoot.journal).sessions[0].noLoot, false);
+
+  // Loot worth nothing is still loot that was counted.
+  const unpriced = addLoot(ended.journal, 'session-1', [{ itemName: 'Unknown Thing', quantity: 1, chaosValue: 0 }], { createId: idFactory('loot'), now: NOW });
+  assert.equal(isUncountedRun(unpriced.session), false);
+
+  // A cost edit moves the profit by the change, which can leave it a rounding error away from minus the cost.
+  const edited = updateCost(endSession(startedJournal({ costChaos: 3 }).journal, 'session-1', {}, { now: NOW }).journal, 'session-1', 0.1, { now: NOW });
+  assert.notEqual(edited.session.profitChaos, -0.1);
+  assert.equal(isUncountedRun(edited.session), true);
+
+  // A stash diff ends a run with final totals and no loot entries.
+  const diffed = endSession(started, 'session-1', { totalLootChaos: 0, profitChaos: -55 }, { now: NOW });
+  assert.equal(isUncountedRun(diffed.session), false);
+  // A list row has the item count in place of the entries.
+  assert.equal(isUncountedRun({ status: 'completed', lootCount: 3, totalLootChaos: 0, profitChaos: 0, costChaos: 0 }), false);
+  assert.equal(isUncountedRun({ status: 'completed', lootCount: 0, totalLootChaos: 0, profitChaos: -40, costChaos: 40 }), true);
+});
+
+test('getPersonalStats leaves uncounted runs out of the profit and its averages', () => {
+  const localNoon = new Date(2026, 9, 21, 12, 0, 0);
+  let journal = { sessions: [] };
+  const start = (id, hour) => startedJournal({ costChaos: 40, startedAt: new Date(2026, 9, 21, hour, 0, 0).toISOString() }, journal, id).journal;
+  const endAt = (hour) => new Date(2026, 9, 21, hour, 30, 0).toISOString();
+
+  journal = endSession(start('counted', 9), 'counted', { endedAt: endAt(9), totalLootChaos: 140, profitChaos: 100 }, { now: localNoon }).journal;
+  journal = endSession(start('uncounted-1', 10), 'uncounted-1', { endedAt: endAt(10) }, { now: localNoon }).journal;
+  journal = endSession(start('uncounted-2', 11), 'uncounted-2', { endedAt: endAt(11) }, { now: localNoon }).journal;
+
+  const { summary } = getPersonalStats(journal, { period: 'daily', now: localNoon });
+
+  assert.equal(summary.totalSessions, 3, 'every map played still counts as a map');
+  assert.equal(summary.totalDuration, 5400);
+  assert.equal(summary.totalProfit, 100);
+  assert.equal(summary.avgProfitPerMap, 100);
+  assert.equal(summary.avgProfitPerHour, 200);
+
+  const none = getPersonalStats({ sessions: journal.sessions.filter((session) => session.id !== 'counted') }, { period: 'daily', now: localNoon });
+  assert.equal(none.summary.totalProfit, 0);
+  assert.equal(none.summary.avgProfitPerMap, 0);
+  assert.equal(none.summary.avgProfitPerHour, 0);
 });
