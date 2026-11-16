@@ -290,7 +290,7 @@ test('currency market smoke: bundled art for rows without art, a localized type,
       window.applyTranslations();
       return labels;
     });
-    expect(ariaInTurkish).toEqual(['Kucult', 'Kapat', "Session'lari oyuna gore filtrele"]);
+    expect(ariaInTurkish).toEqual(['Küçült', 'Kapat', "Session'ları oyuna göre filtrele"]);
 
     // A search that matches nothing offers to clear it.
     await page.locator('#currency-search').fill('zzzz');

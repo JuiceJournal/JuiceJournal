@@ -1526,6 +1526,11 @@ function renderCharacterSummaryCard() {
       ? `${visual.classLabel} · ${visual.baseClassLabel}`
       : visual.classLabel;
     elements.characterClass.textContent = isReady ? classChip : window.t('dashboard.unknownClass');
+    if (isReady) {
+      elements.characterClass.setAttribute?.('lang', 'en');
+    } else {
+      elements.characterClass.removeAttribute?.('lang');
+    }
   }
   if (elements.characterLevel) {
     elements.characterLevel.textContent = isReady && summary.level ? String(summary.level) : '—';
@@ -4601,6 +4606,15 @@ function renderLatestMapResult() {
   elements.lastMapResultCard.dataset.resultState = 'ready';
   // Map results store the English 'No farm type' fallback, so it is translated when shown.
   elements.lastMapResultFarmType.textContent = !latest.farmType ? window.t('dashboard.unknownFarmType') : latest.farmType === 'No farm type' ? window.t('dashboard.noFarmType') : latest.farmType;
+  // The label is uppercase. A built-in farm type's name is English, so it keeps English capitals; the translated
+  // fallbacks and a player's own farm type follow the page's language.
+  const builtInFarmName = Boolean(latest.farmType) && latest.farmType !== 'No farm type'
+    && !window.farmTypeModel?.isCustomFarmTypeId?.(latest.farmTypeId || latest.farmType);
+  if (builtInFarmName) {
+    elements.lastMapResultFarmType.setAttribute?.('lang', 'en');
+  } else {
+    elements.lastMapResultFarmType.removeAttribute?.('lang');
+  }
   if (typeof applyFarmType === 'function') {
     applyFarmType(elements.lastMapResultFarmType, latest.farmTypeId || latest.farmType);
   }
@@ -5542,7 +5556,7 @@ function updateActiveSessionUI() {
         <span class="session-live-dot" aria-hidden="true"></span>
         <strong class="session-live-map">${escapeHTML(session.mapName || window.t('misc.unknownMap'))}</strong>
         ${session.mapTier ? `<span class="session-live-chip">T${escapeHTML(session.mapTier)}</span>` : ''}
-        ${farmTypeId ? `<span class="session-live-farm"${farmTypeAttr(farmTypeId)}>${typeof farmTypeIconHTML === 'function' ? farmTypeIconHTML(farmTypeId) : ''}${escapeHTML(getSessionFarmTypeLabel(session))}</span>` : ''}
+        ${farmTypeId ? `<span class="session-live-farm"${farmTypeAttr(farmTypeId)}${window.farmTypeModel?.isCustomFarmTypeId?.(farmTypeId) ? '' : ' lang="en"'}>${typeof farmTypeIconHTML === 'function' ? farmTypeIconHTML(farmTypeId) : ''}${escapeHTML(getSessionFarmTypeLabel(session))}</span>` : ''}
       </div>
       <div class="session-live-tiles">
         <div class="session-live-tile">
@@ -5824,7 +5838,7 @@ function renderFarmingHubRuns() {
     return `
       <article class="farming-hub-run">
         <div class="farming-hub-run-main">
-          <div class="farming-hub-run-kicker">${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(run.league || 'Standard')} / ${escapeHTML(author)}</div>
+          <div class="farming-hub-run-kicker" lang="en">${poeVersion === 'poe2' ? 'PoE 2' : 'PoE 1'} / ${escapeHTML(run.league || 'Standard')} / ${escapeHTML(author)}</div>
           <h3${typeof farmTypeAttr === 'function' ? farmTypeAttr(run.farmType) : ''}>${escapeHTML(run.farmType || window.t('dashboard.unknownFarmType'))}</h3>
           <p>${escapeHTML(run.setupDescription || window.t('farmingHub.noSetupNotes'))}</p>
         </div>

@@ -197,7 +197,7 @@ test('login art column describes shipped features and translates every line', ()
   const html = fs.readFileSync(indexHtmlPath, 'utf8');
   const art = html.match(/<div class="modal-art">([\s\S]*?)<div class="modal-panel/)[1];
   // The brand name stays as is in every locale.
-  const copy = art.replace(/<div class="modal-logo">[\s\S]*?<span>Juice Journal<\/span>\s*<\/div>/, '');
+  const copy = art.replace(/<div class="modal-logo">[\s\S]*?<span lang="en">Juice Journal<\/span>\s*<\/div>/, '');
   const context = vm.createContext({ window: {}, document: { querySelectorAll: () => [] } });
   vm.runInContext(fs.readFileSync(path.join(desktopDir, 'src', 'modules', 'translations.js'), 'utf8'), context);
   const { en, tr } = context.window.Translations;

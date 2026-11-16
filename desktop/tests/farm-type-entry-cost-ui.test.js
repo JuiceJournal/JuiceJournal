@@ -335,7 +335,7 @@ test('the idle card lays the setup block out where the farm picker was, and a ru
   assert.doesNotMatch(css, /data-session-state="active"\] \.session-(setup|cost-field)/);
 });
 
-test('the Entry cost strings exist in en and tr, with the tr ones in plain ASCII', () => {
+test('the Entry cost strings exist in en and tr', () => {
   const source = fs.readFileSync(translationsJsPath, 'utf8');
   const keys = [
     'dashboard.entryCost',
@@ -352,6 +352,5 @@ test('the Entry cost strings exist in en and tr, with the tr ones in plain ASCII
     const lines = source.split(/\r?\n/).filter((line) => line.trimStart().startsWith(`'${key}':`));
     assert.equal(lines.length, 2, `${key} has an en and a tr string`);
     assert.notEqual(lines[0].split(': ').slice(1).join(': '), lines[1].split(': ').slice(1).join(': '));
-    assert.match(lines[0], /^[\x20-\x7e]+$/);
   }
 });

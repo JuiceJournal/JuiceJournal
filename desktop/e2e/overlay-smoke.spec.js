@@ -529,9 +529,9 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     }, {
       durationMs: 1500
     });
-    await expect(overlayWindow.locator('[data-overlay-kicker-label]')).toHaveText('Map Tamamlandi');
+    await expect(overlayWindow.locator('[data-overlay-kicker-label]')).toHaveText('Map Tamamlandı');
     await expect(overlayWindow.locator('[data-overlay-primary]')).toContainText('Farm tipi yok');
-    await expect(overlayWindow.locator('[data-overlay-secondary]')).toHaveText('3 item sayildi');
+    await expect(overlayWindow.locator('[data-overlay-secondary]')).toHaveText('3 item sayıldı');
     await expect(overlayWindow.locator('[data-overlay-meta]')).toHaveText('4dk 05sn');
     await expect(overlayWindow.locator('[data-overlay-pin]')).toHaveText('Sabitle');
     await expect(overlayWindow.locator('[data-overlay-dismiss]')).toHaveText('Kapat');
@@ -544,10 +544,10 @@ test('overlay smoke: launches app, signs in via poe oauth stub, and shows runtim
     }));
     await expect(overlayWindow.locator('main[data-overlay-mode="start-map-prompt"]')).toBeVisible();
     await expect(overlayWindow.locator('[data-overlay-kicker-label]')).toHaveText('Yeni Map');
-    await expect(overlayWindow.locator('[data-overlay-secondary]')).toContainText('Farm tipi sec');
+    await expect(overlayWindow.locator('[data-overlay-secondary]')).toContainText('Farm tipi seç');
     await expect(overlayWindow.locator('[data-farm-type-id=""]')).toHaveText('Farm tipi yok');
-    await expect(overlayWindow.locator('[data-overlay-start-submit]')).toHaveText("Map'i Baslat");
-    await expect(overlayWindow.locator('[data-overlay-start-cancel]')).toHaveText('Iptal');
+    await expect(overlayWindow.locator('[data-overlay-start-submit]')).toHaveText("Map'i Başlat");
+    await expect(overlayWindow.locator('[data-overlay-start-cancel]')).toHaveText('İptal');
     await expectCardFits();
     await overlayWindow.locator('[data-overlay-start-cancel]').click();
   } catch (error) {

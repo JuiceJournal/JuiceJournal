@@ -52,6 +52,16 @@
     if (element) { element.textContent = value || ''; }
   }
 
+  // The kicker is uppercase. The app's name keeps English capitals; a translated label follows the page's language.
+  function setKicker(value, english = false) {
+    setText(el.kickerLabel, value);
+    if (english) {
+      el.kickerLabel?.setAttribute('lang', 'en');
+    } else {
+      el.kickerLabel?.removeAttribute('lang');
+    }
+  }
+
   // Game art for the top drops. The overlay CSP only allows local images: bundled files for the core currencies
   // (same names and same-game rule as the main window's loot rows), else the main-process icon cache as a file://
   // URL, keyed by the remote URL; '' while loading or when the icon is unavailable.
@@ -298,7 +308,7 @@
 
   /* ── Mode: Runtime / Waiting ── */
   function renderRuntimeMode(state) {
-    setText(el.kickerLabel, 'Juice Journal');
+    setKicker('Juice Journal', true);
     setPrimary(state.primaryLine || root.t('overlay.waitingForGame'));
     setSecondary(state.secondaryLine || '');
     setText(el.meta, state.metaLine || '');
@@ -314,7 +324,7 @@
     var itemCount = Math.max(0, parseInt(result.lootItemCount, 10) || 0);
     // A player can name a farm type anything, "constructor" included.
     var farmTypeKey = Object.prototype.hasOwnProperty.call(STORED_FARM_TYPE_KEYS, result.farmType) ? STORED_FARM_TYPE_KEYS[result.farmType] : null;
-    setText(el.kickerLabel, root.t(result.lootUncounted ? 'overlay.mapCompleteUncounted' : 'overlay.mapComplete'));
+    setKicker(root.t(result.lootUncounted ? 'overlay.mapCompleteUncounted' : 'overlay.mapComplete'));
     setPrimary(
       farmTypeKey ? root.t(farmTypeKey) : (result.farmType || root.t('overlay.completedMap')),
       result.noLoot ? null : createProfitValue(result.netProfit, rates, poeVersion),
@@ -346,7 +356,7 @@
 
   /* ── Mode: Inventory Status ── */
   function renderInventoryStatusMode(state) {
-    setText(el.kickerLabel, root.t('overlay.inventory'));
+    setKicker(root.t('overlay.inventory'));
     setPrimary(state.primaryLine || '');
     setSecondary(state.secondaryLine || '');
     setText(el.meta, '');
@@ -355,7 +365,7 @@
   /* ── Mode: Start Map Prompt ── */
   function renderStartMapPrompt(state) {
     var prompt = (state.startMapPrompt && typeof state.startMapPrompt === 'object') ? state.startMapPrompt : {};
-    setText(el.kickerLabel, root.t('overlay.newMap'));
+    setKicker(root.t('overlay.newMap'));
     setPrimary(prompt.mapName || state.primaryLine || root.t('misc.unknownMap'));
     setSecondary(state.secondaryLine || '');
     // "starts in 6s" while the prompt counts down to starting the map on its own.
@@ -481,7 +491,7 @@
 
   /* ── Mode: Character Prompt ── */
   function renderCharacterPrompt(state) {
-    setText(el.kickerLabel, root.t('dashboard.playingAs'));
+    setKicker(root.t('dashboard.playingAs'));
     setPrimary(state.primaryLine || '');
     setSecondary(state.secondaryLine || '');
     setText(el.meta, state.metaLine || '');

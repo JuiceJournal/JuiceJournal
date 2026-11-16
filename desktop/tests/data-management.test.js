@@ -545,7 +545,7 @@ test('the Clear logs confirm follows the app language', async (t) => {
   assert.deepEqual(plain(await context.clearLogs()), { canceled: true });
 
   const options = plain(calls.dialog[0][1]);
-  assert.deepEqual(options.buttons, ['Temizle', 'Iptal']);
+  assert.deepEqual(options.buttons, ['Temizle', 'İptal']);
   assert.equal(options.title, MAIN_PROCESS_TRANSLATIONS.tr.dataClearLogsTitle);
   assert.equal(options.message, MAIN_PROCESS_TRANSLATIONS.tr.dataClearLogsMessage);
   assert.equal(options.detail, MAIN_PROCESS_TRANSLATIONS.tr.dataClearLogsDetail);

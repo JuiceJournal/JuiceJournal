@@ -923,7 +923,7 @@ test('a map started without a name is named plainly, and the prompt does not ask
 
   const source = fs.readFileSync(mainJsPath, 'utf8');
   assert.match(source, /promptMessage: 'Start this map without a name\?'/);
-  assert.match(source, /promptMessage: 'Map adsiz baslatilsin mi\?'/);
+  assert.match(source, /promptMessage: 'Map adsız başlatılsın mı\?'/);
 });
 
 function loadTrayStart(response) {

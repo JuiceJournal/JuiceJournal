@@ -356,16 +356,16 @@ test('overlay lines and clocks follow the language, and an untranslated language
   const session = deriveOverlayState({ enabled: true, now, language, session: { status: 'active', elapsedSeconds: 70 } });
   assert.equal(session.primaryLine, 'Bilinmeyen Map');
   assert.equal(session.secondaryLine, 'Farm tipi yok');
-  assert.equal(session.metaLine, 'gecen sure 1dk 10sn');
-  assert.equal(formatOverlayClock(session.clock, now + 5000, language), 'gecen sure 1dk 15sn');
+  assert.equal(session.metaLine, 'geçen süre 1dk 10sn');
+  assert.equal(formatOverlayClock(session.clock, now + 5000, language), 'geçen süre 1dk 15sn');
 
   const prompt = deriveOverlayState({ enabled: true, now, language, startMapPrompt: {} });
   assert.equal(prompt.primaryLine, 'Bilinmeyen Map');
-  assert.equal(prompt.secondaryLine, 'Farm tipi sec');
-  assert.equal(prompt.metaLine, 'map baslangicini onayla');
+  assert.equal(prompt.secondaryLine, 'Farm tipi seç');
+  assert.equal(prompt.metaLine, 'map başlangıcını onayla');
 
   const timedPrompt = deriveOverlayState({ enabled: true, now, language, startMapPrompt: { expiresAt: now + 7000 } });
-  assert.equal(timedPrompt.metaLine, '7 sn icinde baslar');
+  assert.equal(timedPrompt.metaLine, '7 sn içinde başlar');
 
   const characterPrompt = (characters) => deriveOverlayState({
     enabled: true,
@@ -385,8 +385,22 @@ test('overlay lines and clocks follow the language, and an untranslated language
     runtime: { summary: { status: 'active', totalActiveSeconds: 60 } }
   });
   assert.equal(runtime.primaryLine, 'Karakter senkronu gerekli');
-  assert.equal(runtime.secondaryLine, 'Bolge bilgisi bekleniyor');
+  assert.equal(runtime.secondaryLine, 'Bölge bilgisi bekleniyor');
   assert.equal(runtime.metaLine, 'Map 0:00 · Toplam 1:00');
 
-  assert.equal(deriveOverlayState({ enabled: true, now, language: 'de', startMapPrompt: {} }).metaLine, 'confirm map start');
+  // A language with its own file reads from it, clocks included; one the app does not know reads English.
+  const german = require('../src/modules/locales/de.js').overlay;
+  assert.equal(deriveOverlayState({ enabled: true, now, language: 'de', startMapPrompt: {} }).metaLine, german.confirmMapStart);
+  assert.notEqual(german.confirmMapStart, 'confirm map start');
+  assert.equal(
+    deriveOverlayState({ enabled: true, now, language: 'de', startMapPrompt: { expiresAt: now + 7000 } }).metaLine,
+    german.startsIn.replace('{seconds}', '7')
+  );
+  assert.equal(
+    deriveOverlayState({ enabled: true, now, language: 'de', session: { status: 'active', elapsedSeconds: 70 } }).metaLine,
+    german.elapsed.replace('{time}', `1${german.minutes} 10${german.seconds}`)
+  );
+  for (const unknown of ['xx', 'constructor', undefined]) {
+    assert.equal(deriveOverlayState({ enabled: true, now, language: unknown, startMapPrompt: {} }).metaLine, 'confirm map start');
+  }
 });

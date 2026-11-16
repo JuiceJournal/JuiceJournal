@@ -184,7 +184,7 @@ test('desktop locale dictionaries expose the full english key set after fallback
   }
 });
 
-test('desktop keys new in the Hub, Currency and Settings pass have their own ASCII Turkish strings', () => {
+test('desktop keys new in the Hub, Currency and Settings pass have their own Turkish strings', () => {
   // tr falls back to en, so the coverage tests above stay green when a Turkish string is missing.
   const translations = loadDesktopTranslations();
   const newKeys = [
@@ -202,11 +202,10 @@ test('desktop keys new in the Hub, Currency and Settings pass have their own ASC
   for (const key of newKeys) {
     assert.ok(translations.en[key], `Missing en string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
-    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
   }
 });
 
-test('desktop bug report keys have their own ASCII Turkish strings', () => {
+test('desktop bug report keys have their own Turkish strings', () => {
   const translations = loadDesktopTranslations();
   const newKeys = [
     'settings.reportBug',
@@ -231,14 +230,13 @@ test('desktop bug report keys have their own ASCII Turkish strings', () => {
   for (const key of newKeys) {
     assert.ok(translations.en[key], `Missing en string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
-    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
   }
   // The issue form, README and CONTRIBUTING quote this label.
   assert.equal(translations.en['settings.reportBug'], 'Report a bug');
   assert.match(translations.tr['toast.bugReportOpenManually'], /\{url\}/);
 });
 
-test('desktop Data tab keys have their own ASCII Turkish strings', () => {
+test('desktop Data tab keys have their own Turkish strings', () => {
   const translations = loadDesktopTranslations();
   const newKeys = [
     'settings.data',
@@ -262,11 +260,10 @@ test('desktop Data tab keys have their own ASCII Turkish strings', () => {
   for (const key of newKeys) {
     assert.ok(translations.en[key], `Missing en string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
-    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
   }
   // The renamed log has one name in both languages.
   assert.equal(translations.en['settings.auditTrail'], 'Activity log');
-  assert.equal(translations.tr['settings.auditTrail'], 'Etkinlik gunlugu');
+  assert.equal(translations.tr['settings.auditTrail'], 'Etkinlik günlüğü');
   // The README quotes these labels.
   assert.equal(translations.en['settings.clearLogs'], 'Clear logs');
   assert.equal(translations.en['settings.openDataFolder'], 'Open folder');
@@ -284,7 +281,7 @@ test('desktop Data tab keys have their own ASCII Turkish strings', () => {
   }
 });
 
-test('desktop Delete everything keys have their own ASCII Turkish strings', () => {
+test('desktop Delete everything keys have their own Turkish strings', () => {
   const translations = loadDesktopTranslations();
   const newKeys = [
     'settings.deleteAll',
@@ -303,7 +300,6 @@ test('desktop Delete everything keys have their own ASCII Turkish strings', () =
   for (const key of newKeys) {
     assert.ok(translations.en[key], `Missing en string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
-    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
   }
   // The README quotes this label.
   assert.equal(translations.en['settings.deleteAll'], 'Delete everything');
@@ -313,10 +309,10 @@ test('desktop Delete everything keys have their own ASCII Turkish strings', () =
     assert.doesNotMatch(translations[language]['toast.deleteAllFailed'], /restart|yeniden baslat/i, language);
   }
   // Shared runs are "runlar" everywhere else in the Turkish UI.
-  assert.match(translations.tr['settings.deleteAllKept'], /paylastigin runlar/);
+  assert.match(translations.tr['settings.deleteAllKept'], /paylaştığın runlar/);
 });
 
-test('desktop notice keys have their own ASCII Turkish strings', () => {
+test('desktop notice keys have their own Turkish strings', () => {
   const translations = loadDesktopTranslations();
   const newKeys = [
     'toast.dismiss', 'toast.mapProfit', 'toast.mapLoss', 'toast.mapUnpriced', 'toast.mapNoLoot',
@@ -341,7 +337,6 @@ test('desktop notice keys have their own ASCII Turkish strings', () => {
   for (const key of newKeys) {
     assert.ok(translations.en[key], `Missing en string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
-    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
   }
   // The inline sign-in line fills in its reason, and the hint names the link below it by its own label.
   assert.match(translations.en['login.failedInline'], /\{reason\}/);
@@ -353,7 +348,7 @@ test('desktop notice keys have their own ASCII Turkish strings', () => {
   assert.ok(translations.tr['toast.tryAgain'].includes(`${translations.tr['nav.settings']} > ${translations.tr['settings.about']}`));
 });
 
-test('desktop journal notice keys have their own ASCII Turkish strings', () => {
+test('desktop journal notice keys have their own Turkish strings', () => {
   const translations = loadDesktopTranslations();
   const newKeys = [
     'journal.unreadableTitle', 'journal.unreadableBody', 'journal.startNew', 'journal.openDataFolder',
@@ -364,14 +359,13 @@ test('desktop journal notice keys have their own ASCII Turkish strings', () => {
   for (const key of newKeys) {
     assert.ok(translations.en[key], `Missing en string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
-    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
     assert.doesNotMatch(translations.en[key], /!|successfully/i, `en string for ${key}`);
   }
   // The README quotes this label.
   assert.equal(translations.en['journal.startNew'], 'Start a new journal');
 });
 
-test('desktop dashboard card, time and reset dialog keys have their own ASCII Turkish strings', () => {
+test('desktop dashboard card, time and reset dialog keys have their own Turkish strings', () => {
   const translations = loadDesktopTranslations();
   const newKeys = [
     'dashboard.noCharacterSelected', 'dashboard.unknownClass', 'dashboard.unknownLeague',
@@ -386,7 +380,6 @@ test('desktop dashboard card, time and reset dialog keys have their own ASCII Tu
   for (const key of newKeys) {
     assert.ok(translations.en[key], `Missing en string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
-    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
   }
   for (const key of ['time.minutesAgo', 'time.hoursAgo', 'time.daysAgo']) {
     assert.match(translations.en[key], /\{count\}/, key);
@@ -394,7 +387,7 @@ test('desktop dashboard card, time and reset dialog keys have their own ASCII Tu
   }
 });
 
-test('desktop dashboard, sessions, hub and modal labels have their own ASCII Turkish strings', () => {
+test('desktop dashboard, sessions, hub and modal labels have their own Turkish strings', () => {
   const translations = loadDesktopTranslations();
   const newKeys = [
     'game.notRunning', 'dashboard.farmType', 'dashboard.noFarmType', 'dashboard.clearFarmType', 'mapResult.notCalculated',
@@ -411,15 +404,18 @@ test('desktop dashboard, sessions, hub and modal labels have their own ASCII Tur
   for (const key of newKeys) {
     assert.ok(translations.en[key], `Missing en string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
-    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
   }
 });
 
-test('every Turkish desktop string is ASCII', () => {
+test('Turkish desktop strings are written with Turkish letters, not folded to ASCII', () => {
   const translations = loadDesktopTranslations();
+  const values = Object.values(translations.tr);
+  assert.ok(values.filter((value) => /[çğıİöşüÇĞÖŞÜ]/.test(value)).length > 400);
+  // Common words as the folded copy wrote them.
+  const folded = /(^|[^\p{L}])(icin|degil|cikis|duzenle|ac[iı]k|kapali|yukle\p{L}*|guncelle\p{L}*|sayilmadi|baslat\p{L}*|olc\p{L}*|goster\p{L}*|envanterini ac|harita\p{L}* gir)([^\p{L}]|$)/iu;
   for (const [key, value] of Object.entries(translations.tr)) {
     if (value !== translations.en[key]) {
-      assert.match(value, /^[\x20-\x7e]*$/, `tr string for ${key} is not ASCII`);
+      assert.doesNotMatch(value.replace(/açık/giu, ''), folded, `tr string for ${key} looks ASCII-folded`);
     }
   }
 });
@@ -452,7 +448,6 @@ test('desktop aria-labels and titles are bound to translations in en and tr', ()
     assert.ok(key, `${attribute} without ${binding}: ${tag}`);
     assert.ok(translations.en[key], `Missing en string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
-    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
   };
 
   const labelled = [...html.matchAll(/<[a-z][^>]*\saria-label="[^"]*"[^>]*>/g)].map(([tag]) => tag);
@@ -498,7 +493,7 @@ test('applyTranslations gives the index.html aria-labels the current language', 
 
   for (const [language, minimize, maximize, close, drawerClose, sessionGame] of [
     ['en', 'Minimize', 'Maximize', 'Close', 'Close', 'Filter sessions by game'],
-    ['tr', 'Kucult', 'Buyut', 'Kapat', 'Kapat', "Session'lari oyuna gore filtrele"]
+    ['tr', 'Küçült', 'Büyüt', 'Kapat', 'Kapat', "Session'ları oyuna göre filtrele"]
   ]) {
     const context = vm.createContext({
       window: { _appState: { language } },
@@ -516,7 +511,7 @@ test('applyTranslations gives the index.html aria-labels the current language', 
     assert.equal(labelOf('session-version-filter'), sessionGame);
   }
   // The markup's own text is what shows before the first pass, and it is not Turkish.
-  assert.doesNotMatch(html, /aria-label="(?:Ana navigasyon|Kucult|Buyut|Kapat)"/);
+  assert.doesNotMatch(html, /aria-label="(?:Ana navigasyon|Küçült|Büyüt|Kapat)"/);
 });
 
 test('the Vaal and Runegraft rail tabs have their strings in en and tr', () => {
@@ -538,9 +533,9 @@ test('the PoE 2 rail tabs for the newer overviews have their strings in en and t
   }
 });
 
-test('the Turkish UI does not get Turkish case mapping on its ASCII-folded uppercase labels', () => {
-  // Chromium uppercases i to a dotted capital I under lang=tr; the tr copy has no dotless i, so it renders as en.
-  for (const [language, expected] of [['tr', 'en'], ['en', 'en'], ['de', 'de']]) {
+test('the page takes the language of the UI, so uppercase labels and fallback fonts follow it', () => {
+  // Chromium uppercases i to a dotted capital I under lang=tr, which is how Turkish writes it.
+  for (const [language, expected] of [['tr', 'tr'], ['en', 'en'], ['de', 'de'], ['zh-TW', 'zh-TW']]) {
     const documentElement = { lang: '' };
     const context = vm.createContext({
       window: { _appState: { language } },
@@ -605,7 +600,6 @@ test('main process dialogs use keys that exist in en and tr', () => {
     const key = `inventoryStatus_${kind}`;
     assert.ok(translations.en[key], `Missing en main process string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
-    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
   }
   assert.deepEqual(
     enKeys.filter((name) => name.startsWith('inventoryStatus_')).sort(),
@@ -613,12 +607,10 @@ test('main process dialogs use keys that exist in en and tr', () => {
   );
   // The first-read hint comes from the main process, not from a watcher status.
   assert.notEqual(translations.tr.inventoryStatus_firstRead, translations.en.inventoryStatus_firstRead);
-  assert.match(translations.tr.inventoryStatus_firstRead, /^[ -~]+$/);
   assert.ok(translations.en.inventoryStatusTitle);
   assert.notEqual(translations.tr.inventoryStatusTitle, translations.en.inventoryStatusTitle);
   for (const key of enKeys.filter((name) => name.startsWith('data'))) {
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
-    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
   }
   for (const key of [
     'dataClearLogsTitle', 'dataClearLogsMessage', 'dataClearLogsDetail', 'dataClearLogsConfirm', 'promptCancel',
@@ -650,7 +642,6 @@ test('main process dialogs use keys that exist in en and tr', () => {
   ]) {
     assert.ok(translations.en[key], `Missing en main process string for ${key}`);
     assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
-    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
   }
 });
 
@@ -675,7 +666,7 @@ test('web locale maps expose the full english key set through i18n composition',
   }
 });
 
-test('custom farm type strings exist in en and in ASCII Turkish, for every colour and icon', () => {
+test('custom farm type strings exist in en and in Turkish, for every colour and icon', () => {
   const translations = loadDesktopTranslations();
   const { CUSTOM_FARM_TYPE_COLORS, CUSTOM_FARM_TYPE_ICONS } = require('../src/modules/farmTypeModel');
   const appSource = read(path.join(desktopDir, 'src', 'app.js'));
@@ -692,7 +683,6 @@ test('custom farm type strings exist in en and in ASCII Turkish, for every colou
   for (const key of keys) {
     assert.ok(translations.en[key], `Missing en string for ${key}`);
     assert.ok(translations.tr[key], `Missing tr string for ${key}`);
-    assert.match(translations.tr[key], /^[\x20-\x7e]+$/, `tr string for ${key} is not ASCII`);
     if (!sameInBothLanguages.has(key)) {
       assert.notEqual(translations.tr[key], translations.en[key], `tr falls back to en for ${key}`);
     }

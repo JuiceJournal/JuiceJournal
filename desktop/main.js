@@ -151,80 +151,80 @@ if (!app.requestSingleInstanceLock()) {
 
 const MAIN_PROCESS_TRANSLATIONS = {
   tr: {
-    trayStillRunning: 'Uygulama sistem tepsisinde calismaya devam ediyor.',
+    trayStillRunning: 'Uygulama sistem tepsisinde çalışmaya devam ediyor.',
     trayHide: 'Pencereyi Gizle',
-    trayOpen: 'Ana Pencereyi Ac',
+    trayOpen: 'Ana Pencereyi Aç',
     trayDashboard: 'Dashboard',
-    traySessions: 'Sessionlar',
+    traySessions: "Session'lar",
     trayCurrency: 'Currency',
     traySettings: 'Ayarlar',
-    trayNewSession: 'Yeni Map Session',
-    trayQuit: 'Cikis',
+    trayNewSession: 'Yeni Map Başlat',
+    trayQuit: 'Çıkış',
     notificationAutoSession: 'Otomatik Session',
-    notificationTryAgain: 'Juice Journal uygulamasini ac ve tekrar dene.',
-    sessionStartFailed: 'Map baslatilamadi',
+    notificationTryAgain: 'Juice Journal uygulamasını aç ve tekrar dene.',
+    sessionStartFailed: 'Map başlatılamadı',
     sessionEndFailed: 'Map bitirilemedi',
-    journalUnreadableBody: 'Gunlugun okunamadi. Ne yapacagini gormek icin Juice Journal uygulamasini ac.',
-    mapProfitBody: 'Kazanc {value}c',
+    journalUnreadableBody: 'Günlüğün okunamadı. Ne yapacağını görmek için Juice Journal uygulamasını aç.',
+    mapProfitBody: 'Kazanç {value}c',
     mapLossBody: 'Zarar {value}c',
-    mapNoLootBody: 'Loot sayilmadi',
-    mapLootUnreadBody: 'Bazi yeni esyalar okunamadi; run detayindan ekleyebilirsin',
+    mapNoLootBody: 'Loot sayılmadı',
+    mapLootUnreadBody: 'Bazı yeni eşyalar okunamadı; run detayından ekleyebilirsin',
     inventoryStatusTitle: 'Envanter',
-    inventoryStatus_firstRead: 'Envanterini bir kez ac. I tusuna bas, sonraki map sayilsin.',
+    inventoryStatus_firstRead: 'Envanterini bir kez aç. I tuşuna bas, sonraki map sayılsın.',
     inventoryStatus_reading: 'Envanter okunuyor...',
-    inventoryStatus_saved: 'Envanter okundu. Haritaya hazirsin.',
-    inventoryStatus_noGain: 'Yeni loot bulunamadi.',
-    inventoryStatus_noBaseline: 'Bu map sayilamadi. Sonraki map sayilacak.',
-    inventoryStatus_notOpen: 'Once envanterini ac.',
-    inventoryStatus_covered: 'Itemlerin ustu kapali. Fareyi cek ve tekrar dene.',
-    inventoryStatus_inMap: 'Loot map bitince sayilir.',
-    inventoryStatus_unsupported: 'Bu oyunda henuz yok. Envanter okuma simdilik PoE 2 icin.',
-    inventoryStatus_notReady: 'Fiyatlar yukleniyor. Birazdan tekrar dene.',
-    inventoryStatus_failed: 'Envanter okunamadi. Tekrar dene.',
-    inventoryStatus_resolution: 'Bu cozunurlukte calismiyor. Envanter okuma simdilik 1440p pencere ister.',
+    inventoryStatus_saved: 'Envanter okundu. Haritaya hazırsın.',
+    inventoryStatus_noGain: 'Yeni loot bulunamadı.',
+    inventoryStatus_noBaseline: 'Bu map sayılamadı. Sonraki map sayılacak.',
+    inventoryStatus_notOpen: 'Önce envanterini aç.',
+    inventoryStatus_covered: 'İtemlerin üstü kapalı. Fareyi çek ve tekrar dene.',
+    inventoryStatus_inMap: 'Loot map bitince sayılır.',
+    inventoryStatus_unsupported: 'Bu oyunda henüz yok. Envanter okuma şimdilik PoE 2 için.',
+    inventoryStatus_notReady: 'Fiyatlar yükleniyor. Birazdan tekrar dene.',
+    inventoryStatus_failed: 'Envanter okunamadı. Tekrar dene.',
+    inventoryStatus_resolution: 'Bu çözünürlükte çalışmıyor. Envanter okuma şimdilik 1440p pencere ister.',
     inventoryStatus_saveFailed: 'Bu mapin lootu kaydedilemedi.',
     mapDuration: '{minutes}dk {seconds}sn',
     mapDurationSeconds: '{seconds}sn',
-    autoSessionBody: '{mapName} mapi baslatildi',
-    promptStart: 'Baslat',
-    promptCancel: 'Iptal',
+    autoSessionBody: '{mapName} mapi başlatıldı',
+    promptStart: 'Başlat',
+    promptCancel: 'İptal',
     promptTitle: 'Yeni Map Session',
-    promptMessage: 'Map adsiz baslatilsin mi?',
-    promptDetail: "Bilinmeyen Map olarak listelenir. Ad vermek icin map'i Dashboard'dan baslat.",
-    promptEndConfirm: 'Bitir ve baslat',
-    promptEndMessage: '{mapName} bitirilip yeni map baslatilsin mi?',
-    promptEndDetail: "Sonucunda yalnizca envanterinden okunan loot sayilir. Yeni map Bilinmeyen Map olarak listelenir. Ad vermek icin map'i Dashboard'dan baslat.",
+    promptMessage: 'Map adsız başlatılsın mı?',
+    promptDetail: "Bilinmeyen Map olarak listelenir. Ad vermek için map'i Dashboard'dan başlat.",
+    promptEndConfirm: 'Bitir ve başlat',
+    promptEndMessage: '{mapName} bitirilip yeni map başlatılsın mı?',
+    promptEndDetail: "Sonucunda yalnızca envanterinden okunan loot sayılır. Yeni map Bilinmeyen Map olarak listelenir. Ad vermek için map'i Dashboard'dan başlat.",
     unknownMap: 'Bilinmeyen Map',
-    auditLogin: 'Yerel kullanici girisi basarili',
-    auditLogout: 'Kullanici cikis yapti',
-    auditSessionStarted: '{mapName} session baslatildi',
-    auditSessionQueued: '{mapName} session senkron kuyruguna alindi',
-    auditSessionEnded: '{mapName} session tamamlandi',
-    auditSessionEndQueued: '{mapName} session bitisi kuyruga alindi',
-    auditLootQueued: '{count} loot senkron kuyruguna alindi',
-    auditPendingSyncFlushed: 'Bekleyen senkron islemleri denendi. Session: {sessions}, Loot: {loot}',
-    auditDiagnosticsExported: 'Diagnostik dosyasi disa aktarildi',
-    stashSnapshotTaken: 'Stash goruntusu alindi ({count} item)',
-    stashSnapshotFailed: 'Stash goruntusu alinamadi',
-    pricesSynced: 'Fiyatlar guncellendi ({count} item)',
-    pricesSyncFailed: 'Fiyat guncelleme basarisiz',
-    poeNotLinked: 'PoE hesabi bagli degil. Ayarlardan baglayabilirsiniz.',
-    profitCalculated: 'Kar hesaplandi: {value}c',
-    gameClosed: '{game} kapatildi',
-    poeNoAccountId: 'Path of Exile hesap kimligini gondermedi.',
-    poeDifferentAccount: 'Bu farkli bir Path of Exile hesabi. Hesap degistirmek icin cikis yap.',
-    dataClearLogsTitle: 'Loglari temizle',
-    dataClearLogsMessage: 'Etkinlik gunlugu ve hata logu temizlensin mi?',
-    dataClearLogsDetail: 'Bu bilgisayarda silinirler ve geri alinamaz. Oturumlarin, lootun, map sonuclarin ve ayarlarin kalir. Disa aktardigin diagnostik dosyalari ve kopyaladigin raporlar degismez.',
+    auditLogin: 'Yerel kullanıcı girişi başarılı',
+    auditLogout: 'Kullanıcı çıkış yaptı',
+    auditSessionStarted: '{mapName} session başlatıldı',
+    auditSessionQueued: '{mapName} session senkron kuyruğuna alındı',
+    auditSessionEnded: '{mapName} session tamamlandı',
+    auditSessionEndQueued: '{mapName} session bitişi senkron kuyruğuna alındı',
+    auditLootQueued: '{count} loot senkron kuyruğuna alındı',
+    auditPendingSyncFlushed: 'Bekleyen senkron işlemleri denendi. Session: {sessions}, Loot: {loot}',
+    auditDiagnosticsExported: 'Diagnostik dosyası dışa aktarıldı',
+    stashSnapshotTaken: 'Stash görüntüsü alındı ({count} item)',
+    stashSnapshotFailed: 'Stash görüntüsü alınamadı',
+    pricesSynced: 'Fiyatlar güncellendi ({count} item)',
+    pricesSyncFailed: 'Fiyat güncelleme başarısız',
+    poeNotLinked: "PoE hesabı bağlı değil. Ayarlar'dan bağlayabilirsiniz.",
+    profitCalculated: 'Kâr hesaplandı: {value}c',
+    gameClosed: '{game} kapatıldı',
+    poeNoAccountId: 'Path of Exile hesap kimliğini göndermedi.',
+    poeDifferentAccount: 'Bu farklı bir Path of Exile hesabı. Hesap değiştirmek için çıkış yap.',
+    dataClearLogsTitle: 'Logları temizle',
+    dataClearLogsMessage: 'Etkinlik günlüğü ve hata logu temizlensin mi?',
+    dataClearLogsDetail: 'Bu bilgisayarda silinirler ve geri alınamaz. Oturumların, lootun, map sonuçların ve ayarların kalır. Dışa aktardığın diagnostik dosyaları ve kopyaladığın raporlar değişmez.',
     dataClearLogsConfirm: 'Temizle',
-    dataNewJournalTitle: 'Yeni gunluk baslat',
-    dataNewJournalMessage: 'Yeni ve bos bir gunluk baslatilsin mi?',
-    dataNewJournalDetail: 'Gunluk dosyan okunamiyor. Veri klasorunde journal.broken-<tarih>-<saat>.json olarak saklanir; hicbir sey silinmez. Icindeki session ve lootlar uygulamada gorunmez; kayitli map sonuclarin kalir.',
-    dataNewJournalConfirm: 'Yeni gunluk baslat',
-    onlineSendTitle: 'Online ozellikleri kullan',
-    onlineSendMessage: '{server} adresine veri gonderilsin mi?',
-    onlineSendDetail: 'Giris bilgilerin ve paylasmayi sectigin farm run ve stash snapshot kayitlarin bu sunucuya gider. Sunucuyu sen calistiriyorsan ya da ona guveniyorsan devam et. Online ozellikleri Ayarlar bolumunden tekrar kapatabilirsin.',
-    onlineSendConfirm: 'Izin ver'
+    dataNewJournalTitle: 'Yeni günlük başlat',
+    dataNewJournalMessage: 'Yeni ve boş bir günlük başlatılsın mı?',
+    dataNewJournalDetail: 'Günlük dosyan okunamıyor. Veri klasöründe journal.broken-<tarih>-<saat>.json olarak saklanır; hiçbir şey silinmez. İçindeki session ve lootlar uygulamada görünmez; kayıtlı map sonuçların kalır.',
+    dataNewJournalConfirm: 'Yeni günlük başlat',
+    onlineSendTitle: 'Online özellikleri kullan',
+    onlineSendMessage: '{server} adresine veri gönderilsin mi?',
+    onlineSendDetail: 'Giriş bilgilerin ve paylaşmayı seçtiğin farm run ve stash snapshot kayıtların bu sunucuya gider. Sunucuyu sen çalıştırıyorsan ya da ona güveniyorsan devam et. Online özellikleri Ayarlar bölümünden tekrar kapatabilirsin.',
+    onlineSendConfirm: 'İzin ver',
   },
   en: {
     trayStillRunning: 'The app is still running in the system tray.',
@@ -539,9 +539,14 @@ let appUpdateState = null;
 let appUpdateInitialized = false;
 let appUpdateFlow = null;
 
+// English and Turkish are written above; each other language's file carries its main-process strings too.
+for (const code of ['de', 'fr', 'es', 'it', 'pt-BR', 'ru', 'ja', 'ko', 'zh-CN', 'zh-TW']) {
+  MAIN_PROCESS_TRANSLATIONS[code] = require(`./src/modules/locales/${code}.js`).main;
+}
+
 function getLanguage() {
   const lang = store.get('language');
-  return lang === 'tr' ? 'tr' : 'en';
+  return Object.prototype.hasOwnProperty.call(MAIN_PROCESS_TRANSLATIONS, lang) ? lang : 'en';
 }
 
 function t(key, values = {}) {
@@ -2974,7 +2979,7 @@ async function deleteAllLocalData() {
     }
     errorLogState.recent.clear();
 
-    // The raw value: getLanguage folds every language but Turkish to English.
+    // The raw value: getLanguage folds a language the main process has no strings for to English.
     try {
       const language = store.get('language');
       store.clear();
@@ -4000,7 +4005,7 @@ function updateOverlayWindow({ character, runtimeSession } = {}) {
   }
 
   applyOverlayWindowVisibility(overlayState);
-  // The raw value, as in the main window: getLanguage folds every language but Turkish to English.
+  // The raw value, as in the main window: getLanguage folds a language it has no strings for to English.
   overlayWindow.webContents.send('overlay-render-state', {
     ...overlayState,
     language: store.get('language'),

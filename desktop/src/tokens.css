@@ -118,7 +118,9 @@
   --duration-enter: 180ms;
 
   /* Type */
-  --font: 'Source Sans 3', -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Source Sans 3 is bundled for Latin only; Segoe UI draws Cyrillic, and the page's lang picks the system font for
+     Japanese, Korean and Chinese through sans-serif. */
+  --font: 'Source Sans 3', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-display: 'Cinzel', Georgia, serif;
   /* Both ship with Windows 10 and 11, so nothing is bundled or fetched. */
   --font-mono: 'Cascadia Mono', Consolas, monospace;

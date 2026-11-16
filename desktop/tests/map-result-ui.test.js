@@ -2343,7 +2343,7 @@ test('dashboard empty states start as the rich state in index.html', () => {
   assert.match(activeSession, /data-i18n="dashboard\.idleHint"/);
   assert.match(recentLoot, /<span class="item-slot empty-state-art"><svg[^>]*><use href="assets\/icons\.svg#chest"\/>/);
   assert.match(recentLoot, /data-i18n="dashboard\.noLoot"/);
-  assert.doesNotMatch(html, /Aktif map yok|Henuz loot eklenmedi/);
+  assert.doesNotMatch(html, /Aktif map yok|Henüz loot eklenmedi/);
   // The history card waits for its first result.
   assert.match(html, /<div class="card map-result-history-card" id="map-result-history-card" hidden>/);
 });
@@ -4834,7 +4834,7 @@ test('a running map shows a live hero, and the 1 s clock only rewrites the elaps
   assert.ok(harness.badgeClasses.has('is-active'));
   assert.match(harness.html(), /<strong class="session-live-map">Crimson Temple Map<\/strong>/);
   assert.match(harness.html(), /<span class="session-live-chip">T16<\/span>/);
-  assert.match(harness.html(), /<span class="session-live-farm" data-farm-type="ritual">Ritual<\/span>/);
+  assert.match(harness.html(), /<span class="session-live-farm" data-farm-type="ritual" lang="en">Ritual<\/span>/);
   assert.match(harness.html(), /data-profit-tier="rare"><span class="value-chip">\+3\.00 /);
   assert.match(harness.html(), /data-meme="pog"/);
   assert.doesNotMatch(harness.html(), /dashboard\.liveLoot|sessions\.cost/, 'no loot/cost line without a cost');
