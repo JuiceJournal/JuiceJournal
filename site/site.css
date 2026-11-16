@@ -432,15 +432,12 @@ h3 {
 .firstmap-node:hover { color: var(--ink-bright); }
 .firstmap-node:focus-visible, .firstmap-button:focus-visible { outline: 2px solid var(--ember-hot); outline-offset: 2px; }
 .firstmap-node.is-done { color: var(--ash); }
-.firstmap-node.is-done .firstmap-num { font-size: 0; background: var(--brass-dim); box-shadow: inset 0 0 0 1px var(--brass); }
-.firstmap-node.is-done .firstmap-num::before {
-  content: "";
-  width: 0.7rem;
-  height: 0.38rem;
-  margin-top: -0.15rem;
-  border: solid var(--ink-bright);
-  border-width: 0 0 2px 2px;
-  transform: rotate(-45deg);
+/* A done step shows a tick in place of its number. It is a drawing set in the middle of the square: a tick built from
+   two borders sat high and to the right. */
+.firstmap-node.is-done .firstmap-num {
+  font-size: 0;
+  background: var(--brass-dim) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23fffaf3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 1rem 1rem no-repeat;
+  box-shadow: inset 0 0 0 1px var(--brass);
 }
 .firstmap-node[aria-current="step"] { color: var(--ink-bright); font-weight: 700; }
 .firstmap-node[aria-current="step"] .firstmap-num {
