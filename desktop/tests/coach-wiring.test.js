@@ -79,7 +79,7 @@ test('every step and every message the model can return has its text in English 
   ]);
 
   const keys = [
-    'coach.title', 'coach.progress', 'coach.kicker', 'coach.hide', 'coach.showAgain',
+    'coach.title', 'coach.progress', 'coach.kicker', 'coach.hide', 'coach.doneTag', 'coach.showAgain',
     ...COACH_STEPS.map((step) => `coach.step.${step}`),
     ...[...messages].map((message) => `coach.msg.${message}`)
   ];
@@ -215,40 +215,81 @@ test('the steps take the first-read hint\'s place while they lead, and a counted
   assert.match(mainJs, /ipcMain\.handle\('set-coach-hidden', \(event, hidden\) => setCoachHidden\(hidden === true\)\);/);
 });
 
-test('the Dashboard card lists the five steps with the current one marked and says what it waits for', () => {
+test('the Dashboard card lights the current step on its rail, fills the flask and says what the step waits for', () => {
   const classes = new Set(['hidden']);
+  const properties = {};
+  const messageClasses = [];
   const elements = {
-    coachCard: { dataset: {}, classList: { toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)) } },
+    coachCard: {
+      dataset: {},
+      classList: { toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)) },
+      style: { setProperty: (name, value) => { properties[name] = value; } }
+    },
     coachProgress: { textContent: '' },
     coachSteps: { innerHTML: '' },
-    coachMessage: { textContent: '' }
+    coachMessage: { textContent: '', offsetWidth: 0, classList: { add: (name) => messageClasses.push(`+${name}`), remove: (name) => messageClasses.push(`-${name}`) } }
   };
-  const context = loadFunctions(appJs, ['setCoachState', 'renderCoach'], {
+  const context = loadFunctions(appJs, ['setCoachState', 'renderCoach', 'handleCoachStepClick'], {
     elements,
     state: {},
     window: { t: (key, values) => (values ? `${key}:${values.step}/${values.total}` : key), coachModel: { COACH_STEPS } },
     escapeHTML: (value) => String(value)
   });
+  vm.runInContext(appJs.match(/const COACH_STEP_MESSAGES = \{[^}]*\};/)[0].replace('const ', 'globalThis.'), context);
+  const rail = () => [...elements.coachSteps.innerHTML.matchAll(
+    /<li data-step-state="(\w+)"><button type="button" class="coach-node" data-coach-step="(\w+)"( aria-current="step")? aria-pressed="(true|false)"><span class="coach-node-mark" aria-hidden="true">(\d?)<\/span><span class="coach-node-name">([^<]+)<\/span><\/button><\/li>/g
+  )].map(([, stepState, id, current, pressed, number, name]) => [stepState, id, Boolean(current), pressed === 'true', number, name]);
+  const press = (step) => context.handleCoachStepClick({ target: { closest: () => ({ getAttribute: () => step }) } });
 
   context.setCoachState({ step: 'inventory', index: 3, total: 5, message: 'openInventory', status: 'do' });
   assert.equal(classes.has('hidden'), false);
   assert.equal(elements.coachCard.dataset.coachStatus, 'do');
   assert.equal(elements.coachProgress.textContent, 'coach.progress:3/5');
   assert.equal(elements.coachMessage.textContent, 'coach.msg.openInventory');
-  assert.deepEqual(
-    [...elements.coachSteps.innerHTML.matchAll(/<li data-step-state="(\w+)"( aria-current="step")?>([^<]+)<\/li>/g)].map((match) => [match[1], Boolean(match[2]), match[3]]),
-    [
-      ['done', false, 'coach.step.game'],
-      ['done', false, 'coach.step.ready'],
-      ['current', true, 'coach.step.inventory'],
-      ['todo', false, 'coach.step.map'],
-      ['todo', false, 'coach.step.count']
-    ]
-  );
+  // A done step shows a tick in place of its number.
+  assert.deepEqual(rail(), [
+    ['done', 'game', false, false, '', 'coach.step.game'],
+    ['done', 'ready', false, false, '', 'coach.step.ready'],
+    ['current', 'inventory', true, false, '3', 'coach.step.inventory'],
+    ['todo', 'map', false, false, '4', 'coach.step.map'],
+    ['todo', 'count', false, false, '5', 'coach.step.count']
+  ]);
+  // The flask is half full at the third step, and the rail is filled up to it.
+  assert.deepEqual(properties, { '--coach-fill': '0.5', '--coach-rail': '0.5' });
+  // The sentence comes in again only when it changes.
+  assert.deepEqual(messageClasses, ['-is-in', '+is-in']);
+  context.renderCoach();
+  assert.deepEqual(messageClasses, ['-is-in', '+is-in']);
+
+  // Pressing another step reads what it is about, without moving the player's own step.
+  press('map');
+  assert.equal(elements.coachMessage.textContent, 'coach.msg.runMap');
+  assert.equal(elements.coachCard.dataset.coachPeek, 'true');
+  assert.deepEqual(rail().map((step) => [step[0], step[3]]), [['done', false], ['done', false], ['current', false], ['todo', true], ['todo', false]]);
+  assert.deepEqual(properties, { '--coach-fill': '0.5', '--coach-rail': '0.5' });
+  // Pressing it again goes back, and so does pressing the current step.
+  press('map');
+  assert.equal(elements.coachMessage.textContent, 'coach.msg.openInventory');
+  assert.equal(elements.coachCard.dataset.coachPeek, 'false');
+  press('game');
+  assert.equal(elements.coachMessage.textContent, 'coach.msg.game');
+  press('inventory');
+  assert.equal(elements.coachMessage.textContent, 'coach.msg.openInventory');
+  assert.equal(elements.coachCard.dataset.coachPeek, 'false');
+
+  // A new step from main ends a look at another one; the same step sent again does not.
+  press('count');
+  context.setCoachState({ step: 'inventory', index: 3, total: 5, message: 'openInventory', status: 'do' });
+  assert.equal(elements.coachMessage.textContent, 'coach.msg.count');
+  context.setCoachState({ step: 'map', index: 4, total: 5, message: 'runMap', status: 'do' });
+  assert.equal(elements.coachMessage.textContent, 'coach.msg.runMap');
+  assert.equal(elements.coachCard.dataset.coachPeek, 'false');
+  assert.deepEqual(properties, { '--coach-fill': '0.7', '--coach-rail': '0.75' });
 
   context.setCoachState({ step: 'done', index: 5, total: 5, message: 'done', status: 'done' });
-  assert.equal(elements.coachProgress.textContent, '');
-  assert.equal([...elements.coachSteps.innerHTML.matchAll(/data-step-state="done"/g)].length, 5);
+  assert.equal(elements.coachProgress.textContent, 'coach.doneTag');
+  assert.deepEqual(rail().map((step) => step[0]), ['done', 'done', 'done', 'done', 'done']);
+  assert.deepEqual(properties, { '--coach-fill': '1', '--coach-rail': '1' });
 
   // Path of Exile 1 gets its note with no steps; nothing to show hides the card.
   context.setCoachState({ step: 'poe1', index: 0, total: 0, message: 'poe1', status: 'info' });
@@ -258,11 +299,26 @@ test('the Dashboard card lists the five steps with the current one marked and sa
   assert.equal(classes.has('hidden'), true);
 });
 
+test('the card moves only where motion is welcome: the flask and the rail hold still with motion turned down', () => {
+  const css = read('src', 'styles.css');
+  // The app's one reduced-motion rule stops every animation and transition, the card's included.
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\r?\n  \*, \*::before, \*::after, select::picker-icon \{\r?\n    animation-duration: 0\.01ms !important;\r?\n    animation-iteration-count: 1 !important;\r?\n    transition-duration: 0\.01ms !important;/);
+  assert.match(css, /\.coach-flask-level \{[^}]*transform: translateY\(calc\(55px - var\(--coach-fill\) \* 36px\)\);/);
+  assert.match(css, /\.coach-steps::after \{[^}]*transform: scaleX\(var\(--coach-rail\)\);/);
+  // The overlay sits over the game: its step bar moves once per step and nothing there loops.
+  const overlay = read('src', 'overlay.html');
+  assert.match(overlay, /\.jj-card\[data-overlay-mode="coach"\]::after \{[^}]*transform: scaleX\(var\(--coach-progress, 0\)\);/);
+  assert.doesNotMatch(overlay, /animation:[^;]*infinite/);
+  for (const asset of ['flask-back.svg', 'flask-front.svg', 'flask-mask.svg', 'flask-wave.svg']) {
+    assert.ok(fs.existsSync(path.join(desktopDir, 'src', 'assets', 'brand', asset)), asset);
+  }
+});
+
 test('the pages load the model, show the card above the Dashboard and offer the steps again in the Guide', () => {
   const html = read('src', 'index.html');
   const scripts = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((match) => match[1]);
   assert.ok(scripts.indexOf('modules/coachModel.js') !== -1 && scripts.indexOf('modules/coachModel.js') < scripts.indexOf('app.js'));
-  assert.match(html, /<div class="coach-card hidden" id="coach-card"[\s\S]*?<img class="coach-mascot" src="assets\/brand\/mark\.svg" width="44" height="44" alt="">[\s\S]*?<button type="button" class="btn btn-ghost btn-small" id="coach-hide" data-i18n="coach\.hide">[\s\S]*?<div class="dashboard-grid">/);
+  assert.match(html, /<div class="coach-card hidden" id="coach-card"[\s\S]*?<div class="coach-mascot" aria-hidden="true">[\s\S]*?<div class="coach-flask-level"><\/div>[\s\S]*?<img class="coach-flask-front" src="assets\/brand\/flask-front\.svg" width="64" height="64" alt="">\s*<img class="coach-cheer" src="assets\/brand\/reactions\/juiced\.svg" width="34" height="34" alt="">[\s\S]*?<button type="button" class="btn btn-ghost btn-small" id="coach-hide" data-i18n="coach\.hide">[\s\S]*?<div class="dashboard-grid">/);
   assert.match(html, /<button type="button" class="btn btn-link" id="guide-show-coach" data-i18n="coach\.showAgain">/);
   assert.ok(fs.existsSync(path.join(desktopDir, 'src', 'assets', 'brand', 'mark-small.svg')));
 

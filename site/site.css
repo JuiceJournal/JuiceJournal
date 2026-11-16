@@ -290,7 +290,9 @@ h3 {
 .coach { margin-block: 1.5rem 0.25rem; box-shadow: inset 0 0 0 1px var(--line-strong); }
 .coach.is-live { display: grid; grid-template-columns: minmax(0, 17rem) minmax(0, 1fr); }
 
-.coach-steps { display: flex; flex-direction: column; gap: 0.25rem; padding: 1.25rem 1rem; border-right: 1px solid var(--line); }
+/* The steps are as tall as their own five rows, so the rail ends at the last number; the stage carries the divider. */
+.coach-steps { display: flex; flex-direction: column; align-self: start; gap: 0.25rem; padding: 1.25rem 1rem; }
+.coach.is-live .coach-stage { border-left: 1px solid var(--line); }
 .coach-steps[hidden], .coach-nav[hidden] { display: none; }
 
 .coach-tab {
@@ -340,7 +342,111 @@ h3 {
   gap: 1.25rem 1.5rem;
   padding: 1.75rem;
 }
-.coach-guide { height: auto; filter: drop-shadow(0 0 1.2rem rgb(255 122 31 / 0.35)); }
+/* The flask in three layers, as in the app: the plate behind, the liquid cut to the bulb's shape, the glass in
+   front. It fills as the steps go by. */
+.coach { --coach-fill: 0.5; --coach-rail: 0; }
+.coach-guide {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  zoom: 1.4;
+  background: url('assets/flask-back.svg') center / contain no-repeat;
+  filter: drop-shadow(0 0 1.2rem rgb(255 122 31 / 0.35));
+}
+.coach-flask-body {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  mask: url('assets/flask-mask.svg') center / contain no-repeat;
+}
+.coach-flask-level {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(180deg, var(--ember-hot), var(--ember-deep));
+  transform: translateY(calc(54px - var(--coach-fill) * 30px));
+}
+.coach-flask-level::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 0;
+  width: 96px;
+  height: 6px;
+  background: url('assets/flask-wave.svg') 0 0 / 16px 6px repeat-x;
+}
+.coach-flask-bubble {
+  position: absolute;
+  bottom: 9px;
+  left: 26px;
+  width: 3px;
+  height: 3px;
+  background: var(--brass-light);
+  border-radius: 50%;
+  opacity: 0;
+}
+.coach-flask-bubble:nth-of-type(2) { left: 33px; width: 2px; height: 2px; }
+.coach-flask-bubble:nth-of-type(3) { left: 37px; width: 4px; height: 4px; }
+.coach-flask-front { position: absolute; inset: 0; }
+.coach-cheer { position: absolute; right: -6px; bottom: -5px; opacity: 0; transform: scale(0.4); }
+.coach.is-full .coach-cheer { opacity: 1; transform: scale(1); }
+
+/* The rail: a line behind the step numbers that fills up to the step shown. */
+.coach.is-live .coach-steps { position: relative; }
+.coach.is-live .coach-steps::before,
+.coach.is-live .coach-steps::after {
+  content: "";
+  position: absolute;
+  top: 2.85rem;
+  bottom: 2.85rem;
+  left: 2.7rem;
+  width: 2px;
+  background: var(--line-strong);
+}
+.coach.is-live .coach-steps::after {
+  background: linear-gradient(180deg, var(--brass-dim), var(--ember-hot));
+  transform: scaleY(var(--coach-rail));
+  transform-origin: center top;
+}
+.coach.is-live .coach-tab { position: relative; z-index: 1; }
+.coach.is-live .coach-tab:not([aria-selected="true"]) .coach-num { background: var(--plate); }
+.coach.is-live .coach-tab.is-done .coach-num { font-size: 0; background: var(--brass-dim); box-shadow: inset 0 0 0 1px var(--brass); }
+.coach.is-live .coach-tab.is-done .coach-num::before {
+  content: "";
+  width: 0.7rem;
+  height: 0.38rem;
+  margin-top: -0.15rem;
+  border: solid var(--ink-bright);
+  border-width: 0 0 2px 2px;
+  transform: rotate(-45deg);
+}
+
+/* What the app itself shows at this step, drawn like its overlay card. */
+.coach-says {
+  display: grid;
+  gap: 0.15rem;
+  max-width: 24rem;
+  margin-top: 1rem;
+  padding: 0.7rem 0.9rem 0.8rem;
+  background: var(--plate-deep);
+  box-shadow: inset 0 0 0 1px var(--brass-dim), inset 0 -3px 0 var(--ember-hot);
+}
+.coach-says-where { font-size: 0.75rem; color: var(--smoke); }
+.coach-says-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+.coach-says-kicker::before { content: ""; width: 1rem; height: 1rem; background: url('assets/mark.svg') center / contain no-repeat; }
+.coach-says strong { color: var(--ink-bright); }
+.coach-says span:last-child { font-size: 0.95rem; color: var(--ash); }
 .coach.is-live .coach-panels { min-height: 9.5rem; }
 .coach-panel + .coach-panel { margin-top: 1.25rem; }
 .coach-panel h3 { font-size: 1.3rem; }
@@ -399,12 +505,17 @@ h3 {
   .install { flex-direction: column; }
   /* The steps turn into a row of numbers; the name of the current one is the heading under it. */
   .coach.is-live { grid-template-columns: 1fr; }
-  .coach-steps { flex-direction: row; padding: 0.75rem; border-right: 0; border-bottom: 1px solid var(--line); }
+  .coach-steps { flex-direction: row; align-self: stretch; padding: 0.75rem; border-bottom: 1px solid var(--line); }
+  .coach.is-live .coach-stage { border-left: 0; }
   .coach-tab { justify-content: center; padding: 0.5rem 0; box-shadow: inset 0 -3px 0 transparent; }
   .coach-tab[aria-selected="true"] { box-shadow: inset 0 -3px 0 var(--ember-hot); }
   .coach-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .coach-stage { gap: 1rem; padding: 1.25rem; }
-  .coach-guide { width: 48px; }
+  .coach-guide { zoom: 1; }
+  /* The rail runs along the row of numbers. */
+  .coach.is-live .coach-steps::before,
+  .coach.is-live .coach-steps::after { top: 1.75rem; bottom: auto; left: 10%; width: 80%; height: 2px; }
+  .coach.is-live .coach-steps::after { background: linear-gradient(90deg, var(--brass-dim), var(--ember-hot)); transform: scaleX(var(--coach-rail)); transform-origin: left center; }
   .coach.is-live .coach-panels { min-height: 13.5rem; }
   .coach-nav { grid-column: 1 / -1; }
 }
@@ -417,6 +528,28 @@ h3 {
 @media (prefers-reduced-motion: no-preference) {
   .button { transition: filter 150ms ease; }
   .flask-mid, .coach-guide { animation: bob 5s ease-in-out infinite; }
+  .coach-flask-level { transition: transform 900ms cubic-bezier(0.3, 1.4, 0.5, 1); }
+  .coach-flask-level::before { animation: coach-wave 2.6s linear infinite; }
+  .coach-flask-bubble { animation: coach-bubble 2.8s ease-in infinite; }
+  .coach-flask-bubble:nth-of-type(2) { animation-delay: 0.9s; }
+  .coach-flask-bubble:nth-of-type(3) { animation-delay: 1.7s; }
+  .coach-cheer { transition: opacity 200ms ease, transform 500ms cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .coach.is-live .coach-steps::after { transition: transform 600ms ease; }
+  .coach-num { transition: background-color 300ms ease, box-shadow 300ms ease; }
+  .coach-tab[aria-selected="true"] .coach-num { animation: coach-pulse 1.8s ease-out infinite; }
+  .coach.is-live .coach-says { animation: coach-in 320ms ease-out 80ms backwards; }
+  @keyframes coach-wave {
+    to { transform: translateX(-32px); }
+  }
+  @keyframes coach-bubble {
+    0% { opacity: 0; transform: translateY(0); }
+    20% { opacity: 0.8; }
+    100% { opacity: 0; transform: translateY(-26px); }
+  }
+  @keyframes coach-pulse {
+    0% { box-shadow: 0 0 0 0 rgb(255 122 31 / 0.55); }
+    100% { box-shadow: 0 0 0 0.6rem rgb(255 122 31 / 0); }
+  }
   .coach-button { transition: filter 150ms ease, border-color 150ms ease; }
   .coach.is-live .coach-panel { animation: coach-in 220ms ease-out; }
   @keyframes coach-in {

@@ -3135,6 +3135,7 @@ function setupIPCListeners() {
   if (window.electronAPI.onCoachState && typeof setCoachState === 'function') {
     window.electronAPI.onCoachState(setCoachState);
     window.electronAPI.getCoachState().then(setCoachState).catch(() => {});
+    elements.coachSteps?.addEventListener('click', handleCoachStepClick);
     elements.coachHide?.addEventListener('click', () => {
       window.electronAPI.setCoachHidden(true).then(setCoachState).catch(() => {});
     });
@@ -6136,11 +6137,19 @@ function renderSessionsSummary(sessions = []) {
 }
 
 function setCoachState(coach) {
+  // A new step ends a look at another one.
+  if (coach?.message !== state.coach?.message) {
+    state.coachPeek = null;
+  }
   state.coach = coach || null;
   renderCoach();
 }
 
-// The first-map steps on the Dashboard: the five steps with the current one marked, and what it asks for or waits on.
+// What each step is about, for a look at a step other than the current one: the message a player meets there.
+const COACH_STEP_MESSAGES = { game: 'game', ready: 'loading', inventory: 'openInventory', map: 'runMap', count: 'count' };
+
+// The first-map steps on the Dashboard: a rail of the five steps with the current one lit, the flask filling as they
+// pass, and what the current step asks for or waits on. A step on the rail can be pressed to read what it is about.
 function renderCoach() {
   const card = elements.coachCard;
   if (!card) return;
@@ -6149,16 +6158,40 @@ function renderCoach() {
   card.classList.toggle('hidden', !coach);
   if (!coach) return;
 
-  card.dataset.coachStatus = coach.status;
-  elements.coachProgress.textContent = coach.total && coach.status !== 'done'
-    ? window.t('coach.progress', { step: coach.index, total: coach.total })
-    : '';
-  elements.coachMessage.textContent = window.t(`coach.msg.${coach.message}`);
   const steps = coach.total ? window.coachModel.COACH_STEPS : [];
+  const done = coach.status === 'done';
+  const peek = steps.includes(state.coachPeek) && steps.indexOf(state.coachPeek) + 1 !== coach.index ? state.coachPeek : null;
+  card.dataset.coachStatus = coach.status;
+  card.dataset.coachPeek = peek ? 'true' : 'false';
+  // The flask is a tenth full at the first step and full when a map has been counted.
+  card.style?.setProperty('--coach-fill', String(done ? 1 : coach.total ? (coach.index - 0.5) / coach.total : 0.5));
+  card.style?.setProperty('--coach-rail', String(coach.total > 1 ? (done ? 1 : (coach.index - 1) / (coach.total - 1)) : 0));
+  elements.coachProgress.textContent = done
+    ? window.t('coach.doneTag')
+    : coach.total ? window.t('coach.progress', { step: coach.index, total: coach.total }) : '';
+
+  const message = window.t(`coach.msg.${peek ? COACH_STEP_MESSAGES[peek] : coach.message}`);
+  if (elements.coachMessage.textContent !== message) {
+    elements.coachMessage.textContent = message;
+    // The sentence comes in again when it changes.
+    elements.coachMessage.classList?.remove('is-in');
+    void elements.coachMessage.offsetWidth;
+    elements.coachMessage.classList?.add('is-in');
+  }
   elements.coachSteps.innerHTML = steps.map((id, position) => {
-    const stepState = coach.status === 'done' || position + 1 < coach.index ? 'done' : position + 1 === coach.index ? 'current' : 'todo';
-    return `<li data-step-state="${stepState}"${stepState === 'current' ? ' aria-current="step"' : ''}>${escapeHTML(window.t(`coach.step.${id}`))}</li>`;
+    const stepState = done || position + 1 < coach.index ? 'done' : position + 1 === coach.index ? 'current' : 'todo';
+    return `<li data-step-state="${stepState}"><button type="button" class="coach-node" data-coach-step="${id}"${stepState === 'current' ? ' aria-current="step"' : ''} aria-pressed="${peek === id}"><span class="coach-node-mark" aria-hidden="true">${stepState === 'done' ? '' : position + 1}</span><span class="coach-node-name">${escapeHTML(window.t(`coach.step.${id}`))}</span></button></li>`;
   }).join('');
+}
+
+// Pressing a step shows what it is about; pressing it again, or the current step, goes back to where the player is.
+function handleCoachStepClick(event) {
+  const node = event.target?.closest?.('[data-coach-step]');
+  if (!node) return;
+
+  const step = node.getAttribute('data-coach-step');
+  state.coachPeek = state.coachPeek === step ? null : step;
+  renderCoach();
 }
 
 function renderRecentLoot() {

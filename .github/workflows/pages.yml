@@ -29,13 +29,14 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
-      # The page uses the app's own fonts, mark and flask emotes, so they are copied in here and not kept twice in the repo.
+      # The page uses the app's own fonts, mark, flask and flask emotes, so they are copied in here and not kept twice in the repo.
       - name: Put the site together
         run: |
           mkdir -p _site/fonts
           cp -r site/. _site/
           cp desktop/src/assets/fonts/* _site/fonts/
           cp desktop/src/assets/brand/mark.svg _site/assets/mark.svg
+          cp desktop/src/assets/brand/flask-*.svg _site/assets/
           cp -r desktop/src/assets/brand/reactions _site/assets/reactions
       - uses: actions/upload-pages-artifact@v5
         with:

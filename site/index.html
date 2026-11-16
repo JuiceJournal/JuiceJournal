@@ -130,32 +130,71 @@
           <button class="coach-tab" type="button" role="tab" id="coach-tab-5" aria-controls="coach-step-5"><span class="coach-num" aria-hidden="true">5</span><span class="coach-name">Count the loot</span></button>
         </div>
         <div class="coach-stage">
-          <img class="coach-guide" src="assets/mark.svg" alt="" width="72" height="72">
+          <div class="coach-guide" aria-hidden="true">
+            <div class="coach-flask-body">
+              <div class="coach-flask-level"></div>
+              <span class="coach-flask-bubble"></span>
+              <span class="coach-flask-bubble"></span>
+              <span class="coach-flask-bubble"></span>
+            </div>
+            <img class="coach-flask-front" src="assets/flask-front.svg" width="64" height="64" alt="">
+            <img class="coach-cheer" src="assets/reactions/juiced.svg" width="22" height="22" alt="">
+          </div>
           <div class="coach-panels" aria-live="polite">
             <article class="coach-panel" id="coach-step-1" role="tabpanel" aria-labelledby="coach-tab-1">
               <p class="coach-progress">Step 1 of 5</p>
               <h3>Start the game</h3>
               <p>Start Path of Exile and enter the game. The app finds it on its own.</p>
+              <div class="coach-says">
+                <span class="coach-says-where">What the Dashboard says</span>
+                <span class="coach-says-kicker">Your first map</span>
+                <strong>Start Path of Exile and enter the game.</strong>
+                <span>The app finds it on its own.</span>
+              </div>
             </article>
             <article class="coach-panel" id="coach-step-2" role="tabpanel" aria-labelledby="coach-tab-2">
               <p class="coach-progress">Step 2 of 5</p>
               <h3>Get ready</h3>
               <p>Enter the game with the character you play. The app loads prices and item pictures; the first time takes a minute or two.</p>
+              <div class="coach-says">
+                <span class="coach-says-where">What the overlay says, in the game</span>
+                <span class="coach-says-kicker">First map 2/5</span>
+                <strong>Loading prices and item pictures.</strong>
+                <span>The first time takes a minute or two.</span>
+              </div>
             </article>
             <article class="coach-panel" id="coach-step-3" role="tabpanel" aria-labelledby="coach-tab-3">
               <p class="coach-progress">Step 3 of 5</p>
               <h3>Open your inventory</h3>
               <p>Go to your hideout. Maps are counted from there. Open your inventory once. Press I, so your next map counts.</p>
+              <div class="coach-says">
+                <span class="coach-says-where">What the overlay says, in the game</span>
+                <span class="coach-says-kicker">First map 3/5</span>
+                <strong>Open your inventory once.</strong>
+                <span>Press I, so your next map counts.</span>
+              </div>
             </article>
             <article class="coach-panel" id="coach-step-4" role="tabpanel" aria-labelledby="coach-tab-4">
               <p class="coach-progress">Step 4 of 5</p>
               <h3>Run a map</h3>
               <p>Run a map at your own pace, with no need to stop for loot. Its loot is counted when you are back in your hideout.</p>
+              <div class="coach-says">
+                <span class="coach-says-where">What the overlay says, in the game</span>
+                <span class="coach-says-kicker">First map 4/5</span>
+                <strong>Inventory read.</strong>
+                <span>Run a map at your own pace, with no need to stop for loot.</span>
+              </div>
             </article>
             <article class="coach-panel" id="coach-step-5" role="tabpanel" aria-labelledby="coach-tab-5">
               <p class="coach-progress">Step 5 of 5</p>
               <h3>Count the loot</h3>
               <p>Go back to your hideout and open your inventory. The map's loot is counted from it. Every map works the same way: open your inventory in your hideout before it and after it.</p>
+              <div class="coach-says">
+                <span class="coach-says-where">What the overlay says, in the game</span>
+                <span class="coach-says-kicker">First map 5/5</span>
+                <strong>Open your inventory.</strong>
+                <span>The loot of the map you just ran is counted from it.</span>
+              </div>
             </article>
           </div>
           <div class="coach-nav" hidden>
@@ -230,6 +269,7 @@
       var nav = document.querySelector('.coach-nav');
       var back = document.getElementById('coach-back');
       var next = document.getElementById('coach-next');
+      var coach = steps.parentNode;
       var current = 0;
 
       function show(index, focus) {
@@ -240,6 +280,11 @@
           tab.classList.toggle('is-done', i < index);
           panels[i].hidden = i !== index;
         });
+        // The flask fills and the rail runs up to the step shown; at the last one the flask is full.
+        var last = tabs.length - 1;
+        coach.style.setProperty('--coach-fill', String(index === last ? 1 : (index + 0.5) / tabs.length));
+        coach.style.setProperty('--coach-rail', String(index / last));
+        coach.classList.toggle('is-full', index === last);
         back.setAttribute('aria-disabled', String(index === 0));
         next.textContent = index === tabs.length - 1 ? 'Start again' : 'Next';
         if (focus) tabs[index].focus();
