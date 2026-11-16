@@ -154,14 +154,15 @@
     .jj-card[data-overlay-mode="coach"]::after {
       content: "";
       position: absolute;
-      left: 0;
+      left: var(--bevel-lg);
+      right: var(--bevel-lg);
       bottom: 0;
-      width: 100%;
       height: 3px;
-      background: linear-gradient(90deg, var(--brass-dim), var(--ember-hot));
-      transform: scaleX(var(--coach-progress, 0));
-      transform-origin: left center;
-      transition: transform 600ms ease;
+      background:
+        linear-gradient(90deg, var(--brass-dim), var(--ember-hot)) left / 0 100% no-repeat,
+        linear-gradient(rgb(var(--brass-rgb) / 0.16), rgb(var(--brass-rgb) / 0.16));
+      background-size: calc(var(--coach-progress, 0) * 100%) 100%, 100% 100%;
+      transition: background-size 600ms ease;
     }
 
 

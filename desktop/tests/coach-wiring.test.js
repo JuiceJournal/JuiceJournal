@@ -334,7 +334,12 @@ test('the card moves only where motion is welcome: the flask and the rail hold s
   assert.match(css, /\.coach-steps::after \{[^}]*transform: scaleX\(var\(--coach-rail\)\);/);
   // The overlay sits over the game: its step bar moves once per step and nothing there loops.
   const overlay = read('src', 'overlay.html');
-  assert.match(overlay, /\.jj-card\[data-overlay-mode="coach"\]::after \{[^}]*transform: scaleX\(var\(--coach-progress, 0\)\);/);
+  const bar = overlay.match(/\.jj-card\[data-overlay-mode="coach"\]::after \{([^}]*)\}/)[1];
+  assert.match(bar, /background-size: calc\(var\(--coach-progress, 0\) \* 100%\) 100%, 100% 100%;/);
+  // The card's corners are cut: the bar runs between them, on a track, so it reads as part of the card.
+  assert.match(bar, /left: var\(--bevel-lg\);/);
+  assert.match(bar, /right: var\(--bevel-lg\);/);
+  assert.doesNotMatch(bar, /width: 100%/);
   assert.doesNotMatch(overlay, /animation:[^;]*infinite/);
   for (const asset of ['flask-back.svg', 'flask-front.svg', 'flask-mask.svg', 'flask-wave.svg']) {
     assert.ok(fs.existsSync(path.join(desktopDir, 'src', 'assets', 'brand', asset)), asset);
