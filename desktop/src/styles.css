@@ -4376,6 +4376,43 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 .coach-card[data-coach-status="wait"] .coach-flask-level::before { animation-duration: 1.1s; }
 .coach-card[data-coach-status="wait"] .coach-flask-bubble { animation-duration: 1.1s; }
 
+/* When a step passes, three coins drop into the neck: brass, then two of the profit tiers. */
+.coach-coin {
+  --x: -14px;
+  --coin: var(--gold);
+  position: absolute;
+  top: 2px;
+  left: 27px;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  background: radial-gradient(circle at 35% 30%, rgb(var(--ink-rgb) / 0.7), transparent 45%), var(--coin);
+  border-radius: 50%;
+  corner-shape: round;
+  box-shadow: 0 0 6px var(--coin);
+  opacity: 0;
+}
+
+.coach-coin:nth-of-type(2) { --x: 16px; --coin: var(--tier-rare); animation-delay: 140ms; }
+.coach-coin:nth-of-type(3) { --x: -4px; --coin: var(--tier-unique); animation-delay: 280ms; }
+
+.coach-card[data-coach-drop="a"] .coach-coin { animation-name: coach-coin-a; animation-duration: 850ms; animation-timing-function: ease-in; animation-fill-mode: both; }
+.coach-card[data-coach-drop="b"] .coach-coin { animation-name: coach-coin-b; animation-duration: 850ms; animation-timing-function: ease-in; animation-fill-mode: both; }
+
+@keyframes coach-coin-a {
+  0% { opacity: 0; transform: translate(var(--x), -52px); }
+  15% { opacity: 1; }
+  80% { opacity: 1; transform: translate(0, 2px); }
+  100% { opacity: 0; transform: translate(0, 12px) scale(0.5); }
+}
+
+@keyframes coach-coin-b {
+  0% { opacity: 0; transform: translate(var(--x), -52px); }
+  15% { opacity: 1; }
+  80% { opacity: 1; transform: translate(0, 2px); }
+  100% { opacity: 0; transform: translate(0, 12px) scale(0.5); }
+}
+
 /* The cheering flask of a counted map sits on the corner, big enough to be seen. */
 .coach-cheer {
   position: absolute;

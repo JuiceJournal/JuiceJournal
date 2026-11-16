@@ -6141,6 +6141,11 @@ function setCoachState(coach) {
   if (coach?.message !== state.coach?.message) {
     state.coachPeek = null;
   }
+  // A step passed: coins drop into the flask. The two names take turns, so the same animation runs again.
+  const rank = (value) => (value ? (value.status === 'done' ? value.total + 1 : value.index) : 0);
+  if (state.coach && rank(coach) > rank(state.coach)) {
+    state.coachDrop = state.coachDrop === 'a' ? 'b' : 'a';
+  }
   state.coach = coach || null;
   renderCoach();
 }
@@ -6163,6 +6168,7 @@ function renderCoach() {
   const peek = steps.includes(state.coachPeek) && steps.indexOf(state.coachPeek) + 1 !== coach.index ? state.coachPeek : null;
   card.dataset.coachStatus = coach.status;
   card.dataset.coachPeek = peek ? 'true' : 'false';
+  card.dataset.coachDrop = state.coachDrop || '';
   // The flask is a tenth full at the first step and full when a map has been counted.
   card.style?.setProperty('--coach-fill', String(done ? 1 : coach.total ? (coach.index - 0.5) / coach.total : 0.5));
   card.style?.setProperty('--coach-rail', String(coach.total > 1 ? (done ? 1 : (coach.index - 1) / (coach.total - 1)) : 0));

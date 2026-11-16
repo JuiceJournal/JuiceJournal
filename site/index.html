@@ -117,91 +117,100 @@
 
     <!-- The steps and their texts are the app's own first-map steps (the coach.* strings in
          desktop/src/modules/translations.js), so the page and the app say the same thing. -->
-    <section id="first-map" class="section">
+    <section id="first-map" class="section journey">
       <p class="kicker">New to it?</p>
       <h2>Your first map</h2>
-      <p class="section-lede">In Path of Exile 2 the app leads a new player through five steps, on the Dashboard and on the overlay, until one map's loot has been counted. Here they are, before you install anything.</p>
-      <div class="coach plate">
-        <div class="coach-steps" role="tablist" aria-label="The first-map steps" hidden>
-          <button class="coach-tab" type="button" role="tab" id="coach-tab-1" aria-controls="coach-step-1"><span class="coach-num" aria-hidden="true">1</span><span class="coach-name">Start the game</span></button>
-          <button class="coach-tab" type="button" role="tab" id="coach-tab-2" aria-controls="coach-step-2"><span class="coach-num" aria-hidden="true">2</span><span class="coach-name">Get ready</span></button>
-          <button class="coach-tab" type="button" role="tab" id="coach-tab-3" aria-controls="coach-step-3"><span class="coach-num" aria-hidden="true">3</span><span class="coach-name">Open your inventory</span></button>
-          <button class="coach-tab" type="button" role="tab" id="coach-tab-4" aria-controls="coach-step-4"><span class="coach-num" aria-hidden="true">4</span><span class="coach-name">Run a map</span></button>
-          <button class="coach-tab" type="button" role="tab" id="coach-tab-5" aria-controls="coach-step-5"><span class="coach-num" aria-hidden="true">5</span><span class="coach-name">Count the loot</span></button>
-        </div>
-        <div class="coach-stage">
-          <div class="coach-guide" aria-hidden="true">
-            <div class="coach-flask-body">
-              <div class="coach-flask-level"></div>
-              <span class="coach-flask-bubble"></span>
-              <span class="coach-flask-bubble"></span>
-              <span class="coach-flask-bubble"></span>
+      <p class="section-lede">In Path of Exile 2 the app leads a new player through five steps, on the Dashboard and on the overlay, until one map's loot has been counted. Scroll through them: the flask fills as the map goes.</p>
+      <div class="journey-body">
+        <div class="journey-scene" aria-hidden="true">
+          <div class="journey-vessel">
+            <div class="journey-glow"></div>
+            <div class="journey-flask">
+              <div class="coach-flask-body">
+                <div class="coach-flask-level"></div>
+                <span class="coach-flask-bubble"></span>
+                <span class="coach-flask-bubble"></span>
+                <span class="coach-flask-bubble"></span>
+              </div>
+              <img class="coach-flask-front" src="assets/flask-front.svg" width="64" height="64" alt="">
             </div>
-            <img class="coach-flask-front" src="assets/flask-front.svg" width="64" height="64" alt="">
-            <img class="coach-cheer" src="assets/reactions/juiced.svg" width="22" height="22" alt="">
+            <div class="journey-drops">
+              <span class="journey-drop"></span>
+              <span class="journey-drop"></span>
+              <span class="journey-drop"></span>
+              <span class="journey-drop"></span>
+              <span class="journey-drop"></span>
+              <span class="journey-drop"></span>
+              <span class="journey-drop"></span>
+              <span class="journey-drop"></span>
+              <span class="journey-drop"></span>
+              <span class="journey-drop"></span>
+              <span class="journey-drop"></span>
+              <span class="journey-drop"></span>
+            </div>
+            <img class="journey-cheer" src="assets/reactions/juiced.svg" width="64" height="64" alt="">
           </div>
-          <div class="coach-panels" aria-live="polite">
-            <article class="coach-panel" id="coach-step-1" role="tabpanel" aria-labelledby="coach-tab-1">
-              <p class="coach-progress">Step 1 of 5</p>
-              <h3>Start the game</h3>
-              <p>Start Path of Exile and enter the game. The app finds it on its own.</p>
-              <div class="coach-says">
-                <span class="coach-says-where">What the Dashboard says</span>
-                <span class="coach-says-kicker">Your first map</span>
-                <strong>Start Path of Exile and enter the game.</strong>
-                <span>The app finds it on its own.</span>
-              </div>
-            </article>
-            <article class="coach-panel" id="coach-step-2" role="tabpanel" aria-labelledby="coach-tab-2">
-              <p class="coach-progress">Step 2 of 5</p>
-              <h3>Get ready</h3>
-              <p>Enter the game with the character you play. The app loads prices and item pictures; the first time takes a minute or two.</p>
-              <div class="coach-says">
-                <span class="coach-says-where">What the overlay says, in the game</span>
-                <span class="coach-says-kicker">First map 2/5</span>
-                <strong>Loading prices and item pictures.</strong>
-                <span>The first time takes a minute or two.</span>
-              </div>
-            </article>
-            <article class="coach-panel" id="coach-step-3" role="tabpanel" aria-labelledby="coach-tab-3">
-              <p class="coach-progress">Step 3 of 5</p>
-              <h3>Open your inventory</h3>
-              <p>Go to your hideout. Maps are counted from there. Open your inventory once. Press I, so your next map counts.</p>
-              <div class="coach-says">
-                <span class="coach-says-where">What the overlay says, in the game</span>
-                <span class="coach-says-kicker">First map 3/5</span>
-                <strong>Open your inventory once.</strong>
-                <span>Press I, so your next map counts.</span>
-              </div>
-            </article>
-            <article class="coach-panel" id="coach-step-4" role="tabpanel" aria-labelledby="coach-tab-4">
-              <p class="coach-progress">Step 4 of 5</p>
-              <h3>Run a map</h3>
-              <p>Run a map at your own pace, with no need to stop for loot. Its loot is counted when you are back in your hideout.</p>
-              <div class="coach-says">
-                <span class="coach-says-where">What the overlay says, in the game</span>
-                <span class="coach-says-kicker">First map 4/5</span>
-                <strong>Inventory read.</strong>
-                <span>Run a map at your own pace, with no need to stop for loot.</span>
-              </div>
-            </article>
-            <article class="coach-panel" id="coach-step-5" role="tabpanel" aria-labelledby="coach-tab-5">
-              <p class="coach-progress">Step 5 of 5</p>
-              <h3>Count the loot</h3>
-              <p>Go back to your hideout and open your inventory. The map's loot is counted from it. Every map works the same way: open your inventory in your hideout before it and after it.</p>
-              <div class="coach-says">
-                <span class="coach-says-where">What the overlay says, in the game</span>
-                <span class="coach-says-kicker">First map 5/5</span>
-                <strong>Open your inventory.</strong>
-                <span>The loot of the map you just ran is counted from it.</span>
-              </div>
-            </article>
-          </div>
-          <div class="coach-nav" hidden>
-            <button class="coach-button" type="button" id="coach-back">Back</button>
-            <button class="coach-button coach-next" type="button" id="coach-next">Next</button>
-          </div>
+          <ol class="journey-dots">
+            <li></li><li></li><li></li><li></li><li></li>
+          </ol>
         </div>
+        <ol class="journey-steps">
+          <li class="journey-step">
+            <p class="journey-count">Step 1 of 5</p>
+            <h3>Start the game</h3>
+            <p>Start Path of Exile and enter the game. The app finds it on its own.</p>
+            <div class="coach-says">
+              <span class="coach-says-where">What the Dashboard says</span>
+              <span class="coach-says-kicker">Your first map</span>
+              <strong>Start Path of Exile and enter the game.</strong>
+              <span>The app finds it on its own.</span>
+            </div>
+          </li>
+          <li class="journey-step">
+            <p class="journey-count">Step 2 of 5</p>
+            <h3>Get ready</h3>
+            <p>Enter the game with the character you play. The app loads prices and item pictures; the first time takes a minute or two.</p>
+            <div class="coach-says">
+              <span class="coach-says-where">What the overlay says, in the game</span>
+              <span class="coach-says-kicker">First map 2/5</span>
+              <strong>Loading prices and item pictures.</strong>
+              <span>The first time takes a minute or two.</span>
+            </div>
+          </li>
+          <li class="journey-step">
+            <p class="journey-count">Step 3 of 5</p>
+            <h3>Open your inventory</h3>
+            <p>Go to your hideout. Maps are counted from there. Open your inventory once. Press I, so your next map counts.</p>
+            <div class="coach-says">
+              <span class="coach-says-where">What the overlay says, in the game</span>
+              <span class="coach-says-kicker">First map 3/5</span>
+              <strong>Open your inventory once.</strong>
+              <span>Press I, so your next map counts.</span>
+            </div>
+          </li>
+          <li class="journey-step">
+            <p class="journey-count">Step 4 of 5</p>
+            <h3>Run a map</h3>
+            <p>Run a map at your own pace, with no need to stop for loot. Its loot is counted when you are back in your hideout.</p>
+            <div class="coach-says">
+              <span class="coach-says-where">What the overlay says, in the game</span>
+              <span class="coach-says-kicker">First map 4/5</span>
+              <strong>Inventory read.</strong>
+              <span>Run a map at your own pace, with no need to stop for loot.</span>
+            </div>
+          </li>
+          <li class="journey-step">
+            <p class="journey-count">Step 5 of 5</p>
+            <h3>Count the loot</h3>
+            <p>Go back to your hideout and open your inventory. The map's loot is counted from it. Every map works the same way: open your inventory in your hideout before it and after it.</p>
+            <div class="coach-says">
+              <span class="coach-says-where">What the overlay says, in the game</span>
+              <span class="coach-says-kicker">First map 5/5</span>
+              <strong>Open your inventory.</strong>
+              <span>The loot of the map you just ran is counted from it.</span>
+            </div>
+          </li>
+        </ol>
       </div>
       <p class="fine">Counting loot from your inventory is experimental and works in Path of Exile 2, with a game window 1440 pixels tall. Path of Exile 1: maps and time are tracked on their own. Loot is added by hand, in Sessions.</p>
     </section>
@@ -261,54 +270,6 @@
       })
       .catch(function () {});
 
-    // The first-map steps become tabs. Without this script all five are simply listed.
-    (function () {
-      var steps = document.querySelector('.coach-steps');
-      var tabs = Array.prototype.slice.call(steps.querySelectorAll('[role="tab"]'));
-      var panels = Array.prototype.slice.call(document.querySelectorAll('.coach-panel'));
-      var nav = document.querySelector('.coach-nav');
-      var back = document.getElementById('coach-back');
-      var next = document.getElementById('coach-next');
-      var coach = steps.parentNode;
-      var current = 0;
-
-      function show(index, focus) {
-        current = index;
-        tabs.forEach(function (tab, i) {
-          tab.setAttribute('aria-selected', String(i === index));
-          tab.tabIndex = i === index ? 0 : -1;
-          tab.classList.toggle('is-done', i < index);
-          panels[i].hidden = i !== index;
-        });
-        // The flask fills and the rail runs up to the step shown; at the last one the flask is full.
-        var last = tabs.length - 1;
-        coach.style.setProperty('--coach-fill', String(index === last ? 1 : (index + 0.5) / tabs.length));
-        coach.style.setProperty('--coach-rail', String(index / last));
-        coach.classList.toggle('is-full', index === last);
-        back.setAttribute('aria-disabled', String(index === 0));
-        next.textContent = index === tabs.length - 1 ? 'Start again' : 'Next';
-        if (focus) tabs[index].focus();
-      }
-
-      tabs.forEach(function (tab, i) {
-        tab.addEventListener('click', function () { show(i); });
-      });
-      steps.addEventListener('keydown', function (event) {
-        var last = tabs.length - 1;
-        var target = { ArrowRight: current + 1, ArrowDown: current + 1, ArrowLeft: current - 1, ArrowUp: current - 1, Home: 0, End: last }[event.key];
-        if (target === undefined) return;
-        event.preventDefault();
-        show(target < 0 ? last : target > last ? 0 : target, true);
-      });
-      back.addEventListener('click', function () { if (current > 0) show(current - 1); });
-      next.addEventListener('click', function () { show((current + 1) % tabs.length); });
-
-      panels.forEach(function (panel) { panel.tabIndex = 0; });
-      steps.hidden = false;
-      nav.hidden = false;
-      steps.parentNode.classList.add('is-live');
-      show(0);
-    })();
   </script>
 </body>
 </html>

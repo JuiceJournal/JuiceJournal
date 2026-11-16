@@ -285,11 +285,19 @@ test('the Dashboard card lights the current step on its rail, fills the flask an
   assert.equal(elements.coachMessage.textContent, 'coach.msg.runMap');
   assert.equal(elements.coachCard.dataset.coachPeek, 'false');
   assert.deepEqual(properties, { '--coach-fill': '0.7', '--coach-rail': '0.75' });
+  // A step passed, so coins drop into the flask; the same step sent again, or a step back, drops none.
+  assert.equal(elements.coachCard.dataset.coachDrop, 'a');
+  context.setCoachState({ step: 'map', index: 4, total: 5, message: 'inMap', status: 'wait' });
+  context.setCoachState({ step: 'inventory', index: 3, total: 5, message: 'openInventory', status: 'do' });
+  assert.equal(elements.coachCard.dataset.coachDrop, 'a');
+  context.setCoachState({ step: 'count', index: 5, total: 5, message: 'count', status: 'do' });
+  assert.equal(elements.coachCard.dataset.coachDrop, 'b');
 
   context.setCoachState({ step: 'done', index: 5, total: 5, message: 'done', status: 'done' });
   assert.equal(elements.coachProgress.textContent, 'coach.doneTag');
   assert.deepEqual(rail().map((step) => step[0]), ['done', 'done', 'done', 'done', 'done']);
   assert.deepEqual(properties, { '--coach-fill': '1', '--coach-rail': '1' });
+  assert.equal(elements.coachCard.dataset.coachDrop, 'a', 'the counted map drops coins too');
 
   // Path of Exile 1 gets its note with no steps; nothing to show hides the card.
   context.setCoachState({ step: 'poe1', index: 0, total: 0, message: 'poe1', status: 'info' });
@@ -318,7 +326,7 @@ test('the pages load the model, show the card above the Dashboard and offer the 
   const html = read('src', 'index.html');
   const scripts = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((match) => match[1]);
   assert.ok(scripts.indexOf('modules/coachModel.js') !== -1 && scripts.indexOf('modules/coachModel.js') < scripts.indexOf('app.js'));
-  assert.match(html, /<div class="coach-card hidden" id="coach-card"[\s\S]*?<div class="coach-mascot" aria-hidden="true">[\s\S]*?<div class="coach-flask-level"><\/div>[\s\S]*?<img class="coach-flask-front" src="assets\/brand\/flask-front\.svg" width="64" height="64" alt="">\s*<img class="coach-cheer" src="assets\/brand\/reactions\/juiced\.svg" width="34" height="34" alt="">[\s\S]*?<button type="button" class="btn btn-ghost btn-small" id="coach-hide" data-i18n="coach\.hide">[\s\S]*?<div class="dashboard-grid">/);
+  assert.match(html, /<div class="coach-card hidden" id="coach-card"[\s\S]*?<div class="coach-mascot" aria-hidden="true">[\s\S]*?<div class="coach-flask-level"><\/div>[\s\S]*?<img class="coach-flask-front" src="assets\/brand\/flask-front\.svg" width="64" height="64" alt="">\s*(?:<span class="coach-coin"><\/span>\s*){3}<img class="coach-cheer" src="assets\/brand\/reactions\/juiced\.svg" width="34" height="34" alt="">[\s\S]*?<button type="button" class="btn btn-ghost btn-small" id="coach-hide" data-i18n="coach\.hide">[\s\S]*?<div class="dashboard-grid">/);
   assert.match(html, /<button type="button" class="btn btn-link" id="guide-show-coach" data-i18n="coach\.showAgain">/);
   assert.ok(fs.existsSync(path.join(desktopDir, 'src', 'assets', 'brand', 'mark-small.svg')));
 
