@@ -37,6 +37,10 @@ jobs:
           cp desktop/src/assets/fonts/* _site/fonts/
           cp desktop/src/assets/brand/mark.svg _site/assets/mark.svg
           cp desktop/src/assets/brand/flask-*.svg _site/assets/
+          # The currency that falls into the first-map flask: a few of the app's own icons for both games.
+          mkdir -p _site/assets/currency/poe1 _site/assets/currency/poe2
+          for icon in chaos divine exalted mirror alchemy regal; do cp desktop/src/assets/currency/poe1/$icon.png _site/assets/currency/poe1/; done
+          for icon in chaos.png divine.webp exalted.png mirror.png regal.png transmute.png; do cp desktop/src/assets/currency/poe2/$icon _site/assets/currency/poe2/; done
           cp -r desktop/src/assets/brand/reactions _site/assets/reactions
       - uses: actions/upload-pages-artifact@v5
         with:
