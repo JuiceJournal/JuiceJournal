@@ -299,10 +299,10 @@ test('a map starting clears the hint and leaves other cards alone', async () => 
 
 test('the main process words the hint in both languages', () => {
   assert.match(mainJs, /inventoryStatus_firstRead: 'Open your inventory once\. Press I, so your next map counts\.'/);
-  assert.match(mainJs, /inventoryStatus_firstRead: 'Envanterini bir kez ac\. I tusuna bas, sonraki map sayilsin\.'/);
+  assert.match(mainJs, /inventoryStatus_firstRead: 'Envanterini bir kez aç\. I tuşuna bas, sonraki map sayılsın\.'/);
 });
 
 test('the ready card says the inventory was read, in both languages', () => {
   assert.match(mainJs, /inventoryStatus_saved: 'Inventory read\. You are ready for the map\.'/);
-  assert.match(mainJs, /inventoryStatus_saved: 'Envanter okundu\. Haritaya hazirsin\.'/);
+  assert.match(mainJs, /inventoryStatus_saved: 'Envanter okundu\. Haritaya hazırsın\.'/);
 });

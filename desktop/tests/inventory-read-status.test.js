@@ -250,15 +250,15 @@ test('each kind reads as its own text and tone, with the local time as HH:MM', (
 test('Turkish has its own text for every kind', () => {
   const { context, text } = loadRenderer({ language: 'tr' });
   const cases = [
-    [{ kind: 'saved', at }, 'Envanter okundu - 14:07'],
-    [{ kind: 'added', at, count: 4, mapName: 'Strand' }, '4 item Strand mapine eklendi - 14:07'],
-    [{ kind: 'added', at, count: 1, mapName: null }, '1 item son mapine eklendi - 14:07'],
-    [{ kind: 'noGain', at }, 'Yeni loot yok - 14:07'],
-    [{ kind: 'noBaseline', at }, 'Son map sayilmadi - 14:07'],
-    [{ kind: 'none', at: null }, 'Envanter henuz okunmadi. Sonraki mapten once ac.'],
-    [{ kind: 'resolution', at }, 'Okunamadi: 1440p oyun penceresi gerekli'],
-    [{ kind: 'saveFailed', at }, 'Son mapin lootu kaydedilemedi - 14:07'],
-    [{ kind: 'off' }, 'Envanter okuma kapali']
+    [{ kind: 'saved', at }, 'Envanter okundu · 14:07'],
+    [{ kind: 'added', at, count: 4, mapName: 'Strand' }, '4 item Strand mapine eklendi · 14:07'],
+    [{ kind: 'added', at, count: 1, mapName: null }, '1 item son mapine eklendi · 14:07'],
+    [{ kind: 'noGain', at }, 'Yeni loot yok · 14:07'],
+    [{ kind: 'noBaseline', at }, 'Son map sayılmadı · 14:07'],
+    [{ kind: 'none', at: null }, 'Envanter henüz okunmadı. Sonraki mapten önce aç.'],
+    [{ kind: 'resolution', at }, 'Okunamadı: 1440p oyun penceresi gerekli'],
+    [{ kind: 'saveFailed', at }, 'Son mapin lootu kaydedilemedi · 14:07'],
+    [{ kind: 'off' }, 'Envanter okuma kapalı']
   ];
 
   for (const [status, expected] of cases) {
@@ -294,7 +294,7 @@ test('the line follows the game and the language when they change, without a new
 
   window._appState.language = 'tr';
   context.renderInventoryReadStatus();
-  assert.equal(text.textContent, 'Yeni loot yok - 14:07');
+  assert.equal(text.textContent, 'Yeni loot yok · 14:07');
 });
 
 test('loading asks main for the status and keeps the last one when that fails', async () => {

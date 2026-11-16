@@ -32,17 +32,17 @@
     tr: {
       unknownMap: 'Bilinmeyen Map',
       noFarmType: 'Farm tipi yok',
-      chooseFarmType: 'Farm tipi sec',
+      chooseFarmType: 'Farm tipi seç',
       activeMapSession: 'Aktif map oturumu',
-      confirmDetectedMap: 'Algilanan mapi onayla',
-      confirmMapStart: 'map baslangicini onayla',
+      confirmDetectedMap: 'Algılanan mapi onayla',
+      confirmMapStart: 'map başlangıcını onayla',
       characterSyncNeeded: 'Karakter senkronu gerekli',
       lastPlayedCharacter: 'Son oynanan karakter',
-      waitingForArea: 'Bolge bilgisi bekleniyor',
+      waitingForArea: 'Bölge bilgisi bekleniyor',
       level: 'Seviye',
-      closesIn: (seconds) => `${seconds} sn icinde kapanir`,
-      startsIn: (seconds) => `${seconds} sn icinde baslar`,
-      elapsed: (time) => `gecen sure ${time}`,
+      closesIn: (seconds) => `${seconds} sn içinde kapanır`,
+      startsIn: (seconds) => `${seconds} sn içinde başlar`,
+      elapsed: (time) => `geçen süre ${time}`,
       map: 'Map',
       total: 'Toplam',
       minutes: 'dk',
@@ -50,8 +50,37 @@
     }
   };
 
+  // The other languages keep these lines in their own file, modules/locales/<code>.js, with {seconds} and {time} where
+  // the table above has a function. Main loads the file; the overlay page has loaded it as a script.
+  const LOCALE_FILES = ['de', 'fr', 'es', 'it', 'pt-BR', 'ru', 'ja', 'ko', 'zh-CN', 'zh-TW'];
+
+  function getLocaleOverlayText(language) {
+    if (!LOCALE_FILES.includes(language)) {
+      return null;
+    }
+
+    const locale = typeof module === 'object' && module.exports
+      ? require(`./locales/${language}.js`)
+      : (typeof window !== 'undefined' && window.LocaleTranslations ? window.LocaleTranslations[language] : null);
+    const lines = locale && locale.overlay;
+    if (!lines) {
+      return null;
+    }
+
+    const fill = (template, name) => (value) => String(template).replace(`{${name}}`, value);
+    OVERLAY_TEXT[language] = {
+      ...lines,
+      closesIn: fill(lines.closesIn, 'seconds'),
+      startsIn: fill(lines.startsIn, 'seconds'),
+      elapsed: fill(lines.elapsed, 'time')
+    };
+    return OVERLAY_TEXT[language];
+  }
+
   function getOverlayText(language) {
-    return OVERLAY_TEXT[language] || OVERLAY_TEXT.en;
+    return (Object.prototype.hasOwnProperty.call(OVERLAY_TEXT, language) && OVERLAY_TEXT[language])
+      || getLocaleOverlayText(language)
+      || OVERLAY_TEXT.en;
   }
 
   function normalizeString(value, fallback = null) {

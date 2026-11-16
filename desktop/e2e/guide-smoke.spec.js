@@ -145,9 +145,26 @@ test('guide smoke: the Guide tab lists the questions, opens one, searches and fo
       window._appState.language = 'tr';
       window.applyTranslations();
     });
-    await expect(page.locator('.guide-section-title').first()).toHaveText('Baslarken');
-    await expect(customFarm.locator('summary')).toHaveText('Kendi farm tipimi nasil eklerim?');
+    await expect(page.locator('.guide-section-title').first()).toHaveText('Başlarken');
+    await expect(customFarm.locator('summary')).toHaveText('Kendi farm tipimi nasıl eklerim?');
     await expect(customFarm).toHaveAttribute('open', '');
+
+    // Every language in the picker has its own text, loaded from its file, and the page takes its language.
+    await expect(page.locator('#global-language option')).toHaveText([
+      'English', 'Türkçe', 'Deutsch', 'Français', 'Español', 'Italiano', 'Português (Brasil)', 'Русский', '日本語', '한국어', '简体中文', '繁體中文'
+    ]);
+    for (const [language, title, question] of [
+      ['de', 'Erste Schritte', 'Wie füge ich einen eigenen Farmtyp hinzu?'],
+      ['ja', 'はじめに', '自分のファームタイプを追加するには？']
+    ]) {
+      await page.evaluate((code) => {
+        window._appState.language = code;
+        window.applyTranslations();
+      }, language);
+      await expect(page.locator('.guide-section-title').first()).toHaveText(title);
+      await expect(customFarm.locator('summary')).toHaveText(question);
+      await expect(page.locator('html')).toHaveAttribute('lang', language);
+    }
     if (process.env.GUIDE_SHOT) {
       await page.evaluate(() => {
         window._appState.language = 'en';

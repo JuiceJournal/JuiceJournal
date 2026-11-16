@@ -315,6 +315,7 @@ test('main overlay window is created lazily only when overlay state is visible',
   let visible = false;
   let derivedLanguage = null;
   const context = loadFunctions(['getLanguage', 'buildOverlayState', 'updateOverlayWindow'], {
+    MAIN_PROCESS_TRANSLATIONS: { en: {}, tr: {} },
     store: { get: (key) => (key === 'language' ? 'tr' : undefined) },
     getStoredCustomFarmTypes: () => [],
     overlayMapResultState: null,

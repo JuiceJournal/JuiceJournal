@@ -17,8 +17,14 @@
     { id: 'help', topics: ['hotkeys', 'language', 'reportBug'] }
   ];
 
+  // Accents and the Turkish dotless i are folded away, so "francais" finds "Français" and "isik" finds "Işık".
   function normalize(text) {
-    return String(text || '').toLocaleLowerCase('en').trim();
+    return String(text || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0131/g, 'i')
+      .toLocaleLowerCase('en')
+      .trim();
   }
 
   // The sections with their texts, narrowed to the topics that hold every word of the search. A word may be in the

@@ -368,13 +368,13 @@ test('settings smoke: launches desktop app and shows core settings controls', as
       }, language);
       expect(fits, language).toBe(true);
     }
-    // Turkish labels are ASCII-folded, so their uppercase keeps a plain I instead of a dotted one.
+    // Uppercase labels follow Turkish capitals (i becomes a dotted capital), except a name kept in English.
     const turkishNav = await page.evaluate(() => {
       window._appState.language = 'tr';
       window.applyTranslations();
-      return document.querySelector('.nav-btn[data-page="sessions"]').innerText;
+      return ['sessions', 'farming-hub'].map((name) => document.querySelector('.nav-btn[data-page="' + name + '"]').innerText);
     });
-    expect(turkishNav).toBe("SESSION'LAR");
+    expect(turkishNav).toEqual(["SESSİON'LAR", 'FARMING HUB']);
     await page.evaluate((name) => {
       window._appState.language = 'en';
       window.applyTranslations();

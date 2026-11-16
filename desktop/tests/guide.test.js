@@ -67,6 +67,20 @@ test('a search keeps the topics that hold every word, in the question, the answe
   assert.deepEqual(buildGuide(translate('en'), 'F9').map((section) => section.id), ['loot', 'help']);
 });
 
+test('a search finds words whatever their accents or their Turkish i, typed either way', () => {
+  const texts = {
+    'guide.section.start': 'İlk adımlar',
+    'guide.firstMap.q': 'Français, Español',
+    'guide.firstMap.a': 'Işık açık'
+  };
+  const found = (query) => buildGuide((key) => texts[key] || key, query).flatMap((section) => section.topics.map((topic) => topic.id));
+
+  for (const query of ['ilk', 'İLK', 'adimlar', 'francais', 'ESPANOL', 'isik', 'ışık', 'acik']) {
+    assert.ok(found(query).includes('firstMap'), query);
+  }
+  assert.deepEqual(found('deutsch'), []);
+});
+
 test('the app has a Guide tab and page, and loads the guide after the app script', () => {
   assert.match(html, /<button class="nav-btn" data-page="guide">[\s\S]*?data-i18n="nav\.guide"/);
   assert.match(html, /<section id="guide-page" class="page">/);

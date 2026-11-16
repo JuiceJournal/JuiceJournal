@@ -800,7 +800,7 @@ test('dashboard has no scan button: End Map is the last action and its labels re
   assert.equal(en['settings.scanHotkey'], 'Read Inventory');
   assert.equal(en['settings.stashScanHotkey'], 'Read Inventory (second key)');
   assert.equal(tr['settings.scanHotkey'], 'Envanteri Oku');
-  assert.equal(tr['settings.stashScanHotkey'], 'Envanteri Oku (ikinci tus)');
+  assert.equal(tr['settings.stashScanHotkey'], 'Envanteri Oku (ikinci tuş)');
   for (const dictionary of [en, tr]) {
     for (const key of ['settings.scanHotkey', 'settings.scanHotkeyDesc', 'settings.stashScanHotkey', 'settings.stashScanHotkeyDesc',
       'dashboard.noLootHint', 'login.featureScanTitle', 'login.featureScanBody', 'overlay.noLootScanned',

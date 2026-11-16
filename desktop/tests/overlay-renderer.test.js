@@ -32,6 +32,7 @@ function createElement(tagName = 'span') {
     children: [],
     listeners: {},
     setAttribute(name, value) { attributes[name] = String(value); },
+    removeAttribute(name) { delete attributes[name]; },
     getAttribute(name) { return Object.prototype.hasOwnProperty.call(attributes, name) ? attributes[name] : null; },
     addEventListener(type, listener) { element.listeners[type] = listener; },
     replaceChildren(...nodes) { element.children = nodes; },
@@ -131,20 +132,33 @@ test('overlay renderer ticks the meta line once a second while a map is running'
   assert.equal(overlay.intervals.size, 1);
 });
 
+test('the uppercase kicker marks the app name English and lets a translated label follow the page language', () => {
+  // Under a Turkish page an uppercase i becomes a dotted capital: right for "Tamamlandı", wrong for "Juice Journal".
+  const overlay = loadOverlay();
+
+  overlay.renderState({ visibility: 'visible', mode: 'runtime', language: 'tr', primaryLine: 'Karakter senkronu gerekli' });
+  assert.equal(overlay.kicker.textContent, 'Juice Journal');
+  assert.equal(overlay.kicker.getAttribute('lang'), 'en');
+
+  overlay.renderState({ visibility: 'visible', mode: 'map-result', language: 'tr', mapResult: { visible: true, result: { netProfit: 40 } } });
+  assert.equal(overlay.kicker.textContent, 'Map Tamamlandı');
+  assert.equal(overlay.kicker.getAttribute('lang'), null);
+});
+
 test('overlay renderer shows the map result card and its clockless lines in the app language', () => {
   const overlay = loadOverlay();
   const mapResult = (result) => ({ visibility: 'visible', mode: 'map-result', language: 'tr', mapResult: { visible: true, result } });
 
   overlay.renderState(mapResult({ netProfit: 40, durationSeconds: 300, lootItemCount: 3 }));
-  assert.equal(overlay.kicker.textContent, 'Map Tamamlandi');
+  assert.equal(overlay.kicker.textContent, 'Map Tamamlandı');
   assert.equal(overlay.primary.children[0].textContent, 'Tamamlanan Map');
-  assert.equal(overlay.secondary.textContent, '3 item sayildi');
+  assert.equal(overlay.secondary.textContent, '3 item sayıldı');
   assert.equal(overlay.meta.textContent, '5dk 00sn');
   assert.equal(overlay.pin.textContent, 'Sabitle');
 
   overlay.renderState(mapResult({ netProfit: 40, lootItemCount: 0, farmType: 'No farm type' }));
   assert.equal(overlay.primary.children[0].textContent, 'Farm tipi yok');
-  assert.equal(overlay.secondary.textContent, 'Loot sayilmadi');
+  assert.equal(overlay.secondary.textContent, 'Loot sayılmadı');
 
   overlay.renderState(mapResult({ netProfit: 40, farmType: 'Unknown farm type' }));
   assert.equal(overlay.primary.children[0].textContent, 'Bilinmeyen farm tipi');
@@ -164,12 +178,12 @@ test('overlay renderer labels each prompt and ticks its clock in the app languag
   });
   assert.equal(overlay.kicker.textContent, 'Yeni Map');
   assert.equal(overlay.primary.children[0].textContent, 'Channel');
-  assert.equal(overlay.secondary.textContent, 'Farm tipi sec');
-  assert.equal(overlay.meta.textContent, '7 sn icinde baslar');
+  assert.equal(overlay.secondary.textContent, 'Farm tipi seç');
+  assert.equal(overlay.meta.textContent, '7 sn içinde başlar');
 
   overlay.clock.now = now + 2000;
   overlay.tick();
-  assert.equal(overlay.meta.textContent, '5 sn icinde baslar');
+  assert.equal(overlay.meta.textContent, '5 sn içinde başlar');
 
   overlay.renderState({
     ...overlayStateModel.deriveOverlayState({
@@ -330,7 +344,7 @@ test('the result card of a map still waiting for its inventory loot asks for the
     language: 'tr',
     mapResult: { visible: true, result: { netProfit: 0, noLoot: true, lootPending: true, lootItemCount: 0, topOutputs: [] } }
   });
-  assert.equal(overlay.secondary.textContent, 'Lootu saymak icin envanterini ac');
+  assert.equal(overlay.secondary.textContent, 'Lootu saymak için envanterini aç');
 });
 
 test('a result whose loot covers several maps says how many', () => {
@@ -450,9 +464,9 @@ test('the inventory status mode shows its note under an Inventory kicker with no
   assert.equal(overlay.secondary.textContent, '');
   assert.equal(overlay.meta.textContent, '');
 
-  overlay.renderState({ visibility: 'visible', mode: 'inventory-status', language: 'tr', primaryLine: 'Once envanterini ac.' });
+  overlay.renderState({ visibility: 'visible', mode: 'inventory-status', language: 'tr', primaryLine: 'Önce envanterini aç.' });
   assert.equal(overlay.kicker.textContent, 'Envanter');
-  assert.equal(overlay.primary.children[0].textContent, 'Once envanterini ac.');
+  assert.equal(overlay.primary.children[0].textContent, 'Önce envanterini aç.');
 });
 
 test('a loss keeps its colour on the card but shows the number in bright text', () => {
@@ -814,8 +828,8 @@ test('a map with no loot and no baseline says it was not counted, in the warning
     language: 'tr',
     mapResult: { visible: true, result: { netProfit: 0, noLoot: true, lootUncounted: true, lootItemCount: 0, topOutputs: [] } }
   });
-  assert.equal(overlay.kicker.textContent, 'Map tamamlandi - sayilmadi');
-  assert.equal(overlay.secondary.textContent, 'Sonraki mapten once envanterini ac');
+  assert.equal(overlay.kicker.textContent, 'Map tamamlandı · sayılmadı');
+  assert.equal(overlay.secondary.textContent, 'Sonraki mapten önce envanterini aç');
 
 });
 

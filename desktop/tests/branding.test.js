@@ -43,7 +43,7 @@ test('desktop shell uses Juice Journal branding in the title bar', () => {
   const html = fs.readFileSync(indexHtmlPath, 'utf8');
 
   assert.match(html, /<title>\s*Juice Journal\s*<\/title>/i);
-  assert.match(html, /<h1>\s*Juice Journal\s*<\/h1>/i);
+  assert.match(html, /<h1 lang="en">\s*Juice Journal\s*<\/h1>/i);
   assert.doesNotMatch(html, /PoE\s*<span>\s*Farm\s*<\/span>/i);
   assert.doesNotMatch(html, />\s*POE FARM\s*</i);
 });
