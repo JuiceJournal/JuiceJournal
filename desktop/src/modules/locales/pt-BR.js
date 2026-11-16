@@ -713,6 +713,7 @@
       'coach.progress': 'Passo {step} de {total}',
       'coach.kicker': 'Primeiro mapa {step}/{total}',
       'coach.hide': 'Ocultar',
+      'coach.doneTag': 'Pronto',
       'coach.showAgain': 'Mostrar de novo os passos do primeiro mapa',
       'coach.step.game': 'Abrir o jogo',
       'coach.step.ready': 'Preparar',

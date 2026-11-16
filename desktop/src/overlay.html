@@ -151,6 +151,19 @@
     }
     [data-overlay-mode="coach"] .jj-primary-name { overflow: visible; }
     [data-overlay-mode="coach"] .jj-secondary { white-space: normal; }
+    .jj-card[data-overlay-mode="coach"]::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--brass-dim), var(--ember-hot));
+      transform: scaleX(var(--coach-progress, 0));
+      transform-origin: left center;
+      transition: transform 600ms ease;
+    }
+
 
     .jj-actions {
       display: flex;

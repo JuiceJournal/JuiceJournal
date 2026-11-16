@@ -713,6 +713,7 @@
       'coach.progress': 'Étape {step} sur {total}',
       'coach.kicker': 'Première carte {step}/{total}',
       'coach.hide': 'Masquer',
+      'coach.doneTag': 'Terminé',
       'coach.showAgain': 'Réafficher les étapes de la première carte',
       'coach.step.game': 'Lancer le jeu',
       'coach.step.ready': 'Se préparer',

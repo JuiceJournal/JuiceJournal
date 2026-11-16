@@ -120,11 +120,29 @@ test('guide smoke: the Guide tab lists the questions, opens one, searches and fo
     const coach = page.locator('#coach-card');
     await expect(coach).toBeVisible();
     await expect(coach.locator('#coach-progress')).toHaveText('Step 1 of 5');
-    await expect(coach.locator('#coach-steps li')).toHaveText(['Start the game', 'Get ready', 'Open your inventory', 'Run a map', 'Count the loot']);
-    await expect(coach.locator('#coach-steps li[aria-current="step"]')).toHaveText('Start the game');
+    await expect(coach.locator('.coach-node-name')).toHaveText(['Start the game', 'Get ready', 'Open your inventory', 'Run a map', 'Count the loot']);
+    await expect(coach.locator('.coach-node[aria-current="step"] .coach-node-name')).toHaveText('Start the game');
+    await expect(coach.locator('#coach-message')).toHaveText('Start Path of Exile and enter the game. The app finds it on its own.');
+    // A step on the rail can be pressed to read what it is about; pressing it again goes back to the current one.
+    const mapStep = coach.locator('.coach-node[data-coach-step="map"]');
+    await mapStep.click();
+    await expect(mapStep).toHaveAttribute('aria-pressed', 'true');
+    await expect(coach.locator('#coach-message')).toHaveText('Inventory read. Run a map at your own pace, with no need to stop for loot.');
+    await mapStep.click();
     await expect(coach.locator('#coach-message')).toHaveText('Start Path of Exile and enter the game. The app finds it on its own.');
     if (process.env.COACH_SHOT) {
+      const shot = (name) => page.locator('#coach-card').screenshot({ path: process.env.COACH_SHOT.replace('.png', '-' + name + '.png') });
       await page.screenshot({ path: process.env.COACH_SHOT });
+      for (const [name, coachState] of [
+        ['inventory', { step: 'inventory', index: 3, total: 5, message: 'openInventory', status: 'do' }],
+        ['loading', { step: 'ready', index: 2, total: 5, message: 'loading', status: 'wait' }],
+        ['done', { step: 'done', index: 5, total: 5, message: 'done', status: 'done' }]
+      ]) {
+        await page.evaluate((value) => window.setCoachState(value), coachState);
+        await page.waitForTimeout(1100);
+        await shot(name);
+      }
+      await page.evaluate(() => window.electronAPI.getCoachState().then(window.setCoachState));
     }
     // Hide puts them away for this profile, and the Guide brings them back on the Dashboard.
     await coach.locator('#coach-hide').click();

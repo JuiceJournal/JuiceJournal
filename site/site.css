@@ -285,67 +285,94 @@ h3 {
 .overlay { position: relative; margin: 0; }
 .overlay img { width: min(100%, 345px); margin-inline: auto; filter: drop-shadow(0 0.6rem 1.4rem rgb(0 0 0 / 0.6)); }
 
-/* First map: the app's five first-map steps as tabs, with the flask mark saying the current one. Without the page's
-   script the steps are hidden and all five texts are listed. */
-.coach { margin-block: 1.5rem 0.25rem; box-shadow: inset 0 0 0 1px var(--line-strong); }
-.coach.is-live { display: grid; grid-template-columns: minmax(0, 17rem) minmax(0, 1fr); }
-
-.coach-steps { display: flex; flex-direction: column; gap: 0.25rem; padding: 1.25rem 1rem; border-right: 1px solid var(--line); }
-.coach-steps[hidden], .coach-nav[hidden] { display: none; }
-
-.coach-tab {
-  display: flex;
+/* First map: the app's five first-map steps on one screen. A flask on the left, which game currency falls into and
+   stays in; the step on the right. Without the page's script all five steps are listed and the flask stands full. */
+.firstmap { --coach-fill: 1; --coach-rail: 0; margin-block: 1.5rem 0.25rem; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.firstmap-rail[hidden], .firstmap-controls[hidden] { display: none; }
+.firstmap-stage {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
   align-items: center;
-  gap: 0.8rem;
-  width: 100%;
-  padding: 0.6rem 0.75rem;
-  font: inherit;
-  text-align: left;
-  color: var(--ash);
-  background: none;
-  border: 0;
-  box-shadow: inset 3px 0 0 transparent;
-  cursor: pointer;
+  gap: 1.5rem 2.5rem;
+  padding: 1.75rem 2rem;
 }
-.coach-tab:hover { color: var(--ink-bright); }
-.coach-tab:focus-visible, .coach-button:focus-visible, .coach-panel:focus-visible { outline: 2px solid var(--ember-hot); outline-offset: 2px; }
-.coach-tab[aria-selected="true"] {
-  color: var(--ink-bright);
-  background: rgb(232 182 90 / 0.08);
-  box-shadow: inset 3px 0 0 var(--ember-hot);
-}
-.coach-num {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  font-family: var(--font-display);
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--brass);
-  box-shadow: inset 0 0 0 1px var(--brass-dim);
-}
-.coach-tab.is-done .coach-num { background: rgb(232 182 90 / 0.16); }
-.coach-tab[aria-selected="true"] .coach-num {
-  color: var(--ember-ink);
-  background: linear-gradient(180deg, var(--ember-hot), var(--ember-deep));
-  box-shadow: none;
-}
+.firstmap-scene { position: relative; justify-self: center; width: 13.5rem; height: 13.5rem; }
 
-.coach-stage {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 1.25rem 1.5rem;
-  padding: 1.75rem;
+/* The flask in layers, as in the app: the plate behind, the liquid cut to the bulb's shape, the currency, the glass in
+   front. Drawn on a 64px grid and enlarged. */
+.firstmap-flask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 64px;
+  zoom: 3.375;
+  background: url('assets/flask-back.svg') center / contain no-repeat;
+  filter: drop-shadow(0 0 0.4rem rgb(255 122 31 / 0.35));
 }
-.coach-guide { height: auto; filter: drop-shadow(0 0 1.2rem rgb(255 122 31 / 0.35)); }
-.coach.is-live .coach-panels { min-height: 9.5rem; }
-.coach-panel + .coach-panel { margin-top: 1.25rem; }
-.coach-panel h3 { font-size: 1.3rem; }
-.coach-panel p { max-width: 36rem; color: var(--ash); }
-.coach-panel .coach-progress {
+.coach-flask-body {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  mask: url('assets/flask-mask.svg') center / contain no-repeat;
+}
+.coach-flask-level {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(180deg, var(--ember-hot), var(--ember-deep));
+  transform: translateY(calc(55px - var(--coach-fill) * 30px));
+}
+.coach-flask-level::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 0;
+  width: 96px;
+  height: 6px;
+  background: url('assets/flask-wave.svg') 0 0 / 16px 6px repeat-x;
+}
+.coach-flask-bubble {
+  position: absolute;
+  bottom: 9px;
+  left: 26px;
+  width: 3px;
+  height: 3px;
+  background: var(--brass-light);
+  border-radius: 50%;
+  opacity: 0;
+}
+.coach-flask-bubble:nth-of-type(2) { left: 33px; width: 2px; height: 2px; }
+.coach-flask-bubble:nth-of-type(3) { left: 37px; width: 4px; height: 4px; }
+.coach-flask-front { position: absolute; inset: 0; }
+
+/* Each piece of currency has its place in the pile; while the steps play, only those that have fallen in show. */
+.firstmap-coin { position: absolute; width: 8px; height: 8px; rotate: var(--turn); filter: drop-shadow(0 0.5px 0.5px rgb(0 0 0 / 0.6)); }
+.firstmap-coin:nth-of-type(1) { left: 28.0px; top: 43.5px; --dx: 0.0px; --dy: -53.5px; --turn: -18deg; --wait: 0ms; }
+.firstmap-coin:nth-of-type(2) { left: 21.5px; top: 42.5px; --dx: 6.5px; --dy: -52.5px; --turn: 12deg; --wait: 110ms; }
+.firstmap-coin:nth-of-type(3) { left: 34.5px; top: 42.5px; --dx: -6.5px; --dy: -52.5px; --turn: 24deg; --wait: 220ms; }
+.firstmap-coin:nth-of-type(4) { left: 25.0px; top: 37.5px; --dx: 3.0px; --dy: -47.5px; --turn: -8deg; --wait: 330ms; }
+.firstmap-coin:nth-of-type(5) { left: 31.5px; top: 37.5px; --dx: -3.5px; --dy: -47.5px; --turn: 16deg; --wait: 440ms; }
+.firstmap-coin:nth-of-type(6) { left: 18.5px; top: 36.5px; --dx: 9.5px; --dy: -46.5px; --turn: -26deg; --wait: 0ms; }
+.firstmap-coin:nth-of-type(7) { left: 37.5px; top: 36.5px; --dx: -9.5px; --dy: -46.5px; --turn: 9deg; --wait: 110ms; }
+.firstmap-coin:nth-of-type(8) { left: 28.0px; top: 32.0px; --dx: 0.0px; --dy: -42.0px; --turn: -14deg; --wait: 220ms; }
+.firstmap-coin:nth-of-type(9) { left: 21.5px; top: 31.0px; --dx: 6.5px; --dy: -41.0px; --turn: 20deg; --wait: 330ms; }
+.firstmap-coin:nth-of-type(10) { left: 34.5px; top: 31.0px; --dx: -6.5px; --dy: -41.0px; --turn: -6deg; --wait: 440ms; }
+.firstmap-coin:nth-of-type(11) { left: 25.0px; top: 26.0px; --dx: 3.0px; --dy: -36.0px; --turn: 14deg; --wait: 0ms; }
+.firstmap-coin:nth-of-type(12) { left: 31.5px; top: 26.0px; --dx: -3.5px; --dy: -36.0px; --turn: -20deg; --wait: 110ms; }
+.firstmap.is-live .firstmap-coin:not(.is-in) { opacity: 0; }
+.firstmap-cheer { position: absolute; top: -0.75rem; right: -0.5rem; opacity: 0; transform: scale(0.4); }
+.firstmap.is-live.is-full .firstmap-cheer { opacity: 1; transform: scale(1); }
+
+.firstmap-steps { display: grid; gap: 2rem; list-style: none; }
+/* Room for the longest step, so the plate keeps its height as the steps change. */
+.firstmap.is-live .firstmap-steps { min-height: 18.5rem; align-content: center; }
+.firstmap-step[hidden] { display: none; }
+.firstmap-step h3 { font-size: 1.5rem; }
+.firstmap-step > p { max-width: 36rem; color: var(--ash); }
+.firstmap-step .firstmap-count {
   margin-bottom: 0.2rem;
   font-size: 0.8rem;
   font-weight: 700;
@@ -354,11 +381,80 @@ h3 {
   color: var(--smoke);
 }
 
-.coach-nav { grid-column: 2; display: flex; gap: 0.75rem; }
-.coach-button {
-  padding: 0.5rem 1.2rem;
+/* The rail across the top: five steps on a line that fills up to the one showing. */
+.firstmap-rail {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 1.25rem 1rem 0.25rem;
+  list-style: none;
+}
+.firstmap-rail::before,
+.firstmap-rail::after {
+  content: "";
+  position: absolute;
+  top: 2.2rem;
+  left: 10%;
+  width: 80%;
+  height: 2px;
+  background: var(--line-strong);
+}
+.firstmap-rail::after {
+  background: linear-gradient(90deg, var(--brass-dim), var(--ember-hot));
+  transform: scaleX(var(--coach-rail));
+  transform-origin: left center;
+}
+.firstmap-node {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  width: 100%;
   font: inherit;
   font-size: 0.9rem;
+  color: var(--smoke);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.firstmap-num {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--brass);
+  background: var(--plate);
+  box-shadow: inset 0 0 0 1px var(--brass-dim);
+}
+.firstmap-node:hover { color: var(--ink-bright); }
+.firstmap-node:focus-visible, .firstmap-button:focus-visible { outline: 2px solid var(--ember-hot); outline-offset: 2px; }
+.firstmap-node.is-done { color: var(--ash); }
+.firstmap-node.is-done .firstmap-num { font-size: 0; background: var(--brass-dim); box-shadow: inset 0 0 0 1px var(--brass); }
+.firstmap-node.is-done .firstmap-num::before {
+  content: "";
+  width: 0.7rem;
+  height: 0.38rem;
+  margin-top: -0.15rem;
+  border: solid var(--ink-bright);
+  border-width: 0 0 2px 2px;
+  transform: rotate(-45deg);
+}
+.firstmap-node[aria-current="step"] { color: var(--ink-bright); font-weight: 700; }
+.firstmap-node[aria-current="step"] .firstmap-num {
+  color: var(--ember-ink);
+  background: linear-gradient(180deg, var(--ember-hot), var(--ember-deep));
+  box-shadow: none;
+}
+
+.firstmap-controls { display: flex; align-items: center; gap: 0.6rem; padding: 0 2rem 1.25rem; }
+.firstmap-button {
+  min-width: 2.5rem;
+  padding: 0.35rem 0.8rem;
+  font: inherit;
+  font-size: 0.85rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -367,10 +463,38 @@ h3 {
   border: 1px solid var(--line-strong);
   cursor: pointer;
 }
-.coach-button:hover { color: var(--ink-bright); border-color: var(--brass); }
-.coach-button[aria-disabled="true"] { opacity: 0.4; cursor: default; }
-.coach-next { color: var(--ember-ink); background: linear-gradient(180deg, var(--ember-hot), var(--ember-deep)); border-color: transparent; }
-.coach-next:hover { color: var(--ember-ink); border-color: transparent; filter: brightness(1.1); }
+.firstmap-button:hover { color: var(--ink-bright); border-color: var(--brass); }
+.firstmap-button[aria-disabled="true"] { opacity: 0.4; cursor: default; }
+.firstmap-button[aria-disabled="true"]:hover { color: var(--brass-light); border-color: var(--line-strong); }
+/* The clock of the show: it runs out, and the next step comes. It is there only while the show plays. */
+.firstmap-timer { flex: 1; height: 3px; background: var(--line); opacity: 0; }
+.firstmap.is-playing .firstmap-timer { opacity: 1; }
+.firstmap-timer span { display: block; height: 100%; background: linear-gradient(90deg, var(--brass-dim), var(--ember-hot)); transform: scaleX(0); transform-origin: left center; }
+
+/* What the app itself shows at this step, drawn like its overlay card. */
+.coach-says {
+  display: grid;
+  gap: 0.15rem;
+  max-width: 24rem;
+  margin-top: 1rem;
+  padding: 0.7rem 0.9rem 0.8rem;
+  background: var(--plate-deep);
+  box-shadow: inset 0 0 0 1px var(--brass-dim), inset 0 -3px 0 var(--ember-hot);
+}
+.coach-says-where { font-size: 0.75rem; color: var(--smoke); }
+.coach-says-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+.coach-says-kicker::before { content: ""; width: 1rem; height: 1rem; background: url('assets/mark.svg') center / contain no-repeat; }
+.coach-says strong { color: var(--ink-bright); }
+.coach-says span:last-child { font-size: 0.95rem; color: var(--ash); }
 
 .install { display: flex; gap: 1.5rem; align-items: flex-start; }
 .install-flask { flex: none; filter: drop-shadow(0 0 1.2rem rgb(255 122 31 / 0.3)); }
@@ -397,16 +521,14 @@ h3 {
   .flask-left, .flask-right { width: 68px; }
   .top nav { gap: 1rem; }
   .install { flex-direction: column; }
-  /* The steps turn into a row of numbers; the name of the current one is the heading under it. */
-  .coach.is-live { grid-template-columns: 1fr; }
-  .coach-steps { flex-direction: row; padding: 0.75rem; border-right: 0; border-bottom: 1px solid var(--line); }
-  .coach-tab { justify-content: center; padding: 0.5rem 0; box-shadow: inset 0 -3px 0 transparent; }
-  .coach-tab[aria-selected="true"] { box-shadow: inset 0 -3px 0 var(--ember-hot); }
-  .coach-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .coach-stage { gap: 1rem; padding: 1.25rem; }
-  .coach-guide { width: 48px; }
-  .coach.is-live .coach-panels { min-height: 13.5rem; }
-  .coach-nav { grid-column: 1 / -1; }
+  /* The flask sits above the step, and the rail keeps its numbers only. */
+  .firstmap-stage { grid-template-columns: 1fr; gap: 1rem; padding: 1.25rem; }
+  .firstmap-scene { width: 9rem; height: 9rem; }
+  .firstmap-flask { zoom: 2.25; }
+  .firstmap-cheer { width: 40px; height: 40px; }
+  .firstmap-name { position: absolute; width: 1px; height: 1px; overflow: hidden; white-space: nowrap; }
+  .firstmap.is-live .firstmap-steps { min-height: 24rem; align-content: start; }
+  .firstmap-controls { padding: 0 1.25rem 1.25rem; }
 }
 
 /* Four links do not fit beside the name on a phone. */
@@ -416,12 +538,59 @@ h3 {
 
 @media (prefers-reduced-motion: no-preference) {
   .button { transition: filter 150ms ease; }
-  .flask-mid, .coach-guide { animation: bob 5s ease-in-out infinite; }
-  .coach-button { transition: filter 150ms ease, border-color 150ms ease; }
-  .coach.is-live .coach-panel { animation: coach-in 220ms ease-out; }
-  @keyframes coach-in {
-    from { opacity: 0; transform: translateX(0.5rem); }
+  .flask-mid { animation: bob 5s ease-in-out infinite; }
+  .coach-flask-level { transition: transform 900ms cubic-bezier(0.3, 1.4, 0.5, 1); }
+  .coach-flask-level::before { animation: coach-wave 2.6s linear infinite; }
+  .coach-flask-bubble { animation: coach-bubble 2.8s ease-in infinite; }
+  .coach-flask-bubble:nth-of-type(2) { animation-delay: 0.9s; }
+  .coach-flask-bubble:nth-of-type(3) { animation-delay: 1.7s; }
+  @keyframes coach-wave {
+    to { transform: translateX(-32px); }
   }
+  @keyframes coach-bubble {
+    0% { opacity: 0; transform: translateY(0); }
+    20% { opacity: 0.8; }
+    100% { opacity: 0; transform: translateY(-26px); }
+  }
+
+  /* Currency falls in from above the neck, slides down through it and settles in its place in the pile. */
+  .firstmap.is-live .firstmap-coin { transition: opacity 250ms ease; }
+  .firstmap.is-live.is-seen .firstmap-coin.is-in { animation: firstmap-fall 900ms cubic-bezier(0.45, 0, 0.6, 1) var(--wait) backwards; }
+  @keyframes firstmap-fall {
+    0% { opacity: 0; transform: translate(var(--dx), calc(var(--dy) - 26px)) rotate(-160deg); }
+    12% { opacity: 1; }
+    55% { transform: translate(var(--dx), calc(var(--dy) + 22px)) rotate(-40deg); }
+    84% { transform: translate(0, 0.8px) rotate(4deg); }
+    100% { transform: translate(0, 0) rotate(0deg); }
+  }
+  .firstmap-cheer { transition: opacity 200ms ease, transform 500ms cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .firstmap-rail::after { transition: transform 600ms ease; }
+  .firstmap-num { transition: background-color 300ms ease, box-shadow 300ms ease; }
+  .firstmap-node[aria-current="step"] .firstmap-num { animation: coach-pulse 1.8s ease-out infinite; }
+  @keyframes coach-pulse {
+    0% { box-shadow: 0 0 0 0 rgb(255 122 31 / 0.55); }
+    100% { box-shadow: 0 0 0 0.6rem rgb(255 122 31 / 0); }
+  }
+  /* A step slides in from the side it comes from. */
+  .firstmap.is-live .firstmap-step { animation: firstmap-step 380ms ease-out; }
+  .firstmap.is-live .firstmap-step.from-left { animation-name: firstmap-step-back; }
+  @keyframes firstmap-step {
+    from { opacity: 0; transform: translateX(2.5rem); }
+  }
+  @keyframes firstmap-step-back {
+    from { opacity: 0; transform: translateX(-2.5rem); }
+  }
+  /* The show's clock; the script gives each step its own length. It waits while the reader points at the steps, has
+     the keyboard in them, or cannot see them. */
+  .firstmap-timer { transition: opacity 300ms ease; }
+  .firstmap-timer span.is-running { animation: firstmap-clock 4s linear forwards; }
+  .firstmap:hover .firstmap-timer span,
+  .firstmap:focus-within .firstmap-timer span,
+  .firstmap.is-offscreen .firstmap-timer span { animation-play-state: paused; }
+  @keyframes firstmap-clock {
+    to { transform: scaleX(1); }
+  }
+  .firstmap-button { transition: border-color 150ms ease; }
   @keyframes bob {
     50% { transform: translateY(-0.4rem); }
   }

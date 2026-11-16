@@ -713,6 +713,7 @@
       'coach.progress': 'ステップ {step} / {total}',
       'coach.kicker': '最初のマップ {step}/{total}',
       'coach.hide': '隠す',
+      'coach.doneTag': '完了',
       'coach.showAgain': '最初のマップの手順をもう一度表示',
       'coach.step.game': 'ゲーム起動',
       'coach.step.ready': '準備',

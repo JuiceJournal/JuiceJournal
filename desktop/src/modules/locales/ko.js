@@ -713,6 +713,7 @@
       'coach.progress': '{total}단계 중 {step}단계',
       'coach.kicker': '첫 지도 {step}/{total}',
       'coach.hide': '숨기기',
+      'coach.doneTag': '완료',
       'coach.showAgain': '첫 지도 단계 다시 보기',
       'coach.step.game': '게임 시작',
       'coach.step.ready': '준비하기',

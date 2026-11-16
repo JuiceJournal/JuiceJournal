@@ -368,6 +368,9 @@
     var coach = state.coach || {};
     var parts = root.t('coach.msg.' + coach.message).split('. ');
     setKicker(root.t('coach.kicker', { step: coach.index, total: coach.total }));
+    if (el.card && el.card.style) {
+      el.card.style.setProperty('--coach-progress', String(coach.total ? coach.index / coach.total : 0));
+    }
     setPrimary(parts[0] + (parts.length > 1 ? '.' : ''));
     setSecondary(parts.slice(1).join('. '));
     setText(el.meta, '');

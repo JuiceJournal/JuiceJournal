@@ -120,48 +120,102 @@
     <section id="first-map" class="section">
       <p class="kicker">New to it?</p>
       <h2>Your first map</h2>
-      <p class="section-lede">In Path of Exile 2 the app leads a new player through five steps, on the Dashboard and on the overlay, until one map's loot has been counted. Here they are, before you install anything.</p>
-      <div class="coach plate">
-        <div class="coach-steps" role="tablist" aria-label="The first-map steps" hidden>
-          <button class="coach-tab" type="button" role="tab" id="coach-tab-1" aria-controls="coach-step-1"><span class="coach-num" aria-hidden="true">1</span><span class="coach-name">Start the game</span></button>
-          <button class="coach-tab" type="button" role="tab" id="coach-tab-2" aria-controls="coach-step-2"><span class="coach-num" aria-hidden="true">2</span><span class="coach-name">Get ready</span></button>
-          <button class="coach-tab" type="button" role="tab" id="coach-tab-3" aria-controls="coach-step-3"><span class="coach-num" aria-hidden="true">3</span><span class="coach-name">Open your inventory</span></button>
-          <button class="coach-tab" type="button" role="tab" id="coach-tab-4" aria-controls="coach-step-4"><span class="coach-num" aria-hidden="true">4</span><span class="coach-name">Run a map</span></button>
-          <button class="coach-tab" type="button" role="tab" id="coach-tab-5" aria-controls="coach-step-5"><span class="coach-num" aria-hidden="true">5</span><span class="coach-name">Count the loot</span></button>
-        </div>
-        <div class="coach-stage">
-          <img class="coach-guide" src="assets/mark.svg" alt="" width="72" height="72">
-          <div class="coach-panels" aria-live="polite">
-            <article class="coach-panel" id="coach-step-1" role="tabpanel" aria-labelledby="coach-tab-1">
-              <p class="coach-progress">Step 1 of 5</p>
+      <p class="section-lede">In Path of Exile 2 the app leads a new player through five steps, on the Dashboard and on the overlay, until one map's loot has been counted.</p>
+      <div class="firstmap plate">
+        <ol class="firstmap-rail" hidden>
+          <li><button class="firstmap-node" type="button" data-step="0"><span class="firstmap-num" aria-hidden="true">1</span><span class="firstmap-name">Start the game</span></button></li>
+          <li><button class="firstmap-node" type="button" data-step="1"><span class="firstmap-num" aria-hidden="true">2</span><span class="firstmap-name">Get ready</span></button></li>
+          <li><button class="firstmap-node" type="button" data-step="2"><span class="firstmap-num" aria-hidden="true">3</span><span class="firstmap-name">Open your inventory</span></button></li>
+          <li><button class="firstmap-node" type="button" data-step="3"><span class="firstmap-num" aria-hidden="true">4</span><span class="firstmap-name">Run a map</span></button></li>
+          <li><button class="firstmap-node" type="button" data-step="4"><span class="firstmap-num" aria-hidden="true">5</span><span class="firstmap-name">Count the loot</span></button></li>
+        </ol>
+        <div class="firstmap-stage">
+          <div class="firstmap-scene" aria-hidden="true">
+            <div class="firstmap-flask">
+              <div class="coach-flask-body">
+                <div class="coach-flask-level"></div>
+                <span class="coach-flask-bubble"></span>
+                <span class="coach-flask-bubble"></span>
+                <span class="coach-flask-bubble"></span>
+              </div>
+              <img class="firstmap-coin" src="assets/currency/poe2/chaos.png" width="8" height="8" alt="">
+              <img class="firstmap-coin" src="assets/currency/poe1/chaos.png" width="8" height="8" alt="">
+              <img class="firstmap-coin" src="assets/currency/poe2/exalted.png" width="8" height="8" alt="">
+              <img class="firstmap-coin" src="assets/currency/poe1/alchemy.png" width="8" height="8" alt="">
+              <img class="firstmap-coin" src="assets/currency/poe2/regal.png" width="8" height="8" alt="">
+              <img class="firstmap-coin" src="assets/currency/poe1/exalted.png" width="8" height="8" alt="">
+              <img class="firstmap-coin" src="assets/currency/poe2/transmute.png" width="8" height="8" alt="">
+              <img class="firstmap-coin" src="assets/currency/poe1/divine.png" width="8" height="8" alt="">
+              <img class="firstmap-coin" src="assets/currency/poe2/divine.webp" width="8" height="8" alt="">
+              <img class="firstmap-coin" src="assets/currency/poe1/regal.png" width="8" height="8" alt="">
+              <img class="firstmap-coin" src="assets/currency/poe2/mirror.png" width="8" height="8" alt="">
+              <img class="firstmap-coin" src="assets/currency/poe1/mirror.png" width="8" height="8" alt="">
+              <img class="coach-flask-front" src="assets/flask-front.svg" width="64" height="64" alt="">
+            </div>
+            <img class="firstmap-cheer" src="assets/reactions/juiced.svg" width="56" height="56" alt="">
+          </div>
+          <ol class="firstmap-steps">
+            <li class="firstmap-step">
+              <p class="firstmap-count">Step 1 of 5</p>
               <h3>Start the game</h3>
               <p>Start Path of Exile and enter the game. The app finds it on its own.</p>
-            </article>
-            <article class="coach-panel" id="coach-step-2" role="tabpanel" aria-labelledby="coach-tab-2">
-              <p class="coach-progress">Step 2 of 5</p>
+              <div class="coach-says">
+                <span class="coach-says-where">What the Dashboard says</span>
+                <span class="coach-says-kicker">Your first map</span>
+                <strong>Start Path of Exile and enter the game.</strong>
+                <span>The app finds it on its own.</span>
+              </div>
+            </li>
+            <li class="firstmap-step">
+              <p class="firstmap-count">Step 2 of 5</p>
               <h3>Get ready</h3>
               <p>Enter the game with the character you play. The app loads prices and item pictures; the first time takes a minute or two.</p>
-            </article>
-            <article class="coach-panel" id="coach-step-3" role="tabpanel" aria-labelledby="coach-tab-3">
-              <p class="coach-progress">Step 3 of 5</p>
+              <div class="coach-says">
+                <span class="coach-says-where">What the overlay says, in the game</span>
+                <span class="coach-says-kicker">First map 2/5</span>
+                <strong>Loading prices and item pictures.</strong>
+                <span>The first time takes a minute or two.</span>
+              </div>
+            </li>
+            <li class="firstmap-step">
+              <p class="firstmap-count">Step 3 of 5</p>
               <h3>Open your inventory</h3>
               <p>Go to your hideout. Maps are counted from there. Open your inventory once. Press I, so your next map counts.</p>
-            </article>
-            <article class="coach-panel" id="coach-step-4" role="tabpanel" aria-labelledby="coach-tab-4">
-              <p class="coach-progress">Step 4 of 5</p>
+              <div class="coach-says">
+                <span class="coach-says-where">What the overlay says, in the game</span>
+                <span class="coach-says-kicker">First map 3/5</span>
+                <strong>Open your inventory once.</strong>
+                <span>Press I, so your next map counts.</span>
+              </div>
+            </li>
+            <li class="firstmap-step">
+              <p class="firstmap-count">Step 4 of 5</p>
               <h3>Run a map</h3>
               <p>Run a map at your own pace, with no need to stop for loot. Its loot is counted when you are back in your hideout.</p>
-            </article>
-            <article class="coach-panel" id="coach-step-5" role="tabpanel" aria-labelledby="coach-tab-5">
-              <p class="coach-progress">Step 5 of 5</p>
+              <div class="coach-says">
+                <span class="coach-says-where">What the overlay says, in the game</span>
+                <span class="coach-says-kicker">First map 4/5</span>
+                <strong>Inventory read.</strong>
+                <span>Run a map at your own pace, with no need to stop for loot.</span>
+              </div>
+            </li>
+            <li class="firstmap-step">
+              <p class="firstmap-count">Step 5 of 5</p>
               <h3>Count the loot</h3>
               <p>Go back to your hideout and open your inventory. The map's loot is counted from it. Every map works the same way: open your inventory in your hideout before it and after it.</p>
-            </article>
-          </div>
-          <div class="coach-nav" hidden>
-            <button class="coach-button" type="button" id="coach-back">Back</button>
-            <button class="coach-button coach-next" type="button" id="coach-next">Next</button>
-          </div>
+              <div class="coach-says">
+                <span class="coach-says-where">What the overlay says, in the game</span>
+                <span class="coach-says-kicker">First map 5/5</span>
+                <strong>Open your inventory.</strong>
+                <span>The loot of the map you just ran is counted from it.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="firstmap-controls" hidden>
+          <button class="firstmap-button" type="button" id="firstmap-back" aria-label="Previous step">&#8249;</button>
+          <button class="firstmap-button" type="button" id="firstmap-next" aria-label="Next step">&#8250;</button>
+          <div class="firstmap-timer" aria-hidden="true"><span id="firstmap-timer"></span></div>
         </div>
       </div>
       <p class="fine">Counting loot from your inventory is experimental and works in Path of Exile 2, with a game window 1440 pixels tall. Path of Exile 1: maps and time are tracked on their own. Loot is added by hand, in Sessions.</p>
@@ -222,47 +276,108 @@
       })
       .catch(function () {});
 
-    // The first-map steps become tabs. Without this script all five are simply listed.
+    // The first-map steps play once, like a slideshow, when they come on screen: each stays about as long as it takes to
+    // read, and the show ends at the last one. Once the reader moves it, it is theirs. Without this script all five
+    // steps are listed.
     (function () {
-      var steps = document.querySelector('.coach-steps');
-      var tabs = Array.prototype.slice.call(steps.querySelectorAll('[role="tab"]'));
-      var panels = Array.prototype.slice.call(document.querySelectorAll('.coach-panel'));
-      var nav = document.querySelector('.coach-nav');
-      var back = document.getElementById('coach-back');
-      var next = document.getElementById('coach-next');
-      var current = 0;
+      var root = document.querySelector('.firstmap');
+      var nodes = Array.prototype.slice.call(root.querySelectorAll('.firstmap-node'));
+      var steps = Array.prototype.slice.call(root.querySelectorAll('.firstmap-step'));
+      var coins = Array.prototype.slice.call(root.querySelectorAll('.firstmap-coin'));
+      var timer = document.getElementById('firstmap-timer');
+      var back = document.getElementById('firstmap-back');
+      var next = document.getElementById('firstmap-next');
+      var calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      // How many coins lie in the flask at each step: a few while getting ready, most of them once the map runs.
+      var pile = [1, 3, 5, 10, 12];
+      var last = steps.length - 1;
+      var current = -1;
+      var playing = !calm;
+      var seen = false;
+      // How long a step stays: a beat to take it in, then its sentence at a quick reader's pace of six words a second.
+      var times = steps.map(function (step) {
+        var words = step.querySelector('h3 + p').textContent.trim().split(/\s+/).length;
+        return Math.min(7, 0.8 + words / 6);
+      });
 
-      function show(index, focus) {
+      function show(index) {
+        var forward = index >= current;
         current = index;
-        tabs.forEach(function (tab, i) {
-          tab.setAttribute('aria-selected', String(i === index));
-          tab.tabIndex = i === index ? 0 : -1;
-          tab.classList.toggle('is-done', i < index);
-          panels[i].hidden = i !== index;
+        steps.forEach(function (step, i) {
+          step.hidden = i !== index;
+          step.classList.toggle('from-left', !forward);
         });
+        nodes.forEach(function (node, i) {
+          node.classList.toggle('is-done', i < index);
+          if (i === index) node.setAttribute('aria-current', 'step'); else node.removeAttribute('aria-current');
+        });
+        coins.forEach(function (coin, i) { coin.classList.toggle('is-in', i < pile[index]); });
+        root.style.setProperty('--coach-fill', String(index === last ? 1 : (index + 0.5) / steps.length));
+        root.style.setProperty('--coach-rail', String(index / last));
+        root.classList.toggle('is-full', index === last);
         back.setAttribute('aria-disabled', String(index === 0));
-        next.textContent = index === tabs.length - 1 ? 'Start again' : 'Next';
-        if (focus) tabs[index].focus();
+        next.setAttribute('aria-disabled', String(index === last));
+        // The show is over at the last step.
+        if (index === last) playing = false;
+        root.classList.toggle('is-playing', playing);
+        restart();
       }
 
-      tabs.forEach(function (tab, i) {
-        tab.addEventListener('click', function () { show(i); });
-      });
-      steps.addEventListener('keydown', function (event) {
-        var last = tabs.length - 1;
-        var target = { ArrowRight: current + 1, ArrowDown: current + 1, ArrowLeft: current - 1, ArrowUp: current - 1, Home: 0, End: last }[event.key];
-        if (target === undefined) return;
-        event.preventDefault();
-        show(target < 0 ? last : target > last ? 0 : target, true);
-      });
-      back.addEventListener('click', function () { if (current > 0) show(current - 1); });
-      next.addEventListener('click', function () { show((current + 1) % tabs.length); });
+      // The bar under the steps is the clock: when it has run out, the next step comes.
+      function restart() {
+        timer.classList.remove('is-running');
+        void timer.offsetWidth;
+        if (playing && seen) {
+          timer.style.animationDuration = times[current] + 's';
+          timer.classList.add('is-running');
+        }
+      }
+      // The reader's own move, by the rail, an arrow, a key or a swipe, ends the show and goes where they ask.
+      function go(index) {
+        if (index < 0 || index > last || index === current) return;
+        playing = false;
+        show(index);
+      }
 
-      panels.forEach(function (panel) { panel.tabIndex = 0; });
-      steps.hidden = false;
-      nav.hidden = false;
-      steps.parentNode.classList.add('is-live');
+      timer.addEventListener('animationend', function () { if (playing && current < last) show(current + 1); });
+      nodes.forEach(function (node, i) { node.addEventListener('click', function () { go(i); }); });
+      back.addEventListener('click', function () { go(current - 1); });
+      next.addEventListener('click', function () { go(current + 1); });
+      root.addEventListener('keydown', function (event) {
+        if (event.key === 'ArrowRight') go(current + 1);
+        else if (event.key === 'ArrowLeft') go(current - 1);
+      });
+      // A sideways swipe moves a step.
+      var startX = null;
+      root.addEventListener('pointerdown', function (event) { startX = event.clientX; });
+      root.addEventListener('pointerup', function (event) {
+        if (startX === null) return;
+        var moved = event.clientX - startX;
+        startX = null;
+        if (Math.abs(moved) > 48) go(current + (moved < 0 ? 1 : -1));
+      });
+
+      root.querySelector('.firstmap-rail').hidden = false;
+      root.querySelector('.firstmap-controls').hidden = false;
+      root.classList.add('is-live');
       show(0);
+
+      // It starts when the reader reaches it and waits while it is out of sight.
+      if ('IntersectionObserver' in window) {
+        new IntersectionObserver(function (entries) {
+          var visible = entries[0].isIntersecting;
+          root.classList.toggle('is-offscreen', !visible);
+          if (visible && !seen) {
+            seen = true;
+            root.classList.add('is-seen');
+            restart();
+          }
+        }, { threshold: 0.45 }).observe(root);
+      } else {
+        seen = true;
+        root.classList.add('is-seen');
+        restart();
+      }
     })();
   </script>
 </body>

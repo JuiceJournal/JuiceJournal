@@ -713,6 +713,7 @@
       'coach.progress': '第 {step} 步，共 {total} 步',
       'coach.kicker': '首张地图 {step}/{total}',
       'coach.hide': '隐藏',
+      'coach.doneTag': '完成',
       'coach.showAgain': '重新显示首张地图的步骤',
       'coach.step.game': '启动游戏',
       'coach.step.ready': '做好准备',

@@ -4295,25 +4295,170 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   border-radius: var(--bevel);
 }
 
-/* The first-map steps: the flask on the left, the five steps with the current one lit, and its message. */
+/* The first-map steps: the flask fills as the steps pass, the rail lights the current one, and the sentence under it
+   says what to do or what the app waits for. */
 .coach-card {
+  --coach-fill: 0.5;
+  --coach-rail: 0;
   display: flex;
-  align-items: flex-start;
-  gap: 0.875rem;
+  align-items: center;
+  gap: 1rem;
   margin-bottom: 1.25rem;
-  padding: 0.875rem 1rem;
+  padding: 0.75rem 1rem;
   background: linear-gradient(180deg, var(--plate-raised), var(--plate));
   border: 1px solid var(--line);
   border-radius: var(--bevel);
 }
 
+/* The flask in three layers: the plate behind, the liquid cut to the bulb's shape, and the glass in front. The shapes
+   are those of assets/brand/mark.svg. */
 .coach-mascot {
+  position: relative;
   flex: none;
+  width: 88px;
+  height: 88px;
+}
+
+/* Drawn on the mark's own 64px grid and enlarged, so the pieces inside keep their places. */
+.coach-flask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 64px;
+  zoom: 1.375;
+  background: url('assets/brand/flask-back.svg') center / contain no-repeat;
+  filter: drop-shadow(0 0 0.5rem rgb(var(--ember-rgb) / 0.3));
+}
+
+.coach-flask-body {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  mask: url('assets/brand/flask-mask.svg') center / contain no-repeat;
+}
+
+/* The liquid's surface sits at the bottom of the bulb when empty and near its neck when full. */
+.coach-flask-level {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(180deg, var(--ember-hot), var(--ember-deep));
+  transform: translateY(calc(55px - var(--coach-fill) * 36px));
+  transition: transform 900ms cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+.coach-flask-level::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 0;
+  width: 96px;
+  height: 6px;
+  background: url('assets/brand/flask-wave.svg') 0 0 / 16px 6px repeat-x;
+  animation: coach-wave 2.6s linear infinite;
+}
+
+.coach-flask-bubble {
+  position: absolute;
+  bottom: 9px;
+  left: 26px;
+  width: 3px;
+  height: 3px;
+  background: var(--gold-light);
+  border-radius: 50%;
+  corner-shape: round;
+  opacity: 0;
+  animation: coach-bubble 2.8s ease-in infinite;
+}
+
+.coach-flask-bubble:nth-of-type(2) { left: 33px; width: 2px; height: 2px; animation-delay: 0.9s; }
+.coach-flask-bubble:nth-of-type(3) { left: 37px; width: 4px; height: 4px; animation-delay: 1.7s; }
+
+.coach-flask-front {
+  position: absolute;
+  inset: 0;
+}
+
+/* While the app is the one working, the flask boils. */
+.coach-card[data-coach-status="wait"] .coach-flask-level::before { animation-duration: 1.1s; }
+.coach-card[data-coach-status="wait"] .coach-flask-bubble { animation-duration: 1.1s; }
+
+/* Game currency falls into the flask as the steps pass and stays in the pile; each piece has its place in it. A piece
+   comes in above the neck, slides down through it and settles. */
+.coach-coin {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  rotate: var(--turn);
+  opacity: 0;
+  transition: opacity 250ms ease;
+}
+
+.coach-coin:nth-of-type(1) { left: 28.0px; top: 43.5px; --dx: 0.0px; --dy: -53.5px; --turn: -18deg; --wait: 0ms; }
+.coach-coin:nth-of-type(2) { left: 21.5px; top: 42.5px; --dx: 6.5px; --dy: -52.5px; --turn: 12deg; --wait: 110ms; }
+.coach-coin:nth-of-type(3) { left: 34.5px; top: 42.5px; --dx: -6.5px; --dy: -52.5px; --turn: 24deg; --wait: 220ms; }
+.coach-coin:nth-of-type(4) { left: 25.0px; top: 37.5px; --dx: 3.0px; --dy: -47.5px; --turn: -8deg; --wait: 330ms; }
+.coach-coin:nth-of-type(5) { left: 31.5px; top: 37.5px; --dx: -3.5px; --dy: -47.5px; --turn: 16deg; --wait: 440ms; }
+.coach-coin:nth-of-type(6) { left: 18.5px; top: 36.5px; --dx: 9.5px; --dy: -46.5px; --turn: -26deg; --wait: 0ms; }
+.coach-coin:nth-of-type(7) { left: 37.5px; top: 36.5px; --dx: -9.5px; --dy: -46.5px; --turn: 9deg; --wait: 110ms; }
+.coach-coin:nth-of-type(8) { left: 28.0px; top: 32.0px; --dx: 0.0px; --dy: -42.0px; --turn: -14deg; --wait: 220ms; }
+.coach-coin:nth-of-type(9) { left: 21.5px; top: 31.0px; --dx: 6.5px; --dy: -41.0px; --turn: 20deg; --wait: 330ms; }
+.coach-coin:nth-of-type(10) { left: 34.5px; top: 31.0px; --dx: -6.5px; --dy: -41.0px; --turn: -6deg; --wait: 440ms; }
+.coach-coin:nth-of-type(11) { left: 25.0px; top: 26.0px; --dx: 3.0px; --dy: -36.0px; --turn: 14deg; --wait: 0ms; }
+.coach-coin:nth-of-type(12) { left: 31.5px; top: 26.0px; --dx: -3.5px; --dy: -36.0px; --turn: -20deg; --wait: 110ms; }
+
+.coach-coin.is-in {
+  opacity: 1;
+  animation: coach-coin-fall 900ms cubic-bezier(0.45, 0, 0.6, 1) var(--wait) backwards;
+}
+
+@keyframes coach-coin-fall {
+  0% { opacity: 0; transform: translate(var(--dx), calc(var(--dy) - 26px)) rotate(-160deg); }
+  12% { opacity: 1; }
+  55% { transform: translate(var(--dx), calc(var(--dy) + 22px)) rotate(-40deg); }
+  84% { transform: translate(0, 0.8px) rotate(4deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+/* The cheering flask of a counted map sits on the corner, big enough to be seen. */
+.coach-cheer {
+  position: absolute;
+  top: -10px;
+  right: -12px;
+  width: 34px;
+  height: 34px;
+  opacity: 0;
+  transform: scale(0.4);
+}
+
+.coach-card[data-coach-status="done"] .coach-cheer {
+  opacity: 1;
+  transform: scale(1);
+  animation: coach-cheer 700ms cubic-bezier(0.3, 1.6, 0.5, 1);
 }
 
 .coach-body {
   flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 40rem) minmax(0, 1fr);
+  grid-template-areas: "head message" "steps message";
+  align-items: center;
+  column-gap: 1.75rem;
   min-width: 0;
+}
+
+.coach-head { grid-area: head; }
+.coach-steps { grid-area: steps; }
+
+/* A window too narrow for both puts the sentence under the rail. */
+@media (max-width: 1180px) {
+  .coach-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "head" "steps" "message";
+  }
 }
 
 .coach-head {
@@ -4324,8 +4469,10 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 
 .coach-title {
   color: var(--text-bright);
-  font-size: 0.875rem;
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
   font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .coach-progress {
@@ -4333,47 +4480,178 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   font-size: 0.75rem;
 }
 
+/* The rail: five steps on a line that fills up to the current one. */
 .coach-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem 1rem;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  max-width: 44rem;
   margin: 0.5rem 0 0;
   padding: 0;
   list-style: none;
-  counter-reset: coach-step;
-  font-size: 0.8125rem;
 }
 
-.coach-steps li {
-  counter-increment: coach-step;
+.coach-steps::before,
+.coach-steps::after {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: 10%;
+  width: 80%;
+  height: 2px;
+  background: var(--line-strong);
+}
+
+.coach-steps::after {
+  background: linear-gradient(90deg, var(--gold-dim), var(--ember-hot));
+  transform: scaleX(var(--coach-rail));
+  transform-origin: left center;
+  transition: transform 700ms ease;
+}
+
+.coach-steps:empty {
+  display: none;
+}
+
+.coach-node {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0;
   color: var(--text-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  text-align: center;
+  background: none;
+  border: 0;
+  cursor: pointer;
 }
 
-.coach-steps li::before {
-  content: counter(coach-step) ". ";
+.coach-node-mark {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--plate);
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+  corner-shape: round;
+  transition: background-color 300ms ease, border-color 300ms ease, transform 300ms ease;
 }
 
-.coach-steps li[data-step-state="done"] {
-  color: var(--gain);
+.coach-node:hover .coach-node-mark,
+.coach-node[aria-pressed="true"] .coach-node-mark {
+  border-color: var(--gold);
+  transform: scale(1.12);
 }
 
-.coach-steps li[data-step-state="done"]::before {
-  content: "\2713  ";
+.coach-node:focus-visible {
+  outline: 2px solid var(--ember-hot);
+  outline-offset: 3px;
 }
 
-.coach-steps li[data-step-state="current"] {
+.coach-steps li[data-step-state="done"] .coach-node {
+  color: var(--text);
+}
+
+.coach-steps li[data-step-state="done"] .coach-node-mark {
+  background: var(--gold-dim);
+  border-color: var(--gold);
+}
+
+.coach-steps li[data-step-state="done"] .coach-node-mark::before {
+  content: "";
+  width: 9px;
+  height: 5px;
+  margin-top: -2px;
+  border: solid var(--text-bright);
+  border-width: 0 0 2px 2px;
+  transform: rotate(-45deg);
+}
+
+.coach-steps li[data-step-state="current"] .coach-node {
   color: var(--text-bright);
   font-weight: 700;
 }
 
-.coach-message {
-  margin-top: 0.5rem;
-  max-width: 72ch;
-  color: var(--text);
+.coach-steps li[data-step-state="current"] .coach-node-mark {
+  color: var(--ember-ink);
+  background: linear-gradient(180deg, var(--ember-hot), var(--ember-deep));
+  border-color: var(--ember-hot);
+  animation: coach-pulse 1.8s ease-out infinite;
 }
 
-.coach-card[data-coach-status="wait"] .coach-message {
+/* What the flask says: the loudest thing on the card. */
+.coach-message {
+  grid-area: message;
+  max-width: 46ch;
+  padding: 0.625rem 0.875rem;
+  color: var(--text-bright);
+  font-size: 1rem;
+  line-height: 1.45;
+  background: rgb(var(--plate-deep-rgb) / 0.55);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--bevel);
+}
+
+@media (max-width: 1180px) {
+  .coach-message {
+    max-width: 72ch;
+    margin-top: 0.625rem;
+  }
+}
+
+.coach-card[data-coach-status="done"] .coach-progress {
+  color: var(--gain);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.coach-card[data-coach-status="done"] .coach-message {
+  border-color: var(--gain);
+}
+
+.coach-message.is-in {
+  animation: coach-say 320ms ease-out;
+}
+
+.coach-card[data-coach-status="wait"] .coach-message,
+.coach-card[data-coach-peek="true"] .coach-message {
   color: var(--text-muted);
+}
+
+@keyframes coach-wave {
+  to { transform: translateX(-32px); }
+}
+
+/* The wave and the pulse loop; with motion turned down they hold still (see the reduced-motion rule at the end). */
+
+@keyframes coach-bubble {
+  0% { opacity: 0; transform: translateY(0); }
+  20% { opacity: 0.8; }
+  100% { opacity: 0; transform: translateY(-26px); }
+}
+
+@keyframes coach-pulse {
+  0% { box-shadow: 0 0 0 0 rgb(var(--ember-rgb) / 0.55); }
+  100% { box-shadow: 0 0 0 9px rgb(var(--ember-rgb) / 0); }
+}
+
+@keyframes coach-say {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+@keyframes coach-cheer {
+  from { opacity: 0; transform: scale(0.2) rotate(-25deg); }
 }
 
 .journal-notice-body {

@@ -713,6 +713,7 @@
       'coach.progress': 'Шаг {step} из {total}',
       'coach.kicker': 'Первая карта {step}/{total}',
       'coach.hide': 'Скрыть',
+      'coach.doneTag': 'Готово',
       'coach.showAgain': 'Снова показать шаги первой карты',
       'coach.step.game': 'Запуск игры',
       'coach.step.ready': 'Подготовка',
