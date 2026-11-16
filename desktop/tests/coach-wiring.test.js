@@ -227,6 +227,10 @@ test('the Dashboard card lights the current step on its rail, fills the flask an
     },
     coachProgress: { textContent: '' },
     coachSteps: { innerHTML: '' },
+    coachCoins: Array.from({ length: 12 }, () => {
+      const coin = { inFlask: false, classList: { toggle: (name, on) => { if (name === 'is-in') coin.inFlask = on; } } };
+      return coin;
+    }),
     coachMessage: { textContent: '', offsetWidth: 0, classList: { add: (name) => messageClasses.push(`+${name}`), remove: (name) => messageClasses.push(`-${name}`) } }
   };
   const context = loadFunctions(appJs, ['setCoachState', 'renderCoach', 'handleCoachStepClick'], {
@@ -236,6 +240,13 @@ test('the Dashboard card lights the current step on its rail, fills the flask an
     escapeHTML: (value) => String(value)
   });
   vm.runInContext(appJs.match(/const COACH_STEP_MESSAGES = \{[^}]*\};/)[0].replace('const ', 'globalThis.'), context);
+  vm.runInContext(appJs.match(/const COACH_STEP_PILE = \[[^\]]*\];/)[0].replace('const ', 'globalThis.'), context);
+  // The pile fills from the bottom: the pieces in the flask are always the first ones.
+  const inFlask = () => {
+    const count = elements.coachCoins.filter((coin) => coin.inFlask).length;
+    assert.ok(elements.coachCoins.slice(0, count).every((coin) => coin.inFlask));
+    return count;
+  };
   const rail = () => [...elements.coachSteps.innerHTML.matchAll(
     /<li data-step-state="(\w+)"><button type="button" class="coach-node" data-coach-step="(\w+)"( aria-current="step")? aria-pressed="(true|false)"><span class="coach-node-mark" aria-hidden="true">(\d?)<\/span><span class="coach-node-name">([^<]+)<\/span><\/button><\/li>/g
   )].map(([, stepState, id, current, pressed, number, name]) => [stepState, id, Boolean(current), pressed === 'true', number, name]);
@@ -266,11 +277,15 @@ test('the Dashboard card lights the current step on its rail, fills the flask an
   assert.equal(elements.coachMessage.textContent, 'coach.msg.runMap');
   assert.equal(elements.coachCard.dataset.coachPeek, 'true');
   assert.deepEqual(rail().map((step) => [step[0], step[3]]), [['done', false], ['done', false], ['current', false], ['todo', true], ['todo', false]]);
-  assert.deepEqual(properties, { '--coach-fill': '0.5', '--coach-rail': '0.5' });
+  // The flask shows itself as it is at that step; the rail stays where the player is.
+  assert.deepEqual(properties, { '--coach-fill': '0.7', '--coach-rail': '0.5' });
+  assert.equal(inFlask(), 10);
   // Pressing it again goes back, and so does pressing the current step.
   press('map');
   assert.equal(elements.coachMessage.textContent, 'coach.msg.openInventory');
   assert.equal(elements.coachCard.dataset.coachPeek, 'false');
+  assert.deepEqual(properties, { '--coach-fill': '0.5', '--coach-rail': '0.5' });
+  assert.equal(inFlask(), 5);
   press('game');
   assert.equal(elements.coachMessage.textContent, 'coach.msg.game');
   press('inventory');
@@ -285,19 +300,23 @@ test('the Dashboard card lights the current step on its rail, fills the flask an
   assert.equal(elements.coachMessage.textContent, 'coach.msg.runMap');
   assert.equal(elements.coachCard.dataset.coachPeek, 'false');
   assert.deepEqual(properties, { '--coach-fill': '0.7', '--coach-rail': '0.75' });
-  // A step passed, so coins drop into the flask; the same step sent again, or a step back, drops none.
-  assert.equal(elements.coachCard.dataset.coachDrop, 'a');
-  context.setCoachState({ step: 'map', index: 4, total: 5, message: 'inMap', status: 'wait' });
+  // Currency lies in the flask by the step: a few pieces while getting ready, most of them once the map runs. A step
+  // back takes the later pieces out again.
+  assert.equal(inFlask(), 10);
   context.setCoachState({ step: 'inventory', index: 3, total: 5, message: 'openInventory', status: 'do' });
-  assert.equal(elements.coachCard.dataset.coachDrop, 'a');
+  assert.equal(inFlask(), 5);
+  context.setCoachState({ step: 'ready', index: 2, total: 5, message: 'loading', status: 'wait' });
+  assert.equal(inFlask(), 3);
+  context.setCoachState({ step: 'game', index: 1, total: 5, message: 'game', status: 'do' });
+  assert.equal(inFlask(), 1);
   context.setCoachState({ step: 'count', index: 5, total: 5, message: 'count', status: 'do' });
-  assert.equal(elements.coachCard.dataset.coachDrop, 'b');
+  assert.equal(inFlask(), 12);
 
   context.setCoachState({ step: 'done', index: 5, total: 5, message: 'done', status: 'done' });
   assert.equal(elements.coachProgress.textContent, 'coach.doneTag');
   assert.deepEqual(rail().map((step) => step[0]), ['done', 'done', 'done', 'done', 'done']);
   assert.deepEqual(properties, { '--coach-fill': '1', '--coach-rail': '1' });
-  assert.equal(elements.coachCard.dataset.coachDrop, 'a', 'the counted map drops coins too');
+  assert.equal(inFlask(), 12);
 
   // Path of Exile 1 gets its note with no steps; nothing to show hides the card.
   context.setCoachState({ step: 'poe1', index: 0, total: 0, message: 'poe1', status: 'info' });
@@ -326,9 +345,16 @@ test('the pages load the model, show the card above the Dashboard and offer the 
   const html = read('src', 'index.html');
   const scripts = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((match) => match[1]);
   assert.ok(scripts.indexOf('modules/coachModel.js') !== -1 && scripts.indexOf('modules/coachModel.js') < scripts.indexOf('app.js'));
-  assert.match(html, /<div class="coach-card hidden" id="coach-card"[\s\S]*?<div class="coach-mascot" aria-hidden="true">[\s\S]*?<div class="coach-flask-level"><\/div>[\s\S]*?<img class="coach-flask-front" src="assets\/brand\/flask-front\.svg" width="64" height="64" alt="">\s*(?:<span class="coach-coin"><\/span>\s*){3}<img class="coach-cheer" src="assets\/brand\/reactions\/juiced\.svg" width="34" height="34" alt="">[\s\S]*?<button type="button" class="btn btn-ghost btn-small" id="coach-hide" data-i18n="coach\.hide">[\s\S]*?<div class="dashboard-grid">/);
+  assert.match(html, /<div class="coach-card hidden" id="coach-card"[\s\S]*?<div class="coach-mascot" aria-hidden="true">[\s\S]*?<div class="coach-flask-level"><\/div>[\s\S]*?(?:<img class="coach-coin" src="assets\/currency\/poe[12]\/[\w-]+\.(?:png|webp)" width="8" height="8" alt="">\s*){12}<img class="coach-flask-front" src="assets\/brand\/flask-front\.svg" width="64" height="64" alt="">\s*<\/div>\s*<img class="coach-cheer" src="assets\/brand\/reactions\/juiced\.svg" width="34" height="34" alt="">[\s\S]*?<button type="button" class="btn btn-ghost btn-small" id="coach-hide" data-i18n="coach\.hide">[\s\S]*?<div class="dashboard-grid">/);
   assert.match(html, /<button type="button" class="btn btn-link" id="guide-show-coach" data-i18n="coach\.showAgain">/);
   assert.ok(fs.existsSync(path.join(desktopDir, 'src', 'assets', 'brand', 'mark-small.svg')));
+  // The currency in the flask is the app's own bundled icons, for both games.
+  const coins = [...html.matchAll(/<img class="coach-coin" src="(assets\/currency\/[^"]+)"/g)].map((match) => match[1]);
+  assert.equal(new Set(coins).size, 12);
+  for (const coin of coins) {
+    assert.ok(fs.existsSync(path.join(desktopDir, 'src', coin)), coin);
+  }
+  assert.deepEqual([...new Set(coins.map((coin) => coin.split('/')[2]))].sort(), ['poe1', 'poe2']);
 
   const preload = read('preload.js');
   assert.match(preload, /getCoachState: \(\) => ipcRenderer\.invoke\('get-coach-state'\)/);

@@ -251,6 +251,7 @@ const elements = {
   coachSteps: document.getElementById('coach-steps'),
   coachMessage: document.getElementById('coach-message'),
   coachHide: document.getElementById('coach-hide'),
+  coachCoins: document.querySelectorAll('.coach-coin'),
   guideShowCoach: document.getElementById('guide-show-coach'),
 
   // Sessions
@@ -6141,14 +6142,12 @@ function setCoachState(coach) {
   if (coach?.message !== state.coach?.message) {
     state.coachPeek = null;
   }
-  // A step passed: coins drop into the flask. The two names take turns, so the same animation runs again.
-  const rank = (value) => (value ? (value.status === 'done' ? value.total + 1 : value.index) : 0);
-  if (state.coach && rank(coach) > rank(state.coach)) {
-    state.coachDrop = state.coachDrop === 'a' ? 'b' : 'a';
-  }
   state.coach = coach || null;
   renderCoach();
 }
+
+// How many pieces of currency lie in the flask at each step: a few while getting ready, most of them once the map runs.
+const COACH_STEP_PILE = [1, 3, 5, 10, 12];
 
 // What each step is about, for a look at a step other than the current one: the message a player meets there.
 const COACH_STEP_MESSAGES = { game: 'game', ready: 'loading', inventory: 'openInventory', map: 'runMap', count: 'count' };
@@ -6168,9 +6167,13 @@ function renderCoach() {
   const peek = steps.includes(state.coachPeek) && steps.indexOf(state.coachPeek) + 1 !== coach.index ? state.coachPeek : null;
   card.dataset.coachStatus = coach.status;
   card.dataset.coachPeek = peek ? 'true' : 'false';
-  card.dataset.coachDrop = state.coachDrop || '';
-  // The flask is a tenth full at the first step and full when a map has been counted.
-  card.style?.setProperty('--coach-fill', String(done ? 1 : coach.total ? (coach.index - 0.5) / coach.total : 0.5));
+  // The flask is a tenth full at the first step and full when a map has been counted. A look at another step shows
+  // the flask as it is there.
+  const shown = peek ? steps.indexOf(peek) + 1 : coach.index;
+  card.style?.setProperty('--coach-fill', String(done && !peek ? 1 : coach.total ? (shown - 0.5) / coach.total : 0.5));
+  // Currency falls into the flask as the steps pass, and stays.
+  const pile = !coach.total ? 0 : done && !peek ? COACH_STEP_PILE[COACH_STEP_PILE.length - 1] : COACH_STEP_PILE[shown - 1];
+  elements.coachCoins?.forEach((coin, position) => coin.classList.toggle('is-in', position < pile));
   card.style?.setProperty('--coach-rail', String(coach.total > 1 ? (done ? 1 : (coach.index - 1) / (coach.total - 1)) : 0));
   elements.coachProgress.textContent = done
     ? window.t('coach.doneTag')
