@@ -362,6 +362,17 @@
     setText(el.meta, '');
   }
 
+  /* ── Mode: First-map steps ── */
+  // Main sends the step; its message is split like a status card's, first sentence on top.
+  function renderCoachMode(state) {
+    var coach = state.coach || {};
+    var parts = root.t('coach.msg.' + coach.message).split('. ');
+    setKicker(root.t('coach.kicker', { step: coach.index, total: coach.total }));
+    setPrimary(parts[0] + (parts.length > 1 ? '.' : ''));
+    setSecondary(parts.slice(1).join('. '));
+    setText(el.meta, '');
+  }
+
   /* ── Mode: Start Map Prompt ── */
   function renderStartMapPrompt(state) {
     var prompt = (state.startMapPrompt && typeof state.startMapPrompt === 'object') ? state.startMapPrompt : {};
@@ -580,6 +591,8 @@
       renderCharacterPrompt(state);
     } else if (mode === 'inventory-status') {
       renderInventoryStatusMode(state);
+    } else if (mode === 'coach') {
+      renderCoachMode(state);
     } else {
       renderRuntimeMode(state);
     }

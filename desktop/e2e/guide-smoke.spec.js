@@ -116,6 +116,24 @@ test('guide smoke: the Guide tab lists the questions, opens one, searches and fo
     const page = await waitForWindow(electronApp, /^Juice Journal$/i);
     await page.waitForLoadState('domcontentloaded');
     await signIn(page);
+    // A new profile is met by the first-map steps: with no game running, the first one is current.
+    const coach = page.locator('#coach-card');
+    await expect(coach).toBeVisible();
+    await expect(coach.locator('#coach-progress')).toHaveText('Step 1 of 5');
+    await expect(coach.locator('#coach-steps li')).toHaveText(['Start the game', 'Get ready', 'Open your inventory', 'Run a map', 'Count the loot']);
+    await expect(coach.locator('#coach-steps li[aria-current="step"]')).toHaveText('Start the game');
+    await expect(coach.locator('#coach-message')).toHaveText('Start Path of Exile and enter the game. The app finds it on its own.');
+    if (process.env.COACH_SHOT) {
+      await page.screenshot({ path: process.env.COACH_SHOT });
+    }
+    // Hide puts them away for this profile, and the Guide brings them back on the Dashboard.
+    await coach.locator('#coach-hide').click();
+    await expect(coach).toBeHidden();
+    await page.locator('.nav-btn[data-page="guide"]').click();
+    await page.locator('#guide-show-coach').click();
+    await expect(page.locator('#dashboard-page')).toHaveClass(/active/);
+    await expect(coach).toBeVisible();
+
     // The Guide tab opens the page with every section and question, all closed.
     await page.locator('.nav-btn[data-page="guide"]').click();
     await expect(page.locator('#guide-page')).toHaveClass(/active/);

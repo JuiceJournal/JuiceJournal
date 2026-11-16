@@ -169,6 +169,19 @@ test('dropdown smoke: selects use the themed picker by mouse and keyboard, in to
       .map((select) => select.id));
     expect(nativeSelects).toEqual([]);
 
+    // A new profile's first-map steps sit above the Dashboard and push the farm type picker down, where its list has
+    // no room below it and opens upward. It still opens whole inside the window; the rest of the checks run with the
+    // steps put away, which is where the list opens downward.
+    await expectOpen(page.locator('#session-farm-type-select'));
+    const listBox = await page.locator('#session-farm-type-select option').first().boundingBox();
+    const lastBox = await page.locator('#session-farm-type-select option').last().boundingBox();
+    const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+    expect(Math.min(listBox.y, lastBox.y)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(listBox.y + listBox.height, lastBox.y + lastBox.height)).toBeLessThanOrEqual(viewport.height);
+    await page.keyboard.press('Escape');
+    await page.locator('#coach-hide').click();
+    await expect(page.locator('#coach-card')).toBeHidden();
+
     const farmType = page.locator('#session-farm-type-select');
 
     // Mouse: the list opens on the page, reads as spaced rows, keeps farm colours, and a click picks and closes.

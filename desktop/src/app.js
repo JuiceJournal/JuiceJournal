@@ -246,6 +246,12 @@ const elements = {
   recentLootList: document.getElementById('recent-loot-list'),
   inventoryReadStatus: document.getElementById('inventory-read-status'),
   inventoryReadStatusText: document.getElementById('inventory-read-status-text'),
+  coachCard: document.getElementById('coach-card'),
+  coachProgress: document.getElementById('coach-progress'),
+  coachSteps: document.getElementById('coach-steps'),
+  coachMessage: document.getElementById('coach-message'),
+  coachHide: document.getElementById('coach-hide'),
+  guideShowCoach: document.getElementById('guide-show-coach'),
 
   // Sessions
   sessionsSummary: document.getElementById('sessions-summary'),
@@ -3125,6 +3131,21 @@ function setupIPCListeners() {
     window.electronAPI.onInventoryReadStatus(setInventoryReadStatus);
   }
 
+  // The first-map steps: main works out the step and says so whenever it changes.
+  if (window.electronAPI.onCoachState && typeof setCoachState === 'function') {
+    window.electronAPI.onCoachState(setCoachState);
+    window.electronAPI.getCoachState().then(setCoachState).catch(() => {});
+    elements.coachHide?.addEventListener('click', () => {
+      window.electronAPI.setCoachHidden(true).then(setCoachState).catch(() => {});
+    });
+    elements.guideShowCoach?.addEventListener('click', () => {
+      window.electronAPI.setCoachHidden(false).then((coach) => {
+        setCoachState(coach);
+        navigateTo('dashboard');
+      }).catch(() => {});
+    });
+  }
+
   // Loot olaylari
   window.electronAPI.onLootAdded(() => {
     refreshTrackerData({ includeSessions: isPageActive('sessions') });
@@ -3720,6 +3741,9 @@ function applyLocalizedChrome() {
   }
   if (typeof renderInventoryReadStatus === 'function') {
     renderInventoryReadStatus();
+  }
+  if (typeof renderCoach === 'function') {
+    renderCoach();
   }
   // The character card and the map result cards write their fallback lines from JS too.
   if (typeof renderCharacterSummaryCard === 'function') {
@@ -6109,6 +6133,32 @@ function renderSessionsSummary(sessions = []) {
     <div class="sessions-summary-runs" role="img" aria-label="${window.t('sessions.summaryBarsLabel', { count: bars.length })}" style="--baseline: ${baseline.toFixed(1)}%">${barsHTML}</div>
   `;
   summary.hidden = false;
+}
+
+function setCoachState(coach) {
+  state.coach = coach || null;
+  renderCoach();
+}
+
+// The first-map steps on the Dashboard: the five steps with the current one marked, and what it asks for or waits on.
+function renderCoach() {
+  const card = elements.coachCard;
+  if (!card) return;
+
+  const coach = state.coach;
+  card.classList.toggle('hidden', !coach);
+  if (!coach) return;
+
+  card.dataset.coachStatus = coach.status;
+  elements.coachProgress.textContent = coach.total && coach.status !== 'done'
+    ? window.t('coach.progress', { step: coach.index, total: coach.total })
+    : '';
+  elements.coachMessage.textContent = window.t(`coach.msg.${coach.message}`);
+  const steps = coach.total ? window.coachModel.COACH_STEPS : [];
+  elements.coachSteps.innerHTML = steps.map((id, position) => {
+    const stepState = coach.status === 'done' || position + 1 < coach.index ? 'done' : position + 1 === coach.index ? 'current' : 'todo';
+    return `<li data-step-state="${stepState}"${stepState === 'current' ? ' aria-current="step"' : ''}>${escapeHTML(window.t(`coach.step.${id}`))}</li>`;
+  }).join('');
 }
 
 function renderRecentLoot() {

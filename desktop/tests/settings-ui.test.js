@@ -2694,7 +2694,7 @@ test('Dashboard and Sessions open with the journal notice, hidden until main say
     /<input id="session-search-filter"[^>]*>\s*<\/div>\s*<\/div>\s*<div class="inline-notice error journal-notice hidden" id="sessions-journal-notice"/
   );
 
-  for (const [page, nextMarker] of [['dashboard', '<div class="dashboard-grid">'], ['sessions', '<div id="sessions-summary"']]) {
+  for (const [page, nextMarker] of [['dashboard', '<div class="coach-card hidden" id="coach-card"'], ['sessions', '<div id="sessions-summary"']]) {
     const start = html.indexOf(`id="${page}-journal-notice"`);
     const notice = html.slice(start, html.indexOf(nextMarker, start));
     for (const part of [

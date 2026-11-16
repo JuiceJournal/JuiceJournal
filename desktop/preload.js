@@ -74,6 +74,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getJournalStatus: () => ipcRenderer.invoke('get-journal-status'),
   startNewJournal: () => ipcRenderer.invoke('start-new-journal'),
   getInventoryReadStatus: () => ipcRenderer.invoke('get-inventory-read-status'),
+  getCoachState: () => ipcRenderer.invoke('get-coach-state'),
+  setCoachHidden: (hidden) => ipcRenderer.invoke('set-coach-hidden', hidden === true),
   deleteAllLocalData: () => ipcRenderer.invoke('delete-all-local-data'),
 
   // Stash & Prices
@@ -133,6 +135,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onInventoryReadStatus: (callback) => {
     ipcRenderer.on('inventory-read-status', (event, data) => callback(data));
   },
+  onCoachState: (callback) => {
+    ipcRenderer.on('coach-state', (event, data) => callback(data));
+  },
   onSessionEnded: (callback) => {
     ipcRenderer.on('session-ended', (event, data) => callback(data));
   },
@@ -191,7 +196,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeAllListeners: (channel) => {
     const ALLOWED_CHANNELS = [
       'map-entered', 'map-exited', 'session-started', 'session-ended', 'session-loot-updated',
-      'session-cost-updated', 'loot-added', 'inventory-read-status',
+      'session-cost-updated', 'loot-added', 'inventory-read-status', 'coach-state',
       'audit-trail-updated', 'navigate', 'tray-action', 'stash-snapshot-taken',
       'profit-calculated', 'prices-updated', 'game-version-changed', 'game-closed',
       'game-session-entered', 'game-session-left', 'character-log-line',
