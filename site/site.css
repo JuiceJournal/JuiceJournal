@@ -464,9 +464,11 @@ h3 {
   cursor: pointer;
 }
 .firstmap-button:hover { color: var(--ink-bright); border-color: var(--brass); }
-.firstmap-play[hidden] { display: none; }
-/* The clock of the slideshow: it runs out, and the next step comes. */
-.firstmap-timer { flex: 1; height: 3px; background: var(--line); }
+.firstmap-button[aria-disabled="true"] { opacity: 0.4; cursor: default; }
+.firstmap-button[aria-disabled="true"]:hover { color: var(--brass-light); border-color: var(--line-strong); }
+/* The clock of the show: it runs out, and the next step comes. It is there only while the show plays. */
+.firstmap-timer { flex: 1; height: 3px; background: var(--line); opacity: 0; }
+.firstmap.is-playing .firstmap-timer { opacity: 1; }
 .firstmap-timer span { display: block; height: 100%; background: linear-gradient(90deg, var(--brass-dim), var(--ember-hot)); transform: scaleX(0); transform-origin: left center; }
 
 /* What the app itself shows at this step, drawn like its overlay card. */
@@ -578,8 +580,10 @@ h3 {
   @keyframes firstmap-step-back {
     from { opacity: 0; transform: translateX(-2.5rem); }
   }
-  /* The slideshow's clock. It waits while the reader points at the steps, has the keyboard in them, or cannot see them. */
-  .firstmap-timer span.is-running { animation: firstmap-clock 5.5s linear forwards; }
+  /* The show's clock; the script gives each step its own length. It waits while the reader points at the steps, has
+     the keyboard in them, or cannot see them. */
+  .firstmap-timer { transition: opacity 300ms ease; }
+  .firstmap-timer span.is-running { animation: firstmap-clock 4s linear forwards; }
   .firstmap:hover .firstmap-timer span,
   .firstmap:focus-within .firstmap-timer span,
   .firstmap.is-offscreen .firstmap-timer span { animation-play-state: paused; }
