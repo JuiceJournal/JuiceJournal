@@ -4295,6 +4295,87 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   border-radius: var(--bevel);
 }
 
+/* The first-map steps: the flask on the left, the five steps with the current one lit, and its message. */
+.coach-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  margin-bottom: 1.25rem;
+  padding: 0.875rem 1rem;
+  background: linear-gradient(180deg, var(--plate-raised), var(--plate));
+  border: 1px solid var(--line);
+  border-radius: var(--bevel);
+}
+
+.coach-mascot {
+  flex: none;
+}
+
+.coach-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.coach-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+}
+
+.coach-title {
+  color: var(--text-bright);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.coach-progress {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.coach-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 1rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: coach-step;
+  font-size: 0.8125rem;
+}
+
+.coach-steps li {
+  counter-increment: coach-step;
+  color: var(--text-muted);
+}
+
+.coach-steps li::before {
+  content: counter(coach-step) ". ";
+}
+
+.coach-steps li[data-step-state="done"] {
+  color: var(--gain);
+}
+
+.coach-steps li[data-step-state="done"]::before {
+  content: "\2713  ";
+}
+
+.coach-steps li[data-step-state="current"] {
+  color: var(--text-bright);
+  font-weight: 700;
+}
+
+.coach-message {
+  margin-top: 0.5rem;
+  max-width: 72ch;
+  color: var(--text);
+}
+
+.coach-card[data-coach-status="wait"] .coach-message {
+  color: var(--text-muted);
+}
+
 .journal-notice-body {
   min-width: 0;
   padding-top: 0.15rem;

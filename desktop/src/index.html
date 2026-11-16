@@ -290,6 +290,18 @@
             </div>
           </div>
         </div>
+        <div class="coach-card hidden" id="coach-card" role="region" aria-labelledby="coach-title" data-coach-status="do">
+          <img class="coach-mascot" src="assets/brand/mark.svg" width="44" height="44" alt="">
+          <div class="coach-body">
+            <div class="coach-head">
+              <p class="coach-title" id="coach-title" data-i18n="coach.title">Your first map</p>
+              <span class="coach-progress" id="coach-progress"></span>
+            </div>
+            <ol class="coach-steps" id="coach-steps"></ol>
+            <p class="coach-message" id="coach-message" aria-live="polite"></p>
+          </div>
+          <button type="button" class="btn btn-ghost btn-small" id="coach-hide" data-i18n="coach.hide">Hide</button>
+        </div>
         <div class="dashboard-grid">
           <!-- Character Summary -->
           <div class="card character-card" id="character-summary-card" role="region" data-i18n-aria="dashboard.characterSummary" data-character-state="empty">
@@ -1172,6 +1184,7 @@
           <div>
             <h2 data-i18n="guide.title">Guide</h2>
             <p class="page-subtitle" data-i18n="guide.intro">Short answers to what new players ask first.</p>
+            <button type="button" class="btn btn-link" id="guide-show-coach" data-i18n="coach.showAgain">Show the first-map steps again</button>
           </div>
           <div class="currency-search-field">
             <svg class="icon currency-search-glyph" width="12" height="12" aria-hidden="true"><use href="assets/icons.svg#search"/></svg>
@@ -1210,6 +1223,7 @@
   <script src="modules/profitTierModel.js"></script>
   <script src="modules/currencyRowWindowModel.js"></script>
   <script src="modules/guideModel.js"></script>
+  <script src="modules/coachModel.js"></script>
   <script src="app.js"></script>
   <script src="guide.js"></script>
 </body>

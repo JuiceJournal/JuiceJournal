@@ -93,8 +93,8 @@ class InventoryWatcher {
   }
 
   // Loads priced art a little at a time. Reads wait until nothing is left but icons that stopped arriving; those keep
-  // being tried, and one that arrives later joins the library. The wait runs from the last icon loaded, since this only
-  // runs with the game in front, and time spent away from it says nothing about the downloads.
+  // being tried, and one that arrives later joins the library. The wait runs from the last icon loaded: this runs on
+  // a tick with the game in front and from prepare(), and time between the two says nothing about the downloads.
   warmArt(game) {
     if (this.art.game !== game) {
       this.resetArt(game);
@@ -247,6 +247,30 @@ class InventoryWatcher {
       this.applyRead(characterKey, result, { announce: false });
     } else if (result && !result.open && !this.state.baselines[characterKey] && this.deps.isInMapHub()) {
       this.deps.onRead('needsBaseline', { characterKey });
+    }
+  }
+
+  // What the first-map steps need to know about reading, for the game that runs.
+  getReadiness(game) {
+    // Another profile's reads are not this one's.
+    this.syncProfile();
+    const characterKey = getCharacterKey(game, this.deps.getCharacter());
+    const { pending } = this.state;
+    return {
+      hasCharacter: Boolean(characterKey),
+      windowUnmeasured: this.isWindowUnmeasured(),
+      artReady: this.art.game === game && this.art.ready === true,
+      hasBaseline: Boolean(characterKey && this.state.baselines[characterKey]),
+      // A map that ended with no read before it cannot be counted, so it is not waiting for one.
+      mapWaiting: Boolean(characterKey && pending && pending.characterKey === characterKey && pending.baseline)
+    };
+  }
+
+  // Loads prices and item art without waiting for the game window to be in front, so a player who is looking at the
+  // app while they load does not come back to a reader that has not started.
+  prepare(game) {
+    if (this.deps.isEnabled() && this.syncProfile() && game && hasInventoryLayout(game)) {
+      this.warmArt(game);
     }
   }
 

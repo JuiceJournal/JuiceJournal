@@ -45,6 +45,7 @@ const localJournal = require('./src/modules/localJournalModel');
 const { deriveMapResultOverlayState, getMapResultCardHeight } = require('./src/modules/mapResultOverlayModel');
 const { buildFarmPublishPayload } = require('./src/modules/farmPublishPayloadModel');
 const { deriveOverlayState } = require('./src/modules/overlayStateModel');
+const { deriveCoach, COACH_OVERLAY_MESSAGES } = require('./src/modules/coachModel');
 const {
   listFarmTypes,
   getFarmTypeById,
@@ -80,6 +81,7 @@ const INVENTORY_STATUS_CARD_MS = 4_000;
 // The hint to open the inventory once waits for a calm hideout, then stays up long enough to be read and acted on.
 const INVENTORY_FIRST_READ_CARD_MS = 20_000;
 const FIRST_READ_NUDGE_DEBOUNCE_MS = 3_000;
+const COACH_TICK_MS = 1_000;
 // Inventory loot waits this long for poe.ninja prices; loot without a price counts as 0.
 const SESSION_PRICES_WAIT_MS = 5_000;
 const SESSION_PRICES_RETRY_MS = 5 * 60_000;
@@ -513,6 +515,11 @@ const firstReadNudgeShown = new Set();
 // Profile and character pairs whose read since the last map entered was already told on the overlay.
 const inventoryReadAnnounced = new Set();
 let inventoryWatcher = null;
+// The first-map steps as last told to the window and the overlay, and the timer that keeps them current.
+let coachState = null;
+let coachTimer = null;
+// Whether this run already said, in the game, that the window is at a size reading does not work on.
+let coachResolutionTold = false;
 // What the last inventory read came to, for the Dashboard's status line. Kept per profile, in memory only.
 let inventoryReadStatus = { kind: 'none', at: null, profileId: null };
 // True while the game window is a size reading has not been checked on. Kept apart from the last read, which it
@@ -3469,7 +3476,10 @@ function getOverlayWindowBounds(overlayState = {}) {
     ? 350
     : isInteractivePrompt
       ? 286
-      : overlayState.mode === 'map-result' ? getMapResultCardHeight(overlayState.mapResult?.result) : 112;
+      : overlayState.mode === 'map-result'
+        ? getMapResultCardHeight(overlayState.mapResult?.result)
+        // A first-map step is a sentence or two, which wraps.
+        : overlayState.mode === 'coach' ? 150 : 112;
 
   return {
     width,
@@ -3927,7 +3937,7 @@ function buildOverlayState({ character = overlayCharacterState, runtimeSession =
     overlayMapResultState = null;
   }
 
-  return deriveOverlayState({
+  const overlayState = deriveOverlayState({
     enabled: isOverlayEnabled(),
     character,
     runtime: runtimeSession,
@@ -3937,6 +3947,15 @@ function buildOverlayState({ character = overlayCharacterState, runtimeSession =
     now: Date.now(),
     language: getLanguage()
   });
+  return typeof coachOverlayState === 'function' ? coachOverlayState(overlayState) : overlayState;
+}
+
+// The first-map steps take the idle card's place once the game runs: never a running map's, a prompt's or a result's.
+function coachOverlayState(overlayState) {
+  if (isCoachGuiding() && COACH_OVERLAY_MESSAGES.includes(coachState.message) && isOverlayEnabled() && !overlayState.mode && !currentSession) {
+    return { visibility: 'visible', mode: 'coach', coach: coachState };
+  }
+  return overlayState;
 }
 
 function ensureOverlayWindowForSettings() {
@@ -4244,6 +4263,10 @@ function createInventoryWatcher() {
       if ((kind === 'gain' || kind === 'noGain' || kind === 'noBaseline') && details.characterKey) {
         inventoryReadAnnounced.add(getInventoryAnnounceKey(details.characterKey));
       }
+      // A map counted from a read before it and a read after it is the whole loop: the first-map steps are done.
+      if ((kind === 'gain' || kind === 'noGain') && typeof completeCoach === 'function') {
+        completeCoach();
+      }
     }
   });
 }
@@ -4299,6 +4322,7 @@ function showInventoryStatus(kind) {
 function maybeShowFirstReadNudge(characterKey, now = Date.now()) {
   const blocked = !characterKey
     || firstReadNudgeShown.has(characterKey)
+    || (typeof isCoachGuiding === 'function' && isCoachGuiding())
     || !isOverlayEnabled(readParsedSetting)
     || overlayStartMapPromptState
     || overlayCharacterPromptState
@@ -4381,6 +4405,104 @@ function getInventoryReadStatus() {
 
   const { profileId, ...status } = inventoryReadStatus;
   return status;
+}
+
+// The first-map steps are kept per profile, like its other settings: 'done' once a map's loot was counted, 'hidden'
+// when the player hid them.
+function getCoachStoreKey(profileId) {
+  return profileId ? `firstMapCoach:${profileId}` : null;
+}
+
+function getCoachRecord() {
+  const key = getCoachStoreKey(getActiveProfile(readParsedSetting)?.id);
+  return key ? (readParsedSetting(key) || null) : null;
+}
+
+function setCoachRecord(value) {
+  const key = getCoachStoreKey(getActiveProfile()?.id);
+  if (!key) {
+    return;
+  }
+
+  if (value) {
+    store.set(key, value);
+  } else {
+    store.delete(key);
+  }
+}
+
+function buildCoachState() {
+  if (!getActiveProfile(readParsedSetting)) {
+    return null;
+  }
+
+  const record = getCoachRecord();
+  const game = gameDetector ? gameDetector.getDetectedGame() : null;
+  return deriveCoach({
+    done: record === 'done',
+    hidden: record === 'hidden',
+    game,
+    readingEnabled: readParsedSetting('inventoryReadEnabled') !== false,
+    ...(inventoryWatcher ? inventoryWatcher.getReadiness(game) : {}),
+    inMap: Boolean(logParser?.currentMap),
+    inHub: Boolean(logParser?.isInMapHub?.())
+  });
+}
+
+// Whether the steps are still leading the player in the game. The first-read hint leaves the inventory step to them.
+function isCoachGuiding() {
+  return Boolean(coachState && coachState.total > 0 && coachState.status !== 'done');
+}
+
+// Runs every second. While the steps wait for prices and item art, they are loaded from here.
+function refreshCoach() {
+  let next;
+  try {
+    next = buildCoachState();
+    if (next?.message === 'loading') {
+      inventoryWatcher.prepare(gameDetector ? gameDetector.getDetectedGame() : null);
+    }
+  } catch (error) {
+    // A timer's throw would raise the error dialog every second.
+    console.warn('Could not work out the first-map step', error);
+    return;
+  }
+  if (JSON.stringify(next) === JSON.stringify(coachState)) {
+    return;
+  }
+
+  coachState = next;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('coach-state', coachState);
+  }
+  // A window at another size is a step the player cannot get past in the game, so the overlay does not hold its card
+  // there. It is said once, the way the read key says it.
+  if (next?.message === 'resolution' && !coachResolutionTold) {
+    coachResolutionTold = true;
+    showInventoryStatus('resolution');
+  }
+  updateOverlayWindow();
+}
+
+function startCoach() {
+  if (!coachTimer) {
+    coachTimer = setInterval(refreshCoach, COACH_TICK_MS);
+  }
+  refreshCoach();
+}
+
+function completeCoach() {
+  if (getActiveProfile() && !getCoachRecord()) {
+    setCoachRecord('done');
+    refreshCoach();
+  }
+}
+
+// The Dashboard's Hide, and the Guide's button that brings the steps back from the start.
+function setCoachHidden(hidden) {
+  setCoachRecord(hidden === true ? 'hidden' : null);
+  refreshCoach();
+  return coachState;
 }
 
 function sendInventoryReadStatus() {
@@ -5285,7 +5407,7 @@ function getRendererSettings() {
   // The renderer sees only the signed-in profile's character cache. Map results
   // and custom farm types reach it per profile through their own IPC.
   Object.keys(allSettings)
-    .filter((key) => key.startsWith('lastKnownAccountState:') || key.startsWith('mapResults:') || key.startsWith('customFarmTypes:') || key.startsWith('farmTypeCosts:'))
+    .filter((key) => key.startsWith('lastKnownAccountState:') || key.startsWith('mapResults:') || key.startsWith('customFarmTypes:') || key.startsWith('farmTypeCosts:') || key.startsWith('firstMapCoach:'))
     .forEach((key) => delete allSettings[key]);
   const accountStateKey = getAccountStateStoreKey();
   allSettings.lastKnownAccountState = (accountStateKey && store.get(accountStateKey)) || null;
@@ -5671,6 +5793,10 @@ function setupIPC() {
 
   // The Dashboard's inventory read line. No renderer input: main knows what the last read came to.
   ipcMain.handle('get-inventory-read-status', () => getInventoryReadStatus());
+
+  // The first-map steps. Hiding takes one boolean; nothing else comes from the renderer.
+  ipcMain.handle('get-coach-state', () => coachState);
+  ipcMain.handle('set-coach-hidden', (event, hidden) => setCoachHidden(hidden === true));
 
   // Settings > Data's Delete everything. No renderer input and no confirm in main: the renderer's own dialog asked.
   ipcMain.handle('delete-all-local-data', () => deleteAllLocalData());
@@ -6303,6 +6429,7 @@ app.whenReady().then(() => {
   iconCache = new IconCache({ dir: path.join(app.getPath('userData'), 'icon-cache') });
   stashAnalyzer = new StashAnalyzer();
   inventoryWatcher = createInventoryWatcher();
+  startCoach();
 
   // Set PoE version for price service
   priceService.setPoeVersion(store.get('poeVersion') || 'poe1');
@@ -6397,6 +6524,11 @@ function handleAppWillQuit() {
   if (scanHotkeyGateInterval) {
     clearInterval(scanHotkeyGateInterval);
     scanHotkeyGateInterval = null;
+  }
+
+  if (coachTimer) {
+    clearInterval(coachTimer);
+    coachTimer = null;
   }
 }
 

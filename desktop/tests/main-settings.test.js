@@ -1419,6 +1419,7 @@ test('main app shutdown cleans up main-process resources', () => {
     },
     mainWindow: null,
     scanHotkeyGateInterval: 7,
+    coachTimer: 9,
     clearInterval(intervalId) {
       clearedIntervals.push(intervalId);
     }
@@ -1431,10 +1432,11 @@ test('main app shutdown cleans up main-process resources', () => {
   assert.equal(gameDetectorStopCalls, 1);
   assert.equal(trayDestroyCalls, 1);
   assert.equal(overlayDestroyCalls, 1);
-  assert.deepEqual(clearedIntervals, [7]);
+  assert.deepEqual(clearedIntervals, [7, 9]);
   assert.equal(context.tray, null);
   assert.equal(context.overlayWindow, null);
   assert.equal(context.scanHotkeyGateInterval, null);
+  assert.equal(context.coachTimer, null);
 });
 
 // On Windows, closing a window made with closable: false cancels app.quit(), and will-quit never comes. Delete

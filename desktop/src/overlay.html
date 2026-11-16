@@ -135,6 +135,23 @@
       transform: rotate(45deg);
     }
 
+    /* The first-map steps: the flask speaks, in place of the kicker's mark. */
+    [data-overlay-mode="coach"] { --tone: var(--gold); }
+    [data-overlay-mode="coach"] .jj-label::before {
+      width: 16px;
+      height: 16px;
+      background: url('assets/brand/mark-small.svg') center / contain no-repeat;
+      transform: none;
+    }
+    /* A step is a sentence to read, not a name: body type, and it wraps. */
+    [data-overlay-mode="coach"] .jj-primary {
+      font-family: var(--font);
+      font-size: 14px;
+      white-space: normal;
+    }
+    [data-overlay-mode="coach"] .jj-primary-name { overflow: visible; }
+    [data-overlay-mode="coach"] .jj-secondary { white-space: normal; }
+
     .jj-actions {
       display: flex;
       gap: 6px;

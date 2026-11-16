@@ -145,6 +145,30 @@ test('the uppercase kicker marks the app name English and lets a translated labe
   assert.equal(overlay.kicker.getAttribute('lang'), null);
 });
 
+test('the first-map step shows its number in the kicker and its message with the first sentence on top', () => {
+  const overlay = loadOverlay();
+  const coach = (message, language = 'en') => ({
+    visibility: 'visible', mode: 'coach', language, coach: { step: 'inventory', index: 3, total: 5, message, status: 'do' }
+  });
+
+  overlay.renderState(coach('openInventory'));
+  assert.equal(overlay.kicker.textContent, 'First map 3/5');
+  assert.equal(overlay.kicker.getAttribute('lang'), null);
+  assert.equal(overlay.primary.children[0].textContent, 'Open your inventory once.');
+  assert.equal(overlay.secondary.textContent, 'Press I, so your next map counts.');
+  assert.equal(overlay.meta.textContent, '');
+
+  overlay.renderState(coach('openInventory', 'tr'));
+  assert.equal(overlay.kicker.textContent, 'İlk map 3/5');
+  assert.equal(overlay.primary.children[0].textContent, 'Envanterini bir kez aç.');
+  assert.equal(overlay.secondary.textContent, 'I tuşuna bas, sonraki map sayılsın.');
+
+  // A three-sentence message keeps the rest together under the headline.
+  overlay.renderState(coach('mapUncounted'));
+  assert.equal(overlay.primary.children[0].textContent, 'This map cannot be counted.');
+  assert.equal(overlay.secondary.textContent, 'Your inventory was not read before it, so open it in your hideout after the map.');
+});
+
 test('overlay renderer shows the map result card and its clockless lines in the app language', () => {
   const overlay = loadOverlay();
   const mapResult = (result) => ({ visibility: 'visible', mode: 'map-result', language: 'tr', mapResult: { visible: true, result } });
