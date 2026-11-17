@@ -1067,6 +1067,31 @@ function getStoredCustomFarmTypes() {
   return storeKey ? normalizeCustomFarmTypes(store.get(storeKey)) : [];
 }
 
+// Each profile keeps the farm types it took off the overlay's start card, as ids. They stay everywhere else.
+function getOverlayHiddenFarmTypesStoreKey(profileId = getActiveProfile()?.id) {
+  return profileId ? `overlayHiddenFarmTypes:${profileId}` : null;
+}
+
+function getStoredOverlayHiddenFarmTypes() {
+  const storeKey = getOverlayHiddenFarmTypesStoreKey();
+  const stored = storeKey ? store.get(storeKey) : null;
+  return Array.isArray(stored) ? [...new Set(stored.filter((id) => typeof id === 'string' && id))] : [];
+}
+
+function setStoredOverlayFarmTypeHidden(farmTypeId, hidden) {
+  const storeKey = getOverlayHiddenFarmTypesStoreKey();
+  if (!storeKey || !isKnownFarmTypeCostId(farmTypeId)) {
+    return { ok: false, error: 'FARM_TYPE_NOT_FOUND' };
+  }
+
+  const ids = getStoredOverlayHiddenFarmTypes().filter((id) => id !== farmTypeId);
+  if (hidden) {
+    ids.push(farmTypeId);
+  }
+  store.set(storeKey, ids);
+  return { ok: true, hidden: ids };
+}
+
 // Each profile keeps the entry cost typed for each farm type, as typed: { [farmTypeId]: { amount, unit } }.
 function getFarmTypeCostsStoreKey(profileId = getActiveProfile()?.id) {
   return profileId ? `farmTypeCosts:${profileId}` : null;
@@ -3640,14 +3665,17 @@ function showStartMapPromptOverlay(prompt = {}, options = {}) {
   const createdAt = options.now ?? Date.now();
   const expiresInMs = Number(options.expiresInMs);
   const costs = getStoredFarmTypeCosts();
+  const farmTypeId = normalizeStartMapPromptText(prompt.farmTypeId || prompt.farm_type_id);
+  // The player's own short list. The Dashboard's farm type always shows: the card starts with it selected.
+  const hidden = new Set(typeof getStoredOverlayHiddenFarmTypes === 'function' ? getStoredOverlayHiddenFarmTypes() : []);
   overlayStartMapPromptState = {
     mapName: normalizeStartMapPromptText(prompt.mapName, 'Unknown Map'),
-    farmTypeId: normalizeStartMapPromptText(prompt.farmTypeId || prompt.farm_type_id),
+    farmTypeId,
     farmType: normalizeStartMapPromptText(prompt.farmType),
     poeVersion: normalizeStartMapPromptText(prompt.poeVersion || prompt.gameVersion),
     league: normalizeStartMapPromptText(prompt.league),
     // Each farm type shows the entry cost it applies, as typed; the card's cost box starts from it.
-    farmTypeOptions: normalizeStartMapPromptFarmTypeOptions(prompt.farmTypeOptions).map((option) => {
+    farmTypeOptions: normalizeStartMapPromptFarmTypeOptions(prompt.farmTypeOptions).filter((option) => !hidden.has(option.id) || option.id === farmTypeId).map((option) => {
       const cost = costs[option.id];
       return cost
         ? { ...option, cost: cost.unit === 'divine' ? `${cost.amount} div` : `${cost.amount}c`, costAmount: cost.amount, costUnit: cost.unit }
@@ -5407,7 +5435,7 @@ function getRendererSettings() {
   // The renderer sees only the signed-in profile's character cache. Map results
   // and custom farm types reach it per profile through their own IPC.
   Object.keys(allSettings)
-    .filter((key) => key.startsWith('lastKnownAccountState:') || key.startsWith('mapResults:') || key.startsWith('customFarmTypes:') || key.startsWith('farmTypeCosts:') || key.startsWith('firstMapCoach:'))
+    .filter((key) => key.startsWith('lastKnownAccountState:') || key.startsWith('mapResults:') || key.startsWith('customFarmTypes:') || key.startsWith('overlayHiddenFarmTypes:') || key.startsWith('farmTypeCosts:') || key.startsWith('firstMapCoach:'))
     .forEach((key) => delete allSettings[key]);
   const accountStateKey = getAccountStateStoreKey();
   allSettings.lastKnownAccountState = (accountStateKey && store.get(accountStateKey)) || null;
@@ -5617,6 +5645,13 @@ function setupIPC() {
   ipcMain.handle('get-custom-farm-types', () => getStoredCustomFarmTypes());
 
   ipcMain.handle('get-farm-type-costs', () => getStoredFarmTypeCosts());
+
+  ipcMain.handle('get-overlay-hidden-farm-types', () => getStoredOverlayHiddenFarmTypes());
+
+  ipcMain.handle('set-overlay-farm-type-hidden', (event, farmTypeId, hidden) => {
+    assertDesktopUserAuthenticated();
+    return setStoredOverlayFarmTypeHidden(farmTypeId, hidden === true);
+  });
 
   ipcMain.handle('set-farm-type-cost', async (event, farmTypeId, input) => {
     try {

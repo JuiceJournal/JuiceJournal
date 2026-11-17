@@ -50,6 +50,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteCustomFarmType: (farmTypeId) => ipcRenderer.invoke('delete-custom-farm-type', farmTypeId),
   getFarmTypeCosts: () => ipcRenderer.invoke('get-farm-type-costs'),
   setFarmTypeCost: (farmTypeId, cost) => ipcRenderer.invoke('set-farm-type-cost', farmTypeId, cost),
+  getOverlayHiddenFarmTypes: () => ipcRenderer.invoke('get-overlay-hidden-farm-types'),
+  setOverlayFarmTypeHidden: (farmTypeId, hidden) => ipcRenderer.invoke('set-overlay-farm-type-hidden', farmTypeId, hidden),
   getSessionDetails: (sessionId) => ipcRenderer.invoke('get-session-details', sessionId),
   updateSessionDetails: (sessionId, payload) => ipcRenderer.invoke('update-session-details', sessionId, payload),
   updateLoot: (sessionId, lootId, changes) => ipcRenderer.invoke('update-loot', sessionId, lootId, changes),

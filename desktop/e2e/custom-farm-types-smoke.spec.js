@@ -230,6 +230,29 @@ test('custom farm types smoke: made, shown, renamed and deleted per profile, acr
     expect(await iconHasBox(overlayName.locator('use'))).toBe(true);
     await overlay.locator('[data-overlay-dismiss]').click();
 
+    // Farm types on the overlay: one switched off leaves the start card and stays on the Dashboard.
+    await openCustomFarmSettings(page);
+    const ritualSwitch = page.locator('#overlay-farm-list input[value="ritual"]');
+    await expect(page.locator(`#overlay-farm-list input[value="${created.id}"]`)).toBeChecked();
+    await expect(ritualSwitch).toBeChecked();
+    await ritualSwitch.uncheck();
+    await expect.poll(() => readConfig()[`overlayHiddenFarmTypes:${profileIdA}`]).toEqual(['ritual']);
+    const showPrompt = (farmTypeId) => page.evaluate(({ id, label, farmTypeId }) => window.electronAPI.showStartMapPromptOverlay({
+      mapName: 'Cemetery Map',
+      farmTypeId,
+      farmTypeOptions: [{ id, label }, { id: 'ritual', label: 'Ritual' }, { id: 'breach', label: 'Breach' }]
+    }), { id: created.id, label: created.label, farmTypeId });
+    await showPrompt('');
+    await expect(overlay.locator('[data-farm-type-id="breach"]')).toBeVisible();
+    await expect(overlay.locator('[data-farm-type-id="ritual"]')).toHaveCount(0);
+    // The Dashboard's farm type shows even when it is switched off.
+    await showPrompt('ritual');
+    await expect(overlay.locator('[data-farm-type-id="ritual"]')).toHaveAttribute('aria-pressed', 'true');
+    await overlay.locator('[data-overlay-start-cancel]').click();
+    await expect(page.locator('#session-farm-type-select option[value="ritual"]')).toHaveCount(1);
+    await page.locator('#overlay-farm-list input[value="ritual"]').check();
+    await expect.poll(() => readConfig()[`overlayHiddenFarmTypes:${profileIdA}`]).toEqual([]);
+
     // Edit: the same id, and the rename and colour reach the past session and the stored result.
     await openCustomFarmSettings(page);
     await page.locator('[data-custom-farm-action="edit"]').click();

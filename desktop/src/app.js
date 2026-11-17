@@ -63,6 +63,7 @@ const state = {
   sessionCostBusy: false,
   // Entry costs of the signed-in profile by farm type id, as typed: { amount, unit }.
   farmTypeCosts: {},
+  overlayHiddenFarmTypes: [],
   farmTypeCostBusy: false,
   renderedFarmTypeCostId: null,
   auditTrail: [],
@@ -219,6 +220,7 @@ const elements = {
   entryCostError: document.getElementById('session-entry-cost-error'),
   customFarmGroup: document.getElementById('custom-farm-types-group'),
   customFarmList: document.getElementById('custom-farm-list'),
+  overlayFarmList: document.getElementById('overlay-farm-list'),
   customFarmAddBtn: document.getElementById('custom-farm-add-btn'),
   customFarmForm: document.getElementById('custom-farm-form'),
   customFarmFormTitle: document.getElementById('custom-farm-form-title'),
@@ -1791,6 +1793,7 @@ function renderCustomFarmTypes() {
     elements.customFarmAddBtn.disabled = farmTypes.length >= CUSTOM_FARM_TYPE_LIMIT;
   }
   renderCustomFarmPicker();
+  renderOverlayFarmTypes();
 }
 
 // The radio buttons keep what is selected when the language redraws their names.
@@ -1869,6 +1872,42 @@ function closeCustomFarmForm() {
   if (elements.customFarmForm) {
     elements.customFarmForm.hidden = true;
   }
+}
+
+// The farm types the overlay's start card offers: every farm type is a switch, on unless the player turned it off.
+function renderOverlayFarmTypes() {
+  if (!elements.overlayFarmList) {
+    return;
+  }
+
+  const hidden = new Set(state.overlayHiddenFarmTypes);
+  elements.overlayFarmList.innerHTML = getFarmTypeModel().listFarmTypes().map((farmType) => `
+    <label class="custom-farm-option overlay-farm-option">
+      <input type="checkbox" value="${escapeHTML(farmType.id)}"${hidden.has(farmType.id) ? '' : ' checked'}>
+      <span class="custom-farm-option-face"${farmTypeAttr(farmType.id)}>${farmTypeIconHTML(farmType.id)}${escapeHTML(farmType.label)}</span>
+    </label>`).join('');
+}
+
+async function loadOverlayHiddenFarmTypes() {
+  if (!window.electronAPI?.getOverlayHiddenFarmTypes) return;
+  state.overlayHiddenFarmTypes = await window.electronAPI.getOverlayHiddenFarmTypes().catch(() => []) || [];
+  renderOverlayFarmTypes();
+}
+
+async function handleOverlayFarmTypeChange(event) {
+  const input = event.target;
+  if (!input?.value) {
+    return;
+  }
+
+  const result = await window.electronAPI.setOverlayFarmTypeHidden(input.value, !input.checked).catch(() => null);
+  if (result?.ok) {
+    state.overlayHiddenFarmTypes = result.hidden || [];
+  } else {
+    showToast(window.t('overlayFarm.saveError'), '', 'error');
+  }
+  // Draws what is saved, so a failed change goes back.
+  renderOverlayFarmTypes();
 }
 
 // Draws everything that names a farm type again, after the list changed.
@@ -1996,6 +2035,7 @@ async function init() {
   await loadCustomFarmTypes();
   await loadActiveFarmTypeSelection();
   await loadFarmTypeCosts();
+  await loadOverlayHiddenFarmTypes();
   populateStrategyPresets();
 
   // Set language from settings and apply translations
@@ -2850,6 +2890,7 @@ function setupEventListeners() {
     elements.customFarmForm.addEventListener('input', renderCustomFarmPreview);
     elements.customFarmList?.addEventListener('click', handleCustomFarmListClick);
   }
+  elements.overlayFarmList?.addEventListener('change', handleOverlayFarmTypeChange);
 
   // Sessions filter
   elements.sessionFilter.addEventListener('change', loadSessions);
@@ -3612,6 +3653,7 @@ async function handlePoeOAuthLogin() {
         await loadCustomFarmTypes();
         await loadActiveFarmTypeSelection();
         await loadFarmTypeCosts();
+        await loadOverlayHiddenFarmTypes();
         renderFarmTypeSelector();
       }
       await loadMapResultHistory();
@@ -3654,6 +3696,7 @@ function showSignedOutWindow() {
   if (typeof loadCustomFarmTypes === 'function') {
     window.farmTypeModel?.setCustomFarmTypes?.([]);
     state.farmTypeCosts = {};
+    state.overlayHiddenFarmTypes = [];
     closeCustomFarmForm();
     renderCustomFarmTypes();
   }

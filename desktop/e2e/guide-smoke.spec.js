@@ -156,7 +156,7 @@ test('guide smoke: the Guide tab lists the questions, opens one, searches and fo
     await page.locator('.nav-btn[data-page="guide"]').click();
     await expect(page.locator('#guide-page')).toHaveClass(/active/);
     await expect(page.locator('.guide-section')).toHaveCount(6);
-    await expect(page.locator('.guide-topic')).toHaveCount(20);
+    await expect(page.locator('.guide-topic')).toHaveCount(21);
     await expect(page.locator('.guide-topic[open]')).toHaveCount(0);
     await expect(page.locator('#guide-empty')).toBeHidden();
 
@@ -173,7 +173,7 @@ test('guide smoke: the Guide tab lists the questions, opens one, searches and fo
     await page.locator('#guide-search').fill('no such word here');
     await expect(page.locator('#guide-empty')).toBeVisible();
     await page.locator('#guide-search').fill('');
-    await expect(page.locator('.guide-topic')).toHaveCount(20);
+    await expect(page.locator('.guide-topic')).toHaveCount(21);
     await expect(page.locator('.guide-topic[open]')).toHaveCount(1);
 
     // The page follows the language.
