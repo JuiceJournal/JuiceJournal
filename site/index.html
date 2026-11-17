@@ -115,6 +115,60 @@
       </figure>
     </section>
 
+    <!-- The switches are real checkboxes and the card follows them in CSS alone, so this works without a script. -->
+    <section id="farm-types" class="section">
+      <p class="kicker">Farm types</p>
+      <h2>Your farms, your short list</h2>
+      <p class="section-lede">Every league brings new content, and nobody runs all of it. Add farm types of your own, then pick which ones the overlay's start card offers. Try it: the card follows the switches.</p>
+      <div class="farmpick plate">
+        <div class="farmpick-side">
+          <h3>In Settings</h3>
+          <div class="farmpick-switches" role="group" aria-label="Farm types on the overlay">
+            <label class="farmpick-switch" data-farm="own"><input type="checkbox" id="farmpick-own" checked><span>Boss rush</span></label>
+            <label class="farmpick-switch" data-farm="abyss"><input type="checkbox" id="farmpick-abyss"><span>Abyss</span></label>
+            <label class="farmpick-switch" data-farm="breach"><input type="checkbox" id="farmpick-breach" checked><span>Breach</span></label>
+            <label class="farmpick-switch" data-farm="expedition"><input type="checkbox" id="farmpick-expedition" checked><span>Expedition</span></label>
+            <label class="farmpick-switch" data-farm="ritual"><input type="checkbox" id="farmpick-ritual" checked><span>Ritual</span></label>
+            <label class="farmpick-switch" data-farm="harbinger"><input type="checkbox" id="farmpick-harbinger"><span>Harbinger</span></label>
+            <label class="farmpick-switch" data-farm="essence"><input type="checkbox" id="farmpick-essence"><span>Essence</span></label>
+            <label class="farmpick-switch" data-farm="delirium"><input type="checkbox" id="farmpick-delirium"><span>Delirium</span></label>
+            <label class="farmpick-switch" data-farm="blight"><input type="checkbox" id="farmpick-blight"><span>Blight</span></label>
+            <label class="farmpick-switch" data-farm="legion"><input type="checkbox" id="farmpick-legion" checked><span>Legion</span></label>
+            <label class="farmpick-switch" data-farm="harvest"><input type="checkbox" id="farmpick-harvest"><span>Harvest</span></label>
+            <label class="farmpick-switch" data-farm="betrayal"><input type="checkbox" id="farmpick-betrayal"><span>Betrayal</span></label>
+          </div>
+          <ul class="farmpick-notes">
+            <li><b>Boss rush</b> is a farm type of the player's own: a name, a colour, an icon and its own entry cost.</li>
+            <li>A farm type you turn off is not deleted. It stays on the Dashboard and on your past results.</li>
+          </ul>
+        </div>
+        <div class="farmpick-side farmpick-game">
+          <h3>In the game</h3>
+          <div class="farmpick-card">
+            <p class="farmpick-label">New map</p>
+            <p class="farmpick-map">Dunes</p>
+            <p class="farmpick-label">Farm type</p>
+            <ul class="farmpick-chips" aria-label="The farm types the start card offers">
+              <li class="is-picked">No farm type</li>
+              <li data-farm="own">Boss rush</li>
+              <li data-farm="abyss">Abyss</li>
+              <li data-farm="breach">Breach</li>
+              <li data-farm="expedition">Expedition</li>
+              <li data-farm="ritual">Ritual</li>
+              <li data-farm="harbinger">Harbinger</li>
+              <li data-farm="essence">Essence</li>
+              <li data-farm="delirium">Delirium</li>
+              <li data-farm="blight">Blight</li>
+              <li data-farm="legion">Legion</li>
+              <li data-farm="harvest">Harvest</li>
+              <li data-farm="betrayal">Betrayal</li>
+            </ul>
+          </div>
+          <p class="farmpick-caption">The overlay's start card, drawn with sample data.</p>
+        </div>
+      </div>
+    </section>
+
     <!-- The steps and their texts are the app's own first-map steps (the coach.* strings in
          desktop/src/modules/translations.js), so the page and the app say the same thing. -->
     <section id="first-map" class="section">

@@ -11,7 +11,7 @@
   const GUIDE_SECTIONS = [
     { id: 'start', topics: ['firstMap', 'manualMap', 'character'] },
     { id: 'loot', topics: ['inventory', 'unread', 'lowProfit', 'poe1', 'tiers'] },
-    { id: 'farm', topics: ['customFarm', 'entryCost', 'compare'] },
+    { id: 'farm', topics: ['customFarm', 'overlayFarm', 'entryCost', 'compare'] },
     { id: 'overlay', topics: ['overlayOn', 'startCard', 'overlayKeyboard'] },
     { id: 'data', topics: ['dataFolder', 'privacy', 'updates'] },
     { id: 'help', topics: ['hotkeys', 'language', 'reportBug'] }

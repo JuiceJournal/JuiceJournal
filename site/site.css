@@ -285,6 +285,82 @@ h3 {
 .overlay { position: relative; margin: 0; }
 .overlay img { width: min(100%, 345px); margin-inline: auto; filter: drop-shadow(0 0.6rem 1.4rem rgb(0 0 0 / 0.6)); }
 
+/* Farm types: the switches of Settings on the left, the overlay's start card on the right. The card follows the
+   switches through :has(), with no script. The colours are the app's farm colours. */
+.farmpick {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 1.5rem 2rem;
+  margin-top: 1.5rem;
+  padding: 1.6rem;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.farmpick [data-farm="own"] { --farm: #ff8247; }
+.farmpick [data-farm="abyss"] { --farm: #6fd36a; }
+.farmpick [data-farm="breach"] { --farm: #d26bf2; }
+.farmpick [data-farm="expedition"] { --farm: #4f9dff; }
+.farmpick [data-farm="ritual"] { --farm: #9d74ff; }
+.farmpick [data-farm="harbinger"] { --farm: #5ad7ef; }
+.farmpick [data-farm="essence"] { --farm: #ff6fb0; }
+.farmpick [data-farm="delirium"] { --farm: #d9dde8; }
+.farmpick [data-farm="blight"] { --farm: #c3d93a; }
+.farmpick [data-farm="legion"] { --farm: #ffb02e; }
+.farmpick [data-farm="harvest"] { --farm: #3fd1ad; }
+.farmpick [data-farm="betrayal"] { --farm: #ff5f57; }
+.farmpick-switches, .farmpick-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; list-style: none; }
+.farmpick-switch { position: relative; display: inline-flex; cursor: pointer; }
+.farmpick-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.farmpick-switch span, .farmpick-chips li {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--farm, var(--ash));
+  background: var(--plate-raised);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  clip-path: polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px);
+}
+.farmpick-switch input:checked + span { box-shadow: inset 0 0 0 2px var(--farm); }
+.farmpick-switch input:not(:checked) + span { color: var(--smoke); text-decoration: line-through; }
+.farmpick-switch input:focus-visible + span { box-shadow: inset 0 0 0 2px var(--ink-bright); }
+.farmpick-switch:hover span { background: #2f221c; }
+.farmpick-notes { margin-top: 1.1rem; padding-left: 1.2rem; font-size: 0.95rem; color: var(--ash); }
+.farmpick-notes li + li { margin-top: 0.35rem; }
+.farmpick-notes li::marker { color: var(--brass); }
+.farmpick-notes b { color: var(--farm, #ff8247); }
+
+/* The card as it sits over the game. */
+.farmpick-game { display: grid; align-content: start; }
+.farmpick-card {
+  --bevel: 9px;
+  padding: 0.9rem 1rem 1.1rem;
+  background: linear-gradient(180deg, #1c1411, #120d0b);
+  clip-path: var(--cut);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  filter: drop-shadow(0 0.6rem 1.2rem rgb(0 0 0 / 0.5));
+}
+.farmpick-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass); }
+.farmpick-map { margin-bottom: 0.7rem; font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; color: var(--ink-bright); }
+.farmpick-chips { margin-top: 0.45rem; }
+.farmpick-chips li { min-height: 1.75rem; font-size: 0.8rem; }
+.farmpick-chips .is-picked { color: var(--ink-bright); background: rgb(255 122 31 / 0.2); box-shadow: inset 0 0 0 1px var(--ember-hot); }
+.farmpick:has(#farmpick-own:not(:checked)) .farmpick-chips [data-farm="own"],
+.farmpick:has(#farmpick-abyss:not(:checked)) .farmpick-chips [data-farm="abyss"],
+.farmpick:has(#farmpick-breach:not(:checked)) .farmpick-chips [data-farm="breach"],
+.farmpick:has(#farmpick-expedition:not(:checked)) .farmpick-chips [data-farm="expedition"],
+.farmpick:has(#farmpick-ritual:not(:checked)) .farmpick-chips [data-farm="ritual"],
+.farmpick:has(#farmpick-harbinger:not(:checked)) .farmpick-chips [data-farm="harbinger"],
+.farmpick:has(#farmpick-essence:not(:checked)) .farmpick-chips [data-farm="essence"],
+.farmpick:has(#farmpick-delirium:not(:checked)) .farmpick-chips [data-farm="delirium"],
+.farmpick:has(#farmpick-blight:not(:checked)) .farmpick-chips [data-farm="blight"],
+.farmpick:has(#farmpick-legion:not(:checked)) .farmpick-chips [data-farm="legion"],
+.farmpick:has(#farmpick-harvest:not(:checked)) .farmpick-chips [data-farm="harvest"],
+.farmpick:has(#farmpick-betrayal:not(:checked)) .farmpick-chips [data-farm="betrayal"] { display: none; }
+.farmpick-caption { margin-top: 0.7rem; font-size: 0.85rem; color: var(--smoke); text-align: center; }
+
 /* First map: the app's five first-map steps on one screen. A flask on the left, which game currency falls into and
    stays in; the step on the right. Without the page's script all five steps are listed and the flask stands full. */
 .firstmap { --coach-fill: 1; --coach-rail: 0; margin-block: 1.5rem 0.25rem; box-shadow: inset 0 0 0 1px var(--line-strong); }
@@ -518,6 +594,7 @@ h3 {
   .flask-left, .flask-right { width: 68px; }
   .top nav { gap: 1rem; }
   .install { flex-direction: column; }
+  .farmpick { grid-template-columns: 1fr; padding: 1.25rem; }
   /* The flask sits above the step, and the rail keeps its numbers only. */
   .firstmap-stage { grid-template-columns: 1fr; gap: 1rem; padding: 1.25rem; }
   .firstmap-scene { width: 9rem; height: 9rem; }
