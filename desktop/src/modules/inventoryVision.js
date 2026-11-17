@@ -222,6 +222,11 @@ function isOccupied(cell) {
 // Area average, so a cell reads the same however the game's resolution rounds its size. Every target pixel covers at
 // least one source pixel, also when the cell is smaller than the target.
 function downscale(cell, size) {
+  return downscaleStep(cell, size, 4);
+}
+
+// `step` is the bytes a pixel takes in `cell.data`.
+function downscaleStep(cell, size, step) {
   const out = new Float32Array(size * size * 3);
   for (let targetY = 0; targetY < size; targetY += 1) {
     const fromY = Math.floor((targetY * cell.height) / size);
@@ -232,7 +237,7 @@ function downscale(cell, size) {
       const to = (targetY * size + targetX) * 3;
       for (let y = fromY; y < toY; y += 1) {
         for (let x = fromX; x < toX; x += 1) {
-          const from = (y * cell.width + x) * 4;
+          const from = (y * cell.width + x) * step;
           out[to] += cell.data[from];
           out[to + 1] += cell.data[from + 1];
           out[to + 2] += cell.data[from + 2];
@@ -507,6 +512,104 @@ function unreadCell(cell, match) {
   return { unknown: true, candidates, quantity };
 }
 
+// Art the player named: the pixels of a cell from the game itself, kept as { name, width, height, data } with three
+// bytes a pixel. Art from the price list is smaller than the game draws it, so a cell is 8 to 13 away from its own
+// picture and look-alikes sit inside that. A cell against an earlier cell of the same item is the same picture: on real
+// screenshots they were at most 0.1 apart with no pixel far off, tiers that differ only by their bars 5.5 apart with
+// 179 pixels far off, and the closest pair of different pictures drawn from the price list's art 1.8 apart with 80.
+const LEARNED_MEAN = 1;
+const LEARNED_FAR = 60;
+const LEARNED_FAR_PIXELS = 8;
+// The cheap first look, on COARSE_SIZE pixels: a cell of the same item drawn a pixel aside stays well under this.
+const LEARNED_COARSE = 8;
+const LEARNED_EDGE = 2;
+
+// The stack digits; a stack that grew is still the same item. The tier bars stay in: they tell tiers apart.
+function isDigitArea(x, y, size) {
+  return x < size * 0.36 && y < size * 0.38;
+}
+
+function toSample(cell) {
+  const data = new Uint8Array(cell.width * cell.height * 3);
+  for (let i = 0, to = 0; i < cell.width * cell.height; i += 1, to += 3) {
+    data[to] = cell.data[i * 4];
+    data[to + 1] = cell.data[i * 4 + 1];
+    data[to + 2] = cell.data[i * 4 + 2];
+  }
+  return { width: cell.width, height: cell.height, data };
+}
+
+// A cell's result comes from the cache while its pixels stay the same, so its pixels are copied once.
+const keptSamples = new WeakMap();
+function sampleOf(read, cell) {
+  if (!keptSamples.has(read)) keptSamples.set(read, toSample(cell));
+  return keptSamples.get(read);
+}
+
+function coarseOf(pixels, step) {
+  if (!pixels.coarse) {
+    Object.defineProperty(pixels, 'coarse', { value: downscaleStep(pixels, COARSE_SIZE, step) });
+  }
+  return pixels.coarse;
+}
+
+// Whether two pictures of one size are the same item's, at the best of nine one-pixel shifts. `leftStep` and
+// `rightStep` are the bytes a pixel takes: 4 for a cell, 3 for kept art.
+function isSamePicture(left, leftStep, right, rightStep) {
+  if (left.width !== right.width || left.height !== right.height) return false;
+  const leftCoarse = coarseOf(left, leftStep);
+  const rightCoarse = coarseOf(right, rightStep);
+  let coarse = 0;
+  for (let i = 0; i < leftCoarse.length; i += 1) coarse += Math.abs(leftCoarse[i] - rightCoarse[i]);
+  if (coarse / leftCoarse.length > LEARNED_COARSE) return false;
+
+  const { width, height } = left;
+  for (let shiftY = -1; shiftY <= 1; shiftY += 1) {
+    for (let shiftX = -1; shiftX <= 1; shiftX += 1) {
+      let total = 0;
+      let count = 0;
+      let far = 0;
+      for (let y = LEARNED_EDGE; y < height - LEARNED_EDGE && far <= LEARNED_FAR_PIXELS; y += 1) {
+        for (let x = LEARNED_EDGE; x < width - LEARNED_EDGE; x += 1) {
+          if (isDigitArea(x, y, width)) continue;
+          const a = (y * width + x) * leftStep;
+          const b = ((y + shiftY) * width + x + shiftX) * rightStep;
+          const difference = Math.abs(left.data[a] - right.data[b]) + Math.abs(left.data[a + 1] - right.data[b + 1])
+            + Math.abs(left.data[a + 2] - right.data[b + 2]);
+          total += difference;
+          count += 3;
+          if (difference > LEARNED_FAR) far += 1;
+        }
+      }
+      if (far <= LEARNED_FAR_PIXELS && total / count <= LEARNED_MEAN) return true;
+    }
+  }
+  return false;
+}
+
+function isSameSample(left, right) {
+  return isSamePicture(left, 3, right, 3);
+}
+
+// The item a cell is, by art the player named. Null when no kept art is this picture, or art of two names is: one of
+// the two was named wrongly, and which is not known.
+function matchLearned(cell, learned) {
+  let found = null;
+  for (const sample of learned || []) {
+    if (sample.name === found || !isSamePicture(cell, 4, sample, 3)) continue;
+    if (found !== null) return null;
+    found = sample.name;
+  }
+  return found;
+}
+
+function readLearned(cell, learned) {
+  const name = matchLearned(cell, learned);
+  if (!name) return null;
+  const { quantity, digits } = readStackSize(cell);
+  return quantity === null ? null : { name, quantity, digits };
+}
+
 function hashCell(cell) {
   let hash = 2166136261;
   for (let i = 0; i < cell.data.length; i += 1) {
@@ -521,9 +624,11 @@ function hashCell(cell) {
  * Reads a grid image into { open, items: { name: quantity }, cells }, see inventoryLootModel for the cells. With
  * covered: true and no items when a tooltip hides much of the grid, since such a read would look like items leaving and
  * coming back. `cache` is an optional Map from cell pixels to results; most cells stay the same between reads, so a
- * repeat read costs almost nothing.
+ * repeat read costs almost nothing. `learned` is art the player named, see matchLearned: it reads a cell the price
+ * list's art leaves unread, and a cache has to be emptied when it changes. `samples` holds the pixels of each unread
+ * cell that looked like an item, by position, for the player to name.
  */
-function readInventory(image, grid, art, cache = null) {
+function readInventory(image, grid, art, cache = null, learned = null) {
   if (scoreGridLines(image, grid) < OPEN_SCORE) {
     return { open: false, items: {} };
   }
@@ -533,6 +638,7 @@ function readInventory(image, grid, art, cache = null) {
 
   const items = {};
   const cells = {};
+  const samples = {};
   for (let row = 0; row < grid.rows; row += 1) {
     for (let col = 0; col < grid.cols; col += 1) {
       const position = `${row},${col}`;
@@ -549,7 +655,7 @@ function readInventory(image, grid, art, cache = null) {
         read = cache.get(key);
       } else {
         const match = matchCell(cell, art);
-        read = readCell(cell, art, match) || unreadCell(cell, match);
+        read = readCell(cell, art, match) || readLearned(cell, learned) || unreadCell(cell, match);
         if (cache) cache.set(key, read);
       }
       if (read.name) {
@@ -559,10 +665,11 @@ function readInventory(image, grid, art, cache = null) {
         // Both side borders hidden is a tooltip or a held item over the cell, not an item left unread. An item's own
         // picture hides at most the one border inside it.
         cells[position] = isCellCovered(image, grid, col, row) ? { unknown: true, covered: true } : read;
+        if (cells[position].candidates) samples[position] = sampleOf(read, cell);
       }
     }
   }
-  return { open: true, items, cells };
+  return Object.keys(samples).length > 0 ? { open: true, items, cells, samples } : { open: true, items, cells };
 }
 
 module.exports = {
@@ -583,5 +690,7 @@ module.exports = {
   readTierBars,
   findStackGlyphs,
   readDigit,
+  isSameSample,
+  matchLearned,
   readInventory
 };

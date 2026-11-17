@@ -33,7 +33,8 @@ const GameDetector = require('./src/modules/gameDetector');
 const win32Probe = require('./src/modules/win32Probe');
 const InventoryWatcher = require('./src/modules/inventoryWatcher');
 const { POE2_ESSENCE_ART } = require('./src/modules/essenceArt');
-const { COARSE_SIZE: INVENTORY_COARSE_SIZE, FINE_ART_SIZE: INVENTORY_FINE_ART_SIZE } = require('./src/modules/inventoryVision');
+const { COARSE_SIZE: INVENTORY_COARSE_SIZE, FINE_ART_SIZE: INVENTORY_FINE_ART_SIZE, isSameSample: isSameInventorySample } = require('./src/modules/inventoryVision');
+const { createLearnedArtStore } = require('./src/modules/learnedArtStore');
 const {
   createRuntimeSessionState,
   applyRuntimeEvent,
@@ -1438,6 +1439,71 @@ function addLootToCurrentSession(items, source) {
   return { lootEntries, session };
 }
 
+// Pictures of items the player named, see learnedArtStore: cells of the game's own screen, kept in one file on this
+// computer and sent nowhere. One file for every profile, since the game draws an item the same for all of them.
+// Delete everything removes its folder.
+let learnedArtStore = null;
+function getLearnedArtStore() {
+  if (!learnedArtStore) {
+    const file = path.join(app.getPath('userData'), 'learned-art', 'pictures.json');
+    learnedArtStore = createLearnedArtStore({
+      load: () => {
+        try {
+          return JSON.parse(fs.readFileSync(file, 'utf8'));
+        } catch {
+          return null;
+        }
+      },
+      save: (content) => {
+        try {
+          fs.mkdirSync(path.dirname(file), { recursive: true });
+          fs.writeFileSync(`${file}.tmp`, JSON.stringify(content));
+          fs.renameSync(`${file}.tmp`, file);
+        } catch (error) {
+          console.warn('Could not save the item pictures', error?.code || error?.name);
+        }
+      },
+      isSameSample: isSameInventorySample
+    });
+  }
+  return learnedArtStore;
+}
+
+// A read left offers for the player; their pixels wait in memory for the answer. The journal keeps the names only.
+function holdUnreadSamples(sessionId, candidates) {
+  try {
+    const game = localJournal.getSession(readJournal(), sessionId)?.poeVersion;
+    if (game) getLearnedArtStore().hold(sessionId, game, candidates);
+  } catch (error) {
+    console.warn('Could not keep the pixels of the unread items', error?.code || error?.name);
+  }
+}
+
+// The names of the unread look that `name` settles in a run, as the journal picks it, or null.
+function getSettledLookNames(session, index, name) {
+  const target = localJournal.findUnreadCandidate(session, { index: Number.isInteger(index) ? index : null, name });
+  return target === -1 ? null : session.lootUnreadCandidates[target].names;
+}
+
+// The player named a look: its pixels become that item's art. Returns whether they did. The item is added either way.
+function learnNamedLook(sessionId, lookNames, name) {
+  try {
+    return getLearnedArtStore().confirm(sessionId, lookNames, name);
+  } catch (error) {
+    console.warn('Could not keep the picture of the named item', error?.code || error?.name);
+    return false;
+  }
+}
+
+// The player dismissed a look, or settled it by typing a name: its pixels are let go.
+function forgetDismissedLook(sessionId, lookNames) {
+  try {
+    getLearnedArtStore().drop(sessionId, lookNames);
+  } catch (error) {
+    console.warn('Could not drop the pixels of the dismissed look', error?.code || error?.name);
+  }
+}
+
 // The read after a finished map found new items it could not name and nothing it could. The map's result card says so,
 // so the player can add them by hand in the run detail.
 function markSessionLootUnread(sessionId, unreadCandidates = [], unreadOther = false) {
@@ -1460,11 +1526,17 @@ function dismissUnreadCandidate(sessionId, { index, name } = {}) {
   if (typeof name !== 'string' || !name) {
     throw Object.assign(new Error('Name the look to dismiss'), { code: 'LOOT_INVALID' });
   }
+  const lookNames = typeof getSettledLookNames === 'function'
+    ? getSettledLookNames(localJournal.getSession(readJournal(), sessionId), index, name)
+    : null;
   const { journal, session } = localJournal.dropUnreadCandidate(readJournal(), sessionId, {
     index: Number.isInteger(index) ? index : null,
     name
   }, { now: new Date() });
   writeJournal(journal);
+  if (lookNames) {
+    forgetDismissedLook(sessionId, lookNames);
+  }
   if (currentSession?.id === session.id) {
     currentSession = session;
   }
@@ -1497,6 +1569,7 @@ function addSessionLootByHand(sessionId, { itemName, quantity, candidate } = {})
     source: 'manual'
   }], { createId: () => crypto.randomUUID(), now: new Date() });
   // An item added for an unread look, by its button or by hand, settles that look.
+  const lookNames = typeof getSettledLookNames === 'function' ? getSettledLookNames(session, candidate, name) : null;
   ({ journal, session: updated } = localJournal.dropUnreadCandidate(journal, sessionId, {
     index: Number.isInteger(candidate) ? candidate : null,
     name
@@ -1509,7 +1582,13 @@ function addSessionLootByHand(sessionId, { itemName, quantity, candidate } = {})
   if (updated.status !== 'active' && totalsFollowLoot) {
     updateSessionMapResult(updated);
   }
-  return updated;
+  // The player named the look with its own button: its pixels become that item's art, and the window is told so it
+  // can say so. A name typed by hand may be for another drop, so it settles the look and teaches nothing.
+  const learned = lookNames && Number.isInteger(candidate) ? learnNamedLook(sessionId, lookNames, name) : false;
+  if (lookNames && !learned) {
+    forgetDismissedLook(sessionId, lookNames);
+  }
+  return learned ? { ...updated, learnedItem: name } : updated;
 }
 
 function getStoredMapResults() {
@@ -2978,6 +3057,7 @@ async function deleteAllLocalData() {
       apiClient?.setToken(null);
     }
     journalStore = null;
+    learnedArtStore = null;
     unreadableJournalProfileId = null;
     bugReport = null;
     const priceSnapshotWrites = priceSnapshots?.stop();
@@ -2989,7 +3069,7 @@ async function deleteAllLocalData() {
     // Generic folder names: at a drive root they could belong to other programs.
     if (path.isAbsolute(userData) && path.dirname(userData) !== userData) {
       // Partitions is left over from the Overwolf version, ocr-cache from the OCR loot scan of older installs.
-      for (const folder of ['profiles', 'icon-cache', 'price-snapshots', 'ocr-cache', 'logs', 'Partitions']) {
+      for (const folder of ['profiles', 'icon-cache', 'price-snapshots', 'learned-art', 'ocr-cache', 'logs', 'Partitions']) {
         let removed = false;
         for (let attempt = 1; !removed && attempt <= DELETE_ALL_FOLDER_ATTEMPTS; attempt += 1) {
           if (attempt > 1) {
@@ -4260,7 +4340,9 @@ function createInventoryWatcher() {
       return itemValues ? itemValues.values : null;
     },
     loadArt: loadInventoryArt,
+    getLearnedArt: (game) => getLearnedArtStore().list(game),
     onUnreadLoot: (sessionId, candidates, other) => {
+      holdUnreadSamples(sessionId, candidates);
       try {
         markSessionLootUnread(sessionId, candidates, other);
       } catch (error) {
@@ -4268,6 +4350,7 @@ function createInventoryWatcher() {
       }
     },
     onGain: (sessionId, items, mapCount, unread, candidates, other) => {
+      holdUnreadSamples(sessionId, candidates);
       addInventoryLoot(sessionId, items, mapCount, unread, candidates, other).catch((error) => {
         console.warn('Could not add the inventory loot to the map', error);
         noteInventoryRead('saveFailed');
@@ -5739,6 +5822,14 @@ function setupIPC() {
     } catch (error) {
       throw toRendererError(error, 'Failed to dismiss');
     }
+  });
+
+  ipcMain.handle('get-learned-art-count', () => getLearnedArtStore().count());
+
+  ipcMain.handle('clear-learned-art', () => {
+    assertDesktopUserAuthenticated();
+    getLearnedArtStore().clear();
+    return getLearnedArtStore().count();
   });
 
   ipcMain.handle('add-session-loot', async (event, sessionId, item = {}) => {

@@ -5637,3 +5637,11 @@ option .farm-type-icon {
 .meme-badge[data-meme="pog"] { --meme-color: var(--tier-rare); }
 .meme-badge[data-meme="juiced"] { --meme-color: var(--tier-unique); }
 .meme-badge[data-meme="mirror"] { --meme-color: var(--tier-mirror); }
+
+/* Settings: the count of items known by a picture, with the button that forgets them. */
+.learned-art-row:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}

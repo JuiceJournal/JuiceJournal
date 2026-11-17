@@ -287,3 +287,66 @@ test('sessions loot edit smoke: quantity and remove reach the journal and the sa
     fs.rmSync(profile.rootDir, { recursive: true, force: true });
   }
 });
+
+test('sessions loot edit smoke: an unread look is named with its button, and Settings counts and forgets the kept pictures', async () => {
+  test.setTimeout(120000);
+  const profile = createIsolatedProfile();
+  const looks = ['Essence of Ruin', 'Greater Essence of Ruin'];
+  const picturesPath = path.join(profile.userDataDir, 'learned-art', 'pictures.json');
+  // A picture named in an earlier run of the app. The pixels of an open offer wait in memory only, so the offer below,
+  // which comes from the journal, has none and teaches nothing.
+  fs.mkdirSync(path.dirname(picturesPath), { recursive: true });
+  fs.writeFileSync(picturesPath, JSON.stringify({
+    version: 1,
+    pictures: [{ game: 'poe2', name: 'Omen of Light', width: 2, height: 2, data: Buffer.alloc(12, 40).toString('base64') }]
+  }));
+  const readPictures = () => JSON.parse(fs.readFileSync(picturesPath, 'utf8'));
+  let electronApp = null;
+
+  try {
+    electronApp = await electron.launch({
+      args: ['-r', profile.bootstrapPath, path.join(__dirname, '..')],
+      cwd: path.join(__dirname, '..'),
+      env: profile.env,
+    });
+    const page = await waitForWindow(electronApp, /^Juice Journal$/i);
+    await page.waitForLoadState('domcontentloaded');
+    await signIn(page);
+
+    const profileId = JSON.parse(fs.readFileSync(profile.configPath, 'utf8')).activeProfileId;
+    const journalDir = path.join(profile.userDataDir, 'profiles', profileId);
+    fs.mkdirSync(journalDir, { recursive: true });
+    fs.writeFileSync(path.join(journalDir, 'journal.json'), JSON.stringify({
+      sessions: [{ ...createSession(), lootUnread: true, lootUnreadCandidates: [{ names: looks, quantity: 1 }] }]
+    }));
+
+    await page.locator('.nav-btn[data-page="sessions"]').click();
+    await page.locator(`#sessions-list [data-session-id="${SESSION_ID}"]`).click();
+    await expect(page.locator('#session-detail-drawer')).not.toHaveClass(/hidden/);
+    const named = page.locator('.session-drawer-loot-candidate[data-candidate-name="Greater Essence of Ruin"]');
+    await expect(named).toBeVisible();
+    await named.click();
+
+    await expect(page.locator('.session-drawer-loot-candidate')).toHaveCount(0);
+    expect((await getJournalSession(page)).lootEntries[0]).toMatchObject({ itemName: 'Greater Essence of Ruin', quantity: 1, source: 'manual' });
+    await expect(page.locator('.toast').filter({ hasText: 'will be read by itself' })).toHaveCount(0);
+    expect(readPictures().pictures.map((picture) => picture.name)).toEqual(['Omen of Light']);
+
+    await page.keyboard.press('Escape');
+    await page.locator('.nav-btn[data-page="settings"]').click();
+    await page.locator('.settings-nav-btn[data-settings-tab="poe"]').click();
+    await expect(page.locator('#learned-art-count')).toHaveText('Items known by their picture: 1');
+    await page.locator('#learned-art-clear').click();
+    await expect(page.locator('#learned-art-row')).toBeHidden();
+    await expect(page.locator('.toast').filter({ hasText: 'The pictures were removed' })).toBeVisible();
+    expect(readPictures()).toEqual({ version: 1, pictures: [] });
+    await page.locator('.settings-nav-btn[data-settings-tab="general"]').click();
+    await page.locator('.settings-nav-btn[data-settings-tab="poe"]').click();
+    await expect(page.locator('#learned-art-row')).toBeHidden();
+  } finally {
+    if (electronApp) {
+      await shutdownElectronApp(electronApp);
+    }
+    fs.rmSync(profile.rootDir, { recursive: true, force: true });
+  }
+});

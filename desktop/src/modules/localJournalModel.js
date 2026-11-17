@@ -280,14 +280,20 @@
     };
   }
 
-  // The player named or dismissed an unread look, so its group goes: the group at `index` when it holds `name`, else the
-  // first that holds it. A group whose index moved since the window drew it is found by its name instead.
+  // Where the unread look a name settles is in the run's list, or -1: the group at `index` when it holds `name`, else
+  // the first that holds it. A group whose index moved since the window drew it is found by its name instead.
+  function findUnreadCandidate(session, { index = null, name }) {
+    const list = Array.isArray(session?.lootUnreadCandidates) ? session.lootUnreadCandidates : [];
+    const holds = (entry) => Array.isArray(entry?.names) && entry.names.includes(name);
+    return Number.isInteger(index) && holds(list[index]) ? index : list.findIndex(holds);
+  }
+
+  // The player named or dismissed an unread look, so its group goes.
   function dropUnreadCandidate(journal, sessionId, { index = null, name }, { now }) {
     const current = normalizeJournal(journal);
     const session = requireSession(current, sessionId);
     const list = Array.isArray(session.lootUnreadCandidates) ? session.lootUnreadCandidates : [];
-    const holds = (entry) => Array.isArray(entry?.names) && entry.names.includes(name);
-    const target = Number.isInteger(index) && holds(list[index]) ? index : list.findIndex(holds);
+    const target = findUnreadCandidate(session, { index, name });
     if (target === -1) {
       return { journal: current, session };
     }
@@ -439,6 +445,7 @@
     addLoot,
     markLootUnread,
     dropUnreadCandidate,
+    findUnreadCandidate,
     deleteLoot,
     endSession,
     getActiveSession,

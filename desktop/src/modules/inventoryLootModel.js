@@ -39,19 +39,33 @@ function countTrustedGain(before, after) {
   return trusted;
 }
 
+const hasLook = (cell) => Boolean(cell.unknown && !cell.covered && Array.isArray(cell.candidates) && cell.candidates.length);
+
+// How many items a read left unread in stacks that looked like `name`.
+function unreadLookingLike(read, name) {
+  let total = 0;
+  for (const cell of Object.values(read.cells)) {
+    if (hasLook(cell) && cell.candidates.includes(name)) total += cell.quantity || 1;
+  }
+  return total;
+}
+
 // Items only count when there are more of them than before, in cells that can be trusted. Fewer means they were used
-// or stashed, not looted. Any doubt falls on the side of counting less.
+// or stashed, not looted. A stack the baseline left unread that is gone now may be the one read by name in another
+// cell: the player moved it, or named it since and the reader knows its picture. Any doubt falls on the side of
+// counting less.
 function diffInventory(before = EMPTY_READ, after = EMPTY_READ) {
   const trusted = countTrustedGain(before, after);
   return Object.entries(after.items)
     .map(([name, quantity]) => ({
       name,
-      quantity: Math.min(quantity - (before.items[name] || 0), trusted[name] || 0)
+      quantity: Math.min(
+        quantity - (before.items[name] || 0) - Math.max(0, unreadLookingLike(before, name) - unreadLookingLike(after, name)),
+        trusted[name] || 0
+      )
     }))
     .filter((item) => item.quantity > 0);
 }
-
-const hasLook = (cell) => Boolean(cell.unknown && !cell.covered && Array.isArray(cell.candidates) && cell.candidates.length);
 
 // How many items a read holds that could be any of `names`: stacks read by name and unread stacks that looked like one.
 function couldBe(read, names) {
@@ -70,7 +84,8 @@ function couldBe(read, names) {
  * `other`, for the note only: an unread stack that grew or changed in place, a new one that could be a moved stack and
  * outgrew what the baseline held of its names, a stack that grew where the named count does not trust it (unread before,
  * or first seen without digits), something unread with no look in a cell that was empty or held a known stack, and offers
- * past the ten a run keeps. A tooltip over a cell (covered) tells nothing.
+ * past the ten a run keeps. A tooltip over a cell (covered) tells nothing. An offer carries `samples`, the pixels of its
+ * cells, when the read has them.
  */
 function unreadLoot(before = EMPTY_READ, after = EMPTY_READ) {
   const offers = new Map();
@@ -96,6 +111,9 @@ function unreadLoot(before = EMPTY_READ, after = EMPTY_READ) {
       const key = JSON.stringify(cell.candidates);
       const offer = offers.get(key) || { names: cell.candidates.slice(0, 2), quantity: 0 };
       offer.quantity += cell.quantity || 1;
+      // The cell's pixels, when the read kept them: named by the player they become art the reader knows the item by.
+      const sample = after.samples?.[position];
+      if (sample) offer.samples = [...(offer.samples || []), sample];
       offers.set(key, offer);
     } else if (cell.name && earlier && cell.quantity > (earlier.quantity || 0)
       && ((earlier.unknown && !earlier.covered) || (earlier.name === cell.name && !earlier.digits && cell.digits))) {
