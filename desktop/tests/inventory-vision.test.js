@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const vision = require('../src/modules/inventoryVision');
-const { DIGIT_GLYPHS, GLYPH_WIDTH, GLYPH_HEIGHT } = require('../src/modules/inventoryDigitGlyphs');
+const { DIGIT_PICTURES } = require('../src/modules/inventoryDigitPictures');
 
 const WINDOW = { x: 0, y: 0, width: 2560, height: 1440 };
 const GRID = vision.getGridRect('poe2', WINDOW);
@@ -84,25 +84,23 @@ function paintCell(image, col, row, seed) {
   }
 }
 
-// Draws a stored digit shape into a cell, as the game does, white over whatever is there.
+// Draws a stored digit picture into a cell where the game puts a stack number. Returns the digit's width.
 function paintDigit(image, col, row, digit, offset = 0) {
-  const glyph = DIGIT_GLYPHS.find((entry) => entry.digit === digit);
-  const height = 18;
-  const width = Math.max(2, Math.round(height * glyph.aspect));
-  const startX = Math.round(col * GRID.pitchX) + 5 + offset;
-  const startY = Math.round(row * GRID.pitchY) + 4;
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const gx = Math.min(GLYPH_WIDTH - 1, Math.floor(((x + 0.5) / width) * GLYPH_WIDTH));
-      const gy = Math.min(GLYPH_HEIGHT - 1, Math.floor(((y + 0.5) / height) * GLYPH_HEIGHT));
-      if (!glyph.cells[gy * GLYPH_WIDTH + gx]) continue;
+  const set = DIGIT_PICTURES[Math.round(GRID.pitchY)];
+  const picture = set.pictures.find((entry) => entry.digit === digit);
+  const lift = -Math.min(...picture.shape);
+  const startX = Math.round(col * GRID.pitchX) + set.start[0] + offset - 1;
+  const startY = Math.round(row * GRID.pitchY) + picture.top - 1;
+  for (let y = 0; y < picture.height; y += 1) {
+    for (let x = 0; x < picture.width; x += 1) {
       const i = ((startY + y) * image.width + startX + x) * 4;
-      image.data[i] = 255;
-      image.data[i + 1] = 255;
-      image.data[i + 2] = 255;
+      const value = Math.round(picture.shape[y * picture.width + x] + lift);
+      image.data[i] = value;
+      image.data[i + 1] = value;
+      image.data[i + 2] = value;
     }
   }
-  return width;
+  return picture.advance;
 }
 
 test('getGridRect keeps the inventory on the right edge and scales with height', () => {
@@ -211,16 +209,9 @@ test('a stack whose digits cannot be read is left out as unread, and the rest st
   const image = blankGrid();
   paintCell(image, 0, 0, 1);
   paintCell(image, 3, 1, 2);
-  // Digit-sized, but no digit: a solid white block.
-  const startX = Math.round(GRID.pitchX * 0) + 5;
-  for (let y = 4; y < 22; y += 1) {
-    for (let x = startX; x < startX + 13; x += 1) {
-      const i = (y * image.width + x) * 4;
-      image.data[i] = 255;
-      image.data[i + 1] = 255;
-      image.data[i + 2] = 255;
-    }
-  }
+  // Digits that make no stack size: a number does not start with 0.
+  const width = paintDigit(image, 0, 0, '0');
+  paintDigit(image, 0, 0, '4', width + 2);
   drawGridLines(image);
 
   assert.equal(vision.readStackSize(vision.cropCell(image, GRID, 0, 0)).quantity, null);
@@ -472,12 +463,63 @@ test('an empty library reads nothing rather than failing', () => {
   assert.deepEqual(result.items, {});
 });
 
-test('every digit is stored and reads back as itself', () => {
-  for (const digit of '0123456789') {
-    const glyph = DIGIT_GLYPHS.find((entry) => entry.digit === digit);
-    assert.ok(glyph, `digit ${digit} is missing`);
-    assert.equal(vision.readDigit(glyph), digit);
+test('every cell size with digit pictures holds all ten digits', () => {
+  assert.deepEqual(Object.keys(DIGIT_PICTURES), ['53', '66', '70']);
+  for (const [size, set] of Object.entries(DIGIT_PICTURES)) {
+    for (const digit of '0123456789') {
+      assert.ok(set.pictures.some((picture) => picture.digit === digit), `digit ${digit} is missing at cell size ${size}`);
+    }
   }
+});
+
+test('every digit reads back as itself', () => {
+  for (const digit of '123456789') {
+    const image = blankGrid();
+    paintCell(image, 1, 1, 2);
+    paintDigit(image, 1, 1, digit);
+    assert.deepEqual(vision.readStackSize(vision.cropCell(image, GRID, 1, 1)), { quantity: Number(digit), digits: true }, `digit ${digit}`);
+  }
+});
+
+test('the second digit of a number is never taken for its first', () => {
+  const image = blankGrid();
+  paintCell(image, 2, 2, 2);
+  const width = paintDigit(image, 2, 2, '1');
+  paintDigit(image, 2, 2, '0', width + 1);
+  assert.deepEqual(vision.readStackSize(vision.cropCell(image, GRID, 2, 2)), { quantity: 10, digits: true });
+});
+
+test('a white patch of art in the corner is not a number', () => {
+  const image = blankGrid();
+  paintCell(image, 0, 0, 1);
+  for (let y = 4; y < 26; y += 1) {
+    for (let x = 5; x < 22; x += 1) {
+      const i = (y * image.width + x) * 4;
+      image.data[i] = 255;
+      image.data[i + 1] = 255;
+      image.data[i + 2] = 255;
+    }
+  }
+  assert.deepEqual(vision.readStackSize(vision.cropCell(image, GRID, 0, 0)), { quantity: 1, digits: false });
+});
+
+test('a digit standing off where numbers start leaves the cell unread, not without a number', () => {
+  const image = blankGrid();
+  paintCell(image, 1, 1, 2);
+  paintDigit(image, 1, 1, '7', 9);
+  assert.deepEqual(vision.readStackSize(vision.cropCell(image, GRID, 1, 1)), { quantity: null, digits: true });
+});
+
+test('a cell size with no digit pictures reads no stack size', () => {
+  const cell = { data: new Uint8Array(40 * 40 * 4), width: 40, height: 40 };
+  assert.deepEqual(vision.readStackSize(cell), { quantity: null, digits: true });
+});
+
+test('a number longer than a stack can be is unread', () => {
+  const image = blankGrid();
+  let offset = 0;
+  for (let i = 0; i < 6; i += 1) offset += paintDigit(image, 0, 0, '1', offset) + 2;
+  assert.deepEqual(vision.readStackSize(vision.cropCell(image, GRID, 0, 0)), { quantity: null, digits: true });
 });
 
 test('multi-digit stacks read left to right', () => {
