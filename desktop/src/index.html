@@ -919,7 +919,12 @@
                     <span data-i18n="settings.inventoryRead">Count loot from your inventory automatically</span>
                   </label>
                 </div>
-                <p class="settings-desc" data-i18n="settings.inventoryReadDescription">Reads that part of the screen when your inventory is open, while the game is in front and outside a map. Nothing is saved or sent anywhere.</p>
+                <p class="settings-desc" data-i18n="settings.inventoryReadDescription">Reads that part of the screen when your inventory is open, while the game is in front and outside a map. Nothing is sent anywhere. The only thing kept is the small picture of an item you name yourself.</p>
+                <p class="settings-desc" data-i18n="learnedArt.desc">When the reader leaves an item unread and you say which item it is, the app keeps that cell's picture on this computer and reads the item by itself from then on.</p>
+                <p class="settings-desc learned-art-row" id="learned-art-row" hidden>
+                  <span id="learned-art-count"></span>
+                  <button type="button" class="btn btn-secondary btn-small" id="learned-art-clear" data-i18n="learnedArt.clear">Forget them</button>
+                </p>
               </div>
               <div class="settings-group settings-group--wide">
                 <h3 data-i18n="settings.poeAccount">Path of Exile Account</h3>

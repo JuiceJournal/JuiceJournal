@@ -270,3 +270,39 @@ test('a named gain the reader does not trust never leaks into an offer, and offe
   assert.equal(found.other, true);
   assert.deepEqual(plain(unreadCandidates(looks({}), many)[0]), { names: ['Look 0', 'Twin 0'], quantity: 1 });
 });
+
+test('an offer carries the pixels of its cells when the read kept them', () => {
+  const look = { unknown: true, candidates: ['Essence of Ice', 'Greater Essence of Ice'], quantity: 1 };
+  const first = { width: 1, height: 1, data: new Uint8Array(3) };
+  const second = { width: 1, height: 1, data: new Uint8Array(3).fill(9) };
+  const before = { items: {}, cells: {} };
+
+  const { candidates } = unreadLoot(before, { items: {}, cells: { '0,0': look, '0,1': look }, samples: { '0,0': first, '0,1': second } });
+  assert.deepEqual(candidates, [{ names: look.candidates, quantity: 2, samples: [first, second] }]);
+
+  assert.deepEqual(unreadLoot(before, { items: {}, cells: { '0,0': look } }).candidates, [{ names: look.candidates, quantity: 1 }]);
+});
+
+test('a stack the baseline left unread, read by name in another cell after the map, is not loot', () => {
+  const look = { unknown: true, candidates: ['Essence of Ice', 'Greater Essence of Ice'], quantity: 5 };
+  const before = { items: {}, cells: { '0,0': look } };
+  const named = { name: 'Essence of Ice', quantity: 5, digits: true };
+
+  // Moved to an empty cell and read there by the picture the player named meanwhile.
+  assert.deepEqual(diffInventory(before, { items: { 'Essence of Ice': 5 }, cells: { '2,3': named } }), []);
+  // Moved, and two more looted into the stack: only what the unread stack cannot explain counts.
+  assert.deepEqual(
+    diffInventory(before, { items: { 'Essence of Ice': 7 }, cells: { '2,3': { ...named, quantity: 7 } } }),
+    [{ name: 'Essence of Ice', quantity: 2 }]
+  );
+  // The unread stack is still there, so a new stack read by name is loot in full.
+  assert.deepEqual(
+    diffInventory(before, { items: { 'Essence of Ice': 3 }, cells: { '0,0': look, '2,3': { ...named, quantity: 3 } } }),
+    [{ name: 'Essence of Ice', quantity: 3 }]
+  );
+  // An item the unread stack did not look like is not held back.
+  assert.deepEqual(
+    diffInventory(before, { items: { 'Vaal Orb': 2 }, cells: { '2,3': { name: 'Vaal Orb', quantity: 2, digits: true } } }),
+    [{ name: 'Vaal Orb', quantity: 2 }]
+  );
+});

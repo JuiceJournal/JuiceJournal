@@ -533,3 +533,99 @@ test('the cell cache gives the same answer without matching again', () => {
   assert.deepEqual(first.items, { 'First Orb': 1 });
   assert.deepEqual(second.items, first.items);
 });
+
+// An unread look-alike cell at `col`, `row` with a stack digit, and the library that leaves it unread.
+function unreadLookAlike(col, row, digit, change = null) {
+  const image = blankGrid();
+  paintCell(image, col, row, 1);
+  if (digit) paintDigit(image, col, row, digit);
+  if (change) change(image, Math.round(col * GRID.pitchX), Math.round(row * GRID.pitchY));
+  drawGridLines(image);
+  return image;
+}
+const ESSENCE_LIBRARY = () => lookAlikeLibrary({ name: 'Greater Essence of Ice', value: 0.01 });
+
+function learnedFrom(image, position, name) {
+  const { samples } = vision.readInventory(image, GRID, ESSENCE_LIBRARY());
+  return [{ name, ...samples[position] }];
+}
+
+test('an unread cell that looked like an item comes with its pixels, and a read with none has no samples', () => {
+  const result = vision.readInventory(unreadLookAlike(2, 1, '3'), GRID, ESSENCE_LIBRARY());
+  const size = Math.round(GRID.pitchX);
+
+  assert.deepEqual(Object.keys(result.samples), ['1,2']);
+  assert.equal(result.samples['1,2'].width, size);
+  assert.equal(result.samples['1,2'].data.length, size * Math.round(GRID.pitchY) * 3);
+  assert.equal('samples' in vision.readInventory(blankGrid(), GRID, []), false);
+});
+
+test('art the player named reads the same item in another cell and with another stack size', () => {
+  const learned = learnedFrom(unreadLookAlike(2, 1, '3'), '1,2', 'Greater Essence of Ice');
+
+  const later = vision.readInventory(unreadLookAlike(7, 3, '5'), GRID, ESSENCE_LIBRARY(), null, learned);
+
+  assert.deepEqual(later.items, { 'Greater Essence of Ice': 5 });
+  assert.deepEqual(later.cells['3,7'], { name: 'Greater Essence of Ice', quantity: 5, digits: true });
+  assert.equal('samples' in later, false);
+});
+
+test('named art does not read a tier with other bars, a look-alike or a cell of another brightness', () => {
+  const learned = learnedFrom(unreadLookAlike(2, 1, '3'), '1,2', 'Greater Essence of Ice');
+  const size = Math.round(GRID.pitchX);
+  const fill = (image, fromX, fromY, width, height, add) => {
+    for (let y = fromY; y < fromY + height; y += 1) {
+      for (let x = fromX; x < fromX + width; x += 1) {
+        const i = (y * image.width + x) * 4;
+        for (let channel = 0; channel < 3; channel += 1) image.data[i + channel] = Math.max(0, Math.min(255, image.data[i + channel] + add));
+      }
+    }
+  };
+  const readsWith = (change) => vision.readInventory(unreadLookAlike(2, 1, '3', change), GRID, ESSENCE_LIBRARY(), null, learned).items;
+
+  assert.deepEqual(readsWith(null), { 'Greater Essence of Ice': 3 });
+  // Two tier bars in the bottom-right corner.
+  assert.deepEqual(readsWith((image, x, y) => {
+    fill(image, x + Math.round(size * 0.72), y + Math.round(size * 0.72), 3, 14, 255);
+    fill(image, x + Math.round(size * 0.82), y + Math.round(size * 0.72), 3, 14, 255);
+  }), {});
+  // A look-alike: the same picture but for a small part.
+  assert.deepEqual(readsWith((image, x, y) => fill(image, x + 30, y + 40, 5, 5, -120)), {});
+  // The whole cell a little brighter, as under the pointer.
+  assert.deepEqual(readsWith((image, x, y) => fill(image, x + 1, y + 1, size - 2, size - 2, 4)), {});
+});
+
+test('named art of two names for one picture reads as neither, and art of another cell size is not used', () => {
+  const image = unreadLookAlike(2, 1, '3');
+  const [sample] = learnedFrom(image, '1,2', 'Greater Essence of Ice');
+  const read = (learned) => vision.readInventory(image, GRID, ESSENCE_LIBRARY(), null, learned);
+
+  assert.deepEqual(read([sample, { ...sample, name: 'Essence of Ice' }]).items, {});
+  assert.deepEqual(read([sample, { ...sample }]).items, { 'Greater Essence of Ice': 3 });
+  assert.deepEqual(read([{ ...sample, width: sample.width - 1 }]).items, {});
+  assert.equal(vision.matchLearned(vision.cropCell(image, GRID, 2, 1), null), null);
+});
+
+test('a cell the price list reads keeps that read, whatever named art says', () => {
+  const image = blankGrid();
+  paintCell(image, 4, 2, 1);
+  drawGridLines(image);
+  const library = [makeArt('First Orb', 1), makeArt('Second Orb', 2)];
+  const cell = vision.cropCell(image, GRID, 4, 2);
+  const size = cell.width * cell.height;
+  const data = new Uint8Array(size * 3);
+  for (let i = 0; i < size; i += 1) data.set(cell.data.subarray(i * 4, i * 4 + 3), i * 3);
+
+  const result = vision.readInventory(image, GRID, library, null, [{ name: 'Named Wrongly', width: cell.width, height: cell.height, data }]);
+
+  assert.deepEqual(result.items, { 'First Orb': 1 });
+});
+
+test('two samples are the same picture only when their pixels are', () => {
+  const { samples } = vision.readInventory(unreadLookAlike(2, 1, '3'), GRID, ESSENCE_LIBRARY());
+  const other = vision.readInventory(unreadLookAlike(9, 4, '7'), GRID, ESSENCE_LIBRARY()).samples['4,9'];
+  const changed = { ...other, data: Uint8Array.from(other.data, (value, i) => (i > 9000 && i < 9600 ? 255 - value : value)) };
+
+  assert.equal(vision.isSameSample(samples['1,2'], other), true);
+  assert.equal(vision.isSameSample(samples['1,2'], changed), false);
+});

@@ -1159,7 +1159,7 @@ test('after Clear logs, the next read of an unreadable journal is logged again',
 });
 
 // ocr-cache is left by older installs, which read loot with OCR.
-const DELETED_FOLDERS = ['profiles', 'icon-cache', 'price-snapshots', 'ocr-cache', 'logs', 'Partitions'];
+const DELETED_FOLDERS = ['profiles', 'icon-cache', 'price-snapshots', 'learned-art', 'ocr-cache', 'logs', 'Partitions'];
 // No maxRetries: rm repeats those at every folder level, so main tries the whole folder again instead.
 const RM_OPTIONS = { recursive: true, force: true };
 // A few of main.js's store defaults, null ones included: conf's clear() writes back only the defaults that are not null.
@@ -1569,6 +1569,7 @@ test('a folder is tried again as a whole, three times at most, so a file held op
     'rm profiles',
     'rm icon-cache', 'rm icon-cache', 'rm icon-cache',
     'rm price-snapshots',
+    'rm learned-art',
     'rm ocr-cache',
     'rm logs', 'rm logs', 'rm logs',
     'rm Partitions'

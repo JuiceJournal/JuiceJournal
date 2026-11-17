@@ -68,12 +68,15 @@ class InventoryWatcher {
    *   saved, noBaseline, noGain, gain (each with { characterKey }); resolution when the window turns to a size reading
    *   has not been checked on, and measured when it fits again; needsBaseline ({ characterKey }) when the inventory is
    *   closed and the character has no baseline yet, on every tick
+   * @param {function(string): ({revision: number, samples: Array}|null)} [deps.getLearnedArt] - Art the player named
+   *   for a game, as { name, width, height, data } each; `revision` changes whenever the art does
    * @param {function(): number} [deps.now]
    */
   constructor(deps) {
     this.deps = { now: Date.now, onRead: () => {}, isInMapHub: () => false, ...deps };
     this.profileId = null;
     this.windowUnmeasured = false;
+    this.learnedRevision = null;
     this.state = createInventoryLootState();
     this.resetArt(null);
   }
@@ -176,7 +179,13 @@ class InventoryWatcher {
     if (this.cellCache.size > CELL_CACHE_LIMIT) {
       this.cellCache.clear();
     }
-    return readInventory({ data, width: grid.width, height: grid.height }, grid, this.art.list, this.cellCache);
+    // Art the player named reads cells the price list's art leaves unread, so a cell decided without it is decided again.
+    const learned = this.deps.getLearnedArt?.(this.art.game) || null;
+    if ((learned?.revision ?? null) !== this.learnedRevision) {
+      this.learnedRevision = learned?.revision ?? null;
+      this.cellCache.clear();
+    }
+    return readInventory({ data, width: grid.width, height: grid.height }, grid, this.art.list, this.cellCache, learned?.samples || null);
   }
 
   // Applies a read of the open inventory and acts on what it settles.

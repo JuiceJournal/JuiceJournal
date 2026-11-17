@@ -64,6 +64,7 @@ const state = {
   // Entry costs of the signed-in profile by farm type id, as typed: { amount, unit }.
   farmTypeCosts: {},
   overlayHiddenFarmTypes: [],
+  learnedArtCount: 0,
   farmTypeCostBusy: false,
   renderedFarmTypeCostId: null,
   auditTrail: [],
@@ -221,6 +222,9 @@ const elements = {
   customFarmGroup: document.getElementById('custom-farm-types-group'),
   customFarmList: document.getElementById('custom-farm-list'),
   overlayFarmList: document.getElementById('overlay-farm-list'),
+  learnedArtRow: document.getElementById('learned-art-row'),
+  learnedArtCount: document.getElementById('learned-art-count'),
+  learnedArtClear: document.getElementById('learned-art-clear'),
   customFarmAddBtn: document.getElementById('custom-farm-add-btn'),
   customFarmForm: document.getElementById('custom-farm-form'),
   customFarmFormTitle: document.getElementById('custom-farm-form-title'),
@@ -1794,6 +1798,7 @@ function renderCustomFarmTypes() {
   }
   renderCustomFarmPicker();
   renderOverlayFarmTypes();
+  renderLearnedArt();
 }
 
 // The radio buttons keep what is selected when the language redraws their names.
@@ -1886,6 +1891,32 @@ function renderOverlayFarmTypes() {
       <input type="checkbox" value="${escapeHTML(farmType.id)}"${hidden.has(farmType.id) ? '' : ' checked'}>
       <span class="custom-farm-option-face"${farmTypeAttr(farmType.id)}>${farmTypeIconHTML(farmType.id)}${escapeHTML(farmType.label)}</span>
     </label>`).join('');
+}
+
+// How many items the reader knows by a picture the player named, with the button that forgets them. Hidden at none.
+function renderLearnedArt() {
+  if (!elements.learnedArtRow || !elements.learnedArtCount) return;
+  elements.learnedArtRow.hidden = !(state.learnedArtCount > 0);
+  elements.learnedArtCount.textContent = window.t('learnedArt.count', { count: state.learnedArtCount });
+}
+
+async function loadLearnedArtCount() {
+  if (!window.electronAPI?.getLearnedArtCount) return;
+  state.learnedArtCount = Number(await window.electronAPI.getLearnedArtCount().catch(() => 0)) || 0;
+  renderLearnedArt();
+}
+
+async function handleLearnedArtClear() {
+  if (elements.learnedArtClear.disabled) return;
+  elements.learnedArtClear.disabled = true;
+  try {
+    state.learnedArtCount = Number(await window.electronAPI.clearLearnedArt()) || 0;
+    showToast(window.t('learnedArt.cleared'), '', 'success');
+  } catch (error) {
+    showToast(window.t('learnedArt.clearError'), '', 'error');
+  }
+  elements.learnedArtClear.disabled = false;
+  renderLearnedArt();
 }
 
 async function loadOverlayHiddenFarmTypes() {
@@ -2036,6 +2067,7 @@ async function init() {
   await loadActiveFarmTypeSelection();
   await loadFarmTypeCosts();
   await loadOverlayHiddenFarmTypes();
+  await loadLearnedArtCount();
   populateStrategyPresets();
 
   // Set language from settings and apply translations
@@ -2891,6 +2923,7 @@ function setupEventListeners() {
     elements.customFarmList?.addEventListener('click', handleCustomFarmListClick);
   }
   elements.overlayFarmList?.addEventListener('change', handleOverlayFarmTypeChange);
+  elements.learnedArtClear?.addEventListener('click', handleLearnedArtClear);
 
   // Sessions filter
   elements.sessionFilter.addEventListener('change', loadSessions);
@@ -3654,6 +3687,7 @@ async function handlePoeOAuthLogin() {
         await loadActiveFarmTypeSelection();
         await loadFarmTypeCosts();
         await loadOverlayHiddenFarmTypes();
+        await loadLearnedArtCount();
         renderFarmTypeSelector();
       }
       await loadMapResultHistory();
@@ -8444,7 +8478,11 @@ async function handleSessionLootCandidateClick(event) {
   state.sessionLootAddBusy = true;
   let added = null;
   try {
-    const updated = await window.electronAPI.addSessionLoot(session.id, { itemName, quantity, candidate });
+    const { learnedItem, ...updated } = await window.electronAPI.addSessionLoot(session.id, { itemName, quantity, candidate });
+    if (learnedItem) {
+      showToast(window.t('learnedArt.learned', { item: learnedItem }), '', 'success');
+      loadLearnedArtCount();
+    }
     if (state.selectedSession?.id === session.id) state.selectedSession = updated;
     if (state.currentSession?.id === updated.id) {
       state.currentSession = { ...state.currentSession, ...updated };

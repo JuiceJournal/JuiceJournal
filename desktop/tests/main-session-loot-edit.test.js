@@ -479,3 +479,105 @@ test('the remembered item values leave the art the reader holds with what workin
   assert.ok(steps.some(([, current]) => current) && steps.some(([, current]) => !current));
   assert.ok(new Set(steps.filter(([, current]) => current).map(([, , exalted]) => exalted)).size >= 4);
 });
+
+// main's learned art over a store that records what it is asked.
+function loadLearning(backend, { confirm = () => true, hold = null } = {}) {
+  const asked = [];
+  const store = {
+    confirm: (...args) => { asked.push(['confirm', ...JSON.parse(JSON.stringify(args))]); return confirm(); },
+    drop: (...args) => asked.push(['drop', ...JSON.parse(JSON.stringify(args))]),
+    hold: (...args) => { asked.push(['hold', ...args]); if (hold) hold(); }
+  };
+  const { context } = loadAddByHand(backend);
+  const learning = loadFunctions(['getSettledLookNames', 'learnNamedLook', 'forgetDismissedLook', 'holdUnreadSamples'], {
+    localJournal,
+    readJournal: () => backend.journal,
+    getLearnedArtStore: () => store,
+    console: { warn() {}, log() {} }
+  });
+  for (const name of ['getSettledLookNames', 'learnNamedLook', 'forgetDismissedLook']) context[name] = learning[name];
+  return { context, learning, asked };
+}
+
+function withLooks(backend) {
+  backend.journal = localJournal.markLootUnread(backend.journal, 'session-1', {
+    now: NOW,
+    unreadCandidates: [{ names: ['Essence of Ruin', 'Greater Essence of Ruin'], quantity: 2 }, { names: ['Omen of Light'], quantity: 1 }]
+  }).journal;
+  return backend;
+}
+
+test('naming a look teaches the reader its picture and tells the window, and a name outside every look teaches nothing', () => {
+  const { context, asked } = loadLearning(withLooks(createBackend()));
+
+  const named = context.addSessionLootByHand('session-1', { itemName: 'Greater Essence of Ruin', quantity: 2, candidate: 0 });
+  assert.equal(named.learnedItem, 'Greater Essence of Ruin');
+  assert.deepEqual(asked, [['confirm', 'session-1', ['Essence of Ruin', 'Greater Essence of Ruin'], 'Greater Essence of Ruin']]);
+
+  const other = context.addSessionLootByHand('session-1', { itemName: 'Divine Orb', quantity: 1 });
+  assert.equal('learnedItem' in other, false);
+  assert.equal(asked.length, 1);
+});
+
+test('a name typed by hand settles the look it matches but teaches nothing: it may be for another drop', () => {
+  const { context, asked } = loadLearning(withLooks(createBackend()));
+
+  const typed = context.addSessionLootByHand('session-1', { itemName: 'Greater Essence of Ruin', quantity: 1 });
+
+  assert.equal('learnedItem' in typed, false);
+  assert.deepEqual(asked, [['drop', 'session-1', ['Essence of Ruin', 'Greater Essence of Ruin']]]);
+  assert.deepEqual(JSON.parse(JSON.stringify(typed.lootUnreadCandidates)), [{ names: ['Omen of Light'], quantity: 1 }]);
+});
+
+test('a look whose pixels were not kept, or a store that fails, still adds the item', () => {
+  const quiet = loadLearning(withLooks(createBackend()), { confirm: () => false });
+  const added = quiet.context.addSessionLootByHand('session-1', { itemName: 'Omen of Light', quantity: 1, candidate: 1 });
+  assert.equal(added.lootEntries[0].itemName, 'Omen of Light');
+  assert.equal('learnedItem' in added, false);
+
+  const broken = loadLearning(withLooks(createBackend()), { confirm: () => { throw new Error('disk'); } });
+  const still = broken.context.addSessionLootByHand('session-1', { itemName: 'Omen of Light', quantity: 1, candidate: 1 });
+  assert.equal(still.lootEntries[0].itemName, 'Omen of Light');
+  assert.equal('learnedItem' in still, false);
+});
+
+test('a dismissed look lets its pixels go', () => {
+  const { context, asked } = loadLearning(withLooks(createBackend()));
+
+  context.dismissUnreadCandidate('session-1', { index: 1, name: 'Omen of Light' });
+
+  assert.deepEqual(asked, [['drop', 'session-1', ['Omen of Light']]]);
+});
+
+test('the pixels of a run\'s offers wait under the run\'s game, and a failure there does not stop the loot', () => {
+  const offers = [{ names: ['Omen of Light'], quantity: 1, samples: [{}] }];
+  const { learning, asked } = loadLearning(createBackend());
+  learning.holdUnreadSamples('session-1', offers);
+  learning.holdUnreadSamples('no-such-run', offers);
+  assert.deepEqual(asked, [['hold', 'session-1', 'poe1', offers]]);
+
+  const failing = loadLearning(createBackend(), { hold: () => { throw new Error('disk'); } });
+  assert.doesNotThrow(() => failing.learning.holdUnreadSamples('session-1', offers));
+});
+
+test('the reader is handed the named art, offers reach the store before the journal, and the window can count and clear', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8').replace(/\r\n/g, '\n');
+  const preload = fs.readFileSync(path.join(path.dirname(mainJsPath), 'preload.js'), 'utf8');
+
+  assert.match(source, /getLearnedArt: \(game\) => getLearnedArtStore\(\)\.list\(game\),/);
+  assert.match(source, /onUnreadLoot: \(sessionId, candidates, other\) => \{\n\s+holdUnreadSamples\(sessionId, candidates\);/);
+  assert.match(source, /onGain: \(sessionId, items, mapCount, unread, candidates, other\) => \{\n\s+holdUnreadSamples\(sessionId, candidates\);/);
+  assert.match(source, /typeof getSettledLookNames === 'function' \? getSettledLookNames\(session, candidate, name\) : null/);
+  assert.match(source, /path\.join\(app\.getPath\('userData'\), 'learned-art', 'pictures\.json'\)/);
+  assert.match(source, /ipcMain\.handle\('get-learned-art-count', \(\) => getLearnedArtStore\(\)\.count\(\)\);/);
+  assert.match(source, /ipcMain\.handle\('clear-learned-art', \(\) => \{\n\s+assertDesktopUserAuthenticated\(\);\n\s+getLearnedArtStore\(\)\.clear\(\);/);
+  assert.match(preload, /getLearnedArtCount: \(\) => ipcRenderer\.invoke\('get-learned-art-count'\)/);
+  assert.match(preload, /clearLearnedArt: \(\) => ipcRenderer\.invoke\('clear-learned-art'\)/);
+});
+
+test('the window announces a learned item and refreshes its count, from the offer\'s button only', () => {
+  const app = fs.readFileSync(path.join(path.dirname(mainJsPath), 'src', 'app.js'), 'utf8').replace(/\r\n/g, '\n');
+
+  assert.match(app, /const \{ learnedItem, \.\.\.updated \} = await window\.electronAPI\.addSessionLoot\(session\.id, \{ itemName, quantity, candidate \}\);\n\s+if \(learnedItem\) \{\n\s+showToast\(window\.t\('learnedArt\.learned', \{ item: learnedItem \}\), '', 'success'\);\n\s+loadLearnedArtCount\(\);/);
+  assert.match(fs.readFileSync(mainJsPath, 'utf8'), /lookNames && Number\.isInteger\(candidate\) \? learnNamedLook\(sessionId, lookNames, name\) : false/);
+});

@@ -57,6 +57,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateLoot: (sessionId, lootId, changes) => ipcRenderer.invoke('update-loot', sessionId, lootId, changes),
   deleteLoot: (sessionId, lootId) => ipcRenderer.invoke('delete-loot', sessionId, lootId),
   addSessionLoot: (sessionId, item) => ipcRenderer.invoke('add-session-loot', sessionId, item),
+  getLearnedArtCount: () => ipcRenderer.invoke('get-learned-art-count'),
+  clearLearnedArt: () => ipcRenderer.invoke('clear-learned-art'),
   dismissLootCandidate: (sessionId, look) => ipcRenderer.invoke('dismiss-loot-candidate', sessionId, look),
   updateSessionCost: (sessionId, costChaos) => ipcRenderer.invoke('update-session-cost', sessionId, costChaos),
   getSessions: (params) => ipcRenderer.invoke('get-sessions', params),

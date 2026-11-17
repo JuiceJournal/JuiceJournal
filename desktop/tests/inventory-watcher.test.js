@@ -14,8 +14,8 @@ function loadWatcher(script) {
     if (request === './inventoryVision') {
       return {
         ...realVision,
-        readInventory: (image, grid, art) => {
-          const read = script(art);
+        readInventory: (image, grid, art, cache, learned) => {
+          const read = script(art, cache, learned);
           // Each scripted item sits in a cell of its own.
           const cells = {};
           for (const [name, quantity] of Object.entries(read.items)) {
@@ -36,9 +36,12 @@ function loadWatcher(script) {
 }
 
 function setup(overrides = {}) {
-  const log = { statuses: [], reads: [], gains: [], unread: [], artLoads: 0, screenReads: 0 };
+  const log = { statuses: [], reads: [], gains: [], unread: [], learned: [], artLoads: 0, screenReads: 0 };
   let read = { open: true, items: {} };
-  const Watcher = loadWatcher(() => read);
+  const Watcher = loadWatcher((art, cache, learned) => {
+    log.learned.push(learned);
+    return read;
+  });
   const env = {
     now: 0,
     inMap: false,
@@ -71,6 +74,7 @@ function setup(overrides = {}) {
       items: env.pricedItems || [{ name: 'Exalted Orb', icon: 'exalted-url' }, { name: 'No Art', icon: null }]
     }),
     getIconPath: (url) => (env.iconFor ? env.iconFor(url) : env.icons['Exalted Orb']),
+    getLearnedArt: (game) => (env.learnedArt ? env.learnedArt(game) : null),
     loadArt: () => {
       log.artLoads += 1;
       return { coarse: new Uint8Array(0), fine: new Uint8Array(0) };
@@ -647,4 +651,30 @@ test('a map whose only new items were left unread is marked so, and a gain says 
   watcher.tick();
   assert.deepEqual(log.gains, [{ sessionId: 's2', items: [{ name: 'Exalted Orb', quantity: 2 }], mapCount: 1, unread: true, candidates: [] }]);
   assert.equal(log.unread.length, 1);
+});
+
+test('art the player named goes to every read, and cells are decided again when it changes', () => {
+  const sample = { name: 'Essence of Ice', width: 1, height: 1, data: new Uint8Array(3) };
+  let art = { revision: 0, samples: [] };
+  const games = [];
+  const context = setup({ learnedArt: (game) => { games.push(game); return art; } });
+
+  readBaseline(context, {});
+  context.watcher.cellCache.set('a cell', {});
+  context.watcher.readNow();
+  assert.equal(context.watcher.cellCache.size, 1, 'the same art keeps the cached cells');
+  art = { revision: 1, samples: [sample] };
+  context.watcher.readNow();
+  assert.equal(context.watcher.cellCache.size, 0);
+  context.watcher.readNow();
+
+  assert.deepEqual(games, ['poe2', 'poe2', 'poe2', 'poe2']);
+  assert.deepEqual(context.log.learned, [[], [], [sample], [sample]]);
+});
+
+test('a watcher with no named art reads with none', () => {
+  const context = setup();
+  readBaseline(context, {});
+
+  assert.deepEqual(context.log.learned, [null]);
 });
