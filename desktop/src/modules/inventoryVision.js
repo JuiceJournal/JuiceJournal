@@ -14,7 +14,7 @@ const GRIDS = {
   poe2: { rightOffset: 864 / 1440, top: 787 / 1440, pitchX: 70.25 / 1440, pitchY: 70.1 / 1440, cols: 12, rows: 5 }
 };
 
-const MEASURED_WINDOW_HEIGHTS = new Set([1440]);
+const MEASURED_WINDOW_HEIGHTS = new Set([1080, 1440]);
 
 const COARSE_SIZE = 16;
 const FINE_SIZE = 64;
@@ -78,7 +78,8 @@ const DIGIT_SLACK = 2;
 // How far around that, in pixels of a 1440 window, a digit must not be found for a cell to count as having no number.
 const DIGIT_REACH = 6;
 
-// The only window heights the digits and art limits have been checked on with real screenshots.
+// The only window heights the digits, tier bars and art limits have been checked on with real screenshots of a
+// filled inventory. 1353 has digit pictures and no such check yet.
 function isMeasuredWindow(windowRect) {
   return MEASURED_WINDOW_HEIGHTS.has(windowRect?.height);
 }

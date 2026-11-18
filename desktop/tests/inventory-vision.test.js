@@ -254,7 +254,9 @@ test('cells smaller than the matching size still match, so lower resolutions rea
 test('only measured window heights count as readable', () => {
   assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 2560, height: 1440 }), true);
   assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 3440, height: 1440 }), true);
-  assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 1920, height: 1080 }), false);
+  assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 1920, height: 1080 }), true);
+  assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 1920, height: 1353 }), false);
+  assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 1600, height: 900 }), false);
   assert.equal(vision.isMeasuredWindow(null), false);
 });
 
@@ -508,6 +510,25 @@ test('a digit standing off where numbers start leaves the cell unread, not witho
   paintCell(image, 1, 1, 2);
   paintDigit(image, 1, 1, '7', 9);
   assert.deepEqual(vision.readStackSize(vision.cropCell(image, GRID, 1, 1)), { quantity: null, digits: true });
+});
+
+test('a stack number reads at each cell size that has digit pictures', () => {
+  for (const [size, set] of Object.entries(DIGIT_PICTURES)) {
+    const side = Number(size);
+    const cell = { data: new Uint8Array(side * side * 4).fill(20), width: side, height: side };
+    let left = set.start[0];
+    for (const digit of '24') {
+      const picture = set.pictures.find((entry) => entry.digit === digit);
+      const lift = -Math.min(...picture.shape);
+      for (let y = 0; y < picture.height; y += 1) {
+        for (let x = 0; x < picture.width; x += 1) {
+          cell.data.fill(Math.round(picture.shape[y * picture.width + x] + lift), ((picture.top - 1 + y) * side + left - 1 + x) * 4, ((picture.top - 1 + y) * side + left - 1 + x) * 4 + 3);
+        }
+      }
+      left += picture.advance + 2;
+    }
+    assert.deepEqual(vision.readStackSize(cell), { quantity: 24, digits: true }, `cell size ${size}`);
+  }
 });
 
 test('a cell size with no digit pictures reads no stack size', () => {
