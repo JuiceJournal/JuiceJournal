@@ -6,7 +6,7 @@
  * same in every game language, so nothing here reads text except the stack digits.
  */
 
-const { DIGIT_GLYPHS, GLYPH_WIDTH, GLYPH_HEIGHT } = require('./inventoryDigitGlyphs');
+const { DIGIT_PICTURES } = require('./inventoryDigitPictures');
 
 // Measured on PoE2 at 2560x1440. The game scales its interface with the window height and keeps the inventory on the
 // right edge. PoE1's layout has not been measured, so it has no grid.
@@ -14,7 +14,7 @@ const GRIDS = {
   poe2: { rightOffset: 864 / 1440, top: 787 / 1440, pitchX: 70.25 / 1440, pitchY: 70.1 / 1440, cols: 12, rows: 5 }
 };
 
-const MEASURED_WINDOW_HEIGHTS = new Set([1440]);
+const MEASURED_WINDOW_HEIGHTS = new Set([1080, 1440]);
 
 const COARSE_SIZE = 16;
 const FINE_SIZE = 64;
@@ -61,11 +61,26 @@ const ESSENCE_PATTERN = /Essence of /;
 // this leaves a cheap item unread.
 const CLEAR_MARGIN = 2.3;
 const CLEAR_SCORE = 12;
-const DIGIT_BRIGHTNESS = 185;
 const TIER_BRIGHTNESS = 170;
-const DIGIT_MAX_DISTANCE = 0.35;
+// Stack digits are matched against pictures of the game's own digits, one set for each cell size. Measured on 381
+// cells from real screenshots at window heights 1440, 1353 and 1080, each digit judged by pictures from other cells:
+// the 529 real digits fit at 0.87 or more, and where a number ends, or an item has none, nothing fit above 0.52.
+// Between the two limits the number stays unread. Pictures stretched from another size do not do: with them a 50
+// read as no number at all.
+const DIGIT_SURE = 0.8;
+const DIGIT_NONE = 0.65;
+const DIGIT_LEAD = 0.05;
+// A patch this even holds no digit: a digit is white with a black edge.
+const DIGIT_FLAT = 30;
+const MAX_STACK_DIGITS = 5;
+// The grid is found to a pixel or two, so a number may sit that far from where the pictures were cut.
+const DIGIT_SLACK = 2;
+// How far around that, in pixels of a 1440 window, nothing like a digit may be found for a cell to count as having no
+// number, and how far past the end of a number for the number to count as whole.
+const DIGIT_REACH = 6;
 
-// The only window heights the digits and art limits have been checked on with real screenshots.
+// The only window heights the digits, tier bars and art limits have been checked on with real screenshots of a
+// filled inventory. 1353 has digit pictures and no such check yet.
 function isMeasuredWindow(windowRect) {
   return MEASURED_WINDOW_HEIGHTS.has(windowRect?.height);
 }
@@ -359,75 +374,119 @@ function brightParts(cell, region, threshold) {
   return { parts, mask, width };
 }
 
-function glyphOf(found, part) {
-  const width = part.maxX - part.minX + 1;
-  const height = part.maxY - part.minY + 1;
-  const cells = new Uint8Array(GLYPH_WIDTH * GLYPH_HEIGHT);
-  for (let y = 0; y < GLYPH_HEIGHT; y += 1) {
-    for (let x = 0; x < GLYPH_WIDTH; x += 1) {
-      const sourceX = part.minX + Math.min(width - 1, Math.floor(((x + 0.5) / GLYPH_WIDTH) * width));
-      const sourceY = part.minY + Math.min(height - 1, Math.floor(((y + 0.5) / GLYPH_HEIGHT) * height));
-      cells[y * GLYPH_WIDTH + x] = found.mask[sourceY * found.width + sourceX];
+// How white each pixel of the top of a cell is: digits are white, so the weakest colour channel shows them best.
+function whitenessOf(cell, rows) {
+  const height = Math.min(cell.height, rows);
+  const data = new Uint8Array(cell.width * height);
+  for (let i = 0; i < data.length; i += 1) {
+    data[i] = Math.min(cell.data[i * 4], cell.data[i * 4 + 1], cell.data[i * 4 + 2]);
+  }
+  return { data, width: cell.width, height };
+}
+
+// How well a digit picture fits the cell with its top-left corner at x, y: 1 is the same shape, whatever the
+// brightness or contrast; 0 is no likeness.
+function fitDigitPicture(white, picture, x, y) {
+  const { width, height } = picture;
+  if (x < 0 || y < 0 || x + width > white.width || y + height > white.height) return -1;
+  const count = width * height;
+  let sum = 0;
+  for (let row = 0; row < height; row += 1) {
+    const at = (y + row) * white.width + x;
+    for (let col = 0; col < width; col += 1) sum += white.data[at + col];
+  }
+  const mean = sum / count;
+  let both = 0;
+  let spread = 0;
+  for (let row = 0; row < height; row += 1) {
+    const at = (y + row) * white.width + x;
+    for (let col = 0; col < width; col += 1) {
+      const value = white.data[at + col] - mean;
+      both += value * picture.shape[row * width + col];
+      spread += value * value;
     }
   }
-  return { cells, aspect: width / height };
+  if (spread < count * DIGIT_FLAT * DIGIT_FLAT) return 0;
+  return both / Math.sqrt(spread * picture.spread);
 }
 
-// The digit shapes in a cell's top-left corner, left to right. An empty list means the item shows no stack size.
-function findStackGlyphs(cell) {
-  const scale = cell.height / 70;
-  const found = brightParts(cell, {
-    x: 0,
-    y: 0,
-    width: Math.round(cell.width * 0.94),
-    height: Math.round(cell.height * 0.46)
-  }, DIGIT_BRIGHTNESS);
-  const candidates = found.parts
-    .filter((part) => {
-      const height = part.maxY - part.minY + 1;
-      const width = part.maxX - part.minX + 1;
-      return height >= 12 * scale && height <= 22 * scale && width >= 2 && width <= 16 * scale && part.minY <= 14 * scale;
-    })
-    .sort((left, right) => left.minX - right.minX);
-
-  const run = [];
-  for (const part of candidates) {
-    const limit = run.length === 0 ? part.minX <= 24 * scale : part.minX - run[run.length - 1].maxX <= 7 * scale;
-    if (limit) run.push(part);
+// The best fit of each digit with its left edge at x.
+function fitDigitsAt(white, pictures, x) {
+  const fits = new Map();
+  for (const picture of pictures) {
+    for (let y = picture.top - 1 - DIGIT_SLACK; y <= picture.top - 1 + DIGIT_SLACK; y += 1) {
+      const score = fitDigitPicture(white, picture, x - 1, y);
+      const held = fits.get(picture.digit);
+      if (!held || score > held.score) fits.set(picture.digit, { digit: picture.digit, score, x, advance: picture.advance });
+    }
   }
-  return run.map((part) => glyphOf(found, part));
+  return fits;
 }
 
-function glyphDistance(left, right) {
-  let total = 0;
-  for (let i = 0; i < left.cells.length; i += 1) {
-    total += Math.abs(left.cells[i] - right.cells[i]);
+// The next digit of a number, looked for from the left: the first place where a digit fits closely is the digit, so
+// the 0 of a 10 is never taken for the number's first digit. False where nothing looks like a digit (the number has
+// ended), null where something does and it is not clear which.
+function nextDigit(white, pictures, fromX, toX) {
+  let strongest = 0;
+  for (let x = fromX; x <= toX; x += 1) {
+    const fits = fitDigitsAt(white, pictures, x);
+    let sure = false;
+    for (const fit of fits.values()) {
+      strongest = Math.max(strongest, fit.score);
+      sure = sure || fit.score >= DIGIT_SURE;
+    }
+    if (!sure) continue;
+    // The digit may sit one pixel further on, where it fits better still.
+    for (const [digit, fit] of fitDigitsAt(white, pictures, x + 1)) {
+      if (fit.score > fits.get(digit).score) fits.set(digit, fit);
+    }
+    const [best, next] = [...fits.values()].sort((left, right) => right.score - left.score);
+    return next && best.score - next.score < DIGIT_LEAD ? null : best;
   }
-  return total / left.cells.length + Math.abs(left.aspect - right.aspect) * 0.5;
+  return strongest < DIGIT_NONE ? false : null;
 }
 
-function readDigit(glyph, samples = DIGIT_GLYPHS) {
-  let best = null;
-  for (const sample of samples) {
-    const distance = glyphDistance(glyph, sample);
-    if (!best || distance < best.distance) best = { digit: sample.digit, distance };
+// Whether anything like a digit stands with its left edge between fromX and toX, up to reachY pixels above or below
+// where digits stand. Asked where the reader found none: beside the place numbers start, for a cell not cut where the
+// grid is, and past the end of a number, for a digit standing further off than the next one should. Either way the
+// number read so far, or the lack of one, cannot be trusted.
+function hasDigitWithin(white, pictures, fromX, toX, reachY) {
+  for (const picture of pictures) {
+    for (let y = picture.top - 1 - reachY; y <= picture.top - 1 + reachY; y += 1) {
+      for (let x = fromX; x <= toX; x += 1) {
+        if (fitDigitPicture(white, picture, x - 1, y) >= DIGIT_NONE) return true;
+      }
+    }
   }
-  return best && best.distance <= DIGIT_MAX_DISTANCE ? best.digit : null;
+  return false;
 }
 
 // Stack size from the corner digits; items without digits are single items. Null means digits that cannot be read:
-// a guess in one read would turn into a false gain or loss against the next.
-function readStackSize(cell) {
-  const glyphs = findStackGlyphs(cell);
-  if (glyphs.length === 0) return { quantity: 1, digits: false };
+// a guess in one read would turn into a false gain or loss against the next. The number is walked from where numbers
+// start: each digit must fit a picture closely and clearly better than any other digit, and the number ends where
+// nothing fits at all. Anything in between, and a cell size with no pictures, is unread.
+function readStackSize(cell, set = DIGIT_PICTURES[cell.height]) {
+  const unread = { quantity: null, digits: true };
+  if (!set) return unread;
+  const step = cell.height / 70;
+  const reach = Math.round(DIGIT_REACH * step);
+  const white = whitenessOf(cell, set.rows + reach);
+  let fromX = set.start[0] - DIGIT_SLACK;
+  let toX = set.start[1] + DIGIT_SLACK;
   let text = '';
-  for (const glyph of glyphs) {
-    const digit = readDigit(glyph);
-    if (digit === null) return { quantity: null, digits: true };
-    text += digit;
+  for (let place = 0; place <= MAX_STACK_DIGITS; place += 1) {
+    const digit = nextDigit(white, set.pictures, fromX, toX);
+    if (digit === false) break;
+    if (digit === null || place === MAX_STACK_DIGITS) return unread;
+    text += digit.digit;
+    fromX = Math.floor(digit.x + digit.advance - step - 1);
+    toX = Math.ceil(digit.x + digit.advance + 3 * step + 1);
   }
-  const value = Number(text);
-  return { quantity: Number.isInteger(value) && value > 0 ? value : null, digits: true };
+  if (text === '') {
+    return hasDigitWithin(white, set.pictures, set.start[0] - reach, set.start[1] + reach, reach) ? unread : { quantity: 1, digits: false };
+  }
+  if (text[0] === '0' || hasDigitWithin(white, set.pictures, toX + 1, toX + reach, DIGIT_SLACK)) return unread;
+  return { quantity: Number(text), digits: true };
 }
 
 // Bars in the bottom-right corner: none is the base item, II is Greater and III is Perfect.
@@ -688,8 +747,7 @@ module.exports = {
   isCheapValue,
   readStackSize,
   readTierBars,
-  findStackGlyphs,
-  readDigit,
+  fitDigitPicture,
   isSameSample,
   matchLearned,
   readInventory

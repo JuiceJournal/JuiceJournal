@@ -143,7 +143,7 @@ test('a game without a measured layout is left alone', () => {
 });
 
 test('a window height not checked on real screenshots is left alone and the hotkey says why', () => {
-  const { watcher, log } = setup({ gameWindow: { x: 0, y: 0, width: 1920, height: 1080 } });
+  const { watcher, log } = setup({ gameWindow: { x: 0, y: 0, width: 1600, height: 900 } });
 
   watcher.tick();
   watcher.readNow();
@@ -413,7 +413,7 @@ test('the timer reports a window not measured when it starts and when it ends, o
   poe1.watcher.tick();
   assert.deepEqual(poe1.log.reads, [], 'PoE 1 has nothing to read or report');
 
-  const small = setup({ gameWindow: { x: 0, y: 0, width: 1920, height: 1080 } });
+  const small = setup({ gameWindow: { x: 0, y: 0, width: 1600, height: 900 } });
   small.watcher.tick();
   small.watcher.tick();
   assert.deepEqual(small.log.reads, ['resolution'], 'once, not every tick');
@@ -424,7 +424,7 @@ test('the timer reports a window not measured when it starts and when it ends, o
   const resized = setup();
   resized.watcher.tick();
   assert.deepEqual(resized.log.reads, ['saved']);
-  resized.env.gameWindow = { x: 0, y: 0, width: 1920, height: 1080 };
+  resized.env.gameWindow = { x: 0, y: 0, width: 1600, height: 900 };
   resized.watcher.tick();
   resized.env.gameWindow = { x: 0, y: 0, width: 2560, height: 1440 };
   resized.watcher.tick();
@@ -439,7 +439,7 @@ test('the timer reports a window not measured when it starts and when it ends, o
   }
 
   for (const blocked of [{ inMap: true }, { inFront: false }, { enabled: false }, { profileId: null }]) {
-    for (const overrides of [{ game: 'poe1' }, { gameWindow: { x: 0, y: 0, width: 1920, height: 1080 } }]) {
+    for (const overrides of [{ game: 'poe1' }, { gameWindow: { x: 0, y: 0, width: 1600, height: 900 } }]) {
       const quiet = setup({ ...blocked, ...overrides });
       quiet.watcher.tick();
       assert.deepEqual(quiet.log.reads, [], JSON.stringify({ blocked, overrides }));
@@ -622,7 +622,7 @@ test('needsBaseline is not reported with the inventory covered, in a map, with t
     [{ inMap: true }, { open: false, items: {} }],
     // A town, a trial or a campaign zone is outside a map too, but the hint is for the hideout.
     [{ inMapHub: false }, { open: false, items: {} }],
-    [{ gameWindow: { x: 0, y: 0, width: 1920, height: 1080 } }, { open: false, items: {} }],
+    [{ gameWindow: { x: 0, y: 0, width: 1600, height: 900 } }, { open: false, items: {} }],
     [{ game: 'poe1' }, { open: false, items: {} }]
   ]) {
     const context = setup(overrides);
