@@ -7,6 +7,7 @@
  */
 
 const { DIGIT_PICTURES } = require('./inventoryDigitPictures');
+const { digitSetFor } = require('./inventoryDigitMaker');
 
 // Measured on PoE2 at 2560x1440. The game scales its interface with the window height and keeps the inventory on the
 // right edge. PoE1's layout has not been measured, so it has no grid.
@@ -14,7 +15,8 @@ const GRIDS = {
   poe2: { rightOffset: 864 / 1440, top: 787 / 1440, pitchX: 70.25 / 1440, pitchY: 70.1 / 1440, cols: 12, rows: 5 }
 };
 
-const MEASURED_WINDOW_HEIGHTS = new Set([1080, 1440]);
+const MIN_WINDOW_HEIGHT = 1080;
+const MAX_WINDOW_HEIGHT = 1440;
 
 const COARSE_SIZE = 16;
 const FINE_SIZE = 64;
@@ -66,7 +68,7 @@ const TIER_BRIGHTNESS = 170;
 // cells from real screenshots at window heights 1440, 1353 and 1080, each digit judged by pictures from other cells:
 // the 529 real digits fit at 0.87 or more, and where a number ends, or an item has none, nothing fit above 0.52.
 // Between the two limits the number stays unread. Pictures stretched from another size do not do: with them a 50
-// read as no number at all.
+// read as no number at all; a size without pictures of its own gets made ones (inventoryDigitMaker.js).
 const DIGIT_SURE = 0.8;
 const DIGIT_NONE = 0.65;
 const DIGIT_LEAD = 0.05;
@@ -79,10 +81,20 @@ const DIGIT_SLACK = 2;
 // number, and how far past the end of a number for the number to count as whole.
 const DIGIT_REACH = 6;
 
-// The only window heights the digits, tier bars and art limits have been checked on with real screenshots of a
-// filled inventory. 1353 has digit pictures and no such check yet.
+// The window heights read. The digits, tier bars and art limits were checked on real screenshots of a filled inventory
+// at both ends, 1080 and 1440; a height between them is read with digit pictures made from the real ones. Nothing was
+// checked under or over them.
 function isMeasuredWindow(windowRect) {
-  return MEASURED_WINDOW_HEIGHTS.has(windowRect?.height);
+  const height = windowRect?.height;
+  return Number.isFinite(height) && height >= MIN_WINDOW_HEIGHT && height <= MAX_WINDOW_HEIGHT;
+}
+
+const madeDigitSets = new Map();
+
+// The digit pictures of a cell size: its own, or ones made once from the real sets and kept.
+function digitPicturesFor(cellSize) {
+  if (!madeDigitSets.has(cellSize)) madeDigitSets.set(cellSize, digitSetFor(cellSize, DIGIT_PICTURES));
+  return madeDigitSets.get(cellSize);
 }
 
 function hasInventoryLayout(poeVersion) {
@@ -465,7 +477,7 @@ function hasDigitWithin(white, pictures, fromX, toX, reachY) {
 // a guess in one read would turn into a false gain or loss against the next. The number is walked from where numbers
 // start: each digit must fit a picture closely and clearly better than any other digit, and the number ends where
 // nothing fits at all. Anything in between, and a cell size with no pictures, is unread.
-function readStackSize(cell, set = DIGIT_PICTURES[cell.height]) {
+function readStackSize(cell, set = digitPicturesFor(cell.height)) {
   const unread = { quantity: null, digits: true };
   if (!set) return unread;
   const step = cell.height / 70;

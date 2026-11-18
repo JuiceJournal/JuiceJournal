@@ -234,7 +234,7 @@ test('each kind reads as its own text and tone, with the local time as HH:MM', (
     [{ kind: 'noGain', at }, 'ok', 'No new loot · 14:07'],
     [{ kind: 'noBaseline', at }, 'warn', 'Last map not counted · 14:07'],
     [{ kind: 'none', at: null }, 'warn', 'Inventory not read yet. Open it before your next map.'],
-    [{ kind: 'resolution', at }, 'warn', 'Not read: needs a 1080p or 1440p game window'],
+    [{ kind: 'resolution', at }, 'warn', 'Not read: needs a game window 1080 to 1440 pixels tall'],
     [{ kind: 'saveFailed', at }, 'warn', "Could not save the last map's loot · 14:07"],
     [{ kind: 'off' }, 'muted', 'Inventory reading is off']
   ];
@@ -256,7 +256,7 @@ test('Turkish has its own text for every kind', () => {
     [{ kind: 'noGain', at }, 'Yeni loot yok · 14:07'],
     [{ kind: 'noBaseline', at }, 'Son map sayılmadı · 14:07'],
     [{ kind: 'none', at: null }, 'Envanter henüz okunmadı. Sonraki mapten önce aç.'],
-    [{ kind: 'resolution', at }, 'Okunamadı: 1080p veya 1440p oyun penceresi gerekli'],
+    [{ kind: 'resolution', at }, 'Okunamadı: 1080-1440 piksel yüksekliğinde oyun penceresi gerekli'],
     [{ kind: 'saveFailed', at }, 'Son mapin lootu kaydedilemedi · 14:07'],
     [{ kind: 'off' }, 'Envanter okuma kapalı']
   ];
