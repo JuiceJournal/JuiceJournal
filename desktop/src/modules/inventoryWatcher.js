@@ -333,17 +333,23 @@ class InventoryWatcher {
   }
 
   /**
-   * A read that came from GGG's API. One taken as a map is entered is only what the map starts from: it never
-   * settles a map that is waiting, which a late answer would otherwise do with the wrong inventory. Returns whether
-   * the read was taken.
+   * A read that came from GGG's API, of the character it was asked for. Without a session it is what the next map
+   * starts from, and it never settles a map that is waiting: a late answer would do that with the wrong inventory.
+   * With a session it is that map's read after it, and it is taken only while that very map is the one waiting.
+   * Returns whether the read was taken.
    */
-  applyApiRead(game, read, { settles }) {
-    const characterKey = getCharacterKey(game, this.deps.getCharacter());
+  applyApiRead(game, read, { character, sessionId = null }) {
+    const characterKey = getCharacterKey(game, character);
     if (!this.deps.isEnabled() || !this.syncProfile() || !characterKey || !read || !this.readsFromApi(game)) {
       return false;
     }
-    const waiting = this.state.pending?.characterKey === characterKey;
-    if (!settles && waiting) {
+    // The player has moved to another character since the read was asked for.
+    if (characterKey !== getCharacterKey(game, this.deps.getCharacter())) {
+      return false;
+    }
+    const { pending } = this.state;
+    const waiting = pending?.characterKey === characterKey;
+    if (sessionId ? !(waiting && pending.sessionId === sessionId) : waiting) {
       return false;
     }
     this.applyRead(characterKey, read, { announce: false });

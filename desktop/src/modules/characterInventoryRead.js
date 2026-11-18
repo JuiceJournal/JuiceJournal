@@ -20,11 +20,11 @@ function readCharacterInventory(character) {
   const items = {};
   const cells = {};
   for (const item of character.inventory) {
-    if (item?.inventoryId && item.inventoryId !== MAIN_INVENTORY) continue;
-    if (!isStack(item)) continue;
+    // An item that does not say it is in the main inventory, or how many it is, is left out: both would be a guess.
+    if (item?.inventoryId !== MAIN_INVENTORY || !isStack(item)) continue;
     const name = String(item.baseType || item.typeLine || '').trim();
-    const quantity = Number.isInteger(item.stackSize) && item.stackSize > 0 ? item.stackSize : 1;
-    if (!name || !Number.isInteger(item.x) || !Number.isInteger(item.y)) continue;
+    const quantity = item.stackSize;
+    if (!name || !Number.isInteger(quantity) || quantity < 1 || !Number.isInteger(item.x) || !Number.isInteger(item.y)) continue;
     // The game's numbers are exact, so every stack counts as read with its digits.
     cells[`${item.y},${item.x}`] = { name, quantity, digits: true };
     items[name] = (items[name] || 0) + quantity;

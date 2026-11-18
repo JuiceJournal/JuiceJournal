@@ -374,7 +374,7 @@ class PoeApiClient {
   }
 
   /**
-   * One Path of Exile 1 character with what it wears and carries. Null when the account has no such character.
+   * One Path of Exile 1 character with what it wears and carries. Null when the answer holds no character.
    * After GGG answers "too many requests" no request is sent until the wait it named is over: asking again early
    * makes the penalty longer.
    */
@@ -392,7 +392,9 @@ class PoeApiClient {
       return data?.character || null;
     } catch (error) {
       if (error.code === 'POE_RATE_LIMITED') {
-        this.characterBlockedUntil = Date.now() + error.retryAfter * 1000;
+        // A wait GGG did not put in numbers still is a wait.
+        const seconds = Number.isFinite(error.retryAfter) && error.retryAfter > 0 ? error.retryAfter : 60;
+        this.characterBlockedUntil = Date.now() + seconds * 1000;
       }
       throw error;
     }

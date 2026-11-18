@@ -40,26 +40,32 @@ test('gear, maps and unique items are left out: their worth depends on what is o
   assert.deepEqual(Object.keys(read.cells), ['0,0']);
 });
 
-test('items outside the main inventory are not what the character carries', () => {
+test('items outside the main inventory, or that do not say where they are, are not what the character carries', () => {
   const read = readCharacterInventory({
-    inventory: [stack('Chaos Orb', 5, 0, 0), stack('Chaos Orb', 9, 0, 0, { inventoryId: 'Cursor' })]
+    inventory: [
+      stack('Chaos Orb', 5, 0, 0),
+      stack('Chaos Orb', 9, 0, 0, { inventoryId: 'Cursor' }),
+      stack('Chaos Orb', 3, 1, 0, { inventoryId: undefined })
+    ]
   });
 
   assert.deepEqual(read.items, { 'Chaos Orb': 5 });
 });
 
-test('a stack with a broken size or place is left out rather than guessed', () => {
+test('a stack with no size, a broken size, no place or no name is left out rather than guessed', () => {
   const read = readCharacterInventory({
     inventory: [
       stack('Chaos Orb', 5, 0, 0),
       stack('Exalted Orb', undefined, 1, 0),
+      stack('Vaal Orb', 0, 2, 0),
+      stack('Orb of Chance', 2.5, 3, 0),
       stack('Regal Orb', 4, undefined, 0),
-      stack('', 4, 2, 0, { typeLine: '' })
+      stack('', 4, 4, 0, { typeLine: '' })
     ]
   });
 
-  // A stack that names no size is one item: that is what the game shows.
-  assert.deepEqual(read.items, { 'Chaos Orb': 5, 'Exalted Orb': 1 });
+  assert.deepEqual(read.items, { 'Chaos Orb': 5 });
+  assert.deepEqual(Object.keys(read.cells), ['0,0']);
 });
 
 test('an answer without an inventory list is no read, and an empty list is an empty inventory', () => {

@@ -80,6 +80,8 @@ const MAP_RESULT_OVERLAY_DURATION_MS = 10_000;
 const INVENTORY_POLL_MS = 1_000;
 // GGG saves a character as it changes area; the read after a map waits this long for that to be done.
 const POE1_SETTLE_DELAY_MS = 1_500;
+// An answer later than this is not the inventory the map left behind any more.
+const POE1_SETTLE_DEADLINE_MS = 8_000;
 const INVENTORY_READING_CARD_MS = 1_200;
 const INVENTORY_STATUS_CARD_MS = 4_000;
 // The hint to open the inventory once waits for a calm hideout, then stays up long enough to be read and acted on.
@@ -4628,52 +4630,84 @@ function sendInventoryReadStatus() {
 
 // A map's inventory loot arrives after it ended, from the first read back outside the map.
 // Path of Exile 1 has no inventory layout to read from the screen; GGG's API tells what the character carries, to a
-// signed-in account. The API has no such list for Path of Exile 2.
+// signed-in account. The API has no such list for Path of Exile 2. Off while inventory reading is switched off, and
+// for a sign-in that can read the stash: there the stash difference is the map's loot, and two sources would count
+// it twice.
 function canReadPoe1Inventory(game) {
-  return game === 'poe1' && Boolean(poeApiClient?.isAuthenticated());
+  return game === 'poe1'
+    && readParsedSetting('inventoryReadEnabled') !== false
+    && Boolean(poeApiClient?.isAuthenticated())
+    && !poeApiClient.hasScope('account:stashes');
 }
 
 /**
- * Asks GGG what the Path of Exile 1 character carries and hands it to the inventory watcher. `settles` is false for
- * the read taken as a map is entered and true for the one after it. Resolves to whether the read was taken; a
- * failure leaves the map uncounted instead of guessed.
+ * Asks GGG what the Path of Exile 1 character carries. Resolves to the read and the character it was asked for, or to
+ * null: a failure leaves a map uncounted instead of guessed.
  */
-async function readPoe1Inventory({ settles }) {
-  const name = overlayCharacterState?.name;
-  if (!inventoryWatcher || !name || !canReadPoe1Inventory('poe1')) {
-    return false;
+async function fetchPoe1Inventory() {
+  const character = overlayCharacterState;
+  if (!inventoryWatcher || !character?.name || !canReadPoe1Inventory('poe1')) {
+    return null;
   }
   try {
-    const read = readCharacterInventory(await poeApiClient.getCharacter(name));
-    return Boolean(read) && inventoryWatcher.applyApiRead('poe1', read, { settles });
+    const read = readCharacterInventory(await poeApiClient.getCharacter(character.name));
+    return read ? { character, read } : null;
   } catch (error) {
     console.warn('[poe1-inventory] read failed:', error?.code || error?.message || error);
-    return false;
+    return null;
   }
 }
 
-// The read a Path of Exile 1 map starts from, taken as the map is entered. Held so the read after the map can wait
-// for it and tell whether this map has anything to be counted against.
-let poe1EntryRead = null;
+// The Path of Exile 1 map last entered: whether the read it starts from was taken, whether the map has been left,
+// and whether its loot has been asked for. One map's entry read never counts another map.
+let poe1MapEntry = null;
 
 function startPoe1EntryRead() {
-  poe1EntryRead = gameDetector?.getDetectedGame?.() === 'poe1' ? readPoe1Inventory({ settles: false }) : null;
+  if (gameDetector?.getDetectedGame?.() !== 'poe1') {
+    poe1MapEntry = null;
+    return;
+  }
+  poe1MapEntry = {
+    exited: false,
+    settled: false,
+    applied: fetchPoe1Inventory()
+      .then((got) => Boolean(got) && inventoryWatcher.applyApiRead('poe1', got.read, { character: got.character }))
+      .catch(() => false)
+  };
+}
+
+function notePoe1MapExited() {
+  if (poe1MapEntry) {
+    poe1MapEntry.exited = true;
+  }
 }
 
 /**
- * Counts a finished Path of Exile 1 map: the character's inventory now, against the read taken at its entry. Without
- * that read, or when GGG does not answer, the map is left uncounted: an older read would count what the player took
- * out of the stash as loot.
+ * Counts a finished Path of Exile 1 map: the character's inventory now, against the read taken at its entry. The map
+ * is left uncounted when that read was not taken, when the map was ended before it was left, when GGG does not answer
+ * in time, or when another map was entered meanwhile: by then the inventory is no longer what the map left behind, and
+ * what the player took out of the stash would count as loot.
  */
 async function settlePoe1Inventory(session) {
   if (!session?.id || session.poeVersion !== 'poe1' || !inventoryWatcher?.readsFromApi('poe1')) {
     return;
   }
-  const entryRead = poe1EntryRead;
-  poe1EntryRead = null;
+  const entry = poe1MapEntry;
+  const usable = Boolean(entry) && entry.exited && !entry.settled;
+  if (entry) {
+    entry.settled = true;
+  }
   try {
-    const counted = Boolean(await entryRead)
-      && await new Promise((resolve) => setTimeout(resolve, POE1_SETTLE_DELAY_MS)).then(() => readPoe1Inventory({ settles: true }));
+    const startedAt = Date.now();
+    let counted = usable && await entry.applied;
+    if (counted) {
+      await new Promise((resolve) => setTimeout(resolve, POE1_SETTLE_DELAY_MS));
+      const got = await fetchPoe1Inventory();
+      counted = Boolean(got)
+        && poe1MapEntry === entry
+        && Date.now() - startedAt <= POE1_SETTLE_DEADLINE_MS
+        && inventoryWatcher.applyApiRead('poe1', got.read, { character: got.character, sessionId: session.id });
+    }
     if (!counted) {
       inventoryWatcher.dropPending(session.id);
     }
@@ -5003,12 +5037,14 @@ async function endCurrentSession(options = {}) {
       session.noLoot = true;
     }
     const inventoryCanSettle = !options.shuttingDown && Boolean(inventoryWatcher?.sessionEnded(session));
-    const waitingOnRead = Boolean(session.noLoot) && inventoryCanSettle && store.get('inventoryReadEnabled') !== false;
+    // A Path of Exile 1 map gets its read from GGG, by itself and within seconds: there is no inventory to open, so
+    // the map does not show as waiting for one.
+    const settlesFromApi = inventoryCanSettle && Boolean(inventoryWatcher.readsFromApi?.(session.poeVersion));
+    const waitingOnRead = Boolean(session.noLoot) && inventoryCanSettle && !settlesFromApi && store.get('inventoryReadEnabled') !== false;
     // With no baseline there is nothing to count this map against, however the player opens the inventory later.
     session.lootUncounted = waitingOnRead && !inventoryWatcher.hasBaseline(session.poeVersion);
     session.lootPending = waitingOnRead && !session.lootUncounted;
-    // A Path of Exile 1 map gets its read from GGG, with no inventory to open; it settles or drops the wait by itself.
-    if (inventoryCanSettle && typeof settlePoe1Inventory === 'function') {
+    if (settlesFromApi && typeof settlePoe1Inventory === 'function') {
       settlePoe1Inventory(session);
     }
     let duration = '';
@@ -5185,6 +5221,9 @@ function setupLogParser() {
   });
 
   logParser.on('mapExited', (data) => {
+    if (typeof notePoe1MapExited === 'function') {
+      notePoe1MapExited();
+    }
     const runtimePayload = publishRuntimeSessionEvent('area_exited', data);
     if (currentSession && shouldAutoEndSessionOnMapExit(currentSession)) {
       const instances = Array.isArray(runtimePayload?.runtimeSession?.instances)
