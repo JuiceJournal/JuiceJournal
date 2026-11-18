@@ -327,6 +327,46 @@ class InventoryWatcher {
     }
   }
 
+  // Whether the game's inventory comes from GGG's API instead of the screen (Path of Exile 1).
+  readsFromApi(game) {
+    return Boolean(this.deps.hasApiInventory?.(game));
+  }
+
+  /**
+   * A read that came from GGG's API, of the character it was asked for. Without a session it is what the next map
+   * starts from, and it never settles a map that is waiting: a late answer would do that with the wrong inventory.
+   * With a session it is that map's read after it, and it is taken only while that very map is the one waiting.
+   * Returns whether the read was taken.
+   */
+  applyApiRead(game, read, { character, sessionId = null }) {
+    const characterKey = getCharacterKey(game, character);
+    if (!this.deps.isEnabled() || !this.syncProfile() || !characterKey || !read || !this.readsFromApi(game)) {
+      return false;
+    }
+    // The player has moved to another character since the read was asked for.
+    if (characterKey !== getCharacterKey(game, this.deps.getCharacter())) {
+      return false;
+    }
+    const { pending } = this.state;
+    const waiting = pending?.characterKey === characterKey;
+    if (sessionId ? !(waiting && pending.sessionId === sessionId) : waiting) {
+      return false;
+    }
+    this.applyRead(characterKey, read, { announce: false });
+    return true;
+  }
+
+  // The read a finished map was waiting for will not come: the map stays uncounted, and no later read is taken for it.
+  dropPending(sessionId) {
+    const { pending } = this.state;
+    if (!pending || pending.sessionId !== sessionId) {
+      return;
+    }
+    this.state = { ...this.state, pending: null };
+    this.deps.onRead('noBaseline', { characterKey: pending.characterKey });
+    this.deps.onStatus('noBaseline');
+  }
+
   mapEntered() {
     const characterKey = getCharacterKey(this.deps.getGame(), this.deps.getCharacter());
     if (characterKey) {
@@ -338,7 +378,8 @@ class InventoryWatcher {
   sessionEnded(session) {
     const game = session?.poeVersion;
     const characterKey = getCharacterKey(game, this.deps.getCharacter());
-    if (!session?.id || !characterKey || !hasInventoryLayout(game) || !this.syncProfile() || this.isWindowUnmeasured()) {
+    const fromScreen = hasInventoryLayout(game) && !this.isWindowUnmeasured();
+    if (!session?.id || !characterKey || !this.syncProfile() || !(fromScreen || this.readsFromApi(game))) {
       return false;
     }
 
