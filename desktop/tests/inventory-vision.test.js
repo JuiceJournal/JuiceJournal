@@ -85,12 +85,12 @@ function paintCell(image, col, row, seed) {
 }
 
 // Draws a stored digit picture into a cell where the game puts a stack number. Returns the digit's width.
-function paintDigit(image, col, row, digit, offset = 0) {
+function paintDigit(image, col, row, digit, offset = 0, down = 0) {
   const set = DIGIT_PICTURES[Math.round(GRID.pitchY)];
   const picture = set.pictures.find((entry) => entry.digit === digit);
   const lift = -Math.min(...picture.shape);
   const startX = Math.round(col * GRID.pitchX) + set.start[0] + offset - 1;
-  const startY = Math.round(row * GRID.pitchY) + picture.top - 1;
+  const startY = Math.round(row * GRID.pitchY) + picture.top - 1 + down;
   for (let y = 0; y < picture.height; y += 1) {
     for (let x = 0; x < picture.width; x += 1) {
       const i = ((startY + y) * image.width + startX + x) * 4;
@@ -528,6 +528,43 @@ test('a stack number reads at each cell size that has digit pictures', () => {
       left += picture.advance + 2;
     }
     assert.deepEqual(vision.readStackSize(cell), { quantity: 24, digits: true }, `cell size ${size}`);
+  }
+});
+
+test('a digit standing lower than numbers do leaves the cell unread, not without a number', () => {
+  for (const digit of '19') {
+    const image = blankGrid();
+    paintCell(image, 1, 1, 2);
+    paintDigit(image, 1, 1, digit, 0, 5);
+    assert.deepEqual(vision.readStackSize(vision.cropCell(image, GRID, 1, 1)), { quantity: null, digits: true }, `digit ${digit}`);
+  }
+});
+
+test('a digit standing further from the last one than digits do leaves the number unread, not cut short', () => {
+  const image = blankGrid();
+  paintCell(image, 1, 1, 2);
+  const width = paintDigit(image, 1, 1, '4');
+  paintDigit(image, 1, 1, '6', width + 8);
+  assert.deepEqual(vision.readStackSize(vision.cropCell(image, GRID, 1, 1)), { quantity: null, digits: true });
+});
+
+test('two digits that fit a place equally well leave the number unread', () => {
+  const set = DIGIT_PICTURES[Math.round(GRID.pitchY)];
+  const four = set.pictures.find((entry) => entry.digit === '4');
+  const twins = { ...set, pictures: [four, { ...four, digit: '9' }] };
+  const image = blankGrid();
+  paintCell(image, 1, 1, 2);
+  paintDigit(image, 1, 1, '4');
+  assert.deepEqual(vision.readStackSize(vision.cropCell(image, GRID, 1, 1), twins), { quantity: null, digits: true });
+});
+
+test('every digit picture has all its pixels and is not flat', () => {
+  for (const set of Object.values(DIGIT_PICTURES)) {
+    for (const picture of set.pictures) {
+      assert.equal(picture.shape.length, picture.width * picture.height);
+      assert.ok(picture.spread > 0);
+      assert.equal(picture.width, picture.advance + 2);
+    }
   }
 });
 

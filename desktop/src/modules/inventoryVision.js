@@ -75,7 +75,8 @@ const DIGIT_FLAT = 30;
 const MAX_STACK_DIGITS = 5;
 // The grid is found to a pixel or two, so a number may sit that far from where the pictures were cut.
 const DIGIT_SLACK = 2;
-// How far around that, in pixels of a 1440 window, a digit must not be found for a cell to count as having no number.
+// How far around that, in pixels of a 1440 window, nothing like a digit may be found for a cell to count as having no
+// number, and how far past the end of a number for the number to count as whole.
 const DIGIT_REACH = 6;
 
 // The only window heights the digits, tier bars and art limits have been checked on with real screenshots of a
@@ -445,14 +446,15 @@ function nextDigit(white, pictures, fromX, toX) {
   return strongest < DIGIT_NONE ? false : null;
 }
 
-// A digit standing a little off where numbers start: the cell was not cut where the grid is, and its number, which
-// would otherwise pass for no number at all, cannot be trusted.
-function hasDigitNearby(white, set, step) {
-  const reach = Math.round(DIGIT_REACH * step);
-  for (const picture of set.pictures) {
-    for (let y = picture.top - 1 - reach; y <= picture.top - 1 + reach; y += 1) {
-      for (let x = set.start[0] - reach; x <= set.start[1] + reach; x += 1) {
-        if (fitDigitPicture(white, picture, x - 1, y) >= DIGIT_SURE) return true;
+// Whether anything like a digit stands with its left edge between fromX and toX, up to reachY pixels above or below
+// where digits stand. Asked where the reader found none: beside the place numbers start, for a cell not cut where the
+// grid is, and past the end of a number, for a digit standing further off than the next one should. Either way the
+// number read so far, or the lack of one, cannot be trusted.
+function hasDigitWithin(white, pictures, fromX, toX, reachY) {
+  for (const picture of pictures) {
+    for (let y = picture.top - 1 - reachY; y <= picture.top - 1 + reachY; y += 1) {
+      for (let x = fromX; x <= toX; x += 1) {
+        if (fitDigitPicture(white, picture, x - 1, y) >= DIGIT_NONE) return true;
       }
     }
   }
@@ -466,8 +468,9 @@ function hasDigitNearby(white, set, step) {
 function readStackSize(cell, set = DIGIT_PICTURES[cell.height]) {
   const unread = { quantity: null, digits: true };
   if (!set) return unread;
-  const white = whitenessOf(cell, set.rows);
   const step = cell.height / 70;
+  const reach = Math.round(DIGIT_REACH * step);
+  const white = whitenessOf(cell, set.rows + reach);
   let fromX = set.start[0] - DIGIT_SLACK;
   let toX = set.start[1] + DIGIT_SLACK;
   let text = '';
@@ -479,8 +482,11 @@ function readStackSize(cell, set = DIGIT_PICTURES[cell.height]) {
     fromX = Math.floor(digit.x + digit.advance - step - 1);
     toX = Math.ceil(digit.x + digit.advance + 3 * step + 1);
   }
-  if (text === '') return hasDigitNearby(white, set, step) ? unread : { quantity: 1, digits: false };
-  return text[0] === '0' ? unread : { quantity: Number(text), digits: true };
+  if (text === '') {
+    return hasDigitWithin(white, set.pictures, set.start[0] - reach, set.start[1] + reach, reach) ? unread : { quantity: 1, digits: false };
+  }
+  if (text[0] === '0' || hasDigitWithin(white, set.pictures, toX + 1, toX + reach, DIGIT_SLACK)) return unread;
+  return { quantity: Number(text), digits: true };
 }
 
 // Bars in the bottom-right corner: none is the base item, II is Greater and III is Perfect.
