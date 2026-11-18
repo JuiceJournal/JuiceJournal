@@ -327,6 +327,40 @@ class InventoryWatcher {
     }
   }
 
+  // Whether the game's inventory comes from GGG's API instead of the screen (Path of Exile 1).
+  readsFromApi(game) {
+    return Boolean(this.deps.hasApiInventory?.(game));
+  }
+
+  /**
+   * A read that came from GGG's API. One taken as a map is entered is only what the map starts from: it never
+   * settles a map that is waiting, which a late answer would otherwise do with the wrong inventory. Returns whether
+   * the read was taken.
+   */
+  applyApiRead(game, read, { settles }) {
+    const characterKey = getCharacterKey(game, this.deps.getCharacter());
+    if (!this.deps.isEnabled() || !this.syncProfile() || !characterKey || !read || !this.readsFromApi(game)) {
+      return false;
+    }
+    const waiting = this.state.pending?.characterKey === characterKey;
+    if (!settles && waiting) {
+      return false;
+    }
+    this.applyRead(characterKey, read, { announce: false });
+    return true;
+  }
+
+  // The read a finished map was waiting for will not come: the map stays uncounted, and no later read is taken for it.
+  dropPending(sessionId) {
+    const { pending } = this.state;
+    if (!pending || pending.sessionId !== sessionId) {
+      return;
+    }
+    this.state = { ...this.state, pending: null };
+    this.deps.onRead('noBaseline', { characterKey: pending.characterKey });
+    this.deps.onStatus('noBaseline');
+  }
+
   mapEntered() {
     const characterKey = getCharacterKey(this.deps.getGame(), this.deps.getCharacter());
     if (characterKey) {
@@ -338,7 +372,8 @@ class InventoryWatcher {
   sessionEnded(session) {
     const game = session?.poeVersion;
     const characterKey = getCharacterKey(game, this.deps.getCharacter());
-    if (!session?.id || !characterKey || !hasInventoryLayout(game) || !this.syncProfile() || this.isWindowUnmeasured()) {
+    const fromScreen = hasInventoryLayout(game) && !this.isWindowUnmeasured();
+    if (!session?.id || !characterKey || !this.syncProfile() || !(fromScreen || this.readsFromApi(game))) {
       return false;
     }
 

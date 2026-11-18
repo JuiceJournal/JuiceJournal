@@ -42,6 +42,7 @@ class PoeApiClient {
     this.refreshInFlight = null;
     this.characterListRequests = [];
     this.characterListBlockedUntil = 0;
+    this.characterBlockedUntil = 0;
 
     this.client = axios.create({
       baseURL: POE_API_BASE,
@@ -367,6 +368,31 @@ class PoeApiClient {
     } catch (error) {
       if (error.code === 'POE_RATE_LIMITED') {
         this.characterListBlockedUntil = Date.now() + error.retryAfter * 1000;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * One Path of Exile 1 character with what it wears and carries. Null when the account has no such character.
+   * After GGG answers "too many requests" no request is sent until the wait it named is over: asking again early
+   * makes the penalty longer.
+   */
+  async getCharacter(name) {
+    const now = Date.now();
+    if (now < this.characterBlockedUntil) {
+      throw Object.assign(new Error('Character requests are on hold'), {
+        code: 'POE_RATE_LIMITED',
+        retryAfter: Math.ceil((this.characterBlockedUntil - now) / 1000)
+      });
+    }
+
+    try {
+      const data = await this._request('GET', `/character/${encodeURIComponent(name)}`);
+      return data?.character || null;
+    } catch (error) {
+      if (error.code === 'POE_RATE_LIMITED') {
+        this.characterBlockedUntil = Date.now() + error.retryAfter * 1000;
       }
       throw error;
     }
