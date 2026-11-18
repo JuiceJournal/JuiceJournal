@@ -4,14 +4,15 @@
  * Resizing a real picture as it is does not give what the game draws at another size: the black edge round a digit is
  * one pixel wide at every size, and with resized pictures a 50 read as no number at all. So only the digit's white
  * fill is scaled, at a few part-pixel shifts, and the edge is drawn round it again. Checked on real screenshots by
- * reading each window height with pictures made from the other two only: 310 of 311 cells at 1080, 19 of 19 at 1440
- * and 43 of 51 at 1353 read right, the rest stayed unread and none read wrong.
+ * reading each window height with pictures made from the others only: 310 of 311 cells at 1080, 19 of 19 at 1440 and
+ * 43 of 51 at 1353 read right, the rest stayed unread and none read wrong.
  */
 
 const { makeSet } = require('./inventoryDigitPictures');
 
-// Cell sizes whose pictures were cut and checked on a filled inventory, at window heights 1080 and 1440. Where numbers
-// start is taken from these alone: the pictures of other sizes were cut from stash tabs, a pixel or two off the grid.
+// Cell sizes whose pictures were cut and checked on a filled inventory, at window heights 1080 and 1440. Pictures are
+// made from these alone, and where numbers start is taken from them: the pictures of other sizes were cut from stash
+// tabs, a pixel or two off the grid.
 const CHECKED_CELL_SIZES = [53, 70];
 // How white a pixel must be to belong to a digit's fill: under 110 is edge or background, 235 and over is all fill.
 const FILL_FROM = 110;
@@ -63,8 +64,8 @@ function fillBetween(image, x, y) {
     + (fillAt(image, left, top + 1) * (1 - alongX) + fillAt(image, left + 1, top + 1) * alongX) * alongY;
 }
 
-// The fill at `scale` times its size, moved right and down by a part of a pixel; each new pixel is the mean of what
-// it covers. One pixel of room is left on every side.
+// The fill at `scale` times its size, moved up and left by a part of a pixel; each new pixel is the mean of what it
+// covers, taken at sixteen points. One pixel of room is left on every side.
 function scaleFill(source, scale, shiftX, shiftY) {
   const width = Math.ceil(source.width * scale) + 2;
   const height = Math.ceil(source.height * scale) + 2;
@@ -120,30 +121,30 @@ function makePicture(source, scale, shiftX, shiftY) {
       white[y * width + x] = Math.round(FILL_WHITE * fill + (edge ? EDGE_WHITE : BACK_WHITE) * (1 - fill));
     }
   }
-  // The source picture begins one pixel above the digit, and so does the scaled one before it is cut.
-  const top = Math.round((source.top - 1) * scale - shiftY + minY);
+  // Row y of the scaled fill is row (source.top - 1) * scale + shiftY + y - 1 of the cell: the source picture begins
+  // one pixel above the digit, and the scaled one has a pixel of room above that. The digit's first row is minY.
+  const top = Math.round((source.top - 1) * scale + shiftY + minY - 1);
   return [source.digit, top, width - 2, width, height, white.toString('base64')];
 }
 
-// Where numbers start at a cell size, from the sizes checked on a filled inventory, a pixel wider on each side.
-function startFor(cellSize, sets) {
+// Where numbers start at a cell size, from the sizes checked on a filled inventory.
+function startFor(cellSize, sizes, sets) {
   const edges = [];
-  for (const size of CHECKED_CELL_SIZES) {
-    if (!sets[size]) continue;
-    edges.push(Math.floor((sets[size].start[0] * cellSize) / size) - 1, Math.ceil((sets[size].start[1] * cellSize) / size) + 1);
+  for (const size of sizes) {
+    edges.push(Math.floor((sets[size].start[0] * cellSize) / size), Math.ceil((sets[size].start[1] * cellSize) / size));
   }
-  return edges.length > 0 ? [Math.min(...edges), Math.max(...edges)] : null;
+  return [Math.min(...edges), Math.max(...edges)];
 }
 
-// The digit pictures to read a cell size with: its own real ones if it has them, else pictures made from every real
-// set. Null for a size smaller or larger than every real one: nothing was checked beyond them.
+// The digit pictures to read a cell size with. A checked size reads with its own. Any other size between the checked
+// ones reads with pictures made from them, together with its own real pictures if it has any: those have the exact
+// shapes, the made ones stand where the checked sizes say digits stand. Null for a size smaller or larger than every
+// checked one: nothing was checked beyond them.
 function digitSetFor(cellSize, sets) {
-  const sizes = Object.keys(sets).map(Number);
-  if (sets[cellSize] && CHECKED_CELL_SIZES.includes(cellSize)) return sets[cellSize];
+  const sizes = CHECKED_CELL_SIZES.filter((size) => sets[size]);
+  if (sets[cellSize] && sizes.includes(cellSize)) return sets[cellSize];
   if (sizes.length === 0 || cellSize < Math.min(...sizes) || cellSize > Math.max(...sizes)) return null;
-  const start = startFor(cellSize, sets);
-  if (!start) return null;
-  if (sets[cellSize]) return { ...sets[cellSize], start };
+  const start = startFor(cellSize, sizes, sets);
 
   const rows = new Map();
   for (const size of sizes) {
@@ -159,7 +160,9 @@ function digitSetFor(cellSize, sets) {
     }
   }
   const made = makeSet({ start, pictures: [...rows.values()] });
-  return '0123456789'.split('').every((digit) => made.pictures.some((picture) => picture.digit === digit)) ? made : null;
+  if (!'0123456789'.split('').every((digit) => made.pictures.some((picture) => picture.digit === digit))) return null;
+  if (!sets[cellSize]) return made;
+  return { start, rows: Math.max(made.rows, sets[cellSize].rows), pictures: [...sets[cellSize].pictures, ...made.pictures] };
 }
 
 module.exports = { digitSetFor, makePicture, cleanFills };

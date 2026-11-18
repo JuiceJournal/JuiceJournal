@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 const vision = require('../src/modules/inventoryVision');
 const { DIGIT_PICTURES } = require('../src/modules/inventoryDigitPictures');
-const { digitSetFor } = require('../src/modules/inventoryDigitMaker');
+const { digitSetFor, makePicture, cleanFills } = require('../src/modules/inventoryDigitMaker');
 
 // A dark cell with a number drawn from a set's pictures where numbers start.
 function cellWith(size, set, number, pick = (pictures) => pictures[0]) {
@@ -32,13 +32,43 @@ test('a cell size smaller or larger than every real one gets no pictures', () =>
   assert.equal(digitSetFor(71, DIGIT_PICTURES), null);
   assert.equal(digitSetFor(60, {}), null);
   assert.equal(digitSetFor(60, { 66: DIGIT_PICTURES[66] }), null);
+  assert.equal(digitSetFor(60, { 53: DIGIT_PICTURES[53], 66: DIGIT_PICTURES[66] }), null);
 });
 
-test('a size cut from stash tabs keeps its pictures and starts where the checked sizes say numbers start', () => {
+test('a picture made at its own size puts the digit on the rows the real one has it on', () => {
+  for (const size of [53, 70]) {
+    for (const fill of cleanFills(DIGIT_PICTURES[size])) {
+      let firstRow = 0;
+      while (!fill.fill.subarray(firstRow * fill.width, (firstRow + 1) * fill.width).some((value) => value >= 0.25)) firstRow += 1;
+      const [digit, top, advance, width] = makePicture(fill, 1, 0, 0);
+      // The real picture's first row is row top - 1 of the cell.
+      assert.equal(top, fill.top - 1 + firstRow, `digit ${digit} at ${size}`);
+      assert.equal(width, advance + 2);
+    }
+  }
+});
+
+test('a number whose first digit only half fits is unread, not read from its second digit', () => {
+  const set = DIGIT_PICTURES[70];
+  const cell = cellWith(70, set, 17);
+  // Dim the 1 until it fits no better than a doubtful digit: the 7 behind it still fits closely.
+  const one = set.pictures.find((picture) => picture.digit === '1');
+  for (let y = one.top; y < one.top + one.height - 2; y += 1) {
+    for (let x = set.start[0] + 2; x < set.start[0] + 2 + one.advance; x += 1) {
+      if ((x + y) % 2 === 0) cell.data.fill(20, (y * 70 + x) * 4, (y * 70 + x) * 4 + 3);
+    }
+  }
+  const read = vision.readStackSize(cell);
+  assert.notEqual(read.quantity, 7);
+  assert.ok(read.quantity === null || read.quantity === 17, `read as ${read.quantity}`);
+});
+
+test('a size cut from stash tabs keeps its pictures, adds made ones, and starts where the checked sizes say', () => {
   const set = digitSetFor(66, DIGIT_PICTURES);
-  assert.equal(set.pictures, DIGIT_PICTURES[66].pictures);
-  assert.ok(set.start[0] <= DIGIT_PICTURES[66].start[0] && set.start[1] >= DIGIT_PICTURES[66].start[1]);
-  assert.ok(set.start[0] <= Math.floor((7 * 66) / 70) && set.start[1] >= Math.ceil((10 * 66) / 53));
+  for (const picture of DIGIT_PICTURES[66].pictures) assert.ok(set.pictures.includes(picture));
+  assert.ok(set.pictures.length > DIGIT_PICTURES[66].pictures.length);
+  assert.deepEqual(set.start, [Math.floor((7 * 66) / 70), Math.ceil((10 * 66) / 53)]);
+  assert.ok(set.rows >= DIGIT_PICTURES[66].rows);
 });
 
 test('pictures made for a size between the real ones hold every digit, whole', () => {

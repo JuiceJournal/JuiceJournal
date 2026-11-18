@@ -438,16 +438,19 @@ function fitDigitsAt(white, pictures, x) {
 // The next digit of a number, looked for from the left: the first place where a digit fits closely is the digit, so
 // the 0 of a 10 is never taken for the number's first digit. False where nothing looks like a digit (the number has
 // ended), null where something does and it is not clear which.
-function nextDigit(white, pictures, fromX, toX) {
+function nextDigit(white, pictures, fromX, toX, startsFrom = null, digitApart = 0) {
   let strongest = 0;
+  const seen = [];
   for (let x = fromX; x <= toX; x += 1) {
     const fits = fitDigitsAt(white, pictures, x);
-    let sure = false;
-    for (const fit of fits.values()) {
-      strongest = Math.max(strongest, fit.score);
-      sure = sure || fit.score >= DIGIT_SURE;
-    }
-    if (!sure) continue;
+    let here = 0;
+    for (const fit of fits.values()) here = Math.max(here, fit.score);
+    seen.push(here);
+    strongest = Math.max(strongest, here);
+    if (here < DIGIT_SURE) continue;
+    // Where a number starts, something that may be a digit, standing where numbers start and a digit's width or more
+    // before this one, would be dropped from the number by taking this one.
+    if (startsFrom !== null && seen.slice(Math.max(0, startsFrom - fromX), Math.max(0, seen.length - digitApart)).some((score) => score >= DIGIT_NONE)) return null;
     // The digit may sit one pixel further on, where it fits better still.
     for (const [digit, fit] of fitDigitsAt(white, pictures, x + 1)) {
       if (fit.score > fits.get(digit).score) fits.set(digit, fit);
@@ -487,7 +490,9 @@ function readStackSize(cell, set = digitPicturesFor(cell.height)) {
   let toX = set.start[1] + DIGIT_SLACK;
   let text = '';
   for (let place = 0; place <= MAX_STACK_DIGITS; place += 1) {
-    const digit = nextDigit(white, set.pictures, fromX, toX);
+    const digit = place === 0
+      ? nextDigit(white, set.pictures, fromX, toX, set.start[0], Math.max(3, Math.round(4 * step)))
+      : nextDigit(white, set.pictures, fromX, toX);
     if (digit === false) break;
     if (digit === null || place === MAX_STACK_DIGITS) return unread;
     text += digit.digit;
