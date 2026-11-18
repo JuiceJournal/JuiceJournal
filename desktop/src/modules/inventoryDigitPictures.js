@@ -1,7 +1,8 @@
 /**
  * Pictures of the game's stack digits, one set for each cell size, cut by research tooling from real game screenshots.
  * Each picture: digit, top of the digit in the cell, digit width, picture width and height (one pixel wider than the
- * digit on every side, to hold its black edge), and how white each pixel is.
+ * digit on every side, to hold its black edge), and how white each pixel is. A set keeps those pixels as `white`, for
+ * making the pictures of sizes that have none, and as `shape` and `spread`, for matching.
  */
 
 function makeSet({ start, pictures }) {
@@ -16,7 +17,7 @@ function makeSet({ start, pictures }) {
       shape[i] = bytes[i] - mean;
       spread += shape[i] * shape[i];
     }
-    return { digit, top, advance, width, height, shape, spread };
+    return { digit, top, advance, width, height, white: bytes, shape, spread };
   });
   return { start, rows: Math.max(...list.map((picture) => picture.top + picture.height)) + 1, pictures: list };
 }

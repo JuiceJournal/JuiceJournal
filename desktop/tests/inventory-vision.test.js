@@ -251,13 +251,23 @@ test('cells smaller than the matching size still match, so lower resolutions rea
   assert.equal(read.name, 'Second Orb');
 });
 
-test('only measured window heights count as readable', () => {
-  assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 2560, height: 1440 }), true);
+test('window heights from 1080 to 1440 count as readable, and none under or over', () => {
+  for (const height of [1080, 1200, 1353, 1440]) {
+    assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 1920, height }), true, `height ${height}`);
+  }
   assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 3440, height: 1440 }), true);
-  assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 1920, height: 1080 }), true);
-  assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 1920, height: 1353 }), false);
-  assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 1600, height: 900 }), false);
+  for (const height of [900, 1079, 1441, 2160, NaN, undefined]) {
+    assert.equal(vision.isMeasuredWindow({ x: 0, y: 0, width: 1920, height }), false, `height ${height}`);
+  }
   assert.equal(vision.isMeasuredWindow(null), false);
+});
+
+test('every readable window height has digit pictures for its cell size', () => {
+  for (let height = 1080; height <= 1440; height += 1) {
+    const cell = Math.round(vision.getGridRect('poe2', { x: 0, y: 0, width: 1920, height }).pitchY);
+    const empty = { data: new Uint8Array(cell * cell * 4).fill(20), width: cell, height: cell };
+    assert.deepEqual(vision.readStackSize(empty), { quantity: 1, digits: false }, `height ${height}, cell ${cell}`);
+  }
 });
 
 // A library entry whose art is a faint blend of another's: a look-alike that is ahead by less than the valuable bar.
