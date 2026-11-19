@@ -28,7 +28,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The page uses the app's own fonts, mark, flask and flask emotes, so they are copied in here and not kept twice in the repo.
       - name: Put the site together
         run: |
@@ -42,8 +42,8 @@ jobs:
           for icon in chaos divine exalted mirror alchemy regal; do cp desktop/src/assets/currency/poe1/$icon.png _site/assets/currency/poe1/; done
           for icon in chaos.png divine.webp exalted.png mirror.png regal.png transmute.png; do cp desktop/src/assets/currency/poe2/$icon _site/assets/currency/poe2/; done
           cp -r desktop/src/assets/brand/reactions _site/assets/reactions
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: _site
       - id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

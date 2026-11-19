@@ -4385,6 +4385,10 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 /* While the app is the one working, the flask boils. */
 .coach-card[data-coach-status="wait"] .coach-flask-level::before { animation-duration: 1.1s; }
 .coach-card[data-coach-status="wait"] .coach-flask-bubble { animation-duration: 1.1s; }
+/* A finished card stays until it is hidden; its flask rests, so it does not repaint for ever. */
+.coach-card[data-coach-status="done"] .coach-flask-level::before,
+.coach-card[data-coach-status="done"] .coach-flask-bubble,
+.coach-card[data-coach-status="done"] .coach-node-mark { animation-play-state: paused; }
 
 /* Game currency falls into the flask as the steps pass and stays in the pile; each piece has its place in it. A piece
    comes in above the neck, slides down through it and settles. */

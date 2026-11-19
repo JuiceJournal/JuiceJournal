@@ -317,16 +317,17 @@
   </footer>
 
   <script>
-    // Points the button at the newest installer. Without an answer it keeps leading to the releases page.
-    fetch('https://api.github.com/repos/JuiceJournal/JuiceJournal/releases?per_page=1')
-      .then(function (response) { return response.ok ? response.json() : []; })
-      .then(function (releases) {
-        var release = releases[0];
+    // Points the button at the installer of the latest full release; a pre-release is never offered as the download.
+    // Without an answer it keeps leading to the releases page.
+    fetch('https://api.github.com/repos/JuiceJournal/JuiceJournal/releases/latest')
+      .then(function (response) { return response.ok ? response.json() : null; })
+      .then(function (release) {
+        if (!release || release.prerelease || release.draft) return;
         var installer = release && release.assets.filter(function (asset) { return /\.exe$/.test(asset.name); })[0];
         if (!installer) return;
         document.getElementById('download').href = installer.browser_download_url;
         document.getElementById('download-note').textContent = 'Version ' + release.tag_name.replace(/^v/, '')
-          + (release.prerelease ? ', a pre-release' : '') + '. The installer is ' + Math.round(installer.size / 1048576) + ' MB.';
+          + '. The installer is ' + Math.round(installer.size / 1048576) + ' MB.';
       })
       .catch(function () {});
 
