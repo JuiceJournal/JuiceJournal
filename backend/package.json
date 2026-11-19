@@ -17,7 +17,7 @@
     "docker:psql": "docker exec -it juice-journal-db psql -U postgres -d juicejournal"
   },
   "dependencies": {
-    "axios": "1.16.0",
+    "axios": "1.21.1",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
@@ -44,7 +44,7 @@
   "author": "",
   "license": "MIT",
   "overrides": {
-    "follow-redirects": "1.16.0",
+    "follow-redirects": "1.16.3",
     "uuid": "file:vendor/uuid-safe"
   }
 }
