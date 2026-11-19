@@ -77,6 +77,10 @@ class InventoryWatcher {
     this.profileId = null;
     this.windowUnmeasured = false;
     this.learnedRevision = null;
+    // A read that runs off the main thread, while it runs. Another read waits for it.
+    this.reading = null;
+    // Moves on with every change a read in progress must not outlive: another profile or game, or the cache emptied.
+    this.epoch = 0;
     this.state = createInventoryLootState();
     this.resetArt(null);
   }
@@ -84,6 +88,12 @@ class InventoryWatcher {
   resetArt(game) {
     this.art = { game, items: new Map(), list: [], queue: null, ready: false, lastProgressAt: 0 };
     this.cellCache = new Map();
+    this.epoch += 1;
+  }
+
+  clearCellCache() {
+    this.cellCache.clear();
+    this.epoch += 1;
   }
 
   syncProfile() {
@@ -91,6 +101,7 @@ class InventoryWatcher {
     if (profileId !== this.profileId) {
       this.profileId = profileId;
       this.state = createInventoryLootState();
+      this.epoch += 1;
     }
     return profileId;
   }
@@ -130,7 +141,7 @@ class InventoryWatcher {
       this.art.list = [...this.art.items.values()];
       this.art.lastProgressAt = this.deps.now();
       // A cell read without this art has to be read again. It cannot become false loot: unread cells count no gain.
-      this.cellCache.clear();
+      this.clearCellCache();
     }
     if (remaining.length === 0 || this.deps.now() - this.art.lastProgressAt >= ART_WAIT_MS) {
       this.art.ready = true;
@@ -167,7 +178,7 @@ class InventoryWatcher {
     }
     // A read takes one thing from a price: which side of the valuable bar it is on. A cell decided with an item on
     // the other side is decided again; a sync that only moves prices leaves the cells as they are.
-    if (changed) this.cellCache.clear();
+    if (changed) this.clearCellCache();
   }
 
   readGrid(grid) {
@@ -177,15 +188,48 @@ class InventoryWatcher {
     }
     this.refreshArtValues();
     if (this.cellCache.size > CELL_CACHE_LIMIT) {
-      this.cellCache.clear();
+      this.clearCellCache();
     }
     // Art the player named reads cells the price list's art leaves unread, so a cell decided without it is decided again.
     const learned = this.deps.getLearnedArt?.(this.art.game) || null;
     if ((learned?.revision ?? null) !== this.learnedRevision) {
       this.learnedRevision = learned?.revision ?? null;
-      this.cellCache.clear();
+      this.clearCellCache();
     }
-    return readInventory({ data, width: grid.width, height: grid.height }, grid, this.art.list, this.cellCache, learned?.samples || null);
+    const image = { data, width: grid.width, height: grid.height };
+    const samples = learned?.samples || null;
+    if (!this.deps.readInventory) {
+      return readInventory(image, grid, this.art.list, this.cellCache, samples);
+    }
+    // Off the main thread the cache comes back as what the read added; it joins the cache only if nothing emptied the
+    // cache meanwhile, since those cells were read with art or prices that no longer hold.
+    const epoch = this.epoch;
+    return this.deps.readInventory(image, grid, this.art.list, this.cellCache, samples).then(({ read, added }) => {
+      if (epoch === this.epoch) {
+        for (const [key, value] of added) this.cellCache.set(key, value);
+      }
+      return read;
+    });
+  }
+
+  /**
+   * Hands a read to `use`, now or when a read off the main thread answers. Meanwhile further reads wait. An answer that
+   * comes after the profile, the game, the character or the cache changed is dropped: it may be another inventory, or
+   * read against art that no longer holds. A read that fails gives null.
+   */
+  whenRead(result, game, characterKey, use) {
+    if (!result || typeof result.then !== 'function') {
+      use(result);
+      return;
+    }
+    const epoch = this.epoch;
+    const reading = result.then((read) => read, () => null).then((read) => {
+      if (this.reading === reading) this.reading = null;
+      const current = this.syncProfile() && this.epoch === epoch && this.art.game === game
+        && getCharacterKey(game, this.deps.getCharacter()) === characterKey;
+      use(current ? read : null);
+    });
+    this.reading = reading;
   }
 
   // Applies a read of the open inventory and acts on what it settles.
@@ -222,7 +266,7 @@ class InventoryWatcher {
 
   // The timer's step. Costs one small screen read while the game is in front outside a map, and nothing otherwise.
   tick() {
-    if (!this.deps.isEnabled() || !this.syncProfile() || !this.deps.isGameInFront() || this.deps.isInMap()) {
+    if (this.reading || !this.deps.isEnabled() || !this.syncProfile() || !this.deps.isGameInFront() || this.deps.isInMap()) {
       return;
     }
 
@@ -251,12 +295,13 @@ class InventoryWatcher {
     }
 
     const grid = this.getGrid(game);
-    const result = grid ? this.readGrid(grid) : null;
-    if (result?.open && !result.covered) {
-      this.applyRead(characterKey, result, { announce: false });
-    } else if (result && !result.open && !this.state.baselines[characterKey] && this.deps.isInMapHub()) {
-      this.deps.onRead('needsBaseline', { characterKey });
-    }
+    this.whenRead(grid ? this.readGrid(grid) : null, game, characterKey, (result) => {
+      if (result?.open && !result.covered) {
+        this.applyRead(characterKey, result, { announce: false });
+      } else if (result && !result.open && !this.state.baselines[characterKey] && this.deps.isInMapHub()) {
+        this.deps.onRead('needsBaseline', { characterKey });
+      }
+    });
   }
 
   // What the first-map steps need to know about reading, for the game that runs.
@@ -291,6 +336,11 @@ class InventoryWatcher {
 
   // The read hotkey. Status kinds: unsupported, resolution, inMap, notReady, failed, notOpen, covered, saved, noBaseline, noGain, reading.
   readNow() {
+    // A key press during a read is read after it, from what the screen shows then.
+    if (this.reading) {
+      this.reading.then(() => this.readNow());
+      return;
+    }
     if (!this.syncProfile()) {
       return;
     }
@@ -315,16 +365,17 @@ class InventoryWatcher {
     }
 
     const grid = this.getGrid(game);
-    const result = grid ? this.readGrid(grid) : null;
-    if (!result) {
-      this.deps.onStatus('failed');
-    } else if (!result.open) {
-      this.deps.onStatus('notOpen');
-    } else if (result.covered) {
-      this.deps.onStatus('covered');
-    } else {
-      this.applyRead(characterKey, result, { announce: true });
-    }
+    this.whenRead(grid ? this.readGrid(grid) : null, game, characterKey, (result) => {
+      if (!result) {
+        this.deps.onStatus('failed');
+      } else if (!result.open) {
+        this.deps.onStatus('notOpen');
+      } else if (result.covered) {
+        this.deps.onStatus('covered');
+      } else {
+        this.applyRead(characterKey, result, { announce: true });
+      }
+    });
   }
 
   // Whether the game's inventory comes from GGG's API instead of the screen (Path of Exile 1).
