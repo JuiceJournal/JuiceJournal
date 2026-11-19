@@ -1451,7 +1451,13 @@ function addLootToCurrentSession(items, source) {
 // computer and sent nowhere. One file for every profile, since the game draws an item the same for all of them.
 // Delete everything removes its folder.
 let learnedArtStore = null;
+// While Delete everything runs, nothing loads the pictures back or saves them: a read meanwhile would put them in memory
+// again, and naming an item would write them back after their folder went.
+let learnedArtHeld = false;
 function getLearnedArtStore() {
+  if (learnedArtHeld) {
+    return createLearnedArtStore({ load: () => null, save: () => {}, isSameSample: isSameInventorySample });
+  }
   if (!learnedArtStore) {
     const file = path.join(app.getPath('userData'), 'learned-art', 'pictures.json');
     learnedArtStore = createLearnedArtStore({
@@ -3066,6 +3072,7 @@ async function deleteAllLocalData() {
     }
     journalStore = null;
     learnedArtStore = null;
+    learnedArtHeld = true;
     unreadableJournalProfileId = null;
     bugReport = null;
     const priceSnapshotWrites = priceSnapshots?.stop();
@@ -3149,6 +3156,9 @@ async function deleteAllLocalData() {
       errorLogState.disabled = false;
       dataActionRunning = false;
       priceSnapshots?.resume();
+      // A delete that failed part way may have left the pictures; they are read again from what is on disk.
+      learnedArtHeld = false;
+      learnedArtStore = null;
     }
   }
 }
