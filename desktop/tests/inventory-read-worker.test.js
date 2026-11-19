@@ -274,6 +274,60 @@ test('an answer for a map that ended meanwhile settles it: the read was taken af
   assert.deepEqual(log.gains, [{ sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }] }]);
 });
 
+test('a screen read before a map that ended before the answer came is that map\'s start, not its result', async () => {
+  const { watcher, log, answers, open, settle } = setupWatcher();
+  watcher.tick();
+  answers[0].resolve(open({ 'Exalted Orb': 5 }));
+  await settle();
+
+  // 3 orbs leave the stash, the screen is read, then a map is entered and ended before the answer comes.
+  watcher.tick();
+  watcher.mapEntered();
+  assert.equal(watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' }), true);
+  answers[1].resolve(open({ 'Exalted Orb': 8 }));
+  await settle();
+  assert.deepEqual(log.gains, []);
+
+  // The read after the map counts it from the inventory it started with.
+  watcher.tick();
+  answers[2].resolve(open({ 'Exalted Orb': 10 }));
+  await settle();
+  assert.deepEqual(log.gains, [{ sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }] }]);
+});
+
+test('a map whose end is marked after the read after it is still settled by that read', async () => {
+  const { watcher, log, answers, open, settle } = setupWatcher();
+  watcher.tick();
+  answers[0].resolve(open({ 'Exalted Orb': 5 }));
+  await settle();
+
+  // The map was entered and left before the screen was read; ending it took a moment longer than the read.
+  watcher.mapEntered();
+  watcher.tick();
+  watcher.sessionEnded({ id: 's1', poeVersion: 'poe2' });
+  answers[1].resolve(open({ 'Exalted Orb': 7 }));
+  await settle();
+
+  assert.deepEqual(log.gains, [{ sessionId: 's1', items: [{ name: 'Exalted Orb', quantity: 2 }] }]);
+});
+
+test('a failure in what a read is handed to says "failed" to a key press and leaves reading free', async () => {
+  const { watcher, log, answers, open, settle } = setupWatcher();
+  watcher.deps.onStatus = (kind) => {
+    if (kind === 'saved') throw new Error('the window is gone');
+    log.statuses.push(kind);
+  };
+
+  watcher.readNow();
+  answers[0].resolve(open({ 'Exalted Orb': 5 }));
+  await settle();
+
+  assert.deepEqual(log.statuses, ['failed']);
+  assert.equal(watcher.reading, null);
+  watcher.tick();
+  assert.equal(log.screenReads, 2);
+});
+
 test('a key press during a read is read after it, and a read that fails says so', async () => {
   const { watcher, log, answers, open, settle } = setupWatcher();
 

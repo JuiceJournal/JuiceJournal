@@ -1445,7 +1445,6 @@ test('main app shutdown cleans up main-process resources', () => {
   assert.equal(context.coachTimer, null);
   // The inventory reader's worker thread is ended with the app.
   assert.equal(readerCloseCalls, 1);
-  assert.equal(context.inventoryReader, null);
 });
 
 // On Windows, closing a window made with closable: false cancels app.quit(), and will-quit never comes. Delete

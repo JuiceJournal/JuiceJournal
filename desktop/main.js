@@ -6774,9 +6774,9 @@ function handleAppWillQuit() {
     coachTimer = null;
   }
 
-  // A read in progress has nobody left to answer to.
+  // A read in progress has nobody left to answer to. The closed reader stays, so nothing starts another worker; a
+  // read after this runs on the main thread.
   inventoryReader?.close();
-  inventoryReader = null;
 }
 
 let isFinalizingQuitSession = false;

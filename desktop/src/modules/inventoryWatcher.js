@@ -81,6 +81,8 @@ class InventoryWatcher {
     this.reading = null;
     // Moves on with every change a read in progress must not outlive: another profile or game, or the cache emptied.
     this.epoch = 0;
+    // Counts maps entered, so an answer can tell whether a map started after the screen it read.
+    this.mapEntries = 0;
     this.state = createInventoryLootState();
     this.resetArt(null);
   }
@@ -217,17 +219,36 @@ class InventoryWatcher {
    * comes after the profile, the game, the character or the cache changed is dropped: it may be another inventory, or
    * read against art that no longer holds. A read that fails gives null.
    */
-  whenRead(result, game, characterKey, use) {
+  whenRead(result, game, characterKey, use, { announce = false } = {}) {
     if (!result || typeof result.then !== 'function') {
       use(result);
       return;
     }
     const epoch = this.epoch;
+    const mapEntries = this.mapEntries;
+    const pendingAtCapture = this.state.pending;
     const reading = result.then((read) => read, () => null).then((read) => {
       if (this.reading === reading) this.reading = null;
       const current = this.syncProfile() && this.epoch === epoch && this.art.game === game
         && getCharacterKey(game, this.deps.getCharacter()) === characterKey;
-      use(current ? read : null);
+      const answer = current ? read : null;
+      const { pending } = this.state;
+      // A map was entered after this screen and has ended since: the screen is from before that map. It is the map's
+      // start, not its result, however late the map's end was marked.
+      if (answer?.open && !answer.covered && this.mapEntries !== mapEntries
+        && pending && pending !== pendingAtCapture && pending.characterKey === characterKey) {
+        this.state = {
+          ...this.state,
+          baselines: { ...this.state.baselines, [characterKey]: answer },
+          pending: { ...pending, baseline: answer }
+        };
+        if (announce) this.deps.onStatus('saved');
+        return;
+      }
+      use(answer);
+    }).catch(() => {
+      // What the read was handed to failed; a key press still hears that it did not work.
+      if (announce) this.deps.onStatus('failed');
     });
     this.reading = reading;
   }
@@ -375,7 +396,7 @@ class InventoryWatcher {
       } else {
         this.applyRead(characterKey, result, { announce: true });
       }
-    });
+    }, { announce: true });
   }
 
   // Whether the game's inventory comes from GGG's API instead of the screen (Path of Exile 1).
@@ -419,6 +440,7 @@ class InventoryWatcher {
   }
 
   mapEntered() {
+    this.mapEntries += 1;
     const characterKey = getCharacterKey(this.deps.getGame(), this.deps.getCharacter());
     if (characterKey) {
       this.state = noteMapEntered(this.state, characterKey);
