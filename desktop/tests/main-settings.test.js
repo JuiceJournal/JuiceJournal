@@ -1385,6 +1385,7 @@ test('main app shutdown cleans up main-process resources', () => {
   let gameDetectorStopCalls = 0;
   let trayDestroyCalls = 0;
   let overlayDestroyCalls = 0;
+  let readerCloseCalls = 0;
   const clearedIntervals = [];
   const context = loadFunctions([
     'handleAppWillQuit'
@@ -1420,6 +1421,11 @@ test('main app shutdown cleans up main-process resources', () => {
     mainWindow: null,
     scanHotkeyGateInterval: 7,
     coachTimer: 9,
+    inventoryReader: {
+      close() {
+        readerCloseCalls += 1;
+      }
+    },
     clearInterval(intervalId) {
       clearedIntervals.push(intervalId);
     }
@@ -1437,6 +1443,8 @@ test('main app shutdown cleans up main-process resources', () => {
   assert.equal(context.overlayWindow, null);
   assert.equal(context.scanHotkeyGateInterval, null);
   assert.equal(context.coachTimer, null);
+  // The inventory reader's worker thread is ended with the app.
+  assert.equal(readerCloseCalls, 1);
 });
 
 // On Windows, closing a window made with closable: false cancels app.quit(), and will-quit never comes. Delete

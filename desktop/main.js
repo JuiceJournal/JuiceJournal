@@ -32,6 +32,7 @@ const StashAnalyzer = require('./src/modules/stashAnalyzer');
 const GameDetector = require('./src/modules/gameDetector');
 const win32Probe = require('./src/modules/win32Probe');
 const InventoryWatcher = require('./src/modules/inventoryWatcher');
+const { createInventoryReadWorker } = require('./src/modules/inventoryReadWorker');
 const { readCharacterInventory } = require('./src/modules/characterInventoryRead');
 const { POE2_ESSENCE_ART } = require('./src/modules/essenceArt');
 const { COARSE_SIZE: INVENTORY_COARSE_SIZE, FINE_ART_SIZE: INVENTORY_FINE_ART_SIZE, isSameSample: isSameInventorySample } = require('./src/modules/inventoryVision');
@@ -521,6 +522,8 @@ const firstReadNudgeShown = new Set();
 // Profile and character pairs whose read since the last map entered was already told on the overlay.
 const inventoryReadAnnounced = new Set();
 let inventoryWatcher = null;
+// Reads the inventory off the main thread (inventoryReadWorker.js).
+let inventoryReader = null;
 // The first-map steps as last told to the window and the overlay, and the timer that keeps them current.
 let coachState = null;
 let coachTimer = null;
@@ -4346,6 +4349,14 @@ function createInventoryWatcher() {
       return itemValues ? itemValues.values : null;
     },
     loadArt: loadInventoryArt,
+    readInventory: (...args) => {
+      if (!inventoryReader) {
+        inventoryReader = createInventoryReadWorker({
+          onFallback: (error) => console.warn('[inventory-reader] reading on the main thread:', error?.message || error)
+        });
+      }
+      return inventoryReader.read(...args);
+    },
     getLearnedArt: (game) => getLearnedArtStore().list(game),
     onUnreadLoot: (sessionId, candidates, other) => {
       holdUnreadSamples(sessionId, candidates);
@@ -6762,6 +6773,10 @@ function handleAppWillQuit() {
     clearInterval(coachTimer);
     coachTimer = null;
   }
+
+  // A read in progress has nobody left to answer to. The closed reader stays, so nothing starts another worker; a
+  // read after this runs on the main thread.
+  inventoryReader?.close();
 }
 
 let isFinalizingQuitSession = false;
