@@ -392,11 +392,15 @@
       text-transform: uppercase;
     }
 
+    /* A pressed chip moves 1px down. The 1px of padding holds that move, so pressing a chip in the last row never
+       makes the row scroll: a scrollbar would narrow the rows, and the chips would move away from under the mouse
+       before it is released. */
     .jj-chips {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
       max-height: 96px;
+      padding-bottom: 1px;
       overflow-y: auto;
     }
 
