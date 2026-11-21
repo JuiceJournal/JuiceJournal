@@ -25,7 +25,8 @@
   // from the prompt state and the farm type is picked from buttons.
   var startPromptKey = null;
   var renderedChipsKey = null;
-  var selectedFarmTypeId = '';
+  // The farm types picked, in click order; several are saved as one combined farm type when the map starts.
+  var selectedFarmTypeIds = [];
   var startFarmTypeOptions = [];
   // The cost box starts from the selected farm type's cost; only a change is saved.
   var startCostUnit = 'chaos';
@@ -122,6 +123,16 @@
         return ' data-farm-c' + (index + 1) + '="' + part.colorKey + '"';
       }).join('')
       : '';
+  }
+
+  // As many farm types as a combo takes can be picked at once. Without the farm type model nothing is combined.
+  function getComboMaxParts() {
+    var model = root.farmTypeModel;
+    return (model && model.FARM_COMBO_MAX_PARTS) || 1;
+  }
+
+  function isComboFarmType(farmTypeId) {
+    return getFarmTypeParts(farmTypeId).length > 0;
   }
 
   function getFarmTypeIconHTML(value) {
@@ -418,7 +429,7 @@
     if (newPrompt) {
       startPromptKey = promptKey;
       renderedChipsKey = null;
-      selectedFarmTypeId = opts.some(function (e) { return e.id === prompt.farmTypeId; }) ? prompt.farmTypeId : '';
+      selectedFarmTypeIds = opts.some(function (e) { return e.id === prompt.farmTypeId; }) ? [prompt.farmTypeId] : [];
     }
     // Rebuild the buttons only when they change, so state pushes cannot swallow a click in progress.
     var noFarmType = root.t('dashboard.noFarmType');
@@ -428,11 +439,13 @@
       el.startFarmTypes.innerHTML = [{ id: '', label: noFarmType }].concat(opts).map(function (e) {
         var farmTypeId = getFarmTypeId(e.id);
         var farmColor = farmTypeId ? describeFarmType(farmTypeId).color : '';
+        var chip = getChipState(e.id);
         return '<button class="jj-chip" type="button" data-farm-type-id="' + escapeHTML(e.id) + '"' +
           (farmTypeId ? ' data-farm-type="' + farmTypeId + '"' : '') +
           (farmColor ? ' data-farm-color="' + farmColor + '"' : '') +
-          (farmTypeId ? getFarmPartsAttr(farmTypeId) : '') + ' aria-pressed="' +
-          (e.id === selectedFarmTypeId ? 'true' : 'false') + '">' +
+          (farmTypeId ? getFarmPartsAttr(farmTypeId) : '') +
+          (chip.locked ? ' data-combo-full disabled' : '') + ' aria-pressed="' +
+          (chip.picked ? 'true' : 'false') + '">' +
           (farmTypeId ? getFarmTypeIconHTML(farmTypeId) : '') + escapeHTML(e.label) +
           (e.cost ? '<span class="jj-chip-cost">' + escapeHTML(e.cost) + '</span>' : '') + '</button>';
       }).join('');
@@ -446,11 +459,45 @@
     }
   }
 
+  // No farm type is pressed while nothing is picked. Once a combo is full, the other plain farm types wait until one is
+  // taken off; a combo stays open, as it is picked alone.
+  function getChipState(farmTypeId) {
+    var picked = farmTypeId ? selectedFarmTypeIds.indexOf(farmTypeId) !== -1 : !selectedFarmTypeIds.length;
+    var full = getComboMaxParts() > 1 && selectedFarmTypeIds.length >= getComboMaxParts();
+    return { picked: picked, locked: full && Boolean(farmTypeId) && !picked && !isComboFarmType(farmTypeId) };
+  }
+
+  function renderFarmTypeChips(busy) {
+    if (!el.startFarmTypes) return;
+    Array.prototype.forEach.call(el.startFarmTypes.querySelectorAll('[data-farm-type-id]'), function (button) {
+      var chip = getChipState(button.getAttribute('data-farm-type-id') || '');
+      button.setAttribute('aria-pressed', chip.picked ? 'true' : 'false');
+      if (chip.locked) {
+        button.setAttribute('data-combo-full', '');
+      } else {
+        button.removeAttribute('data-combo-full');
+      }
+      button.disabled = busy || chip.locked;
+    });
+  }
+
+  function isSameFarmTypePick(farmTypeId) {
+    var parts = getFarmTypeParts(farmTypeId);
+    return parts.length === selectedFarmTypeIds.length && parts.every(function (part) {
+      return selectedFarmTypeIds.indexOf(part.id) !== -1;
+    });
+  }
+
+  // One farm type picked is its own option; several are the combo of the same parts on the card, if there is one.
   function getSelectedStartOption() {
-    return startFarmTypeOptions.filter(function (e) { return e.id === selectedFarmTypeId; })[0] || null;
+    if (selectedFarmTypeIds.length > 1) {
+      return startFarmTypeOptions.filter(function (e) { return isSameFarmTypePick(e.id); })[0] || null;
+    }
+    return startFarmTypeOptions.filter(function (e) { return e.id === selectedFarmTypeIds[0]; })[0] || null;
   }
 
   // The box shows the selected farm type's cost as typed; a cost is kept per farm type, so No farm type has none.
+  // A new combo starts empty.
   function fillStartCost() {
     var selected = getSelectedStartOption();
     var hasAmount = Boolean(selected) && typeof selected.costAmount === 'number';
@@ -459,7 +506,7 @@
     startCostError = '';
     if (el.startCostInput) {
       el.startCostInput.value = startCostBaseline.text;
-      el.startCostInput.disabled = !selected;
+      el.startCostInput.disabled = !selectedFarmTypeIds.length;
     }
     renderStartCostUnits();
     renderStartCostNote();
@@ -467,7 +514,7 @@
 
   function renderStartCostUnits() {
     if (!el.startCostUnits) return;
-    var noFarmType = !getSelectedStartOption();
+    var noFarmType = !selectedFarmTypeIds.length;
     Array.prototype.forEach.call(el.startCostUnits.querySelectorAll('[data-cost-unit]'), function (button) {
       button.setAttribute('aria-pressed', button.getAttribute('data-cost-unit') === startCostUnit ? 'true' : 'false');
       button.disabled = noFarmType;
@@ -479,9 +526,10 @@
     if (!el.startCostNote) return;
     var selected = getSelectedStartOption();
     var key = startCostError
-      || (!selected ? 'overlay.entryCostPickFarmType' : '')
+      || (!selectedFarmTypeIds.length ? 'overlay.entryCostPickFarmType' : '')
       || (startCostTyping ? 'overlay.entryCostKeys' : '')
-      || (selected.cost ? '' : 'overlay.noEntryCost');
+      || (selectedFarmTypeIds.length > 1 ? 'overlay.comboSaveNote' : '')
+      || (selected && selected.cost ? '' : 'overlay.noEntryCost');
     el.startCostNote.hidden = !key;
     el.startCostNote.textContent = key ? root.t(key) : '';
     el.startCostNote.setAttribute('data-tone', startCostError ? 'error' : 'hint');
@@ -510,15 +558,23 @@
     });
   }
 
-  function selectFarmType(farmTypeId) {
-    // The farm type already picked keeps what was typed for it.
-    if (farmTypeId === selectedFarmTypeId) return;
-    selectedFarmTypeId = farmTypeId;
-    if (el.startFarmTypes) {
-      Array.prototype.forEach.call(el.startFarmTypes.querySelectorAll('[data-farm-type-id]'), function (button) {
-        button.setAttribute('aria-pressed', button.getAttribute('data-farm-type-id') === farmTypeId ? 'true' : 'false');
-      });
+  // A click adds a plain farm type or takes it off again; the only one picked stays, so No farm type takes it off.
+  // A combo is picked alone and gives way to the next farm type clicked.
+  function getNextFarmTypePick(current, farmTypeId) {
+    if (!farmTypeId) return [];
+    if (getComboMaxParts() < 2 || isComboFarmType(farmTypeId) || current.some(isComboFarmType)) return [farmTypeId];
+    if (current.indexOf(farmTypeId) !== -1) {
+      return current.length > 1 ? current.filter(function (id) { return id !== farmTypeId; }) : current;
     }
+    return current.length < getComboMaxParts() ? current.concat([farmTypeId]) : current;
+  }
+
+  function selectFarmType(farmTypeId) {
+    var next = getNextFarmTypePick(selectedFarmTypeIds, farmTypeId);
+    // The same pick keeps what was typed for it.
+    if (next.join('\n') === selectedFarmTypeIds.join('\n')) return;
+    selectedFarmTypeIds = next;
+    renderFarmTypeChips(false);
     fillStartCost();
   }
 
@@ -637,10 +693,13 @@
   }
 
   /* ── IPC helpers ── */
-  // A changed cost goes with the farm type; an unreadable one keeps the card up and says why.
+  // A changed cost goes with the farm type; an unreadable one keeps the card up and says why. Several farm types go
+  // as their ids, for main to find or make their combo.
   function getStartMapPromptPayload() {
-    var payload = { farmTypeId: selectedFarmTypeId || null };
-    if (!el.startCostInput || !getSelectedStartOption()) return payload;
+    var payload = selectedFarmTypeIds.length > 1
+      ? { farmTypeIds: selectedFarmTypeIds.slice() }
+      : { farmTypeId: selectedFarmTypeIds[0] || null };
+    if (!el.startCostInput || !selectedFarmTypeIds.length) return payload;
     var text = String(el.startCostInput.value || '').trim();
     if (text === startCostBaseline.text && startCostUnit === startCostBaseline.unit) return payload;
     var amount = parseStartCost(text);
@@ -654,10 +713,10 @@
   }
 
   function setStartMapPromptBusy(busy) {
-    var chips = el.startFarmTypes ? Array.prototype.slice.call(el.startFarmTypes.querySelectorAll('button')) : [];
-    chips.concat([el.startSubmit, el.startCancel]).filter(Boolean).forEach(function (e) { e.disabled = busy; });
+    renderFarmTypeChips(busy);
+    [el.startSubmit, el.startCancel].filter(Boolean).forEach(function (e) { e.disabled = busy; });
     var units = el.startCostUnits ? Array.prototype.slice.call(el.startCostUnits.querySelectorAll('button')) : [];
-    var noFarmType = !getSelectedStartOption();
+    var noFarmType = !selectedFarmTypeIds.length;
     units.concat([el.startCostInput]).filter(Boolean).forEach(function (e) { e.disabled = busy || noFarmType; });
   }
 
@@ -739,7 +798,10 @@
       setStartMapPromptBusy(true);
       root.electronAPI.confirmStartMapPromptOverlay(payload).then(function (result) {
         setStartMapPromptBusy(false);
-        if (result && result.ok === false) {
+        if (result && result.ok === false && result.combo) {
+          startCostError = result.error === 'LIMIT_REACHED' ? 'overlay.comboLimitReached' : 'overlay.comboSaveError';
+          renderStartCostNote();
+        } else if (result && result.ok === false) {
           startCostError = 'dashboard.entryCostSaveError';
           renderStartCostNote();
           // The box still has the keyboard, so the player can fix the amount.

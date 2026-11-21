@@ -56,7 +56,8 @@ const {
   normalizeCustomFarmTypes,
   createCustomFarmType,
   updateCustomFarmType,
-  deleteCustomFarmType
+  deleteCustomFarmType,
+  CUSTOM_FARM_TYPE_LABEL_MAX_LENGTH
 } = require('./src/modules/farmTypeModel');
 const {
   DEFAULT_SCAN_HOTKEY,
@@ -3830,6 +3831,62 @@ function normalizeStartMapPromptResult(payload = {}, promptState = overlayStartM
   };
 }
 
+// A combo picked on the start card is named after its parts ("Abyss + Breach"), each part cut evenly to fit the name
+// limit, and numbered when one of the player's farm types already has that name.
+function getStartMapPromptComboLabel(partLabels, takenLabels) {
+  const fit = (room) => {
+    let cap = Math.max(...partLabels.map((label) => label.length));
+    let label = partLabels.join(' + ');
+    while (label.length > room && cap > 1) {
+      cap -= 1;
+      label = partLabels.map((part) => part.slice(0, cap).trimEnd()).join(' + ');
+    }
+    return label;
+  };
+
+  const label = fit(CUSTOM_FARM_TYPE_LABEL_MAX_LENGTH);
+  if (!takenLabels.has(label.toLowerCase())) {
+    return label;
+  }
+  for (let number = 2; ; number += 1) {
+    const numbered = `${fit(CUSTOM_FARM_TYPE_LABEL_MAX_LENGTH - ` ${number}`.length)} ${number}`;
+    if (!takenLabels.has(numbered.toLowerCase())) {
+      return numbered;
+    }
+  }
+}
+
+// Several farm types picked on the start card run as one: the player's combo of the same parts in this game, or a new
+// one saved as the Settings editor saves it. Its colour shows nowhere, so every such combo gets the same one.
+const START_MAP_PROMPT_COMBO_STYLE = { color: 'silver', icon: 'farm-star' };
+
+function resolveStartMapPromptCombo(farmTypeIds, promptState) {
+  const offered = new Set(normalizeStartMapPromptFarmTypeOptions(promptState?.farmTypeOptions).map((entry) => entry.id));
+  if (!farmTypeIds.every((id) => typeof id === 'string' && (!offered.size || offered.has(id)))
+    || new Set(farmTypeIds).size !== farmTypeIds.length) {
+    return { error: 'PARTS_INVALID' };
+  }
+
+  const poeVersion = promptState?.poeVersion;
+  const current = getStoredCustomFarmTypes();
+  const existing = current.find((farmType) => !farmType.deletedAt
+    && farmType.parts?.length === farmTypeIds.length
+    && farmTypeIds.every((id) => farmType.parts.includes(id))
+    && farmType.poeVersions.includes(poeVersion));
+  if (existing) {
+    return { farmTypeId: existing.id };
+  }
+
+  const taken = new Set(current.filter((farmType) => !farmType.deletedAt).map((farmType) => farmType.label.toLowerCase()));
+  const saved = saveCustomFarmType({
+    ...START_MAP_PROMPT_COMBO_STYLE,
+    label: getStartMapPromptComboLabel(farmTypeIds.map((id) => resolveFarmTypeLabel(id) || id), taken),
+    poeVersions: [poeVersion],
+    parts: farmTypeIds
+  });
+  return saved.ok ? { farmTypeId: saved.farmType.id, farmTypes: saved.farmTypes } : { error: saved.error };
+}
+
 function emitStartMapPromptOverlayResult(result) {
   if (mainWindow && (typeof mainWindow.isDestroyed !== 'function' || !mainWindow.isDestroyed())) {
     mainWindow.webContents.send('start-map-prompt-overlay-result', result);
@@ -3845,6 +3902,18 @@ function confirmStartMapPromptOverlay(payload = {}) {
   }
 
   const result = normalizeStartMapPromptResult(payload, overlayStartMapPromptState, 'confirm');
+  // Several farm types become one combo before the map starts. One that cannot be made keeps the card up, so the
+  // player sees why; the main window gets a new one's list to name the map with.
+  if (Array.isArray(payload.farmTypeIds) && payload.farmTypeIds.length > 1) {
+    const combo = resolveStartMapPromptCombo(payload.farmTypeIds, overlayStartMapPromptState);
+    if (combo.error) {
+      return { ok: false, error: combo.error, combo: true };
+    }
+    result.farmTypeId = combo.farmTypeId;
+    if (combo.farmTypes) {
+      result.customFarmTypes = combo.farmTypes;
+    }
+  }
   // A cost typed on the card is the farm type's from now on, as on the Dashboard, and the map starts with it. One
   // that cannot be saved keeps the card up, so the player sees why.
   if (result.farmTypeId && payload.cost && typeof payload.cost === 'object') {

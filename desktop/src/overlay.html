@@ -485,6 +485,13 @@
       transform: rotate(45deg);
     }
 
+    /* A farm type that waits while the combo picked on the start card is full. */
+    .jj-chip[data-combo-full] {
+      opacity: 0.45;
+      cursor: default;
+      box-shadow: inset 0 0 0 1px var(--line-strong);
+    }
+
     /* ── Farm types: each league's content colour on its name ── */
     [data-farm-type="abyss"] { --farm-color: var(--farm-abyss); }
     [data-farm-type="breach"] { --farm-color: var(--farm-breach); }
