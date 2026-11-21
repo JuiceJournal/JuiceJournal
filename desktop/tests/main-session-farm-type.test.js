@@ -2100,7 +2100,9 @@ function createMemoryStore(initial = {}) {
   };
 }
 
-function loadSignIn({ store, accounts, fsOverrides = {}, legacy = false, readJournal = () => ({ sessions: [] }) }) {
+function loadSignIn({
+  store, accounts, fsOverrides = {}, legacy = false, readJournal = () => ({ sessions: [] }), deviceTokens = { accessToken: null }
+}) {
   const calls = [];
   const warnings = [];
   let nextId = 0;
@@ -2130,6 +2132,8 @@ function loadSignIn({ store, accounts, fsOverrides = {}, legacy = false, readJou
     },
     connectPoeDevice: async () => accounts.shift(),
     poeApiClient: {
+      getTokens: () => deviceTokens,
+      setTokens: (tokens) => calls.push(['setTokens', tokens]),
       clearTokens: () => calls.push('clearTokens')
     },
     persistPoeClientTokens: (tokens) => calls.push(['persistPoeClientTokens', tokens]),
@@ -2206,7 +2210,7 @@ test('a sign-in with an unreadable journal still opens the profile, without a se
   assert.ok(warnings[0].some((value) => value instanceof SyntaxError));
 });
 
-test('reconnecting with another GGG account drops the token and keeps the profile', async () => {
+test('reconnecting with another GGG account and no earlier connection drops the token and keeps the profile', async () => {
   const store = createMemoryStore({ localProfiles: {}, activeProfileId: null });
   const { context, calls } = loadSignIn({
     store,
@@ -2235,6 +2239,24 @@ test('reconnecting with another GGG account drops the token and keeps the profil
     source,
     /await reconnectPoeDevice\(\);[\s\S]{0,300}return \{\s*success: false,\s*errorCode: error\?\.code \|\| null,/
   );
+});
+
+test('reconnecting with another GGG account keeps the connection the profile had', async () => {
+  const store = createMemoryStore({ localProfiles: {}, activeProfileId: null });
+  const own = { accessToken: 'own-token', refreshToken: null, tokenExpiresAt: 1900000000000, scope: 'account:characters' };
+  const { context, calls } = loadSignIn({
+    store,
+    accounts: [{ sub: 'ggg-account-1', username: 'Exile#1234' }, { sub: 'ggg-account-2', username: 'Friend#0001' }],
+    deviceTokens: own
+  });
+  const profile = await context.signInWithPoe();
+  calls.length = 0;
+
+  await assert.rejects(() => context.reconnectPoeDevice(), (error) => error.code === 'POE_DIFFERENT_ACCOUNT');
+
+  // The exchange already took the other account's token; the profile's own one is put back and saved again.
+  assert.deepEqual(calls, [['setTokens', own], ['persistPoeClientTokens', own]]);
+  assert.equal(context.getActiveProfile().id, profile.id);
 });
 
 test('a failed legacy move keeps the profile inactive and is retried at the next sign-in', async () => {

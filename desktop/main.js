@@ -3368,11 +3368,18 @@ async function signInWithPoe() {
   return profile;
 }
 
-// Reconnecting keeps the profile, so it must be the same Path of Exile account.
+// Reconnecting keeps the profile, so it must be the same Path of Exile account. Another account's sign-in is refused
+// and the profile keeps the connection it had: signing in with the wrong account must not cost the player their own.
 async function reconnectPoeDevice() {
+  const previous = poeApiClient.getTokens();
   const account = await connectPoeDevice();
   if (account?.sub !== getActiveProfile()?.poeSub) {
-    dropPoeDeviceConnection();
+    if (previous?.accessToken) {
+      poeApiClient.setTokens(previous);
+      persistPoeClientTokens(previous);
+    } else {
+      dropPoeDeviceConnection();
+    }
     const error = new Error(t('poeDifferentAccount'));
     error.code = 'POE_DIFFERENT_ACCOUNT';
     throw error;
