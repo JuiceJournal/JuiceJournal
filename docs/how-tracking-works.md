@@ -47,7 +47,7 @@ Experimental. For now it works for Path of Exile 2 only, because the PoE1 invent
 
 ## Prices: poe.ninja
 
-Item values come from [poe.ninja](https://poe.ninja). The app asks for prices by league and item category only. Prices for a session's game and league are loaded when the session starts (or when the first inventory loot is counted after a restart) and kept in memory until you switch game or league or restart the app. Counting inventory loot waits up to 5 seconds for them; loot without a price counts as 0, and if poe.ninja could not be reached the app tries again after 5 minutes. For PoE2 the app loads only poe.ninja's currency exchange prices, so other PoE2 items are valued at 0. Item icons are downloaded from `web.poecdn.com` the first time they are shown and cached on disk (up to 64 MB).
+Item values come from [poe.ninja](https://poe.ninja). The app asks for prices by league and item category only. Which categories to ask for comes from a short list published with this project's site (`juicejournal.github.io/JuiceJournal/price-types.json`), read at most once in six hours; the app carries its own copy for when that list cannot be read. Prices for a session's game and league are loaded when the session starts (or when the first inventory loot is counted after a restart) and kept in memory until you switch game or league or restart the app. Counting inventory loot waits up to 5 seconds for them; loot without a price counts as 0, and if poe.ninja could not be reached the app tries again after 5 minutes. For PoE2 the app loads only poe.ninja's currency exchange prices, so other PoE2 items are valued at 0. Item icons are downloaded from `web.poecdn.com` the first time they are shown and cached on disk (up to 64 MB).
 
 ## Profit
 

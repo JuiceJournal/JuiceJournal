@@ -6684,6 +6684,7 @@ app.whenReady().then(() => {
   apiClient = new APIClient(store.get('apiUrl'), resolvedToken, { online: isOnlineEnabled() });
   poeApiClient = new PoeApiClient();
   priceService = new PriceService();
+  priceService.readsTypeList = true;
   priceSnapshots = new PriceSnapshotStore({ dir: path.join(app.getPath('userData'), 'price-snapshots') });
   priceService.onSynced = (snapshot) => priceSnapshots.save(snapshot).then(() => dropItemIconIndex(snapshot.poeVersion));
   iconCache = new IconCache({ dir: path.join(app.getPath('userData'), 'icon-cache') });

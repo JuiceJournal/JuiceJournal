@@ -57,6 +57,7 @@ The app talks to these hosts only:
 |---|---|
 | `www.pathofexile.com`, `api.pathofexile.com` | Sign-in and your character list |
 | `poe.ninja` | Item prices (league and category only) |
+| `juicejournal.github.io` (this project's site) | The list of price categories to ask poe.ninja for, so a new league's items are priced without a new version. Nothing is sent but the request itself |
 | `web.poecdn.com` | Item icons |
 | GitHub | Checking for and downloading updates, installed builds only. When you press **Copy and open GitHub issue**, your browser opens the new-issue page with only the app version and a short environment line (Windows and Electron versions, game, language, online on/off) in the address; the app itself sends nothing there |
 | The server address in Settings → Online (default `http://localhost:3001`, your own PC) | Only after you turn on online features there: the Farming Hub list and the server sign-in. Once signed in to the server, also sharing runs and the server's stash snapshots when the device has no Path of Exile connection. Online features are off by default, and while they are off nothing is sent to this address |

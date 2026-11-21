@@ -20,19 +20,25 @@
 
 // ─── Static poe.ninja API type lists (fallback) ──────────────────
 
+// What poe.ninja's PoE1 economy pages listed on 2026-11-21 (league Covens), plus Catalyst, which they no longer name:
+// catalysts come from Currency, and reading this overview is what marks that tab as read. Scarab is still listed but
+// was empty in every league checked. The same lists are published as site/price-types.json, which a running app reads
+// (see setRemoteTypes), so a new league's types reach players without a new version.
 const POE1_CURRENCY_TYPES = [
   'Currency', 'Fragment', 'Scarab', 'DivinationCard', 'Essence',
   'Oil', 'Fossil', 'Resonator', 'Catalyst', 'DeliriumOrb',
-  'Tattoo', 'Omen', 'Artifact', 'DjinnCoin', 'Runegraft', 'AllflameEmber'
+  'Tattoo', 'Omen', 'Artifact', 'DjinnCoin', 'Runegraft', 'AllflameEmber',
+  'Thread', 'Astrolabe', 'Ducat', 'EnshroudingCrystal'
 ];
 const POE1_ITEM_TYPES = [
   'SkillGem', 'UniqueMap', 'Map',
   'UniqueJewel', 'UniqueFlask', 'UniqueWeapon', 'UniqueArmour',
   'UniqueAccessory', 'Beast',
   'ClusterJewel', 'ForbiddenJewel', 'ShrineBelt', 'UniqueTincture',
-  'Invitation', 'ValdoMap', 'Memory', 'Coffin',
+  'Invitation', 'ValdoMap', 'Memory', 'Corpse',
   'Incubator', 'Vial', 'BlightedMap', 'BlightRavagedMap',
-  'UniqueRelic', 'Wombgift', 'BaseType'
+  'UniqueRelic', 'Wombgift', 'BaseType',
+  'Viscera', 'ImbuedGem', 'IncursionTemple', 'ScryingOrb', 'Flask'
 ];
 
 // What poe.ninja's economy pages listed on 2026-11-04, plus two overviews they no longer name. Ultimatum still has
@@ -50,6 +56,15 @@ const POE1_QUICK_SYNC = [
   'Currency', 'Fragment', 'DivinationCard', 'Scarab',
   'Essence', 'Oil', 'Fossil', 'UniqueMap', 'Catalyst'
 ];
+// A published list is data from the network: only plain type names, and no more than a league could need.
+const MAX_REMOTE_TYPES = 120;
+function readTypeNames(value) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_REMOTE_TYPES) {
+    return null;
+  }
+  return value.every((type) => typeof type === 'string' && /^[A-Za-z][A-Za-z0-9]{0,39}$/.test(type)) ? [...new Set(value)] : null;
+}
+
 const POE2_QUICK_SYNC = [
   'Currency', 'Fragments', 'Essences', 'Runes',
   'UncutGems', 'SoulCores', 'Idols', 'Vaal',
@@ -205,6 +220,9 @@ class CurrencyRegistry {
     // League-specific custom types discovered at runtime
     this.discoveredTypes = new Set();
 
+    // The published type lists, per game, once one was read. The lists above stand in until then.
+    this.remoteTypes = {};
+
     // Initialize with static core currencies
     this._loadCoreCurrencies();
   }
@@ -232,14 +250,36 @@ class CurrencyRegistry {
    * Get poe.ninja currency overview types for current version
    */
   getCurrencyTypes() {
-    return this.poeVersion === 'poe2' ? POE2_CURRENCY_TYPES : POE1_CURRENCY_TYPES;
+    return this.remoteTypes[this.poeVersion]?.exchange
+      || (this.poeVersion === 'poe2' ? POE2_CURRENCY_TYPES : POE1_CURRENCY_TYPES);
+  }
+
+  /**
+   * Takes the published type lists ({ poe1: { exchange, stash }, poe2: { ... } }). A game whose lists are not plain type
+   * names keeps what it had. Returns whether anything was taken.
+   */
+  setRemoteTypes(list) {
+    let taken = false;
+    for (const game of ['poe1', 'poe2']) {
+      const exchange = readTypeNames(list?.[game]?.exchange);
+      const stash = Array.isArray(list?.[game]?.stash) && list[game].stash.length === 0 ? [] : readTypeNames(list?.[game]?.stash);
+      if (exchange && stash) {
+        this.remoteTypes[game] = { exchange, stash };
+        taken = true;
+      }
+    }
+    return taken;
   }
 
   /**
    * Get poe.ninja item overview types for current version
    */
   getItemTypes() {
-    return this.poeVersion === 'poe2' ? POE2_ITEM_TYPES : POE1_ITEM_TYPES;
+    // Path of Exile 2's item overviews are not read yet, whatever the published list names.
+    if (this.poeVersion === 'poe2') {
+      return POE2_ITEM_TYPES;
+    }
+    return this.remoteTypes.poe1?.stash || POE1_ITEM_TYPES;
   }
 
   /**
