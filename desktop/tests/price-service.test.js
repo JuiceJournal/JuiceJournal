@@ -339,7 +339,7 @@ test('queryPrices returns the Currency page shape filtered by item type and name
   service._addPrice('Divine Orb', { chaosValue: 150, divineValue: 1, category: 'currency', icon: 'divine.png', sparkline: [1, 2] });
   service._addPrice('Chaos Orb', { chaosValue: 1, divineValue: 0.006, category: 'currency', icon: null, sparkline: [] });
   service._addPrice('Mageblood', { chaosValue: 30000, divineValue: 200, category: 'uniqueaccessory', icon: 'mb.png' });
-  service._addPrice('Strange Thing', { chaosValue: 3, category: 'wombgift' });
+  service._addPrice('Strange Thing', { chaosValue: 3, category: 'nextleaguething' });
 
   assert.deepEqual(service.queryPrices({ type: 'currency' }).prices.map((price) => price.itemName), ['Divine Orb', 'Chaos Orb']);
   assert.deepEqual(service.queryPrices({ search: 'MAGE' }).prices, [{

@@ -1412,10 +1412,13 @@ test('every category tab shows its bundled art or our line icon in a slot, never
   };
   // All is our layers icon; the tabs that are no game category, or have no current art, get our chest.
   const expectedGlyph = {
-    poe1: { '': 'layers', incubator: 'chest', rune: 'chest', base_type: 'chest', other: 'chest' },
+    poe1: {
+      '': 'layers', thread: 'chest', astrolabe: 'chest', incubator: 'chest', rune: 'chest', base_type: 'chest', other: 'chest',
+      artifact: 'chest', djinn_coin: 'chest', allflame_ember: 'chest', ducat: 'chest', enshrouding_crystal: 'chest', wombgift: 'chest', vial: 'chest', corpse: 'chest', viscera: 'chest', temple: 'chest', scrying_orb: 'chest', flask: 'chest'
+    },
     poe2: { '': 'layers', ultimatum: 'chest', vaal: 'chest', other: 'chest' }
   };
-  for (const [poeVersion, tabCount] of [['poe1', 20], ['poe2', 17]]) {
+  for (const [poeVersion, tabCount] of [['poe1', 34], ['poe2', 17]]) {
     const tabs = renderCategoryRail(poeVersion).match(/<button [\s\S]*?<\/button>/g) || [];
     assert.equal(tabs.length, tabCount, poeVersion);
 
