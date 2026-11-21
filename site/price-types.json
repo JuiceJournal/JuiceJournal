@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "updated": "2026-11-21",
+  "poe1": {
+    "exchange": ["Currency", "Fragment", "Scarab", "DivinationCard", "Essence", "Oil", "Fossil", "Resonator", "Catalyst", "DeliriumOrb", "Tattoo", "Omen", "Artifact", "DjinnCoin", "Runegraft", "AllflameEmber", "Thread", "Astrolabe", "Ducat", "EnshroudingCrystal"],
+    "stash": ["SkillGem", "UniqueMap", "Map", "UniqueJewel", "UniqueFlask", "UniqueWeapon", "UniqueArmour", "UniqueAccessory", "Beast", "ClusterJewel", "ForbiddenJewel", "ShrineBelt", "UniqueTincture", "Invitation", "ValdoMap", "Memory", "Corpse", "Incubator", "Vial", "BlightedMap", "BlightRavagedMap", "UniqueRelic", "Wombgift", "BaseType", "Viscera", "ImbuedGem", "IncursionTemple", "ScryingOrb", "Flask"]
+  },
+  "poe2": {
+    "exchange": ["Currency", "Fragments", "UncutGems", "SoulCores", "Idols", "Runes", "Essences", "Expedition", "Ultimatum", "Vaal", "Ritual", "Abyss", "Breach", "Delirium", "Verisium", "LineageSupportGems"],
+    "stash": []
+  }
+}

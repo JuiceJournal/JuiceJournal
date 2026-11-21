@@ -20,6 +20,11 @@ const REQUEST_DEADLINE_MS = 60000;
 const SYNC_DEADLINE_MS = 5 * 60 * 1000;
 const POE1_CURRENCY_URL = 'https://poe.ninja/poe1/api/economy/stash/current/currency/overview';
 const POE1_ITEM_URL = 'https://poe.ninja/poe1/api/economy/stash/current/item/overview';
+// The type lists the app reads, published with the site so a new league's types need no new version.
+const TYPE_LIST_URL = 'https://juicejournal.github.io/JuiceJournal/price-types.json';
+const TYPE_LIST_TTL_MS = 6 * 60 * 60 * 1000;
+const TYPE_LIST_TIMEOUT_MS = 5000;
+const TYPE_LIST_MAX_BYTES = 64 * 1024;
 const NINJA_API_URLS = {
   poe1: 'https://poe.ninja/poe1/api',
   poe2: 'https://poe.ninja/poe2/api'
@@ -230,6 +235,9 @@ class PriceService {
     this.syncQueue = Promise.resolve();
     // Bumped by clearCache, so a sync that was running then drops what it fetched.
     this.cacheGeneration = 0;
+    // Off until the app turns it on, so nothing but the app itself asks for the published list.
+    this.readsTypeList = false;
+    this.typeListCheckedAt = 0;
     // Bumped whenever the list, its game, its league or its completeness changes, so a reader that keeps something
     // worked out from the list can tell when to work it out again.
     this.revision = 0;
@@ -347,6 +355,27 @@ class PriceService {
 
   // ─── Price Sync ─────────────────────────────────────────────
 
+  // Reads the published type lists, at most once in six hours. Nothing is sent but the request itself. Without an
+  // answer, or with one that is not a type list, the lists the app has stay.
+  async refreshTypeList() {
+    if (!this.readsTypeList || (this.typeListCheckedAt && Date.now() - this.typeListCheckedAt < TYPE_LIST_TTL_MS)) {
+      return;
+    }
+    this.typeListCheckedAt = Date.now();
+    try {
+      const response = await this.client.get(TYPE_LIST_URL, {
+        timeout: TYPE_LIST_TIMEOUT_MS,
+        maxContentLength: TYPE_LIST_MAX_BYTES,
+        maxRedirects: 0,
+        // The timeout above counts idle time only; this ends a slow answer, so prices never wait long for the list.
+        signal: AbortSignal.timeout(TYPE_LIST_TIMEOUT_MS)
+      });
+      registry.setRemoteTypes(response.data);
+    } catch (error) {
+      console.warn('The published price type list could not be read:', error.message);
+    }
+  }
+
   /**
    * Sync prices from poe.ninja into the local desktop cache.
    * Full sync is the default to avoid missing categories.
@@ -362,6 +391,9 @@ class PriceService {
     const generation = this.cacheGeneration;
     let readEveryType = true;
     const deadline = Date.now() + SYNC_DEADLINE_MS;
+
+    // After the generation above was noted: a game switch during this wait still marks the sync as stale.
+    await this.refreshTypeList();
 
     // Get types from registry (version-aware, dynamic)
     const currencyTypes = registry.getCurrencyTypes();
