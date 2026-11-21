@@ -3629,6 +3629,11 @@ async function handleMapEnteredEvent(data = {}) {
             if (overlayResult.costSaved && typeof loadFarmTypeCosts === 'function') {
               await loadFarmTypeCosts();
             }
+            // Farm types picked together on the card may have made a new combo, which this window has to know to name
+            // the map with.
+            if (Array.isArray(overlayResult.customFarmTypes) && typeof applyCustomFarmTypes === 'function') {
+              await applyCustomFarmTypes(overlayResult.customFarmTypes);
+            }
             await handleStartSession({
               defaultMapName: detectedMapName,
               source: 'map-detected-overlay',
