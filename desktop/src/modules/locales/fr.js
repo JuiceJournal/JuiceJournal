@@ -632,6 +632,8 @@
       'category.currency': 'Monnaie',
       'category.fragment': 'Fragment',
       'category.scarab': 'Scarabée',
+      'category.thread': 'Thread',
+      'category.astrolabe': 'Astrolabe',
       'category.essence': 'Essence',
       'category.map': 'Carte',
       'category.divCard': 'Carte divinatoire',

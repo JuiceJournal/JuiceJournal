@@ -632,6 +632,8 @@
       'category.currency': 'Moeda',
       'category.fragment': 'Fragmento',
       'category.scarab': 'Scarab',
+      'category.thread': 'Thread',
+      'category.astrolabe': 'Astrolabe',
       'category.essence': 'Essence',
       'category.map': 'Mapa',
       'category.divCard': 'Div Card',

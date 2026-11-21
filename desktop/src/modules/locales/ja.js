@@ -632,6 +632,8 @@
       'category.currency': 'カレンシー',
       'category.fragment': 'フラグメント',
       'category.scarab': 'スカラベ',
+      'category.thread': 'Thread',
+      'category.astrolabe': 'Astrolabe',
       'category.essence': 'エッセンス',
       'category.map': 'マップ',
       'category.divCard': '占いカード',

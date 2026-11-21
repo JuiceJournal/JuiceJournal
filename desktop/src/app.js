@@ -9018,6 +9018,8 @@ const POE1_CATEGORY_TYPES = [
   { value: 'currency', labelKey: 'category.currency', label: 'Currency', icon: 'chaos' },
   { value: 'fragment', labelKey: 'category.fragment', label: 'Fragment', icon: 'fragment' },
   { value: 'scarab', labelKey: 'category.scarab', label: 'Scarab', icon: 'scarab' },
+  { value: 'thread', labelKey: 'category.thread', label: 'Thread', icon: null, glyph: 'chest' },
+  { value: 'astrolabe', labelKey: 'category.astrolabe', label: 'Astrolabe', icon: null, glyph: 'chest' },
   { value: 'essence', labelKey: 'category.essence', label: 'Essence', icon: 'essence' },
   { value: 'fossil', labelKey: 'category.fossil', label: 'Fossil', icon: 'fossil' },
   { value: 'map', labelKey: 'category.map', label: 'Map', icon: 'map' },

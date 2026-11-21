@@ -632,6 +632,8 @@
       'category.currency': '화폐',
       'category.fragment': '조각',
       'category.scarab': '갑충석',
+      'category.thread': 'Thread',
+      'category.astrolabe': 'Astrolabe',
       'category.essence': '에센스',
       'category.map': '지도',
       'category.divCard': '점술 카드',

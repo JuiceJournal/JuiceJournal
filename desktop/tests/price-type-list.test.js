@@ -135,3 +135,16 @@ test('a game switch while the list is being read still marks the sync as stale',
   assert.deepEqual(kept, []);
   assert.equal(service.priceMap.size, 0);
 });
+
+test('threads and astrolabes list under tabs of their own, in the Market and in a run\'s loot', () => {
+  const service = new PriceService();
+  service.setPoeVersion('poe1');
+  const prices = new Map();
+  service._indexCurrencyData({ core: { primary: 'chaos', rates: {} }, items: [{ id: 'legion-thread', name: 'Legion Thread' }], lines: [{ id: 'legion-thread', primaryValue: 3.5 }] }, 'Thread', prices);
+  service._indexCurrencyData({ core: { primary: 'chaos', rates: {} }, items: [{ id: 'a', name: 'Templar Astrolabe' }], lines: [{ id: 'a', primaryValue: 2 }] }, 'Astrolabe', prices);
+  assert.deepEqual([...prices.values()].map((price) => price.itemType ?? price.category), ['thread', 'astrolabe']);
+
+  const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+  assert.ok(app.includes("{ value: 'thread', labelKey: 'category.thread', label: 'Thread', icon: null, glyph: 'chest' },"));
+  assert.ok(app.includes("{ value: 'astrolabe', labelKey: 'category.astrolabe', label: 'Astrolabe', icon: null, glyph: 'chest' },"));
+});

@@ -632,6 +632,8 @@
       'category.currency': 'Währung',
       'category.fragment': 'Fragment',
       'category.scarab': 'Skarabäus',
+      'category.thread': 'Thread',
+      'category.astrolabe': 'Astrolabe',
       'category.essence': 'Essenz',
       'category.map': 'Karte',
       'category.divCard': 'Weissagungskarte',

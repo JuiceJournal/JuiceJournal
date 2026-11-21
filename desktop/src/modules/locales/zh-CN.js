@@ -632,6 +632,8 @@
       'category.currency': '通货',
       'category.fragment': '碎片',
       'category.scarab': '圣甲虫',
+      'category.thread': 'Thread',
+      'category.astrolabe': 'Astrolabe',
       'category.essence': '精华',
       'category.map': '地图',
       'category.divCard': '命运卡',

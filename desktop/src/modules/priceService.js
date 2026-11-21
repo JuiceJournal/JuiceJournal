@@ -36,6 +36,8 @@ const NINJA_ITEM_TYPES = {
   fragment: 'fragment',
   fragments: 'fragment',
   scarab: 'scarab',
+  thread: 'thread',
+  astrolabe: 'astrolabe',
   map: 'map',
   uniquemap: 'map',
   blightedmap: 'map',

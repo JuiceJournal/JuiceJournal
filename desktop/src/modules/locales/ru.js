@@ -632,6 +632,8 @@
       'category.currency': 'Валюта',
       'category.fragment': 'Фрагменты',
       'category.scarab': 'Скарабеи',
+      'category.thread': 'Thread',
+      'category.astrolabe': 'Astrolabe',
       'category.essence': 'Сущности',
       'category.map': 'Карты',
       'category.divCard': 'Гадальные карты',
