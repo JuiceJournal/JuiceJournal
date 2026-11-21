@@ -255,8 +255,10 @@ class CurrencyRegistry {
   }
 
   /**
-   * Takes the published type lists ({ poe1: { exchange, stash }, poe2: { ... } }). A game whose lists are not plain type
-   * names keeps what it had. Returns whether anything was taken.
+   * Takes the published type lists ({ poe1: { exchange, stash }, poe2: { ... } }). A published list only adds types to
+   * the ones the app carries: a list that lost a type must not cost a player its prices, and a type the app reads from
+   * one overview stays there. A game whose lists are not plain type names keeps what it had. Returns whether anything
+   * was taken.
    */
   setRemoteTypes(list) {
     let taken = false;
@@ -264,7 +266,13 @@ class CurrencyRegistry {
       const exchange = readTypeNames(list?.[game]?.exchange);
       const stash = Array.isArray(list?.[game]?.stash) && list[game].stash.length === 0 ? [] : readTypeNames(list?.[game]?.stash);
       if (exchange && stash) {
-        this.remoteTypes[game] = { exchange, stash };
+        const ownExchange = game === 'poe2' ? POE2_CURRENCY_TYPES : POE1_CURRENCY_TYPES;
+        const ownStash = game === 'poe2' ? POE2_ITEM_TYPES : POE1_ITEM_TYPES;
+        const allExchange = [...new Set([...ownExchange, ...exchange.filter((type) => !ownStash.includes(type))])];
+        this.remoteTypes[game] = {
+          exchange: allExchange,
+          stash: [...new Set([...ownStash, ...stash])].filter((type) => !allExchange.includes(type))
+        };
         taken = true;
       }
     }

@@ -355,14 +355,6 @@ class PriceService {
 
   // ─── Price Sync ─────────────────────────────────────────────
 
-  /**
-   * Sync prices from poe.ninja into the local desktop cache.
-   * Full sync is the default to avoid missing categories.
-   *
-   * @param {string} league
-   * @param {Object} options
-   * @param {boolean} [options.full] - Sync ALL types (slow, many API calls)
-   */
   // Reads the published type lists, at most once in six hours. Nothing is sent but the request itself. Without an
   // answer, or with one that is not a type list, the lists the app has stay.
   async refreshTypeList() {
@@ -374,7 +366,9 @@ class PriceService {
       const response = await this.client.get(TYPE_LIST_URL, {
         timeout: TYPE_LIST_TIMEOUT_MS,
         maxContentLength: TYPE_LIST_MAX_BYTES,
-        maxRedirects: 0
+        maxRedirects: 0,
+        // The timeout above counts idle time only; this ends a slow answer, so prices never wait long for the list.
+        signal: AbortSignal.timeout(TYPE_LIST_TIMEOUT_MS)
       });
       registry.setRemoteTypes(response.data);
     } catch (error) {
@@ -382,6 +376,14 @@ class PriceService {
     }
   }
 
+  /**
+   * Sync prices from poe.ninja into the local desktop cache.
+   * Full sync is the default to avoid missing categories.
+   *
+   * @param {string} league
+   * @param {Object} options
+   * @param {boolean} [options.full] - Sync ALL types (slow, many API calls)
+   */
   async syncPrices(league, options = {}) {
     // Filled apart and swapped in at the end, so readers such as inventory loot pricing never see a half-filled list.
     const prices = new Map();

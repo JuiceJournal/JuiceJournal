@@ -34,18 +34,22 @@ test('Path of Exile 1 reads the types of the Covens league and no longer asks fo
   assert.ok(!stash.includes('Coffin'));
 });
 
-test('a published list replaces the types of its game, and Path of Exile 2 item overviews stay unread', () => {
+test('a published list adds types to the ones the app carries and takes none away', () => {
+  const own = { poe1: builtIn('poe1'), poe2: builtIn('poe2') };
+  // The list lost Fragment, repeats a type, and names a stash type of the app (Map) as an exchange type.
   const taken = registry.setRemoteTypes({
-    poe1: { exchange: ['Currency', 'NewLeagueThing', 'Currency'], stash: ['UniqueMap'] },
-    poe2: { exchange: ['Currency', 'NewMechanic'], stash: ['PrecursorTablets'] }
+    poe1: { exchange: ['Currency', 'NewLeagueThing', 'NewLeagueThing', 'Map'], stash: ['NewStashThing', 'Thread'] },
+    poe2: { exchange: ['NewMechanic'], stash: ['PrecursorTablets'] }
   });
   assert.equal(taken, true);
 
   registry.setPoeVersion('poe1');
-  assert.deepEqual(registry.getCurrencyTypes(), ['Currency', 'NewLeagueThing']);
-  assert.deepEqual(registry.getItemTypes(), ['UniqueMap']);
+  assert.deepEqual(registry.getCurrencyTypes(), [...own.poe1.exchange, 'NewLeagueThing']);
+  // Each type keeps the overview the app reads it from.
+  assert.deepEqual(registry.getItemTypes(), [...own.poe1.stash, 'NewStashThing']);
   registry.setPoeVersion('poe2');
-  assert.deepEqual(registry.getCurrencyTypes(), ['Currency', 'NewMechanic']);
+  assert.deepEqual(registry.getCurrencyTypes(), [...own.poe2.exchange, 'NewMechanic']);
+  // Path of Exile 2 item overviews stay unread.
   assert.deepEqual(registry.getItemTypes(), []);
 });
 
@@ -67,10 +71,10 @@ test('a list that is not plain type names is not taken, game by game', () => {
   assert.deepEqual([...registry.getCurrencyTypes()], before.exchange);
 
   // One game's list can be wrong without the other's being lost.
-  assert.equal(registry.setRemoteTypes({ poe1: { exchange: ['bad type'], stash: [] }, poe2: { exchange: ['Currency'], stash: [] } }), true);
+  assert.equal(registry.setRemoteTypes({ poe1: { exchange: ['bad type'], stash: [] }, poe2: { exchange: ['NewMechanic'], stash: [] } }), true);
   assert.deepEqual([...registry.getCurrencyTypes()], before.exchange);
   registry.setPoeVersion('poe2');
-  assert.deepEqual(registry.getCurrencyTypes(), ['Currency']);
+  assert.ok(registry.getCurrencyTypes().includes('NewMechanic'));
 });
 
 test('the list is asked for only once the app turns it on, and then at most once in six hours', async (t) => {
@@ -82,7 +86,7 @@ test('the list is asked for only once the app turns it on, and then at most once
   const asked = [];
   service.client.get = async (url, options) => {
     asked.push([url, options.maxRedirects]);
-    return { data: { poe1: { exchange: ['Currency', 'Thread'], stash: ['Map'] } } };
+    return { data: { poe1: { exchange: ['NextLeagueThing'], stash: ['Map'] } } };
   };
 
   await service.refreshTypeList();
@@ -92,7 +96,7 @@ test('the list is asked for only once the app turns it on, and then at most once
   await service.refreshTypeList();
   await service.refreshTypeList();
   assert.deepEqual(asked, [['https://juicejournal.github.io/JuiceJournal/price-types.json', 0]]);
-  assert.deepEqual(registry.getCurrencyTypes(), ['Currency', 'Thread']);
+  assert.ok(registry.getCurrencyTypes().includes('NextLeagueThing'));
 
   // Six hours on it asks again; an answer that fails or is not a list leaves the types as they are.
   now += 6 * 60 * 60 * 1000;
@@ -101,5 +105,33 @@ test('the list is asked for only once the app turns it on, and then at most once
   now += 6 * 60 * 60 * 1000;
   service.client.get = async () => ({ data: '<html>not found</html>' });
   await service.refreshTypeList();
-  assert.deepEqual(registry.getCurrencyTypes(), ['Currency', 'Thread']);
+  assert.ok(registry.getCurrencyTypes().includes('NextLeagueThing'));
+  assert.ok(registry.getCurrencyTypes().includes('Currency'));
+});
+
+test('a game switch while the list is being read still marks the sync as stale', async () => {
+  const service = new PriceService();
+  service.setPoeVersion('poe1');
+  service.readsTypeList = true;
+  let release;
+  const asked = [];
+  service.client.get = async (url) => {
+    asked.push(url);
+    if (url.endsWith('price-types.json')) {
+      await new Promise((resolve) => { release = resolve; });
+      return { data: {} };
+    }
+    return { data: { economyLeagues: [], oldEconomyLeagues: [], lines: [] } };
+  };
+  const kept = [];
+  service.onSynced = (snapshot) => kept.push(snapshot);
+
+  const sync = service.syncPrices('Covens', { full: false });
+  await new Promise((resolve) => setImmediate(resolve));
+  service.clearCache();
+  release();
+  await sync;
+
+  assert.deepEqual(kept, []);
+  assert.equal(service.priceMap.size, 0);
 });
