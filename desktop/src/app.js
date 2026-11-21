@@ -2376,6 +2376,23 @@ const CURRENCY_IMAGE_VARIANTS = {
     catalyst: 'assets/currency/poe1/catalyst.png',
     omen: 'assets/currency/poe1/omen.png',
     tattoo: 'assets/currency/poe1/tattoo.png',
+    thread: 'assets/currency/poe1/thread.png',
+    astrolabe: 'assets/currency/poe1/astrolabe.png',
+    incubator: 'assets/currency/poe1/incubator.png',
+    runegraft: 'assets/currency/poe1/runegraft.png',
+    'base-type': 'assets/currency/poe1/base-type.png',
+    artifact: 'assets/currency/poe1/artifact.png',
+    'djinn-coin': 'assets/currency/poe1/djinn-coin.png',
+    'allflame-ember': 'assets/currency/poe1/allflame-ember.png',
+    ducat: 'assets/currency/poe1/ducat.png',
+    'enshrouding-crystal': 'assets/currency/poe1/enshrouding-crystal.png',
+    wombgift: 'assets/currency/poe1/wombgift.png',
+    vial: 'assets/currency/poe1/vial.png',
+    corpse: 'assets/currency/poe1/corpse.png',
+    viscera: 'assets/currency/poe1/viscera.png',
+    temple: 'assets/currency/poe1/temple.png',
+    'scrying-orb': 'assets/currency/poe1/scrying-orb.png',
+    flask: 'assets/currency/poe1/flask.png',
   },
   poe2: {
     chaos: 'assets/currency/poe2/chaos.png',
@@ -2396,6 +2413,9 @@ const CURRENCY_IMAGE_VARIANTS = {
     catalyst: 'assets/currency/poe2/catalyst.png',
     'liquid-emotion': 'assets/currency/poe2/liquid-emotion.png',
     verisium: 'assets/currency/poe2/verisium.png',
+    ultimatum: 'assets/currency/poe2/ultimatum.png',
+    // Not "vaal": that key is the Vaal Orb's, which a loot row shows.
+    'vaal-cultivation-orb': 'assets/currency/poe2/vaal-cultivation-orb.png',
   }
 };
 
@@ -9093,8 +9113,9 @@ function formatLootCategoryLabel(itemType) {
 // ==================== CURRENCY PAGE ====================
 
 // Category art is game content: a tab shows its own bundled category art (one item of the category; every divination
-// card shares one inventory icon), never a stand-in orb. Tabs that are no game category, or whose category has no
-// current art, show one of our line icons instead (`glyph`). Currency keeps the real Chaos Orb.
+// card shares one inventory icon), never a stand-in orb. All and Other are no game category and show one of our line
+// icons instead (`glyph`). Currency keeps the real Chaos Orb. research/tools/market-tab-art.cjs fetched the newer
+// Path of Exile 1 categories' art from the game's image server.
 
 // PoE 1 item category types — includes PoE1-exclusive mechanics
 const POE1_CATEGORY_TYPES = [
@@ -9102,8 +9123,8 @@ const POE1_CATEGORY_TYPES = [
   { value: 'currency', labelKey: 'category.currency', label: 'Currency', icon: 'chaos' },
   { value: 'fragment', labelKey: 'category.fragment', label: 'Fragment', icon: 'fragment' },
   { value: 'scarab', labelKey: 'category.scarab', label: 'Scarab', icon: 'scarab' },
-  { value: 'thread', labelKey: 'category.thread', label: 'Thread', icon: null, glyph: 'chest' },
-  { value: 'astrolabe', labelKey: 'category.astrolabe', label: 'Astrolabe', icon: null, glyph: 'chest' },
+  { value: 'thread', labelKey: 'category.thread', label: 'Thread', icon: 'thread' },
+  { value: 'astrolabe', labelKey: 'category.astrolabe', label: 'Astrolabe', icon: 'astrolabe' },
   { value: 'essence', labelKey: 'category.essence', label: 'Essence', icon: 'essence' },
   { value: 'fossil', labelKey: 'category.fossil', label: 'Fossil', icon: 'fossil' },
   { value: 'map', labelKey: 'category.map', label: 'Map', icon: 'map' },
@@ -9112,25 +9133,25 @@ const POE1_CATEGORY_TYPES = [
   { value: 'unique', labelKey: 'category.unique', label: 'Unique', icon: 'unique' },
   { value: 'oil', labelKey: 'category.oil', label: 'Oil', icon: 'oil' },
   { value: 'beast', labelKey: 'category.beast', label: 'Beast', icon: 'beast' },
-  { value: 'incubator', labelKey: 'category.incubator', label: 'Incubator', icon: null, glyph: 'chest' },
+  { value: 'incubator', labelKey: 'category.incubator', label: 'Incubator', icon: 'incubator' },
   { value: 'delirium_orb', labelKey: 'category.deliriumOrb', label: 'Delirium Orb', icon: 'delirium-orb' },
   { value: 'catalyst', labelKey: 'category.catalyst', label: 'Catalyst', icon: 'catalyst' },
   { value: 'omen', labelKey: 'category.omen', label: 'Omen', icon: 'omen' },
   { value: 'tattoo', labelKey: 'category.tattoo', label: 'Tattoo', icon: 'tattoo' },
-  { value: 'rune', labelKey: 'category.runegraft', label: 'Runegraft', icon: null, glyph: 'chest' },
-  { value: 'base_type', labelKey: 'category.baseType', label: 'Base Type', icon: null, glyph: 'chest' },
-  { value: 'artifact', labelKey: 'category.artifact', label: 'Artifact', icon: null, glyph: 'chest' },
-  { value: 'djinn_coin', labelKey: 'category.djinnCoin', label: 'Djinn Coin', icon: null, glyph: 'chest' },
-  { value: 'allflame_ember', labelKey: 'category.allflameEmber', label: 'Allflame Ember', icon: null, glyph: 'chest' },
-  { value: 'ducat', labelKey: 'category.ducat', label: 'Ducat', icon: null, glyph: 'chest' },
-  { value: 'enshrouding_crystal', labelKey: 'category.enshroudingCrystal', label: 'Enshrouding Crystal', icon: null, glyph: 'chest' },
-  { value: 'wombgift', labelKey: 'category.wombgift', label: 'Wombgift', icon: null, glyph: 'chest' },
-  { value: 'vial', labelKey: 'category.vial', label: 'Vial', icon: null, glyph: 'chest' },
-  { value: 'corpse', labelKey: 'category.corpse', label: 'Corpse', icon: null, glyph: 'chest' },
-  { value: 'viscera', labelKey: 'category.viscera', label: 'Viscera', icon: null, glyph: 'chest' },
-  { value: 'temple', labelKey: 'category.temple', label: 'Temple', icon: null, glyph: 'chest' },
-  { value: 'scrying_orb', labelKey: 'category.scryingOrb', label: 'Scrying Orb', icon: null, glyph: 'chest' },
-  { value: 'flask', labelKey: 'category.flask', label: 'Flask', icon: null, glyph: 'chest' },
+  { value: 'rune', labelKey: 'category.runegraft', label: 'Runegraft', icon: 'runegraft' },
+  { value: 'base_type', labelKey: 'category.baseType', label: 'Base Type', icon: 'base-type' },
+  { value: 'artifact', labelKey: 'category.artifact', label: 'Artifact', icon: 'artifact' },
+  { value: 'djinn_coin', labelKey: 'category.djinnCoin', label: 'Djinn Coin', icon: 'djinn-coin' },
+  { value: 'allflame_ember', labelKey: 'category.allflameEmber', label: 'Allflame Ember', icon: 'allflame-ember' },
+  { value: 'ducat', labelKey: 'category.ducat', label: 'Ducat', icon: 'ducat' },
+  { value: 'enshrouding_crystal', labelKey: 'category.enshroudingCrystal', label: 'Enshrouding Crystal', icon: 'enshrouding-crystal' },
+  { value: 'wombgift', labelKey: 'category.wombgift', label: 'Wombgift', icon: 'wombgift' },
+  { value: 'vial', labelKey: 'category.vial', label: 'Vial', icon: 'vial' },
+  { value: 'corpse', labelKey: 'category.corpse', label: 'Corpse', icon: 'corpse' },
+  { value: 'viscera', labelKey: 'category.viscera', label: 'Viscera', icon: 'viscera' },
+  { value: 'temple', labelKey: 'category.temple', label: 'Temple', icon: 'temple' },
+  { value: 'scrying_orb', labelKey: 'category.scryingOrb', label: 'Scrying Orb', icon: 'scrying-orb' },
+  { value: 'flask', labelKey: 'category.flask', label: 'Flask', icon: 'flask' },
   { value: 'other', labelKey: 'category.other', label: 'Other', icon: null, glyph: 'chest' },
 ];
 
@@ -9150,8 +9171,8 @@ const POE2_CATEGORY_TYPES = [
   { value: 'catalyst', labelKey: 'category.catalyst', label: 'Catalyst', icon: 'catalyst' },
   { value: 'liquid_emotion', labelKey: 'category.liquidEmotion', label: 'Liquid Emotion', icon: 'liquid-emotion' },
   { value: 'verisium', labelKey: 'category.verisium', label: 'Verisium', icon: 'verisium' },
-  { value: 'ultimatum', labelKey: 'category.ultimatum', label: 'Ultimatum', icon: null, glyph: 'chest' },
-  { value: 'vaal', labelKey: 'category.vaal', label: 'Vaal', icon: null, glyph: 'chest' },
+  { value: 'ultimatum', labelKey: 'category.ultimatum', label: 'Ultimatum', icon: 'ultimatum' },
+  { value: 'vaal', labelKey: 'category.vaal', label: 'Vaal', icon: 'vaal-cultivation-orb' },
   { value: 'other', labelKey: 'category.other', label: 'Other', icon: null, glyph: 'chest' },
 ];
 

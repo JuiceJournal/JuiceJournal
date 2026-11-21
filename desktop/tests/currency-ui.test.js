@@ -1402,21 +1402,19 @@ test('every category tab shows its bundled art or our line icon in a slot, never
     poe1: {
       currency: 'chaos', fragment: 'fragment', scarab: 'scarab', essence: 'essence', fossil: 'fossil', map: 'map',
       divination_card: 'divination-card', gem: 'gem', unique: 'unique', oil: 'oil', beast: 'beast',
-      delirium_orb: 'delirium-orb', catalyst: 'catalyst', omen: 'omen', tattoo: 'tattoo'
+      delirium_orb: 'delirium-orb', catalyst: 'catalyst', omen: 'omen', tattoo: 'tattoo',
+      thread: 'thread', astrolabe: 'astrolabe', incubator: 'incubator', rune: 'runegraft', base_type: 'base-type', artifact: 'artifact', djinn_coin: 'djinn-coin', allflame_ember: 'allflame-ember', ducat: 'ducat', enshrouding_crystal: 'enshrouding-crystal', wombgift: 'wombgift', vial: 'vial', corpse: 'corpse', viscera: 'viscera', temple: 'temple', scrying_orb: 'scrying-orb', flask: 'flask'
     },
     poe2: {
       currency: 'chaos', fragment: 'fragment', essence: 'essence', rune: 'rune', gem: 'uncut-gem',
       soul_core: 'soul-core', idol: 'idol', expedition: 'expedition', omen: 'omen', abyssal_bone: 'abyssal-bone',
-      catalyst: 'catalyst', liquid_emotion: 'liquid-emotion', verisium: 'verisium'
+      catalyst: 'catalyst', liquid_emotion: 'liquid-emotion', verisium: 'verisium', ultimatum: 'ultimatum', vaal: 'vaal-cultivation-orb'
     }
   };
-  // All is our layers icon; the tabs that are no game category, or have no current art, get our chest.
+  // All is our layers icon and Other, which is no game category, our chest.
   const expectedGlyph = {
-    poe1: {
-      '': 'layers', thread: 'chest', astrolabe: 'chest', incubator: 'chest', rune: 'chest', base_type: 'chest', other: 'chest',
-      artifact: 'chest', djinn_coin: 'chest', allflame_ember: 'chest', ducat: 'chest', enshrouding_crystal: 'chest', wombgift: 'chest', vial: 'chest', corpse: 'chest', viscera: 'chest', temple: 'chest', scrying_orb: 'chest', flask: 'chest'
-    },
-    poe2: { '': 'layers', ultimatum: 'chest', vaal: 'chest', other: 'chest' }
+    poe1: { '': 'layers', other: 'chest' },
+    poe2: { '': 'layers', other: 'chest' }
   };
   for (const [poeVersion, tabCount] of [['poe1', 34], ['poe2', 17]]) {
     const tabs = renderCategoryRail(poeVersion).match(/<button [\s\S]*?<\/button>/g) || [];
@@ -1624,12 +1622,14 @@ test('a price row takes its own art, then its category art, then our chest icon'
   assert.deepEqual(art(poe1, { itemType: 'fragment' }), { remote: '', bundled: 'assets/currency/poe1/fragment.png' });
   assert.deepEqual(art(poe2, { itemType: 'fragment' }), { remote: '', bundled: 'assets/currency/poe2/fragment.png' });
   assert.deepEqual(art(poe2, { itemType: 'idol' }), { remote: '', bundled: 'assets/currency/poe2/idol.png' });
-  // A Chaos Orb would read as the item's own art, and the categories without current art have none to give. PoE 2's rune
-  // is not a PoE 1 runegraft, and a Vaal Orb would be a stand-in for PoE 2's Vaal items.
-  for (const itemType of ['currency', 'other', 'rune', 'vaal', 'base_type']) {
+  // A Chaos Orb would read as the item's own art, and Other has none to give. PoE 1 has no Vaal tab, and PoE 2's Vaal
+  // tab shows a Vaal crafting orb, never the Vaal Orb a loot row shows.
+  for (const itemType of ['currency', 'other', 'vaal']) {
     assert.deepEqual(art(poe1, { itemType }), { remote: '', bundled: '' }, itemType);
   }
-  assert.deepEqual(art(poe2, { itemType: 'vaal' }), { remote: '', bundled: '' });
+  assert.deepEqual(art(poe1, { itemType: 'rune' }), { remote: '', bundled: 'assets/currency/poe1/runegraft.png' });
+  assert.deepEqual(art(poe1, { itemType: 'flask' }), { remote: '', bundled: 'assets/currency/poe1/flask.png' });
+  assert.deepEqual(art(poe2, { itemType: 'vaal' }), { remote: '', bundled: 'assets/currency/poe2/vaal-cultivation-orb.png' });
   assert.deepEqual(art(poe2, { itemType: 'rune' }), { remote: '', bundled: 'assets/currency/poe2/rune.png' });
   assert.deepEqual(art(poe1, { itemType: 'gem', iconUrl: 'javascript:alert(1)' }), { remote: '', bundled: 'assets/currency/poe1/gem.png' });
 

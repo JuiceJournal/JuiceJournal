@@ -145,6 +145,6 @@ test('threads and astrolabes list under tabs of their own, in the Market and in 
   assert.deepEqual([...prices.values()].map((price) => price.itemType ?? price.category), ['thread', 'astrolabe']);
 
   const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
-  assert.ok(app.includes("{ value: 'thread', labelKey: 'category.thread', label: 'Thread', icon: null, glyph: 'chest' },"));
-  assert.ok(app.includes("{ value: 'astrolabe', labelKey: 'category.astrolabe', label: 'Astrolabe', icon: null, glyph: 'chest' },"));
+  assert.ok(app.includes("{ value: 'thread', labelKey: 'category.thread', label: 'Thread', icon: 'thread' },"));
+  assert.ok(app.includes("{ value: 'astrolabe', labelKey: 'category.astrolabe', label: 'Astrolabe', icon: 'astrolabe' },"));
 });
