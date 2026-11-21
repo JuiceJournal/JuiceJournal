@@ -213,8 +213,11 @@ test('a wait GGG did not put in numbers is still kept', async () => {
 
 // main.js's PoE 1 functions around a real watcher, with GGG's answers held until the test lets them go.
 function createMain(overrides = {}) {
-  const env = { character: EXILE, game: 'poe1', authenticated: true, readingEnabled: true, stashScope: false, ...overrides };
-  const log = { asked: [], warned: [] };
+  const env = {
+    character: EXILE, game: 'poe1', authenticated: true, readingEnabled: true, stashScope: false, overlay: true, startCard: false,
+    signedIn: true, ...overrides
+  };
+  const log = { asked: [], warned: [], told: [] };
   const waiting = [];
   const made = createWatcher();
   const dropped = [];
@@ -231,6 +234,13 @@ function createMain(overrides = {}) {
     POE1_SETTLE_DEADLINE_MS: 8000,
     readCharacterInventory,
     readParsedSetting: (key) => (key === 'inventoryReadEnabled' ? env.readingEnabled : undefined),
+    getActiveProfile: () => (env.signedIn ? { id: 'profile-1' } : null),
+    isOverlayEnabled: () => env.overlay,
+    get overlayStartMapPromptState() { return env.startCard ? { visible: true } : null; },
+    overlayCharacterPromptState: null,
+    showInventoryStatus: (kind) => log.told.push(kind),
+    POE1_ENTRY_CARD_WAIT_MS: 500,
+    POE1_ENTRY_CARD_TRIES: 60,
     get overlayCharacterState() { return env.character; },
     gameDetector: { getDetectedGame: () => env.game },
     poeApiClient: {
@@ -244,7 +254,7 @@ function createMain(overrides = {}) {
     inventoryWatcher: made.watcher
   });
   vm.runInContext('let poe1MapEntry = null;', context);
-  loadFunctions(['canReadPoe1Inventory', 'fetchPoe1Inventory', 'startPoe1EntryRead', 'notePoe1MapExited', 'settlePoe1Inventory'], context);
+  loadFunctions(['canReadPoe1Inventory', 'fetchPoe1Inventory', 'tellPoe1Entry', 'startPoe1EntryRead', 'notePoe1MapExited', 'settlePoe1Inventory'], context);
   // The watcher asks main whether the game reads from the API, as it does in the app.
   made.watcher.deps.hasApiInventory = (game) => context.canReadPoe1Inventory(game);
   const carrying = (quantity) => ({ name: 'Exile', inventory: [stack('Chaos Orb', quantity, 0)] });
@@ -277,6 +287,75 @@ test('main counts a map from GGG at its entry and after it', async () => {
   assert.deepEqual(main.log.asked, ['Exile', 'Exile']);
   assert.deepEqual(main.gains, [{ sessionId: 's1', items: [{ name: 'Chaos Orb', quantity: 5 }], mapCount: 1 }]);
   assert.deepEqual(main.dropped, []);
+});
+
+test('the read at a map entry is told in the game: read, not read, or not connected', async () => {
+  const read = createMain();
+  read.context.startPoe1EntryRead();
+  await read.answer(7);
+  assert.deepEqual(read.log.told, ['savedApi']);
+
+  const failed = createMain();
+  failed.context.startPoe1EntryRead();
+  await failed.answer(new Error('offline'));
+  assert.deepEqual(failed.log.told, ['apiFailed']);
+
+  // The device's connection ended: GGG is not asked, and the player hears what to do about it.
+  const ended = createMain({ authenticated: false });
+  ended.context.startPoe1EntryRead();  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(ended.log.asked, []);
+  assert.deepEqual(ended.log.told, ['apiNotLinked']);
+});
+
+test('nothing is told for a map that reading does not cover, with the overlay off, or once the map was left', async () => {
+  for (const overrides of [{ readingEnabled: false }, { stashScope: true }, { authenticated: false, signedIn: false }]) {
+    const main = createMain(overrides);
+    main.context.startPoe1EntryRead();    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(main.log.told, [], JSON.stringify(overrides));
+  }
+
+  const overlayOff = createMain({ overlay: false });
+  overlayOff.context.startPoe1EntryRead();
+  await overlayOff.answer(7);
+  assert.deepEqual(overlayOff.log.told, []);
+
+  const left = createMain();
+  left.context.startPoe1EntryRead();
+  left.context.notePoe1MapExited();
+  await left.answer(7);
+  assert.deepEqual(left.log.told, []);
+
+  // Another map was entered before the first one's answer came: only the newer entry speaks.
+  const twice = createMain();
+  twice.context.startPoe1EntryRead();
+  twice.context.startPoe1EntryRead();
+  await twice.answer(7);
+  await twice.answer(7);
+  assert.deepEqual(twice.log.told, ['savedApi']);
+});
+
+test('the entry line waits for the start card, and gives up when the card never goes', async () => {
+  const main = createMain({ startCard: true });
+  const waits = [];
+  main.context.setTimeout = (callback, delay) => { waits.push({ callback, delay }); };
+
+  main.context.startPoe1EntryRead();
+  await main.answer(7);
+  assert.deepEqual(main.log.told, []);
+  assert.equal(waits.length, 1);
+  assert.equal(waits[0].delay, 500);
+
+  main.env.startCard = false;
+  waits.shift().callback();
+  assert.deepEqual(main.log.told, ['savedApi']);
+
+  const stuck = createMain({ startCard: true });
+  let tries = 0;
+  stuck.context.setTimeout = (callback) => { tries += 1; callback(); };
+  stuck.context.startPoe1EntryRead();
+  await stuck.answer(7);
+  assert.equal(tries, 60);
+  assert.deepEqual(stuck.log.told, []);
 });
 
 test('a map with no entry read is left uncounted and GGG is not asked again for it', async () => {
