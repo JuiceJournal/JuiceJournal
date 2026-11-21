@@ -3792,10 +3792,12 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
   min-width: 0;
 }
 
+/* The rail fits the window where it rests, below the page title (about 7rem under the app header); stuck under the
+   header later, it keeps that height. */
 .currency-type-tabs {
   display: grid;
   gap: 0.2rem;
-  max-height: calc(100vh - var(--header-height) - 3rem);
+  max-height: calc(100vh - var(--header-height) - 8rem);
   overflow-y: auto;
   padding: 2px 0.25rem 2px 2px;
 }
