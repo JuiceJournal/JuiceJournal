@@ -214,8 +214,9 @@
     const poeVersion = normalizeString(session.poeVersion ?? session.gameVersion);
     const startedAt = normalizeString(session.startedAt ?? session.started_at);
     const startedMs = startedAt ? Date.parse(startedAt) : NaN;
+    // A run that was resumed leaves out the time between its end and its resume.
     const elapsedSeconds = normalizeSeconds(session.elapsedSeconds ?? (
-      Number.isFinite(startedMs) ? (now - startedMs) / 1000 : 0
+      Number.isFinite(startedMs) ? (now - startedMs) / 1000 - (Number(session.pausedSec) || 0) : 0
     ));
 
     return {

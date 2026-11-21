@@ -447,6 +447,24 @@ class InventoryWatcher {
     }
   }
 
+  // The map that just ended was entered again and its run goes on. A read it was still waiting for is no longer its
+  // end: the inventory from before the map stays what the run is counted against, and the map is not counted twice.
+  // A run whose first part was already counted is a map entered since that read, like any other.
+  mapResumed(sessionId) {
+    const { pending } = this.state;
+    if (!pending || pending.sessionId !== sessionId) {
+      this.mapEntered();
+      return;
+    }
+    this.mapEntries += 1;
+    // A screen read still on its way was taken between the two visits: it is neither the run's result nor where the
+    // run started, so its answer is not used.
+    if (this.reading) {
+      this.epoch += 1;
+    }
+    this.state = { ...this.state, pending: null };
+  }
+
   // Returns whether the finished map can still get its loot from a read.
   sessionEnded(session) {
     const game = session?.poeVersion;

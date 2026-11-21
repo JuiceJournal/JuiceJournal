@@ -537,6 +537,8 @@ class LogParser extends EventEmitter {
     this.emit('mapEntered', {
       mapName: data.mapName,
       mapTier: data.mapTier,
+      // The area and its seed: the same map entered again, through a portal left in it, has both unchanged.
+      mapIdentity: data.mapIdentity || null,
       timestamp: data.timestamp,
       source: data.source || null
     });
