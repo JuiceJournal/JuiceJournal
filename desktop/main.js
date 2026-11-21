@@ -4726,7 +4726,7 @@ function startPoe1EntryRead() {
     && readParsedSetting('inventoryReadEnabled') !== false
     && Boolean(getActiveProfile())
     && !poeApiClient?.isAuthenticated();
-  const entry = { exited: false, settled: false, counted: false, round: 0, applied: null };
+  const entry = { exited: false, settled: false, resumed: false, applied: null };
   entry.applied = fetchPoe1Inventory()
     .then((got) => Boolean(got) && inventoryWatcher.applyApiRead('poe1', got.read, { character: got.character }))
     .catch(() => false);
@@ -4738,18 +4738,15 @@ function startPoe1EntryRead() {
   }
 }
 
-// The Path of Exile 1 map that just ended was entered again. If its loot has not been counted yet, the read from its
-// first entry stays the one it is counted against, and the count that was under way is called off. Otherwise the
-// inventory is read again, as for any map.
+// The Path of Exile 1 map that just ended was entered again. The inventory is read again, as for any map: between the
+// two visits the player was where the stash is, so the read from the first entry no longer says what the map gave. A
+// count of the first visit still under way is called off without marking the run as uncounted; what it had not
+// counted yet stays uncounted, never guessed.
 function resumePoe1Entry() {
-  const entry = poe1MapEntry;
-  if (gameDetector?.getDetectedGame?.() !== 'poe1' || !entry || entry.counted) {
-    startPoe1EntryRead();
-    return;
+  if (poe1MapEntry) {
+    poe1MapEntry.resumed = true;
   }
-  entry.round += 1;
-  entry.exited = false;
-  entry.settled = false;
+  startPoe1EntryRead();
 }
 
 function notePoe1MapExited() {
@@ -4770,9 +4767,6 @@ async function settlePoe1Inventory(session) {
   }
   const entry = poe1MapEntry;
   const usable = Boolean(entry) && entry.exited && !entry.settled;
-  const round = entry?.round;
-  // The map was entered again while its loot was being asked for: the run goes on, and its next end counts it.
-  const resumed = () => Boolean(entry) && poe1MapEntry === entry && entry.round !== round;
   if (entry) {
     entry.settled = true;
   }
@@ -4784,13 +4778,11 @@ async function settlePoe1Inventory(session) {
       const got = await fetchPoe1Inventory();
       counted = Boolean(got)
         && poe1MapEntry === entry
-        && entry.round === round
         && Date.now() - startedAt <= POE1_SETTLE_DEADLINE_MS
         && inventoryWatcher.applyApiRead('poe1', got.read, { character: got.character, sessionId: session.id });
     }
-    if (counted) {
-      entry.counted = true;
-    } else if (!resumed()) {
+    // A run that was resumed meanwhile is running again: its next end waits for a read of its own.
+    if (!counted && !entry?.resumed) {
       inventoryWatcher.dropPending(session.id);
     }
   } catch (error) {
@@ -4935,6 +4927,9 @@ async function startNewSession(input = {}) {
 // it after a death or a trip to the hideout, carries the run on.
 let lastEndedRun = null;
 let enteredMapIdentity = null;
+// The run end a map exit started and that has not finished yet. A map entered meanwhile waits for it, so the entry
+// knows which run was ended.
+let runEnding = null;
 
 function isSameMapInstance(a, b) {
   return Boolean(a?.seed && b?.seed) && a.seed === b.seed && a.areaId === b.areaId;
@@ -4978,23 +4973,40 @@ function resumeEndedRun(mapIdentity) {
   }
 }
 
-// Called as a map exit starts ending its run; what it returns takes the ended run. The map and the profile are those
-// of the exit, whatever has changed by the time the run has ended.
-function rememberEndedRun() {
+// Called as a map exit starts ending its run, with the promise of that end. The map and the profile are those of the
+// exit, whatever has changed by the time the run has ended. A run that could not be ended leaves nothing to resume.
+function rememberEndedRun(ending) {
   const identity = enteredMapIdentity;
   const profileId = getActiveProfile()?.id || null;
-  return (session) => {
+  const remembered = Promise.resolve(ending).then((session) => {
     // Kept until the next map entry, which either is this map again or drops it.
     lastEndedRun = session?.id && identity?.seed ? { sessionId: session.id, identity, profileId } : null;
-    return session;
-  };
+  }, () => {
+    lastEndedRun = null;
+  }).then(() => {
+    if (runEnding === remembered) {
+      runEnding = null;
+    }
+  });
+  runEnding = remembered;
+  return remembered;
+}
+
+function waitForRunEnding() {
+  return runEnding;
 }
 
 async function handleMapEntered(data) {
+  // An exit whose run is still being ended (a cost in Divine waits for its rate) is let finish first.
+  if (typeof waitForRunEnding === 'function' && waitForRunEnding()) {
+    await waitForRunEnding();
+  }
   const resumed = typeof resumeEndedRun === 'function' ? resumeEndedRun(data?.mapIdentity) : null;
   if (resumed) {
     inventoryWatcher?.mapResumed(resumed.id);
-    resumePoe1Entry();
+    if (typeof resumePoe1Entry === 'function') {
+      resumePoe1Entry();
+    }
   } else {
     inventoryWatcher?.mapEntered();
     if (typeof startPoe1EntryRead === 'function') {
@@ -5379,13 +5391,14 @@ function setupLogParser() {
         ? runtimePayload.runtimeSession.instances
         : [];
       const lastCompletedInstance = instances[instances.length - 1] || null;
-      const remember = typeof rememberEndedRun === 'function' ? rememberEndedRun() : () => {};
       const ending = endCurrentSession({
         endedAt: data.timestamp,
         durationSeconds: lastCompletedInstance?.durationSeconds
       });
-      // A run that could not be ended is handled below; here it only leaves nothing to resume.
-      ending.then(remember, () => {});
+      // A run that could not be ended is handled below; for resuming it only leaves nothing to resume.
+      if (typeof rememberEndedRun === 'function') {
+        rememberEndedRun(ending);
+      }
       ending.catch((error) => {
         // endCurrentSession has shown the notification. readJournal has logged an unreadable journal already; any other
         // failure still reaches the error log as an unhandled rejection.

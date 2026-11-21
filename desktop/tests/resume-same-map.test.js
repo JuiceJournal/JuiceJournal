@@ -97,6 +97,7 @@ function createMain({ profileId = 'p1' } = {}) {
     console: { warn: (...args) => log.warned.push(args.join(' ')) },
     Date: class extends Date { constructor(...args) { super(...(args.length ? args : [env.now.getTime()])); } },
     Boolean,
+    Promise,
     localJournal,
     readJournal: () => { if (env.failRead) throw new Error('JOURNAL_UNREADABLE'); return env.journal; },
     writeJournal: (journal) => { env.journal = journal; },
@@ -118,18 +119,18 @@ function createMain({ profileId = 'p1' } = {}) {
     overlayInventoryStatus: null,
     publishRuntimeSessionEvent: (type) => log.published.push(type)
   });
-  vm.runInContext('let lastEndedRun = null; let enteredMapIdentity = null;', context);
-  loadFunctions(['isSameMapInstance', 'resumeEndedRun', 'rememberEndedRun', 'handleMapEntered'], context);
+  vm.runInContext('let lastEndedRun = null; let enteredMapIdentity = null; let runEnding = null;', context);
+  loadFunctions(['isSameMapInstance', 'resumeEndedRun', 'rememberEndedRun', 'waitForRunEnding', 'handleMapEntered'], context);
   const map = (seed, areaId = 'mapaugury') => ({ mapName: 'Augury', mapIdentity: { areaId, seed } });
-  // The map exit as main sees it: the run is ended and handed to what the exit remembered.
-  const exit = () => {
-    const remember = context.rememberEndedRun();
+  const endRun = () => {
     const ended = localJournal.endSession(env.journal, 's1', { endedAt: '2026-11-20T10:05:00.000Z' }, { now: new Date('2026-11-20T10:05:00.000Z') });
     env.journal = ended.journal;
     context.currentSession = null;
-    return remember(ended.session);
+    return ended.session;
   };
-  return { context, env, log, map, exit };
+  // The map exit as main sees it: the run is ended, and the exit remembers it once that end has finished.
+  const exit = () => context.rememberEndedRun(Promise.resolve(endRun()));
+  return { context, env, log, map, exit, endRun };
 }
 
 test('entering the same map again carries its run on: no new run, no second cost, no start card', async () => {
@@ -196,16 +197,37 @@ test('a run is offered for resuming once: the entry after a different map does n
   assert.deepEqual(main.log.watcher, ['entered']);
 });
 
-test('a run already running is left alone, and the exit keeps the map it was in', async () => {
+test('a map entered while its run is still being ended waits for that end, and then carries the run on', async () => {
   const main = createMain();
   await main.context.handleMapEntered(main.map('1366560895'));
-  // The exit notes the map before the run has ended; a map entered meanwhile does not change which map that was.
-  const remember = main.context.rememberEndedRun();
-  await main.context.handleMapEntered(main.map('630325767'));
-  const ended = localJournal.endSession(main.env.journal, 's1', {}, { now: new Date('2026-11-20T10:05:00.000Z') });
-  main.env.journal = ended.journal;
-  remember(ended.session);
+  main.context.currentSession = localJournal.getActiveSession(main.env.journal);
+  // The end waits (a cost in Divine asks for its rate) while the player is already back in the map.
+  let finish;
+  main.context.rememberEndedRun(new Promise((resolve) => { finish = resolve; }));
+  main.log.watcher.length = 0;
 
+  const entering = main.context.handleMapEntered(main.map('1366560895'));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(main.log.watcher, []);
+  finish(main.endRun());
+  await entering;
+
+  assert.equal(main.context.currentSession.id, 's1');
+  assert.deepEqual(main.log.watcher, ['resumed s1']);
+  assert.equal(main.context.waitForRunEnding(), null);
+});
+
+test('a run that could not be ended leaves nothing to resume, and a run already running is left alone', async () => {
+  const failed = createMain();
+  await failed.context.handleMapEntered(failed.map('1366560895'));
+  await failed.context.rememberEndedRun(Promise.reject(new Error('JOURNAL_UNREADABLE')));
+  failed.log.watcher.length = 0;
+  await failed.context.handleMapEntered(failed.map('1366560895'));
+  assert.deepEqual(failed.log.watcher, ['entered']);
+
+  const main = createMain();
+  await main.context.handleMapEntered(main.map('1366560895'));
+  await main.exit();
   main.context.currentSession = { id: 'other', status: 'active' };
   await main.context.handleMapEntered(main.map('1366560895'));
   assert.equal(main.context.currentSession.id, 'other');
@@ -215,5 +237,5 @@ test('a run already running is left alone, and the exit keeps the map it was in'
 test('main ends a resumed run with its whole length, and wires the exit to remember the run', () => {
   assert.ok(mainSource.includes("const durationSeconds = Number.isFinite(explicitDurationSeconds) && explicitDurationSeconds > 0 && !pausedSeconds"));
   assert.ok(mainSource.includes('? Math.max(1, Math.round((endedAtMs - startedAtMs) / 1000) - pausedSeconds)'));
-  assert.ok(mainSource.includes("      ending.then(remember, () => {});\n      ending.catch((error) => {"));
+  assert.ok(mainSource.includes("      if (typeof rememberEndedRun === 'function') {\n        rememberEndedRun(ending);\n      }\n      ending.catch((error) => {"));
 });

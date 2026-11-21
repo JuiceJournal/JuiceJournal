@@ -466,7 +466,7 @@ test('main wires the reads to map entry, to map exit and to the end of a map', (
   assert.ok(mainSource.includes("const waitingOnRead = Boolean(session.noLoot) && inventoryCanSettle && !settlesFromApi && store.get('inventoryReadEnabled') !== false;"));
 });
 
-test('a map entered again before its read after it came is counted once, from its first entry to its real end', async () => {
+test('a map entered again while its first visit was being counted is read again and not marked uncounted', async () => {
   const main = createMain();
 
   main.context.startPoe1EntryRead();
@@ -475,6 +475,7 @@ test('a map entered again before its read after it came is counted once, from it
   const firstEnd = main.endMap('s1');
   main.watcher.mapResumed('s1');
   main.context.resumePoe1Entry();
+  await main.answer(9);
   await main.answer(9);
   await firstEnd;
   assert.deepEqual(main.gains, []);
@@ -485,10 +486,31 @@ test('a map entered again before its read after it came is counted once, from it
   await main.answer(12);
   await realEnd;
 
-  // The inventory was not read again at the second entry: the run is counted against its first one.
-  assert.deepEqual(main.log.asked, ['Exile', 'Exile', 'Exile']);
-  assert.deepEqual(main.gains, [{ sessionId: 's1', items: [{ name: 'Chaos Orb', quantity: 5 }], mapCount: 1 }]);
+  // The first visit's two orbs were not counted before the player was back at the stash, so they stay uncounted:
+  // the second visit is counted from the read at its own entry.
+  assert.deepEqual(main.log.asked, ['Exile', 'Exile', 'Exile', 'Exile']);
+  assert.deepEqual(main.gains, [{ sessionId: 's1', items: [{ name: 'Chaos Orb', quantity: 3 }], mapCount: 1 }]);
   assert.deepEqual(main.dropped, []);
+});
+
+test('what was taken from the stash between two visits of a map is never counted as its loot', async () => {
+  const main = createMain();
+
+  // The first visit could not be counted: GGG did not answer at its entry.
+  main.context.startPoe1EntryRead();
+  await main.answer(new Error('offline'));
+  await main.endMap('s1');
+  assert.deepEqual(main.dropped, ['s1']);
+
+  // In the hideout 20 orbs come out of the stash, then the player walks back in.
+  main.watcher.mapResumed('s1');
+  main.context.resumePoe1Entry();
+  await main.answer(27);
+  const realEnd = main.endMap('s1');
+  await main.answer(30);
+  await realEnd;
+
+  assert.deepEqual(main.gains, [{ sessionId: 's1', items: [{ name: 'Chaos Orb', quantity: 3 }], mapCount: 1 }]);
 });
 
 test('a map entered again after its first part was counted reads the inventory again and counts the rest', async () => {
@@ -513,7 +535,7 @@ test('a map entered again after its first part was counted reads the inventory a
   assert.deepEqual(main.dropped, []);
 });
 
-test('a resumed screen-read map keeps the inventory from before it and is not counted as two maps', () => {
+test('a resumed map that still waited for its read keeps the inventory from before it and is counted as one map', () => {
   const { watcher, log } = createWatcher();
 
   watcher.mapEntered();

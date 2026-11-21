@@ -457,6 +457,11 @@ class InventoryWatcher {
       return;
     }
     this.mapEntries += 1;
+    // A screen read still on its way was taken between the two visits: it is neither the run's result nor where the
+    // run started, so its answer is not used.
+    if (this.reading) {
+      this.epoch += 1;
+    }
     this.state = { ...this.state, pending: null };
   }
 
