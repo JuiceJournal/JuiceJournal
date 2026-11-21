@@ -254,7 +254,7 @@ function createMain(overrides = {}) {
     inventoryWatcher: made.watcher
   });
   vm.runInContext('let poe1MapEntry = null;', context);
-  loadFunctions(['canReadPoe1Inventory', 'fetchPoe1Inventory', 'tellPoe1Entry', 'startPoe1EntryRead', 'notePoe1MapExited', 'settlePoe1Inventory'], context);
+  loadFunctions(['canReadPoe1Inventory', 'fetchPoe1Inventory', 'tellPoe1Entry', 'startPoe1EntryRead', 'resumePoe1Entry', 'notePoe1MapExited', 'settlePoe1Inventory'], context);
   // The watcher asks main whether the game reads from the API, as it does in the app.
   made.watcher.deps.hasApiInventory = (game) => context.canReadPoe1Inventory(game);
   const carrying = (quantity) => ({ name: 'Exile', inventory: [stack('Chaos Orb', quantity, 0)] });
@@ -459,9 +459,76 @@ test('nothing is asked with reading off, signed out, with stash access, without 
 
 test('main wires the reads to map entry, to map exit and to the end of a map', () => {
   assert.ok(mainSource.includes("hasApiInventory: (game) => typeof canReadPoe1Inventory === 'function' && canReadPoe1Inventory(game),"));
-  assert.ok(mainSource.includes("async function handleMapEntered(data) {\n  inventoryWatcher?.mapEntered();\n  if (typeof startPoe1EntryRead === 'function') {\n    startPoe1EntryRead();"));
+  assert.ok(mainSource.includes("  } else {\n    inventoryWatcher?.mapEntered();\n    if (typeof startPoe1EntryRead === 'function') {\n      startPoe1EntryRead();"));
   assert.ok(mainSource.includes("  logParser.on('mapExited', (data) => {\n    if (typeof notePoe1MapExited === 'function') {\n      notePoe1MapExited();\n    }"));
   assert.ok(mainSource.includes("    if (settlesFromApi && typeof settlePoe1Inventory === 'function') {\n      settlePoe1Inventory(session);\n    }"));
   // A map that reads from the API does not show as waiting for the player to open the inventory.
   assert.ok(mainSource.includes("const waitingOnRead = Boolean(session.noLoot) && inventoryCanSettle && !settlesFromApi && store.get('inventoryReadEnabled') !== false;"));
+});
+
+test('a map entered again before its read after it came is counted once, from its first entry to its real end', async () => {
+  const main = createMain();
+
+  main.context.startPoe1EntryRead();
+  await main.answer(7);
+  // The player died: the map ended and its loot is being asked for when they walk back in through the portal.
+  const firstEnd = main.endMap('s1');
+  main.watcher.mapResumed('s1');
+  main.context.resumePoe1Entry();
+  await main.answer(9);
+  await firstEnd;
+  assert.deepEqual(main.gains, []);
+  assert.deepEqual(main.dropped, []);
+  assert.deepEqual(main.statuses, []);
+
+  const realEnd = main.endMap('s1');
+  await main.answer(12);
+  await realEnd;
+
+  // The inventory was not read again at the second entry: the run is counted against its first one.
+  assert.deepEqual(main.log.asked, ['Exile', 'Exile', 'Exile']);
+  assert.deepEqual(main.gains, [{ sessionId: 's1', items: [{ name: 'Chaos Orb', quantity: 5 }], mapCount: 1 }]);
+  assert.deepEqual(main.dropped, []);
+});
+
+test('a map entered again after its first part was counted reads the inventory again and counts the rest', async () => {
+  const main = createMain();
+
+  main.context.startPoe1EntryRead();
+  await main.answer(7);
+  const firstEnd = main.endMap('s1');
+  await main.answer(9);
+  await firstEnd;
+  assert.deepEqual(main.gains, [{ sessionId: 's1', items: [{ name: 'Chaos Orb', quantity: 2 }], mapCount: 1 }]);
+
+  main.watcher.mapResumed('s1');
+  main.context.resumePoe1Entry();
+  await main.answer(9);
+  const realEnd = main.endMap('s1');
+  await main.answer(12);
+  await realEnd;
+
+  assert.deepEqual(main.gains.map((gain) => gain.items[0].quantity), [2, 3]);
+  assert.deepEqual(main.gains.map((gain) => gain.sessionId), ['s1', 's1']);
+  assert.deepEqual(main.dropped, []);
+});
+
+test('a resumed screen-read map keeps the inventory from before it and is not counted as two maps', () => {
+  const { watcher, log } = createWatcher();
+
+  watcher.mapEntered();
+  assert.equal(watcher.applyApiRead('poe1', read(stack('Chaos Orb', 7, 0)), { character: EXILE }), true);
+  assert.equal(watcher.sessionEnded({ id: 's1', poeVersion: 'poe1' }), true);
+  watcher.mapResumed('s1');
+  // The run is no longer waiting for a read, so one that comes now is not its result.
+  assert.equal(watcher.applyApiRead('poe1', read(stack('Chaos Orb', 9, 0)), { character: EXILE, sessionId: 's1' }), false);
+
+  assert.equal(watcher.sessionEnded({ id: 's1', poeVersion: 'poe1' }), true);
+  assert.equal(watcher.applyApiRead('poe1', read(stack('Chaos Orb', 12, 0)), { character: EXILE, sessionId: 's1' }), true);
+  assert.deepEqual(log.gains, [{ sessionId: 's1', items: [{ name: 'Chaos Orb', quantity: 5 }], mapCount: 1 }]);
+
+  // Resuming a run that waits for nothing is a map entry like any other.
+  const other = createWatcher();
+  other.watcher.mapResumed('s9');
+  assert.equal(other.watcher.mapEntries, 1);
 });

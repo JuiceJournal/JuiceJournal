@@ -4726,7 +4726,7 @@ function startPoe1EntryRead() {
     && readParsedSetting('inventoryReadEnabled') !== false
     && Boolean(getActiveProfile())
     && !poeApiClient?.isAuthenticated();
-  const entry = { exited: false, settled: false, applied: null };
+  const entry = { exited: false, settled: false, counted: false, round: 0, applied: null };
   entry.applied = fetchPoe1Inventory()
     .then((got) => Boolean(got) && inventoryWatcher.applyApiRead('poe1', got.read, { character: got.character }))
     .catch(() => false);
@@ -4736,6 +4736,20 @@ function startPoe1EntryRead() {
       .then((applied) => tellPoe1Entry(entry, applied ? 'savedApi' : (notLinked ? 'apiNotLinked' : 'apiFailed')))
       .catch((error) => console.warn('[poe1-inventory] could not show the entry read:', error?.message || error));
   }
+}
+
+// The Path of Exile 1 map that just ended was entered again. If its loot has not been counted yet, the read from its
+// first entry stays the one it is counted against, and the count that was under way is called off. Otherwise the
+// inventory is read again, as for any map.
+function resumePoe1Entry() {
+  const entry = poe1MapEntry;
+  if (gameDetector?.getDetectedGame?.() !== 'poe1' || !entry || entry.counted) {
+    startPoe1EntryRead();
+    return;
+  }
+  entry.round += 1;
+  entry.exited = false;
+  entry.settled = false;
 }
 
 function notePoe1MapExited() {
@@ -4756,6 +4770,9 @@ async function settlePoe1Inventory(session) {
   }
   const entry = poe1MapEntry;
   const usable = Boolean(entry) && entry.exited && !entry.settled;
+  const round = entry?.round;
+  // The map was entered again while its loot was being asked for: the run goes on, and its next end counts it.
+  const resumed = () => Boolean(entry) && poe1MapEntry === entry && entry.round !== round;
   if (entry) {
     entry.settled = true;
   }
@@ -4767,10 +4784,13 @@ async function settlePoe1Inventory(session) {
       const got = await fetchPoe1Inventory();
       counted = Boolean(got)
         && poe1MapEntry === entry
+        && entry.round === round
         && Date.now() - startedAt <= POE1_SETTLE_DEADLINE_MS
         && inventoryWatcher.applyApiRead('poe1', got.read, { character: got.character, sessionId: session.id });
     }
-    if (!counted) {
+    if (counted) {
+      entry.counted = true;
+    } else if (!resumed()) {
       inventoryWatcher.dropPending(session.id);
     }
   } catch (error) {
@@ -4911,10 +4931,75 @@ async function startNewSession(input = {}) {
   }
 }
 
+// The run the last map exit ended, with the map it was in. Entering that same map again, through a portal left in
+// it after a death or a trip to the hideout, carries the run on.
+let lastEndedRun = null;
+let enteredMapIdentity = null;
+
+function isSameMapInstance(a, b) {
+  return Boolean(a?.seed && b?.seed) && a.seed === b.seed && a.areaId === b.areaId;
+}
+
+/**
+ * Opens the run of the map that was just left, when the map entered now is that same one. Returns the run, or null:
+ * then the entry is a new map. Only a map the game named with a seed can be told apart from another map of its kind.
+ */
+function resumeEndedRun(mapIdentity) {
+  const ended = lastEndedRun;
+  lastEndedRun = null;
+  enteredMapIdentity = mapIdentity || null;
+  if (!ended || currentSession || !isSameMapInstance(ended.identity, mapIdentity) || getActiveProfile()?.id !== ended.profileId) {
+    return null;
+  }
+  try {
+    const journal = readJournal();
+    const stored = localJournal.getSession(journal, ended.sessionId);
+    if (!stored || stored.status !== 'completed' || localJournal.getActiveSession(journal)) {
+      return null;
+    }
+    const resumed = localJournal.resumeSession(journal, ended.sessionId, { now: new Date() });
+    writeJournal(resumed.journal);
+    currentSession = resumed.session;
+    // The result kept for the run's first end would stand beside the one its real end writes.
+    const storeKey = getMapResultsStoreKey();
+    if (storeKey) {
+      store.set(storeKey, getStoredMapResults().filter((result) => result?.sessionId !== ended.sessionId));
+    }
+    overlayMapResultState = null;
+    clearOverlayMapResultDismissTimer();
+    if (mainWindow) {
+      mainWindow.webContents.send('session-started', currentSession);
+    }
+    return currentSession;
+  } catch (error) {
+    // The entry then starts a new run, as it did before runs could be resumed.
+    console.warn('Could not resume the run of the map entered again', error);
+    return null;
+  }
+}
+
+// Called as a map exit starts ending its run; what it returns takes the ended run. The map and the profile are those
+// of the exit, whatever has changed by the time the run has ended.
+function rememberEndedRun() {
+  const identity = enteredMapIdentity;
+  const profileId = getActiveProfile()?.id || null;
+  return (session) => {
+    // Kept until the next map entry, which either is this map again or drops it.
+    lastEndedRun = session?.id && identity?.seed ? { sessionId: session.id, identity, profileId } : null;
+    return session;
+  };
+}
+
 async function handleMapEntered(data) {
-  inventoryWatcher?.mapEntered();
-  if (typeof startPoe1EntryRead === 'function') {
-    startPoe1EntryRead();
+  const resumed = typeof resumeEndedRun === 'function' ? resumeEndedRun(data?.mapIdentity) : null;
+  if (resumed) {
+    inventoryWatcher?.mapResumed(resumed.id);
+    resumePoe1Entry();
+  } else {
+    inventoryWatcher?.mapEntered();
+    if (typeof startPoe1EntryRead === 'function') {
+      startPoe1EntryRead();
+    }
   }
   inventoryReadAnnounced.clear();
   if (overlayInventoryStatus?.kind === 'firstRead') {
@@ -5055,10 +5140,12 @@ async function endCurrentSession(options = {}) {
     const explicitDurationSeconds = Number(options.durationSeconds);
     const startedAtMs = Date.parse(activeSession.startedAt);
     const endedAtMs = Date.parse(endedAt);
-    const durationSeconds = Number.isFinite(explicitDurationSeconds) && explicitDurationSeconds > 0
+    // A resumed run's last visit is only part of it: its length is the time since its start, less the time away.
+    const pausedSeconds = Math.max(0, Number(activeSession.pausedSec) || 0);
+    const durationSeconds = Number.isFinite(explicitDurationSeconds) && explicitDurationSeconds > 0 && !pausedSeconds
       ? Math.round(explicitDurationSeconds)
       : (Number.isFinite(startedAtMs) && Number.isFinite(endedAtMs) && endedAtMs >= startedAtMs
-        ? Math.max(1, Math.round((endedAtMs - startedAtMs) / 1000))
+        ? Math.max(1, Math.round((endedAtMs - startedAtMs) / 1000) - pausedSeconds)
         : null);
     const completionPayload = {
       endedAt
@@ -5292,10 +5379,14 @@ function setupLogParser() {
         ? runtimePayload.runtimeSession.instances
         : [];
       const lastCompletedInstance = instances[instances.length - 1] || null;
-      endCurrentSession({
+      const remember = typeof rememberEndedRun === 'function' ? rememberEndedRun() : () => {};
+      const ending = endCurrentSession({
         endedAt: data.timestamp,
         durationSeconds: lastCompletedInstance?.durationSeconds
-      }).catch((error) => {
+      });
+      // A run that could not be ended is handled below; here it only leaves nothing to resume.
+      ending.then(remember, () => {});
+      ending.catch((error) => {
         // endCurrentSession has shown the notification. readJournal has logged an unreadable journal already; any other
         // failure still reaches the error log as an unhandled rejection.
         if (error?.message !== 'JOURNAL_UNREADABLE') {

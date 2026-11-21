@@ -173,13 +173,40 @@
       ...session,
       status: 'completed',
       endedAt: new Date(endedAtMs).toISOString(),
-      durationSec: Math.floor((endedAtMs - startedAtMs) / 1000),
+      // The time between a run's end and its resume (see resumeSession) was not spent in the map.
+      durationSec: Math.max(0, Math.floor((endedAtMs - startedAtMs) / 1000) - Math.max(0, toNumber(session.pausedSec))),
       totalLootChaos,
       profitChaos: hasTotals ? Number(completion.profitChaos) : totalLootChaos - toNumber(session.costChaos),
       updatedAt: now.toISOString()
     };
 
     return { journal: replaceSession(current, ended), session: ended };
+  }
+
+  // Opens a finished run again: the player is back in the same map, through a portal left in it. Its loot, cost and
+  // start stay; the time since it ended is kept apart as pausedSec, so the run's length is the time in the map.
+  function resumeSession(journal, sessionId, { now }) {
+    const current = normalizeJournal(journal);
+    if (getActiveSession(current)) {
+      throw journalError('An active session already exists. Complete the current session first.', 'SESSION_ALREADY_ACTIVE');
+    }
+    const session = getSession(current, sessionId);
+    if (!session || session.status !== 'completed') {
+      throw journalError('No completed session was found', 'COMPLETED_SESSION_NOT_FOUND');
+    }
+
+    const endedAtMs = Date.parse(session.endedAt);
+    const awaySec = Number.isFinite(endedAtMs) ? Math.max(0, Math.floor((now.getTime() - endedAtMs) / 1000)) : 0;
+    const resumed = {
+      ...session,
+      status: 'active',
+      endedAt: null,
+      durationSec: null,
+      pausedSec: Math.max(0, toNumber(session.pausedSec)) + awaySec,
+      updatedAt: now.toISOString()
+    };
+
+    return { journal: replaceSession(current, resumed), session: resumed };
   }
 
   function updateSession(journal, sessionId, payload = {}, { now }) {
@@ -455,6 +482,7 @@
     listRecentLoot,
     listSessions,
     normalizeJournal,
+    resumeSession,
     startSession,
     updateCost,
     updateLoot,

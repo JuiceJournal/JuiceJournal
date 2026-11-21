@@ -10173,7 +10173,8 @@ function getLiveDuration(session) {
   if (!session?.startedAt) return 0;
   const endTime = session.endedAt ? new Date(session.endedAt).getTime() : Date.now();
   const startTime = new Date(session.startedAt).getTime();
-  return Math.max(0, Math.floor((endTime - startTime) / 1000));
+  // A run that was resumed leaves out the time between its end and its resume.
+  return Math.max(0, Math.floor((endTime - startTime) / 1000) - (Number(session.pausedSec) || 0));
 }
 
 // Start the application
