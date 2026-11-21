@@ -6374,7 +6374,7 @@ function renderRecentLoot() {
       elements.recentLootList.innerHTML = `<div class="loot-guide"><span class="loot-guide-title">${escapeHTML(window.t('dashboard.lootGuideTitle'))}</span><ol class="loot-guide-steps">${step(1)}${step(2)}${step(3)}</ol></div>`;
       return;
     }
-    // Path of Exile 1 has no inventory read, so a signed-in PoE 1 player is told where loot is added by hand.
+    // Path of Exile 1 has no screen read; a signed-in PoE 1 player is told how its loot is counted and where the rest is added.
     const hintKey = state.currentUser && getResolvedLeagueVersion() === 'poe1' ? 'dashboard.noLootHintPoe1' : 'dashboard.noLootHint';
     elements.recentLootList.innerHTML = emptyStateHTML({ art: 'chest', title: window.t('dashboard.noLoot'), hint: window.t(hintKey) });
     return;
