@@ -2731,7 +2731,9 @@ test('renderer colours farm names by their league content', () => {
   const context = loadFunctions([
     'getFarmTypeIdFor',
     'describeFarmTypeFor',
+    'farmTypePartsFor',
     'farmTypeAttr',
+    'setFarmPartsData',
     'farmIconHTML',
     'farmTypeIconHTML',
     'applyFarmType',
@@ -4970,7 +4972,7 @@ function loadFarmNameFunctions(t, names, overrides = {}) {
     { id: 'custom-gone', label: 'Old Farm', color: 'red', icon: 'farm-skull', poeVersions: ['poe1'], deletedAt: '2026-11-04T10:00:00.000Z' }
   ]);
   t.after(() => farmTypeModel.setCustomFarmTypes([]));
-  return loadFunctions(['getFarmTypeIdFor', 'describeFarmTypeFor', 'farmTypeAttr', 'farmIconHTML', 'farmTypeIconHTML', 'applyFarmType', ...names], {
+  return loadFunctions(['getFarmTypeIdFor', 'describeFarmTypeFor', 'farmTypePartsFor', 'farmTypeAttr', 'setFarmPartsData', 'farmIconHTML', 'farmTypeIconHTML', 'applyFarmType', ...names], {
     window: { t: (key) => key, farmTypeModel },
     getFarmTypeModel: () => farmTypeModel,
     ...overrides

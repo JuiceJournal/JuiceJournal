@@ -40,6 +40,10 @@
   const CUSTOM_FARM_TYPE_LABEL_MAX_LENGTH = 24;
   const CUSTOM_FARM_TYPE_LIMIT = 24;
   const CUSTOM_FARM_TYPE_ID_PATTERN = /^custom-[a-z0-9-]{1,40}$/;
+  // A combo farm type runs several mechanics in one map. The game may allow more parts later, so only this
+  // constant names the maximum; styles.css and overlay.html carry a rule for each count up to it.
+  const FARM_COMBO_MIN_PARTS = 2;
+  const FARM_COMBO_MAX_PARTS = 3;
   // Map results store these two English fallbacks and translate them when shown.
   const RESERVED_LABELS = new Set(['no farm type', 'unknown farm type']);
 
@@ -68,12 +72,24 @@
   }
 
   function cloneFarmType(farmType) {
-    return farmType
-      ? {
-        ...farmType,
-        poeVersions: farmType.poeVersions.slice()
-      }
-      : null;
+    if (!farmType) {
+      return null;
+    }
+
+    const clone = { ...farmType, poeVersions: farmType.poeVersions.slice() };
+    if (farmType.parts) {
+      clone.parts = farmType.parts.slice();
+    }
+    return clone;
+  }
+
+  // The shape of stored parts: distinct farm type ids, as many as a combo takes, never the combo itself.
+  function isPartsShape(parts, ownId) {
+    return Array.isArray(parts)
+      && parts.length >= FARM_COMBO_MIN_PARTS
+      && parts.length <= FARM_COMBO_MAX_PARTS
+      && new Set(parts).size === parts.length
+      && parts.every((part) => part !== ownId && (FARM_TYPE_BY_ID.has(part) || isCustomFarmTypeId(part)));
   }
 
   // Reads what is on disk: an entry a hand edit broke is dropped rather than rendered.
@@ -99,6 +115,10 @@
 
       seenIds.add(entry.id);
       const farmType = { id: entry.id, label, color: entry.color, icon: entry.icon, poeVersions };
+      // Broken parts leave a plain farm type: its runs keep their name, colour and icon.
+      if (isPartsShape(entry.parts, entry.id)) {
+        farmType.parts = entry.parts.slice();
+      }
       if (entry.deletedAt) {
         farmType.deletedAt = String(entry.deletedAt);
       }
@@ -139,7 +159,29 @@
       return { error: 'GAME_REQUIRED' };
     }
 
-    return { value: { label, color: input.color, icon: input.icon, poeVersions } };
+    const value = { label, color: input.color, icon: input.icon, poeVersions };
+    const parts = input?.parts ?? [];
+    if (!Array.isArray(parts)) {
+      return { error: 'PARTS_INVALID' };
+    }
+    if (!parts.length) {
+      return { value };
+    }
+    if (parts.length < FARM_COMBO_MIN_PARTS || parts.length > FARM_COMBO_MAX_PARTS) {
+      return { error: 'PARTS_COUNT' };
+    }
+
+    // A part is a farm type that can be picked now and is not a combo itself.
+    const partTypes = parts.map((part) => FARM_TYPE_BY_ID.get(part)
+      || farmTypes.find((farmType) => farmType.id === part && farmType.id !== currentId && !farmType.deletedAt && !farmType.parts));
+    if (new Set(parts).size !== parts.length || partTypes.some((farmType) => !farmType)) {
+      return { error: 'PARTS_INVALID' };
+    }
+    if (partTypes.some((farmType) => poeVersions.some((version) => !farmType.poeVersions.includes(version)))) {
+      return { error: 'PARTS_GAME' };
+    }
+
+    return { value: { ...value, parts: parts.slice() } };
   }
 
   function createCustomFarmType(farmTypes, input, { id } = {}) {
@@ -267,12 +309,35 @@
     return getFarmTypeById(resolveFarmTypeId(value), { includeDeleted: true });
   }
 
+  // What a combo's chip draws for each part. colorKey is a custom part's colour name or a built-in part's id,
+  // the two kinds of name styles.css maps to a colour. A part deleted after the combo was made still shows.
+  function getFarmTypeParts(value) {
+    const parts = (describeFarmType(value)?.parts || [])
+      .map((part) => getFarmTypeById(part, { includeDeleted: true }))
+      .filter(Boolean)
+      .map((farmType) => ({ id: farmType.id, label: farmType.label, colorKey: farmType.color || farmType.id }));
+    return parts.length >= FARM_COMBO_MIN_PARTS ? parts : [];
+  }
+
+  // A filter on one farm type also finds the combos that contain it. Profit is never split between parts.
+  function farmTypeIncludes(value, part) {
+    const farmTypeId = resolveFarmTypeId(value);
+    const partId = resolveFarmTypeId(part);
+    if (!farmTypeId || !partId) {
+      return false;
+    }
+
+    return farmTypeId === partId || Boolean(describeFarmType(farmTypeId)?.parts?.includes(partId));
+  }
+
   return {
     FARM_TYPES,
     CUSTOM_FARM_TYPE_COLORS,
     CUSTOM_FARM_TYPE_ICONS,
     CUSTOM_FARM_TYPE_LABEL_MAX_LENGTH,
     CUSTOM_FARM_TYPE_LIMIT,
+    FARM_COMBO_MIN_PARTS,
+    FARM_COMBO_MAX_PARTS,
     createFarmTypeState,
     listFarmTypes,
     getFarmTypeById,
@@ -281,6 +346,8 @@
     clearFarmType,
     resolveFarmTypeId,
     describeFarmType,
+    getFarmTypeParts,
+    farmTypeIncludes,
     isCustomFarmTypeId,
     normalizeCustomFarmTypes,
     setCustomFarmTypes,

@@ -1,11 +1,11 @@
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory();
+    module.exports = factory(require('./farmTypeModel'));
     return;
   }
 
-  root.mapResultStoreModel = factory();
-})(typeof globalThis !== 'undefined' ? globalThis : this, function createMapResultStoreModel() {
+  root.mapResultStoreModel = factory(root.farmTypeModel);
+})(typeof globalThis !== 'undefined' ? globalThis : this, function createMapResultStoreModel(farmTypeModel) {
   const VALID_CALCULATION_STATUSES = new Set([
     'calculated',
     'zeroCalculated',
@@ -180,7 +180,9 @@
       return results;
     }
 
-    return results.filter((result) => result?.farmType === farmType);
+    // One farm type also finds the combos that contain it; a combo finds only itself.
+    return results.filter((result) => result?.farmType === farmType
+      || farmTypeModel.farmTypeIncludes(result?.farmTypeId || result?.farmType, farmType));
   }
 
   return {
