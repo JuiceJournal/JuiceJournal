@@ -302,7 +302,8 @@ test('the read at a map entry is told in the game: read, not read, or not connec
 
   // The device's connection ended: GGG is not asked, and the player hears what to do about it.
   const ended = createMain({ authenticated: false });
-  ended.context.startPoe1EntryRead();  await new Promise((resolve) => setImmediate(resolve));
+  ended.context.startPoe1EntryRead();
+  await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(ended.log.asked, []);
   assert.deepEqual(ended.log.told, ['apiNotLinked']);
 });
@@ -310,7 +311,8 @@ test('the read at a map entry is told in the game: read, not read, or not connec
 test('nothing is told for a map that reading does not cover, with the overlay off, or once the map was left', async () => {
   for (const overrides of [{ readingEnabled: false }, { stashScope: true }, { authenticated: false, signedIn: false }]) {
     const main = createMain(overrides);
-    main.context.startPoe1EntryRead();    await new Promise((resolve) => setImmediate(resolve));
+    main.context.startPoe1EntryRead();
+    await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(main.log.told, [], JSON.stringify(overrides));
   }
 
