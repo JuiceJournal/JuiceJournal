@@ -9035,6 +9035,18 @@ const POE1_CATEGORY_TYPES = [
   { value: 'tattoo', labelKey: 'category.tattoo', label: 'Tattoo', icon: 'tattoo' },
   { value: 'rune', labelKey: 'category.runegraft', label: 'Runegraft', icon: null, glyph: 'chest' },
   { value: 'base_type', labelKey: 'category.baseType', label: 'Base Type', icon: null, glyph: 'chest' },
+  { value: 'artifact', labelKey: 'category.artifact', label: 'Artifact', icon: null, glyph: 'chest' },
+  { value: 'djinn_coin', labelKey: 'category.djinnCoin', label: 'Djinn Coin', icon: null, glyph: 'chest' },
+  { value: 'allflame_ember', labelKey: 'category.allflameEmber', label: 'Allflame Ember', icon: null, glyph: 'chest' },
+  { value: 'ducat', labelKey: 'category.ducat', label: 'Ducat', icon: null, glyph: 'chest' },
+  { value: 'enshrouding_crystal', labelKey: 'category.enshroudingCrystal', label: 'Enshrouding Crystal', icon: null, glyph: 'chest' },
+  { value: 'wombgift', labelKey: 'category.wombgift', label: 'Wombgift', icon: null, glyph: 'chest' },
+  { value: 'vial', labelKey: 'category.vial', label: 'Vial', icon: null, glyph: 'chest' },
+  { value: 'corpse', labelKey: 'category.corpse', label: 'Corpse', icon: null, glyph: 'chest' },
+  { value: 'viscera', labelKey: 'category.viscera', label: 'Viscera', icon: null, glyph: 'chest' },
+  { value: 'temple', labelKey: 'category.temple', label: 'Temple', icon: null, glyph: 'chest' },
+  { value: 'scrying_orb', labelKey: 'category.scryingOrb', label: 'Scrying Orb', icon: null, glyph: 'chest' },
+  { value: 'flask', labelKey: 'category.flask', label: 'Flask', icon: null, glyph: 'chest' },
   { value: 'other', labelKey: 'category.other', label: 'Other', icon: null, glyph: 'chest' },
 ];
 

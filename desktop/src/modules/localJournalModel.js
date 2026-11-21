@@ -11,7 +11,8 @@
   const ITEM_TYPES = new Set([
     'currency', 'fragment', 'scarab', 'thread', 'astrolabe', 'map', 'divination_card', 'gem', 'unique', 'oil', 'incubator',
     'delirium_orb', 'catalyst', 'essence', 'fossil', 'beast', 'rune', 'tattoo', 'omen', 'soul_core', 'idol',
-    'expedition', 'ultimatum', 'vaal', 'abyssal_bone', 'liquid_emotion', 'verisium', 'base_type', 'other'
+    'expedition', 'ultimatum', 'vaal', 'abyssal_bone', 'liquid_emotion', 'verisium', 'base_type', 'other',
+    'artifact', 'djinn_coin', 'allflame_ember', 'ducat', 'enshrouding_crystal', 'wombgift', 'vial', 'corpse', 'viscera', 'temple', 'scrying_orb', 'flask'
   ]);
   const LOOT_SOURCES = new Set(['manual', 'ocr', 'api', 'inventory']);
   const PERIOD_DAYS = { weekly: 7, monthly: 30 };
