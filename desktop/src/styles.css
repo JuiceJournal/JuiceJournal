@@ -5420,6 +5420,72 @@ option::checkmark {
 [data-farm-color="orange"] { --farm-color: var(--farm-incursion); }
 [data-farm-type] { color: var(--farm-color); }
 
+/* A combo farm type: its chip is cut corner to corner, each part's slice tinted with that part's colour, and its
+   own name is in bright ink. data-farm-cN names part N's colour. Raising FARM_COMBO_MAX_PARTS in farmTypeModel.js
+   needs a data-farm-parts rule for the next count and a --farm-cN rule for the next slot. */
+[data-farm-parts] {
+  --farm-color: var(--text-bright);
+  --farm-cut-seam: color-mix(in srgb, var(--bg-base) 90%, transparent);
+}
+[data-farm-c1="abyss"] { --farm-c1: var(--farm-abyss); } [data-farm-c2="abyss"] { --farm-c2: var(--farm-abyss); } [data-farm-c3="abyss"] { --farm-c3: var(--farm-abyss); }
+[data-farm-c1="breach"] { --farm-c1: var(--farm-breach); } [data-farm-c2="breach"] { --farm-c2: var(--farm-breach); } [data-farm-c3="breach"] { --farm-c3: var(--farm-breach); }
+[data-farm-c1="expedition"] { --farm-c1: var(--farm-expedition); } [data-farm-c2="expedition"] { --farm-c2: var(--farm-expedition); } [data-farm-c3="expedition"] { --farm-c3: var(--farm-expedition); }
+[data-farm-c1="ritual"] { --farm-c1: var(--farm-ritual); } [data-farm-c2="ritual"] { --farm-c2: var(--farm-ritual); } [data-farm-c3="ritual"] { --farm-c3: var(--farm-ritual); }
+[data-farm-c1="harbinger"] { --farm-c1: var(--farm-harbinger); } [data-farm-c2="harbinger"] { --farm-c2: var(--farm-harbinger); } [data-farm-c3="harbinger"] { --farm-c3: var(--farm-harbinger); }
+[data-farm-c1="essence"] { --farm-c1: var(--farm-essence); } [data-farm-c2="essence"] { --farm-c2: var(--farm-essence); } [data-farm-c3="essence"] { --farm-c3: var(--farm-essence); }
+[data-farm-c1="delirium"] { --farm-c1: var(--farm-delirium); } [data-farm-c2="delirium"] { --farm-c2: var(--farm-delirium); } [data-farm-c3="delirium"] { --farm-c3: var(--farm-delirium); }
+[data-farm-c1="blight"] { --farm-c1: var(--farm-blight); } [data-farm-c2="blight"] { --farm-c2: var(--farm-blight); } [data-farm-c3="blight"] { --farm-c3: var(--farm-blight); }
+[data-farm-c1="legion"] { --farm-c1: var(--farm-legion); } [data-farm-c2="legion"] { --farm-c2: var(--farm-legion); } [data-farm-c3="legion"] { --farm-c3: var(--farm-legion); }
+[data-farm-c1="harvest"] { --farm-c1: var(--farm-harvest); } [data-farm-c2="harvest"] { --farm-c2: var(--farm-harvest); } [data-farm-c3="harvest"] { --farm-c3: var(--farm-harvest); }
+[data-farm-c1="betrayal"] { --farm-c1: var(--farm-betrayal); } [data-farm-c2="betrayal"] { --farm-c2: var(--farm-betrayal); } [data-farm-c3="betrayal"] { --farm-c3: var(--farm-betrayal); }
+[data-farm-c1="incursion"] { --farm-c1: var(--farm-incursion); } [data-farm-c2="incursion"] { --farm-c2: var(--farm-incursion); } [data-farm-c3="incursion"] { --farm-c3: var(--farm-incursion); }
+[data-farm-c1="overseer"] { --farm-c1: var(--farm-overseer); } [data-farm-c2="overseer"] { --farm-c2: var(--farm-overseer); } [data-farm-c3="overseer"] { --farm-c3: var(--farm-overseer); }
+[data-farm-c1="green"] { --farm-c1: var(--farm-abyss); } [data-farm-c2="green"] { --farm-c2: var(--farm-abyss); } [data-farm-c3="green"] { --farm-c3: var(--farm-abyss); }
+[data-farm-c1="magenta"] { --farm-c1: var(--farm-breach); } [data-farm-c2="magenta"] { --farm-c2: var(--farm-breach); } [data-farm-c3="magenta"] { --farm-c3: var(--farm-breach); }
+[data-farm-c1="blue"] { --farm-c1: var(--farm-expedition); } [data-farm-c2="blue"] { --farm-c2: var(--farm-expedition); } [data-farm-c3="blue"] { --farm-c3: var(--farm-expedition); }
+[data-farm-c1="violet"] { --farm-c1: var(--farm-ritual); } [data-farm-c2="violet"] { --farm-c2: var(--farm-ritual); } [data-farm-c3="violet"] { --farm-c3: var(--farm-ritual); }
+[data-farm-c1="cyan"] { --farm-c1: var(--farm-harbinger); } [data-farm-c2="cyan"] { --farm-c2: var(--farm-harbinger); } [data-farm-c3="cyan"] { --farm-c3: var(--farm-harbinger); }
+[data-farm-c1="pink"] { --farm-c1: var(--farm-essence); } [data-farm-c2="pink"] { --farm-c2: var(--farm-essence); } [data-farm-c3="pink"] { --farm-c3: var(--farm-essence); }
+[data-farm-c1="silver"] { --farm-c1: var(--farm-delirium); } [data-farm-c2="silver"] { --farm-c2: var(--farm-delirium); } [data-farm-c3="silver"] { --farm-c3: var(--farm-delirium); }
+[data-farm-c1="lime"] { --farm-c1: var(--farm-blight); } [data-farm-c2="lime"] { --farm-c2: var(--farm-blight); } [data-farm-c3="lime"] { --farm-c3: var(--farm-blight); }
+[data-farm-c1="amber"] { --farm-c1: var(--farm-legion); } [data-farm-c2="amber"] { --farm-c2: var(--farm-legion); } [data-farm-c3="amber"] { --farm-c3: var(--farm-legion); }
+[data-farm-c1="teal"] { --farm-c1: var(--farm-harvest); } [data-farm-c2="teal"] { --farm-c2: var(--farm-harvest); } [data-farm-c3="teal"] { --farm-c3: var(--farm-harvest); }
+[data-farm-c1="red"] { --farm-c1: var(--farm-betrayal); } [data-farm-c2="red"] { --farm-c2: var(--farm-betrayal); } [data-farm-c3="red"] { --farm-c3: var(--farm-betrayal); }
+[data-farm-c1="orange"] { --farm-c1: var(--farm-incursion); } [data-farm-c2="orange"] { --farm-c2: var(--farm-incursion); } [data-farm-c3="orange"] { --farm-c3: var(--farm-incursion); }
+[data-farm-parts="2"] {
+  --farm-cut-fill: linear-gradient(115deg,
+    color-mix(in srgb, var(--farm-c1) 34%, var(--bg-base)) 0 49.2%, var(--farm-cut-seam) 49.2% 50.8%,
+    color-mix(in srgb, var(--farm-c2) 34%, var(--bg-base)) 50.8% 100%);
+  --farm-cut-frame: linear-gradient(115deg,
+    color-mix(in srgb, var(--farm-c1) 75%, transparent) 0 50%, color-mix(in srgb, var(--farm-c2) 75%, transparent) 50% 100%);
+}
+[data-farm-parts="3"] {
+  --farm-cut-fill: linear-gradient(115deg,
+    color-mix(in srgb, var(--farm-c1) 34%, var(--bg-base)) 0 32.6%, var(--farm-cut-seam) 32.6% 34%,
+    color-mix(in srgb, var(--farm-c2) 34%, var(--bg-base)) 34% 65.9%, var(--farm-cut-seam) 65.9% 67.3%,
+    color-mix(in srgb, var(--farm-c3) 34%, var(--bg-base)) 67.3% 100%);
+  --farm-cut-frame: linear-gradient(115deg,
+    color-mix(in srgb, var(--farm-c1) 75%, transparent) 0 33.3%, color-mix(in srgb, var(--farm-c2) 75%, transparent) 33.3% 66.6%,
+    color-mix(in srgb, var(--farm-c3) 75%, transparent) 66.6% 100%);
+}
+
+/* The frame is the background's 1px edge rather than a border, so a combo chip keeps the size of a one-type chip. */
+.session-meta [data-farm-parts],
+.last-map-result-card[data-result-state="ready"] #last-map-result-farm-type[data-farm-parts],
+.custom-farm-name[data-farm-parts],
+.custom-farm-preview-name[data-farm-parts],
+.custom-farm-option-face[data-farm-parts] {
+  background: var(--farm-cut-fill) center / calc(100% - 2px) calc(100% - 2px) no-repeat, var(--farm-cut-frame);
+  box-shadow: none;
+}
+
+/* The list and the preview show one farm type as a plain name, a combo as its chip. */
+.custom-farm-name[data-farm-parts],
+.custom-farm-preview-name[data-farm-parts] {
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--bevel-xs);
+}
+
 .farm-type-icon {
   margin-right: 0.3em;
   vertical-align: -0.15em;
@@ -5592,6 +5658,25 @@ option .farm-type-icon {
 .custom-farm-option input:focus-visible + .custom-farm-option-face {
   outline: 2px solid var(--ember-hot);
   outline-offset: 2px;
+}
+
+.custom-farm-hint {
+  margin-bottom: 0.4rem;
+}
+
+/* A farm type a combo can take shows in its own colour until it is picked. */
+.custom-farm-part-option .custom-farm-option-face {
+  color: var(--farm-color, var(--text-secondary));
+}
+
+/* Once a combo has the most parts it can take, the other farm types cannot be picked. */
+.custom-farm-option input:disabled,
+.custom-farm-option input:disabled + .custom-farm-option-face {
+  cursor: default;
+}
+
+.custom-farm-option input:disabled + .custom-farm-option-face {
+  opacity: 0.45;
 }
 
 .custom-farm-preview {

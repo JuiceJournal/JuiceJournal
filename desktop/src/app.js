@@ -229,6 +229,9 @@ const elements = {
   customFarmForm: document.getElementById('custom-farm-form'),
   customFarmFormTitle: document.getElementById('custom-farm-form-title'),
   customFarmName: document.getElementById('custom-farm-name'),
+  customFarmParts: document.getElementById('custom-farm-parts'),
+  customFarmPartsHint: document.getElementById('custom-farm-parts-hint'),
+  customFarmColorField: document.getElementById('custom-farm-color-field'),
   customFarmColors: document.getElementById('custom-farm-colors'),
   customFarmIcons: document.getElementById('custom-farm-icons'),
   customFarmPreview: document.getElementById('custom-farm-preview'),
@@ -889,6 +892,12 @@ function describeFarmTypeFor(value) {
   return typeof describeFarmType === 'function' ? describeFarmType(value) : null;
 }
 
+// A combo farm type names its parts; the stylesheet cuts its chip into one slice per part, in that part's colour.
+function farmTypePartsFor(value) {
+  const getFarmTypeParts = window.farmTypeModel?.getFarmTypeParts;
+  return typeof getFarmTypeParts === 'function' ? getFarmTypeParts(value) : [];
+}
+
 function farmTypeAttr(value) {
   const farmTypeId = getFarmTypeIdFor(value);
   if (!farmTypeId) {
@@ -896,7 +905,24 @@ function farmTypeAttr(value) {
   }
 
   const color = describeFarmTypeFor(value)?.color;
-  return ` data-farm-type="${farmTypeId}"${color ? ` data-farm-color="${color}"` : ''}`;
+  const parts = farmTypePartsFor(value);
+  const partsAttr = parts.length
+    ? ` data-farm-parts="${parts.length}"${parts.map((part, index) => ` data-farm-c${index + 1}="${part.colorKey}"`).join('')}`
+    : '';
+  return ` data-farm-type="${farmTypeId}"${color ? ` data-farm-color="${color}"` : ''}${partsAttr}`;
+}
+
+// The same attributes on an element that stays: a combo's slices replace the previous type's.
+function setFarmPartsData(element, colorKeys) {
+  Object.keys(element.dataset)
+    .filter((key) => key === 'farmParts' || /^farmC\d+$/.test(key))
+    .forEach((key) => { delete element.dataset[key]; });
+  if (!colorKeys.length) {
+    return;
+  }
+
+  element.dataset.farmParts = String(colorKeys.length);
+  colorKeys.forEach((colorKey, index) => { element.dataset[`farmC${index + 1}`] = colorKey; });
 }
 
 function farmIconHTML(icon, { size = 14, className = 'icon farm-type-icon' } = {}) {
@@ -926,6 +952,7 @@ function applyFarmType(element, value) {
   } else {
     delete element.dataset.farmColor;
   }
+  setFarmPartsData(element, farmTypePartsFor(value).map((part) => part.colorKey));
   // Callers set the text first, which also clears the icon of the previous result.
   if (farmType?.icon) {
     element.insertAdjacentHTML('afterbegin', farmTypeIconHTML(value));
@@ -1763,7 +1790,10 @@ const CUSTOM_FARM_ERROR_KEYS = {
   LABEL_TOO_LONG: 'customFarm.errorNameTooLong',
   LABEL_TAKEN: 'customFarm.errorNameTaken',
   GAME_REQUIRED: 'customFarm.errorGameRequired',
-  LIMIT_REACHED: 'customFarm.errorLimit'
+  LIMIT_REACHED: 'customFarm.errorLimit',
+  PARTS_COUNT: 'customFarm.errorPartsCount',
+  PARTS_INVALID: 'customFarm.errorPartsInvalid',
+  PARTS_GAME: 'customFarm.errorPartsGame'
 };
 
 function renderCustomFarmTypes() {
@@ -1819,6 +1849,27 @@ function renderCustomFarmPicker() {
   if (elements.customFarmFormTitle) {
     elements.customFarmFormTitle.textContent = window.t(state.customFarmEditingId ? 'customFarm.editTitle' : 'customFarm.add');
   }
+  renderCustomFarmParts();
+}
+
+// The farm types a combo can take: those of every chosen game, without combos and without the one being edited.
+function renderCustomFarmParts(selected = getCustomFarmPickedValues('custom-farm-part')) {
+  if (!elements.customFarmParts) {
+    renderCustomFarmPreview();
+    return;
+  }
+
+  const { listFarmTypes, FARM_COMBO_MAX_PARTS } = getFarmTypeModel();
+  const games = getCustomFarmPickedValues('custom-farm-game');
+  const options = listFarmTypes().filter((farmType) => !farmType.parts
+    && farmType.id !== state.customFarmEditingId
+    && games.every((game) => farmType.poeVersions.includes(game)));
+  if (elements.customFarmPartsHint) {
+    elements.customFarmPartsHint.textContent = window.t('customFarm.partsHint', { count: FARM_COMBO_MAX_PARTS });
+  }
+  elements.customFarmParts.innerHTML = options.map((farmType) => (
+    `<label class="custom-farm-option custom-farm-part-option"><input type="checkbox" name="custom-farm-part" value="${escapeHTML(farmType.id)}"${selected.includes(farmType.id) ? ' checked' : ''}><span class="custom-farm-option-face"${farmTypeAttr(farmType.id)}>${farmTypeIconHTML(farmType.id)}${escapeHTML(farmType.label)}</span></label>`
+  )).join('');
   renderCustomFarmPreview();
 }
 
@@ -1826,24 +1877,41 @@ function getCustomFarmPickedValue(name) {
   return elements.customFarmForm?.querySelector(`input[name="${name}"]:checked`)?.value || '';
 }
 
+function getCustomFarmPickedValues(name) {
+  return [...(elements.customFarmForm?.querySelectorAll(`input[name="${name}"]:checked`) || [])].map((input) => input.value);
+}
+
+// A combo draws its parts' colours, so its own colour stays hidden while two or more parts are picked.
 function renderCustomFarmPreview() {
   if (!elements.customFarmPreview) {
     return;
   }
 
+  const { FARM_COMBO_MIN_PARTS, FARM_COMBO_MAX_PARTS, getFarmTypeById } = getFarmTypeModel();
+  const parts = getCustomFarmPickedValues('custom-farm-part');
+  const full = parts.length >= FARM_COMBO_MAX_PARTS;
+  elements.customFarmForm?.querySelectorAll('input[name="custom-farm-part"]').forEach((input) => { input.disabled = full && !input.checked; });
+  const combo = parts.length >= FARM_COMBO_MIN_PARTS;
+  if (elements.customFarmColorField) {
+    elements.customFarmColorField.hidden = combo;
+  }
+
   const name = String(elements.customFarmName?.value || '').trim() || window.t('customFarm.previewName');
   const icon = getCustomFarmPickedValue('custom-farm-icon');
   elements.customFarmPreview.dataset.farmColor = getCustomFarmPickedValue('custom-farm-color');
+  setFarmPartsData(elements.customFarmPreview, combo
+    ? parts.map((part) => getFarmTypeById(part)?.color || part)
+    : []);
   elements.customFarmPreview.innerHTML = `${icon ? farmIconHTML(icon) : ''}${escapeHTML(name)}`;
 }
 
-function setCustomFarmError(key) {
+function setCustomFarmError(key, params) {
   if (!elements.customFarmError) {
     return;
   }
 
   elements.customFarmError.hidden = !key;
-  elements.customFarmError.textContent = key ? window.t(key) : '';
+  elements.customFarmError.textContent = key ? window.t(key, params) : '';
 }
 
 function openCustomFarmForm(farmTypeId = null) {
@@ -1866,7 +1934,7 @@ function openCustomFarmForm(farmTypeId = null) {
   elements.customFarmName.maxLength = CUSTOM_FARM_TYPE_LABEL_MAX_LENGTH;
   elements.customFarmName.value = farmType?.label || '';
   setCustomFarmError(null);
-  renderCustomFarmPreview();
+  renderCustomFarmParts(farmType?.parts || []);
   elements.customFarmForm.hidden = false;
   elements.customFarmName.focus();
 }
@@ -1961,7 +2029,8 @@ async function handleCustomFarmSubmit(event) {
     label: elements.customFarmName.value,
     color: getCustomFarmPickedValue('custom-farm-color'),
     icon: getCustomFarmPickedValue('custom-farm-icon'),
-    poeVersions: [...elements.customFarmForm.querySelectorAll('input[name="custom-farm-game"]:checked')].map((box) => box.value)
+    poeVersions: [...elements.customFarmForm.querySelectorAll('input[name="custom-farm-game"]:checked')].map((box) => box.value),
+    parts: getCustomFarmPickedValues('custom-farm-part')
   };
   if (state.customFarmEditingId) {
     input.id = state.customFarmEditingId;
@@ -1974,7 +2043,7 @@ async function handleCustomFarmSubmit(event) {
     console.error('Unable to save the custom farm type', error);
   }
   if (!result?.ok) {
-    setCustomFarmError(CUSTOM_FARM_ERROR_KEYS[result?.error] || 'customFarm.errorSaveFailed');
+    setCustomFarmError(CUSTOM_FARM_ERROR_KEYS[result?.error] || 'customFarm.errorSaveFailed', { count: getFarmTypeModel().FARM_COMBO_MIN_PARTS });
     return;
   }
 
@@ -2919,7 +2988,10 @@ function setupEventListeners() {
       renderCustomFarmTypes();
     });
     elements.customFarmForm.addEventListener('submit', handleCustomFarmSubmit);
-    elements.customFarmForm.addEventListener('input', renderCustomFarmPreview);
+    // Another game changes which farm types a combo can take; anything else only redraws the preview.
+    elements.customFarmForm.addEventListener('input', (event) => (
+      event.target?.name === 'custom-farm-game' ? renderCustomFarmParts() : renderCustomFarmPreview()
+    ));
     elements.customFarmList?.addEventListener('click', handleCustomFarmListClick);
   }
   elements.overlayFarmList?.addEventListener('change', handleOverlayFarmTypeChange);
@@ -4840,14 +4912,20 @@ function renderMapResultHistory() {
   const availableFarmTypes = [];
   const seenFarmTypes = new Set();
 
+  // A combo's parts are offered too: picking one of them also lists the combos that contain it.
   results.forEach((result) => {
     const farmType = typeof result?.farmType === 'string' ? result.farmType.trim() : '';
-    if (!farmType || seenFarmTypes.has(farmType)) {
-      return;
-    }
+    const partLabels = typeof farmTypePartsFor === 'function'
+      ? farmTypePartsFor(result?.farmTypeId || farmType).map((part) => part.label)
+      : [];
+    [farmType, ...partLabels].forEach((label) => {
+      if (!label || seenFarmTypes.has(label)) {
+        return;
+      }
 
-    seenFarmTypes.add(farmType);
-    availableFarmTypes.push(farmType);
+      seenFarmTypes.add(label);
+      availableFarmTypes.push(label);
+    });
   });
 
   const selectedFarmType = availableFarmTypes.includes(elements.mapResultFilter.value)
@@ -5792,9 +5870,13 @@ function populateSessionFilterOptions(sessions = []) {
     window.t('sessions.allLeagues')
   );
 
+  // A combo's parts are offered too: picking one of them also lists the combos that contain it.
   populateSelectOptions(
     elements.sessionFarmFilter,
-    sessions.map(getSessionFarmTypeLabel),
+    sessions.flatMap((session) => [
+      getSessionFarmTypeLabel(session),
+      ...(typeof farmTypePartsFor === 'function' ? farmTypePartsFor(getSessionFarmTypeId(session)) : []).map((part) => part.label)
+    ]),
     'all',
     window.t('dashboard.allFarms')
   );
@@ -5805,6 +5887,7 @@ function getFilteredSessions() {
   const leagueFilter = getFilterValue(elements.sessionLeagueFilter);
   const farmFilter = getFilterValue(elements.sessionFarmFilter);
   const searchFilter = getSearchFilterValue(elements.sessionSearchFilter);
+  const farmTypeIncludes = window.farmTypeModel?.farmTypeIncludes;
 
   return state.sessions.filter((session) => {
     const poeVersion = getSessionPoeVersion(session);
@@ -5824,7 +5907,8 @@ function getFilteredSessions() {
     if (leagueFilter !== 'all' && league !== leagueFilter) {
       return false;
     }
-    if (farmFilter !== 'all' && farmTypeLabel !== farmFilter) {
+    if (farmFilter !== 'all' && farmTypeLabel !== farmFilter
+      && !(typeof farmTypeIncludes === 'function' && farmTypeIncludes(getSessionFarmTypeId(session), farmFilter))) {
       return false;
     }
 

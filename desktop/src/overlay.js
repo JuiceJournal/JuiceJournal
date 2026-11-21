@@ -109,6 +109,21 @@
     return (model && typeof model.describeFarmType === 'function' && model.describeFarmType(value)) || {};
   }
 
+  // A combo names its parts; the stylesheet cuts its chip into one slice per part, in that part's colour.
+  function getFarmTypeParts(value) {
+    var model = root.farmTypeModel;
+    return (model && typeof model.getFarmTypeParts === 'function' && model.getFarmTypeParts(value)) || [];
+  }
+
+  function getFarmPartsAttr(value) {
+    var parts = getFarmTypeParts(value);
+    return parts.length
+      ? ' data-farm-parts="' + parts.length + '"' + parts.map(function (part, index) {
+        return ' data-farm-c' + (index + 1) + '="' + part.colorKey + '"';
+      }).join('')
+      : '';
+  }
+
   function getFarmTypeIconHTML(value) {
     var icon = describeFarmType(value).icon;
     return icon
@@ -124,6 +139,9 @@
     var farmColor = farmTypeId ? describeFarmType(farmTypeId).color : '';
     if (farmTypeId) { nameSpan.setAttribute('data-farm-type', farmTypeId); }
     if (farmColor) { nameSpan.setAttribute('data-farm-color', farmColor); }
+    var farmParts = farmTypeId ? getFarmTypeParts(farmTypeId) : [];
+    if (farmParts.length) { nameSpan.setAttribute('data-farm-parts', String(farmParts.length)); }
+    farmParts.forEach(function (part, index) { nameSpan.setAttribute('data-farm-c' + (index + 1), part.colorKey); });
     nameSpan.textContent = name || '';
     var farmIconHTML = farmTypeId ? getFarmTypeIconHTML(farmTypeId) : '';
     if (farmIconHTML) { nameSpan.insertAdjacentHTML('afterbegin', farmIconHTML); }
@@ -412,7 +430,8 @@
         var farmColor = farmTypeId ? describeFarmType(farmTypeId).color : '';
         return '<button class="jj-chip" type="button" data-farm-type-id="' + escapeHTML(e.id) + '"' +
           (farmTypeId ? ' data-farm-type="' + farmTypeId + '"' : '') +
-          (farmColor ? ' data-farm-color="' + farmColor + '"' : '') + ' aria-pressed="' +
+          (farmColor ? ' data-farm-color="' + farmColor + '"' : '') +
+          (farmTypeId ? getFarmPartsAttr(farmTypeId) : '') + ' aria-pressed="' +
           (e.id === selectedFarmTypeId ? 'true' : 'false') + '">' +
           (farmTypeId ? getFarmTypeIconHTML(farmTypeId) : '') + escapeHTML(e.label) +
           (e.cost ? '<span class="jj-chip-cost">' + escapeHTML(e.cost) + '</span>' : '') + '</button>';
