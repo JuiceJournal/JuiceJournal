@@ -1,6 +1,6 @@
 {
   "name": "juice-journal-desktop",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Juice Journal",
   "main": "main.js",
   "scripts": {
