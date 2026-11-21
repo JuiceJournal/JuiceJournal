@@ -45,7 +45,7 @@
     if (!facts.game) {
       return at('game', 'game', 'do');
     }
-    // Path of Exile 1 has no loot source, so there is no inventory to walk the player through.
+    // Path of Exile 1 loot is read from the character by the API, so there is no inventory to walk the player through.
     if (facts.game === 'poe1') {
       return { step: 'poe1', index: 0, total: 0, message: 'poe1', status: 'info' };
     }

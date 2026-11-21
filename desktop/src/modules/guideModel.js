@@ -9,9 +9,9 @@
   // The Guide page: sections of questions. The text is in translations.js as guide.section.<section>, guide.<topic>.q and
   // guide.<topic>.a, where an answer's paragraphs are separated by a bar (|).
   const GUIDE_SECTIONS = [
-    { id: 'start', topics: ['firstMap', 'manualMap', 'character'] },
-    { id: 'loot', topics: ['inventory', 'unread', 'lowProfit', 'poe1', 'tiers'] },
-    { id: 'farm', topics: ['customFarm', 'overlayFarm', 'entryCost', 'compare'] },
+    { id: 'start', topics: ['firstMap', 'manualMap', 'resumeMap', 'character', 'switchAccount'] },
+    { id: 'loot', topics: ['inventory', 'unread', 'lowProfit', 'poe1', 'prices', 'tiers'] },
+    { id: 'farm', topics: ['customFarm', 'farmCombo', 'overlayFarm', 'entryCost', 'compare'] },
     { id: 'overlay', topics: ['overlayOn', 'startCard', 'overlayKeyboard'] },
     { id: 'data', topics: ['dataFolder', 'privacy', 'updates'] },
     { id: 'help', topics: ['hotkeys', 'language', 'reportBug'] }
