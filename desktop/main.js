@@ -182,6 +182,9 @@ const MAIN_PROCESS_TRANSLATIONS = {
     inventoryStatus_firstRead: 'Envanterini bir kez aç. I tuşuna bas, sonraki map sayılsın.',
     inventoryStatus_reading: 'Envanter okunuyor...',
     inventoryStatus_saved: 'Envanter okundu. Haritaya hazırsın.',
+    inventoryStatus_savedApi: 'Envanter okundu. Bu map sayılacak.',
+    inventoryStatus_apiFailed: 'Envanter okunamadı. Bu map sayılmayacak.',
+    inventoryStatus_apiNotLinked: "Path of Exile bağlı değil. Loot sayılsın diye Ayarlar'dan bağla.",
     inventoryStatus_noGain: 'Yeni loot bulunamadı.',
     inventoryStatus_noBaseline: 'Bu map sayılamadı. Sonraki map sayılacak.',
     inventoryStatus_notOpen: 'Önce envanterini aç.',
@@ -258,6 +261,9 @@ const MAIN_PROCESS_TRANSLATIONS = {
     inventoryStatus_firstRead: 'Open your inventory once. Press I, so your next map counts.',
     inventoryStatus_reading: 'Reading your inventory...',
     inventoryStatus_saved: 'Inventory read. You are ready for the map.',
+    inventoryStatus_savedApi: 'Inventory read. This map will be counted.',
+    inventoryStatus_apiFailed: 'Inventory not read. This map will not be counted.',
+    inventoryStatus_apiNotLinked: 'Path of Exile not connected. Connect it in Settings to count loot.',
     inventoryStatus_noGain: 'No new loot found.',
     inventoryStatus_noBaseline: 'This map was not counted. The next one will be.',
     inventoryStatus_notOpen: 'Open your inventory first.',
@@ -4690,18 +4696,46 @@ async function fetchPoe1Inventory() {
 // and whether its loot has been asked for. One map's entry read never counts another map.
 let poe1MapEntry = null;
 
+// Says in the game how the read at a Path of Exile 1 map entry went, as the cards of a screen read do for Path of
+// Exile 2. The start card and the character question come first, so the line waits for them; it is dropped once the
+// map was left or another one was entered.
+const POE1_ENTRY_CARD_WAIT_MS = 500;
+const POE1_ENTRY_CARD_TRIES = 60;
+function tellPoe1Entry(entry, kind, triesLeft = POE1_ENTRY_CARD_TRIES) {
+  if (poe1MapEntry !== entry || entry.exited || !isOverlayEnabled()) {
+    return;
+  }
+  if (overlayStartMapPromptState || overlayCharacterPromptState) {
+    if (triesLeft > 0) {
+      setTimeout(() => tellPoe1Entry(entry, kind, triesLeft - 1), POE1_ENTRY_CARD_WAIT_MS);
+    }
+    return;
+  }
+  showInventoryStatus(kind);
+}
+
 function startPoe1EntryRead() {
   if (gameDetector?.getDetectedGame?.() !== 'poe1') {
     poe1MapEntry = null;
     return;
   }
-  poe1MapEntry = {
-    exited: false,
-    settled: false,
-    applied: fetchPoe1Inventory()
-      .then((got) => Boolean(got) && inventoryWatcher.applyApiRead('poe1', got.read, { character: got.character }))
-      .catch(() => false)
-  };
+  const reads = canReadPoe1Inventory('poe1');
+  // Reading is on and a player is signed in to the app, but this device's Path of Exile connection has ended or was
+  // removed: nothing can be read until they connect again, which only they can do.
+  const notLinked = !reads
+    && readParsedSetting('inventoryReadEnabled') !== false
+    && Boolean(getActiveProfile())
+    && !poeApiClient?.isAuthenticated();
+  const entry = { exited: false, settled: false, applied: null };
+  entry.applied = fetchPoe1Inventory()
+    .then((got) => Boolean(got) && inventoryWatcher.applyApiRead('poe1', got.read, { character: got.character }))
+    .catch(() => false);
+  poe1MapEntry = entry;
+  if (reads || notLinked) {
+    entry.applied
+      .then((applied) => tellPoe1Entry(entry, applied ? 'savedApi' : (notLinked ? 'apiNotLinked' : 'apiFailed')))
+      .catch((error) => console.warn('[poe1-inventory] could not show the entry read:', error?.message || error));
+  }
 }
 
 function notePoe1MapExited() {
