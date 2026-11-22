@@ -4067,8 +4067,12 @@ function handleGameSessionEntered({ poeVersion } = {}) {
   const characters = state.account?.activePoeVersion === version ? state.account.charactersByGame?.[version] || [] : [];
   const selected = state.account?.selectedCharacter;
   const trackerContext = typeof getSelectedTrackerContext === 'function' ? getSelectedTrackerContext() : null;
+  // The card names a class as the game does, not by the id GGG's API sends ('Ranger1').
+  const readableClass = window.characterSupportMatrix?.readableClassName;
   const prompt = getAccountStateModel().buildCharacterPrompt({
-    characters,
+    characters: readableClass
+      ? characters.map((character) => ({ ...character, className: readableClass({ ...character, poeVersion: version }) }))
+      : characters,
     selectedId: selected?.id,
     league: (selected?.poeVersion === version && selected.league)
       || (trackerContext?.poeVersion === version ? trackerContext.league : null),

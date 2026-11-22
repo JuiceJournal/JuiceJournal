@@ -376,18 +376,46 @@
     }
   });
 
-  const OBSERVED_RUNTIME_ALIASES = {
-    'poe2:druid1': 'poe2:druid:oracle',
-    'poe2:druid2': 'poe2:druid:shaman',
-    'poe2:monk1': 'poe2:monk:acolyte-of-chayula',
-    'poe2:monk2': 'poe2:monk:invoker',
-    'poe2:mercenary1': 'poe2:mercenary:witchhunter',
-    'poe2:mercenary3': 'poe2:mercenary:gemling-legionnaire',
-    'poe2:huntress1': 'poe2:huntress:amazon',
-    'poe2:ranger1': 'poe2:ranger:deadeye',
-    'poe2:witch1': 'poe2:witch:lich',
-    'poe2:warrior1': 'poe2:warrior:smith-of-kitava',
+  // GGG's API names a Path of Exile 2 ascendancy by the game's own id, the class and a number. The ids and names
+  // are the game's ascendancy list as poe2db.tw shows it (read 2026-11-22).
+  const POE2_CLASS_ID_NAMES = {
+    Druid1: 'Oracle',
+    Druid2: 'Shaman',
+    Huntress1: 'Amazon',
+    Huntress2: 'Spirit Walker',
+    Huntress3: 'Ritualist',
+    Mercenary1: 'Tactician',
+    Mercenary2: 'Witchhunter',
+    Mercenary3: 'Gemling Legionnaire',
+    Monk1: 'Martial Artist',
+    Monk2: 'Invoker',
+    Monk3: 'Acolyte of Chayula',
+    Ranger1: 'Deadeye',
+    Ranger3: 'Pathfinder',
+    Sorceress1: 'Stormweaver',
+    Sorceress2: 'Chronomancer',
+    Sorceress3: 'Disciple of Varashta',
+    Warrior1: 'Titan',
+    Warrior2: 'Warbringer',
+    Warrior3: 'Smith of Kitava',
+    Witch1: 'Infernalist',
+    Witch2: 'Blood Mage',
+    Witch3: 'Lich',
   };
+
+  const POE2_CLASS_ID_BY_TOKEN = new Map(
+    Object.entries(POE2_CLASS_ID_NAMES).map(([classId, name]) => [toToken(classId), name])
+  );
+
+  // The ids that have artwork resolve to their entry; the others only get their name.
+  const OBSERVED_RUNTIME_ALIASES = {};
+  Object.entries(POE2_CLASS_ID_NAMES).forEach(([classId, name]) => {
+    const baseClass = classId.slice(0, -1);
+    const entryId = `poe2:${toSlug(baseClass)}:${toSlug(name)}`;
+    if (SUPPORT_BY_ID.has(entryId)) {
+      OBSERVED_RUNTIME_ALIASES[`poe2:${toToken(classId)}`] = entryId;
+    }
+  });
 
   Object.entries(OBSERVED_RUNTIME_ALIASES).forEach(([aliasKey, entryId]) => {
     ENTRY_BY_TOKEN.set(aliasKey, entryId);
@@ -436,10 +464,31 @@
     return null;
   }
 
+  // The class as a player reads it: 'Ranger1' is 'Deadeye'. An id this list does not know keeps its class and
+  // loses the number, since a wrong ascendancy name is worse than none.
+  function readableClassName(input = {}) {
+    const className = normalizeString(input.className ?? input.class);
+    const poeVersion = normalizePoeVersion(input.poeVersion || input.gameVersion || input.game);
+    if (!className || poeVersion === 'poe1') {
+      return className;
+    }
+
+    const token = toToken(className);
+    if (POE2_CLASS_ID_BY_TOKEN.has(token)) {
+      return POE2_CLASS_ID_BY_TOKEN.get(token);
+    }
+
+    const numbered = /^([a-z]+)\d+$/.exec(token);
+    const baseEntry = numbered ? SUPPORT_BY_ID.get(BASE_ENTRY_BY_TOKEN.get(`poe2:${numbered[1]}`)) : null;
+    return baseEntry ? baseEntry.baseClass : className;
+  }
+
   return {
     PLAYABLE_CHARACTER_SUPPORT,
     EXPECTED_PLAYABLE_KEYS,
     OBSERVED_RUNTIME_ALIASES,
+    POE2_CLASS_ID_NAMES,
     findCharacterSupportEntry,
+    readableClassName,
   };
 });

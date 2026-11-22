@@ -44,11 +44,13 @@
       };
     }
 
+    // A class with no artwork still reads by its name, not by the id GGG's API sends.
+    const classLabel = supportMatrix?.readableClassName?.({ ...character, className }) || className || 'Unknown Class';
     return {
       portraitKey: 'unknown',
       bannerKey: 'unknown',
-      classLabel: className || 'Unknown Class',
-      baseClassLabel: className || 'Unknown Class',
+      classLabel,
+      baseClassLabel: classLabel,
       detailLabel: ascendancy,
       badgeText: createInitials(character.name),
       fallbackInitials: createInitials(character.name),

@@ -57,6 +57,13 @@ test('character visual model maps PoE2 Druid2 to the Shaman portrait treatment',
   assert.equal(visual.bannerPath, 'assets/characters/banners/poe2/shaman.jpg');
 });
 
+test('a class id with no artwork still reads by its ascendancy name', () => {
+  const visual = deriveCharacterVisual({ name: 'Sands', poeVersion: 'poe2', className: 'Sorceress3' });
+
+  assert.equal(visual.portraitKey, 'unknown');
+  assert.equal(visual.classLabel, 'Disciple of Varashta');
+});
+
 test('character visual model maps PoE2 Monk2 to Invoker with unique ascendancy artwork', () => {
   const visual = deriveCharacterVisual({
     name: 'KELLEE',

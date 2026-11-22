@@ -7,6 +7,7 @@ const {
   PLAYABLE_CHARACTER_SUPPORT,
   EXPECTED_PLAYABLE_KEYS,
   findCharacterSupportEntry,
+  readableClassName,
 } = require('../src/modules/characterSupportMatrix');
 
 const desktopDir = path.resolve(__dirname, '..');
@@ -134,6 +135,36 @@ test('matrix resolves canonical base-class and ascendancy lookups', () => {
     findCharacterSupportEntry({ poeVersion: 'poe2', className: 'Druid', ascendancy: 'Oracle' })?.id,
     'poe2:druid:oracle'
   );
+});
+
+test('a Path of Exile 2 class id reads as its ascendancy, by the game\'s own numbering', () => {
+  const read = (className) => readableClassName({ poeVersion: 'poe2', className });
+
+  assert.equal(read('Ranger1'), 'Deadeye');
+  assert.equal(read('Ranger3'), 'Pathfinder');
+  assert.equal(read('Warrior1'), 'Titan');
+  assert.equal(read('Warrior3'), 'Smith of Kitava');
+  assert.equal(read('Witch1'), 'Infernalist');
+  assert.equal(read('Witch3'), 'Lich');
+  assert.equal(read('Mercenary1'), 'Tactician');
+  assert.equal(read('Mercenary2'), 'Witchhunter');
+  assert.equal(read('Monk3'), 'Acolyte of Chayula');
+  assert.equal(read('Sorceress3'), 'Disciple of Varashta');
+
+  // The artwork follows the same numbering.
+  assert.equal(findCharacterSupportEntry({ poeVersion: 'poe2', className: 'Witch1' })?.id, 'poe2:witch:infernalist');
+  assert.equal(findCharacterSupportEntry({ poeVersion: 'poe2', className: 'Warrior1' })?.id, 'poe2:warrior:titan');
+  assert.equal(findCharacterSupportEntry({ poeVersion: 'poe2', className: 'Monk1' }), null);
+});
+
+test('an unknown class id keeps its class and drops the number; other names stay as they are', () => {
+  assert.equal(readableClassName({ poeVersion: 'poe2', className: 'Ranger2' }), 'Ranger');
+  assert.equal(readableClassName({ poeVersion: 'poe2', className: 'Druid7' }), 'Druid');
+  assert.equal(readableClassName({ poeVersion: 'poe2', className: 'Deadeye' }), 'Deadeye');
+  assert.equal(readableClassName({ poeVersion: 'poe2', className: 'Ranger' }), 'Ranger');
+  assert.equal(readableClassName({ poeVersion: 'poe2', className: 'Newclass1' }), 'Newclass1');
+  assert.equal(readableClassName({ poeVersion: 'poe1', className: 'Ranger1' }), 'Ranger1');
+  assert.equal(readableClassName({ poeVersion: 'poe2', className: '' }), null);
 });
 
 test('matrix resolves observed runtime aliases to canonical entries', () => {
