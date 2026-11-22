@@ -183,6 +183,9 @@ h1 .bricked {
 .shot figcaption { padding: 0.6rem; font-size: 0.85rem; color: var(--smoke); text-align: center; }
 .plate.shot { padding: 0.5rem 0.5rem 0; box-shadow: inset 0 0 0 1px var(--line-strong); }
 
+/* Real screenshots: the two windows under the in-game picture, each at full width so their text stays readable. */
+.proof { display: grid; gap: 1rem; margin-top: 1rem; }
+
 /* Sections */
 .section { margin-top: clamp(3rem, 8vw, 5rem); }
 
