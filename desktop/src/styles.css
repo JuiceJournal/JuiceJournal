@@ -3012,7 +3012,8 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 .session-drawer-cost-input,
-.session-drawer-cost-unit {
+.session-drawer-cost-unit,
+.session-drawer-league {
   min-width: 0;
   padding: 0.35rem 0.5rem;
   background: var(--bg-input);
@@ -3040,7 +3041,8 @@ body:has(.modal:not(.hidden)) :is(.nav, #logout-btn) {
 }
 
 .session-drawer-cost-input:disabled,
-.session-drawer-cost-unit:disabled {
+.session-drawer-cost-unit:disabled,
+.session-drawer-league:disabled {
   opacity: 0.5;
   cursor: default;
 }

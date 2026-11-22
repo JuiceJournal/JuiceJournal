@@ -1623,8 +1623,9 @@ function getStoredMapResults() {
 }
 
 // A finished map's saved result follows its loot: the values the loot produced are recomputed in place, so its
-// place in the history and its publish state stay.
-function updateSessionMapResult(session) {
+// place in the history and its publish state stay. `changes` are set on it as well; new rates replace the rate
+// snapshot the ledger normalizer would read first.
+function updateSessionMapResult(session, changes = {}) {
   const storeKey = getMapResultsStoreKey();
   if (!storeKey || !session?.id) {
     return;
@@ -1641,8 +1642,13 @@ function updateSessionMapResult(session) {
   const netProfit = Number(session.profitChaos) || 0;
   // The stored profit, top items and status are dropped so the ledger normalizer derives them from the new values.
   const { profitChaos, topLootItems, calculationStatus, ...stored } = results[index];
+  if (changes.profitCurrencyRates) {
+    delete stored.priceContext;
+    delete stored.profitCurrencyRateSnapshot;
+  }
   const nextResult = normalizeMapResultForLedger({
     ...stored,
+    ...changes,
     // A map whose loot was counted (or added by hand) since has loot now.
     noLoot: lootEntries.length > 0 ? false : Boolean(stored.noLoot),
     outputValue: Number(session.totalLootChaos) || 0,
@@ -1726,6 +1732,96 @@ function editSessionLoot(sessionId, lootId, { quantity, remove = false } = {}) {
     updateSessionMapResult(session);
   }
   return session;
+}
+
+// Item name -> { chaosValue, divineValue, icon } in a game and league, or null when no list for it can be had: the
+// loaded list when it holds that league, else the list kept on disk for it, else that league synced first. The price
+// service holds one league, so it syncs another only for the run that is running or with no run running; a running run
+// of another league would read 0 for its loot meanwhile.
+async function getLeaguePriceLookup(poeVersion, league, sessionId) {
+  const holdsLeague = () => priceService.poeVersion === poeVersion
+    && priceService.league === league
+    && priceService.getStatus().itemCount > 0;
+  const fromLoadedList = (name) => {
+    const info = priceService.getPriceInfo(name);
+    return info ? { chaosValue: readLocalChaosPrice(name, poeVersion) || 0, divineValue: info.divineValue ?? null, icon: info.icon || null } : null;
+  };
+  if (holdsLeague()) {
+    return fromLoadedList;
+  }
+
+  const snapshot = await priceSnapshots.load(poeVersion, league);
+  if (snapshot) {
+    const byName = new Map(snapshot.entries.map((entry) => [entry.name.toLowerCase().trim(), entry]));
+    return (name) => {
+      const entry = byName.get(String(name || '').toLowerCase().trim());
+      return entry ? { chaosValue: normalizePositiveRate(entry.chaosValue) || 0, divineValue: entry.divineValue ?? null, icon: entry.icon || null } : null;
+    };
+  }
+
+  if (!currentSession || currentSession.id === sessionId) {
+    await loadSessionPrices({ poeVersion, league });
+    if (holdsLeague()) {
+      return fromLoadedList;
+    }
+  }
+  return null;
+}
+
+// Moves a run of the signed-in profile to another league of its game and prices its loot again with that league's
+// prices (see localJournal.changeSessionLeague). Answers { success: true, session }, or { success: false, code } when
+// there is no price list for that league (LEAGUE_NO_PRICES) or the run's totals came from a stash diff
+// (SESSION_TOTALS_FIXED); the run is left as it was then.
+async function moveSessionLeague(sessionId, league) {
+  const leagueName = typeof league === 'string' ? league.trim() : '';
+  if (!leagueName) {
+    throw Object.assign(new Error('League is required'), { code: 'LEAGUE_INVALID' });
+  }
+  const session = localJournal.getSession(readJournal(), sessionId);
+  if (!session) {
+    throw Object.assign(new Error('Session not found'), { code: 'SESSION_NOT_FOUND' });
+  }
+
+  const priceOf = await getLeaguePriceLookup(session.poeVersion, leagueName, session.id);
+  if (!priceOf) {
+    return { success: false, code: 'LEAGUE_NO_PRICES' };
+  }
+  let moved = null;
+  try {
+    // Read again: loot may have been added while the prices loaded.
+    moved = localJournal.changeSessionLeague(readJournal(), sessionId, leagueName, { priceOf, now: new Date() });
+  } catch (error) {
+    if (error?.code === 'SESSION_TOTALS_FIXED') {
+      return { success: false, code: error.code };
+    }
+    throw error;
+  }
+  writeJournal(moved.journal);
+  const updated = moved.session;
+
+  if (currentSession?.id === updated.id) {
+    currentSession = updated;
+    updateOverlayWindow();
+    // Loot read from now on is priced in the new league too.
+    void loadSessionPrices(updated);
+  }
+  if (updated.status !== 'active') {
+    // The saved result takes the new league, its numbers and its Divine and Mirror rates in place.
+    updateSessionMapResult(updated, {
+      league: updated.league,
+      profitCurrencyRates: {
+        divineChaos: priceOf('Divine Orb')?.chaosValue || null,
+        mirrorChaos: priceOf('Mirror of Kalandra')?.chaosValue || null
+      }
+    });
+  }
+  // A result card the overlay still shows has the old league's numbers.
+  if (overlayMapResultState?.result?.sessionId === updated.id) {
+    overlayMapResultState = null;
+    clearOverlayMapResultDismissTimer();
+    updateOverlayWindow();
+  }
+  return { success: true, session: updated };
 }
 
 function saveMapResultHistory(result) {
@@ -6162,6 +6258,15 @@ function setupIPC() {
       return editSessionLoot(sessionId, lootId, { quantity: changes?.quantity });
     } catch (error) {
       throw toRendererError(error, 'Failed to update loot');
+    }
+  });
+
+  ipcMain.handle('move-session-league', async (event, sessionId, league) => {
+    try {
+      assertDesktopUserAuthenticated();
+      return await moveSessionLeague(sessionId, league);
+    } catch (error) {
+      throw toRendererError(error, 'Failed to change the league');
     }
   });
 

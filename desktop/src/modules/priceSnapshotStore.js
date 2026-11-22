@@ -1,7 +1,7 @@
 /**
  * The last complete poe.ninja list per game and league, on disk, so the Currency page has rows to show right after a
- * launch while its sync runs. Display only: the page says how old the list is, and nothing prices loot or works out
- * profit from it, because those read the price service's own list. A newer sync that read every type it asked for
+ * launch while its sync runs. The page says how old the list is. Loot and profit read the price service's own list;
+ * only a run moved to a league the service does not hold has its loot priced from that league's kept list. A newer sync that read every type it asked for
  * replaces the league's file, unless it is a quick sync and the file holds a full list from the last day: a quick sync
  * skips some tabs. The oldest files go past MAX_SNAPSHOTS.
  */

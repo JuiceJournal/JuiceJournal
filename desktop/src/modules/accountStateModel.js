@@ -88,6 +88,43 @@
     return result;
   }
 
+  // League names match without case or surrounding spaces.
+  function leagueKey(value) {
+    return String(value ?? '').trim().toLowerCase();
+  }
+
+  // The character last confirmed in each league, per game: { poe2: { 'dawn': id } }. The Play prompt offers it for
+  // its league, so a character of another league is one click away.
+  function normalizeLastPlayedByLeague(value) {
+    const result = {};
+    ['poe1', 'poe2'].forEach((poeVersion) => {
+      const leagues = {};
+      Object.entries(value?.[poeVersion] && typeof value[poeVersion] === 'object' ? value[poeVersion] : {})
+        .forEach(([league, characterId]) => {
+          const key = leagueKey(league);
+          const id = normalizeString(characterId);
+          if (key && id) {
+            leagues[key] = id;
+          }
+        });
+      if (Object.keys(leagues).length) {
+        result[poeVersion] = leagues;
+      }
+    });
+    return result;
+  }
+
+  // The record with `character` as the last played of its league. A character with no league changes nothing.
+  function recordLastPlayed(lastPlayedByLeague, poeVersion, character) {
+    const current = normalizeLastPlayedByLeague(lastPlayedByLeague);
+    const version = normalizePoeVersion(poeVersion);
+    const key = leagueKey(character?.league);
+    if (!version || !key || !character?.id) {
+      return current;
+    }
+    return { ...current, [version]: { ...current[version], [key]: character.id } };
+  }
+
   // Character names are unique within a realm, so a name from Client.txt maps to at most one own character.
   function findCharacterByName(accountState, poeVersion, name) {
     const normalizedName = normalizeString(name);
@@ -154,6 +191,7 @@
       charactersByGame,
       confirmedCharacterByGame,
       apiCurrentByGame: normalizeCharacterIdByGame(cachedAccountState?.apiCurrentByGame),
+      lastPlayedByLeague: normalizeLastPlayedByLeague(cachedAccountState?.lastPlayedByLeague),
       activePoeVersion: normalizedActivePoeVersion,
       selectedCharacter,
       summary: selectedCharacter
@@ -208,6 +246,7 @@
       selectedCharacterByGame,
       confirmedCharacterByGame: normalizeCharacterIdByGame(accountState.confirmedCharacterByGame),
       apiCurrentByGame: normalizeCharacterIdByGame(accountState.apiCurrentByGame),
+      lastPlayedByLeague: normalizeLastPlayedByLeague(accountState.lastPlayedByLeague),
       cachedAt: new Date().toISOString()
     };
   }
@@ -226,34 +265,45 @@
   // Chips the Play prompt shows before its More chip, so a long character list does not crowd the card.
   const CHARACTER_PROMPT_CHIP_LIMIT = 6;
 
-  // The Play prompt offers the current league's characters, the last played first and then by level; the other
-  // leagues' characters wait behind More. `league` is set only on those, as the label the card shows after the name.
-  // With no league known it offers every character by level. No prompt when there is nothing to choose.
-  function buildCharacterPrompt({ characters = [], selectedId = null, league = null } = {}) {
-    const leagueKey = (value) => String(value ?? '').trim().toLowerCase();
+  // A run is priced in its character's league, so the Play prompt's first chips are the last played character, then
+  // the last played of every other league the account has characters in (its highest level one when none was
+  // recorded there), then the rest of the current league by level. More shows the rest, by level. `league` is set on
+  // the characters of other leagues, as the label the card shows after the name. `lastPlayedByLeague` is this game's
+  // record (see recordLastPlayed). With no league known it offers every character by level. No prompt when there is
+  // nothing to choose.
+  function buildCharacterPrompt({ characters = [], selectedId = null, league = null, lastPlayedByLeague = {} } = {}) {
     const currentLeague = leagueKey(league);
     const byLevel = (Array.isArray(characters) ? characters : [])
       .filter((character) => character?.id)
       .sort((a, b) => (b.level || 0) - (a.level || 0));
-    const offered = currentLeague
-      ? byLevel.filter((character) => leagueKey(character.league) === currentLeague)
-      : byLevel;
-    if (!selectedId || offered.length < 2) {
+    if (!selectedId || byLevel.length < 2) {
       return null;
     }
 
-    const selected = offered.find((character) => character.id === selectedId);
-    const ordered = currentLeague
-      ? [
+    let ordered = byLevel;
+    let firstCount = byLevel.length;
+    if (currentLeague) {
+      const selected = byLevel.find((character) => character.id === selectedId);
+      const otherLeagues = [...new Set(byLevel.map((character) => leagueKey(character.league)))]
+        .filter((key) => key && key !== currentLeague);
+      const leaguePicks = otherLeagues
+        .map((key) => {
+          const inLeague = byLevel.filter((character) => leagueKey(character.league) === key);
+          return inLeague.find((character) => character.id === lastPlayedByLeague?.[key]) || inLeague[0];
+        })
+        .filter((character) => character !== selected);
+      const first = [
         ...(selected ? [selected] : []),
-        ...offered.filter((character) => character !== selected),
-        ...byLevel.filter((character) => !offered.includes(character))
-      ]
-      : offered;
+        ...leaguePicks,
+        ...byLevel.filter((character) => character !== selected && leagueKey(character.league) === currentLeague)
+      ];
+      ordered = [...first, ...byLevel.filter((character) => !first.includes(character))];
+      firstCount = first.length;
+    }
 
     return {
       selectedId,
-      shownCount: Math.min(offered.length, CHARACTER_PROMPT_CHIP_LIMIT),
+      shownCount: Math.min(firstCount, CHARACTER_PROMPT_CHIP_LIMIT),
       characters: ordered.map(({ id, name, className, level, league: characterLeague }) => ({
         id,
         name,
@@ -269,6 +319,7 @@
     createAccountStateCache,
     findCharacterByName,
     withDeviceCharacters,
+    recordLastPlayed,
     buildCharacterPrompt
   };
 });

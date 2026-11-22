@@ -385,6 +385,45 @@
     return { journal: replaceSession(current, updated), session: updated, lootEntry, totalsFollowLoot };
   }
 
+  // Moves a run to another league and prices its loot again with that league's prices. `priceOf(itemName)` answers
+  // { chaosValue, divineValue, icon } from that league's list, or null for an item it has no price for: that item
+  // counts 0, as unpriced loot does when it is read. Art is the same in every league, so an entry keeps its art when
+  // the list has none. The cost stays. A run whose totals came from a stash diff cannot be priced again from its loot,
+  // so it is refused and left as it is.
+  function changeSessionLeague(journal, sessionId, league, { priceOf, now }) {
+    const leagueName = normalizeOptionalText(league, 50);
+    if (!leagueName) {
+      throw journalError('League is required', 'LEAGUE_INVALID');
+    }
+
+    const current = normalizeJournal(journal);
+    const session = requireSession(current, sessionId);
+    if (session.status !== 'active' && session.status !== 'completed') {
+      throw journalError('Only an active or ended run can change its league', 'SESSION_NOT_MOVABLE');
+    }
+
+    const timestamp = now.toISOString();
+    const nextLoot = (session.lootEntries || []).map((loot) => {
+      const price = priceOf(loot.itemName) || null;
+      const divineValue = price?.divineValue === null || price?.divineValue === undefined ? NaN : Number(price.divineValue);
+      const icon = normalizeOptionalText(price?.icon, 500);
+      return {
+        ...loot,
+        chaosValue: Math.max(0, toNumber(price?.chaosValue)),
+        divineValue: Number.isFinite(divineValue) && divineValue >= 0 ? divineValue : null,
+        ...(icon ? { icon } : {}),
+        updatedAt: timestamp
+      };
+    });
+    const { session: retotaled, totalsFollowLoot } = retotalSession(session, nextLoot, timestamp);
+    if (!totalsFollowLoot) {
+      throw journalError('This run\'s totals came from a stash diff', 'SESSION_TOTALS_FIXED');
+    }
+
+    const updated = { ...retotaled, league: leagueName };
+    return { journal: replaceSession(current, updated), session: updated };
+  }
+
   function listSessions(journal, params = {}) {
     const limit = clampInteger(params.limit, 20, 1, 100);
     const offset = clampInteger(params.offset, 0, 0, Number.MAX_SAFE_INTEGER);
@@ -471,6 +510,7 @@
   return {
     MAX_COST_CHAOS,
     addLoot,
+    changeSessionLeague,
     markLootUnread,
     dropUnreadCandidate,
     findUnreadCandidate,
