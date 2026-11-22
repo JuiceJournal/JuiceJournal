@@ -1,0 +1,93 @@
+name: Release build
+
+# Builds the Windows installer from the checked-in source, so a code signature can vouch for where it came from.
+# Started by hand. It publishes nothing: the installer and latest.yml are left as a workflow artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      sign:
+        description: Sign the installer through SignPath (waits up to an hour for the approval)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  installer:
+    name: Windows installer
+    # SignPath signs open source builds only from GitHub's own runners.
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npx electron-builder --win --publish never
+
+      - name: Name the installer as the release does
+        id: installer
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $name = "Juice-Journal-Setup-$version.exe"
+          New-Item -ItemType Directory -Force dist/unsigned, dist/release | Out-Null
+          Copy-Item "dist/Juice Journal Setup $version.exe" "dist/unsigned/$name"
+          "name=$name" >> $env:GITHUB_OUTPUT
+
+      # SignPath takes the file from GitHub's artifact store, not from this machine.
+      - name: Upload the unsigned installer
+        id: unsigned
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: unsigned-installer
+          path: desktop/dist/unsigned/${{ steps.installer.outputs.name }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Sign the installer
+        if: ${{ inputs.sign }}
+        uses: signpath/github-action-submit-signing-request@a2c5b60d9c75f073142b653c354b632eedce097b # v3.2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: desktop/dist/release
+
+      - name: Keep the unsigned installer when not signing
+        if: ${{ !inputs.sign }}
+        shell: pwsh
+        run: Copy-Item "dist/unsigned/${{ steps.installer.outputs.name }}" dist/release/
+
+      # Signing changes the file, so latest.yml must describe the file that ships.
+      - name: Describe the installer in latest.yml
+        shell: pwsh
+        run: |
+          Copy-Item dist/latest.yml dist/release/latest.yml
+          node scripts/describe-installer.js "dist/release/${{ steps.installer.outputs.name }}" dist/release/latest.yml
+          Get-AuthenticodeSignature "dist/release/${{ steps.installer.outputs.name }}" | Format-List Status, SignerCertificate
+
+      - name: Upload the release files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ${{ inputs.sign && 'release-signed' || 'release-unsigned' }}
+          path: desktop/dist/release/
+          if-no-files-found: error
+          retention-days: 7

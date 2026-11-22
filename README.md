@@ -126,7 +126,7 @@ web/       Optional Next.js site
 docs/      User and contributor documentation
 ```
 
-More: [How tracking works](docs/how-tracking-works.md) · [Path of Exile sign-in](docs/path-of-exile-sign-in.md) · [Contributing](CONTRIBUTING.md)
+More: [How tracking works](docs/how-tracking-works.md) · [Path of Exile sign-in](docs/path-of-exile-sign-in.md) · [Code signing policy](docs/code-signing-policy.md) · [Contributing](CONTRIBUTING.md)
 
 ## License
 

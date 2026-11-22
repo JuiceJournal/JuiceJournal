@@ -13,6 +13,7 @@ const {
   verifyUpdateSignature
 } = require('../src/modules/updateSignature');
 const { signRelease } = require('../scripts/sign-update');
+const { describeInstaller } = require('../scripts/describe-installer');
 
 const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
 const testPublicKey = publicKey.export({ type: 'spki', format: 'pem' });
@@ -172,5 +173,69 @@ test('signRelease refuses an installer that latest.yml does not describe', async
   await assert.rejects(
     signRelease({ distDir, privateKey, productName: 'Juice Journal', publicKey: testPublicKey }),
     /does not describe/
+  );
+});
+
+test('signRelease signs a folder that holds the installer under its release name', async (t) => {
+  const { distDir, installer, version } = makeRelease(t);
+  const released = path.join(distDir, `Juice-Journal-Setup-${version}.exe`);
+  fs.renameSync(installer, released);
+
+  await signRelease({ distDir, privateKey, productName: 'Juice Journal', publicKey: testPublicKey });
+
+  assert.equal(await verifyUpdateSignature({
+    file: released,
+    version,
+    signature: readSignature(distDir),
+    publicKey: testPublicKey
+  }), true);
+});
+
+test('signRelease says so when the folder has no installer', async (t) => {
+  const { distDir, installer } = makeRelease(t);
+  fs.rmSync(installer);
+
+  await assert.rejects(
+    signRelease({ distDir, privateKey, productName: 'Juice Journal', publicKey: testPublicKey }),
+    /No installer for version 1.0.1/
+  );
+});
+
+test('describeInstaller makes latest.yml describe a code-signed installer, and drops the old update signature', async (t) => {
+  const { distDir, installer, sha512, version } = makeRelease(t);
+  const metadataPath = path.join(distDir, 'latest.yml');
+  fs.writeFileSync(metadataPath, fs.readFileSync(metadataPath, 'utf8')
+    .replace(`    sha512: ${sha512}
+`, `    sha512: ${sha512}
+    size: 15
+`));
+  await signRelease({ distDir, privateKey, productName: 'Juice Journal', publicKey: testPublicKey });
+
+  fs.appendFileSync(installer, 'a code signature');
+  const described = await describeInstaller({ installer, metadataPath });
+
+  const metadata = fs.readFileSync(metadataPath, 'utf8');
+  assert.equal(described.sha512, await hashInstaller(installer));
+  assert.equal(metadata.split(`sha512: ${described.sha512}`).length - 1, 2);
+  assert.match(metadata, /^    size: 31$/m);
+  assert.equal(metadata.includes(sha512), false);
+  assert.equal(readSignature(distDir), undefined);
+  assert.match(metadata, /^version: 1.0.1$/m);
+
+  await signRelease({ distDir, privateKey, productName: 'Juice Journal', publicKey: testPublicKey });
+  assert.equal(await verifyUpdateSignature({
+    file: installer,
+    version,
+    signature: readSignature(distDir),
+    publicKey: testPublicKey
+  }), true);
+});
+
+test('describeInstaller refuses a latest.yml it does not understand', async (t) => {
+  const { distDir, installer } = makeRelease(t);
+
+  await assert.rejects(
+    describeInstaller({ installer, metadataPath: path.join(distDir, 'latest.yml') }),
+    /single-file release/
   );
 });

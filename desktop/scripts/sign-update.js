@@ -1,4 +1,5 @@
-// Signs the built installer and adds the signature to dist/latest.yml. Run it after the build and before uploading.
+// Signs the built installer and adds the signature to latest.yml. Run it after the build and before uploading.
+// The folder is dist/ unless a second argument names another, such as the files a GitHub build left.
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -22,7 +23,13 @@ async function signRelease({ distDir, privateKey, productName, publicKey = UPDAT
   const metadataPath = path.join(distDir, 'latest.yml');
   const metadata = fs.readFileSync(metadataPath, 'utf8');
   const version = readField(metadata, 'version');
-  const installer = path.join(distDir, `${productName} Setup ${version}.exe`);
+  // The build names the installer with spaces; the release, and a GitHub build, with dashes as latest.yml does.
+  const installer = [`${productName} Setup ${version}.exe`, readField(metadata, 'path')]
+    .map((name) => path.join(distDir, name))
+    .find((file) => fs.existsSync(file));
+  if (!installer) {
+    throw new Error(`No installer for version ${version} in ${distDir}`);
+  }
 
   const sha512 = await hashInstaller(installer);
   if (sha512 !== readField(metadata, 'sha512')) {
@@ -42,12 +49,12 @@ async function signRelease({ distDir, privateKey, productName, publicKey = UPDAT
 async function main() {
   const keyPath = process.argv[2] || process.env.JUICE_JOURNAL_UPDATE_KEY;
   if (!keyPath) {
-    throw new Error('Usage: npm run sign:update -- <private key path>, or set JUICE_JOURNAL_UPDATE_KEY');
+    throw new Error('Usage: npm run sign:update -- <private key path> [folder], or set JUICE_JOURNAL_UPDATE_KEY');
   }
 
   const { build } = require('../package.json');
   const { version, installer } = await signRelease({
-    distDir: path.join(__dirname, '..', build.directories.output),
+    distDir: process.argv[3] ? path.resolve(process.argv[3]) : path.join(__dirname, '..', build.directories.output),
     privateKey: crypto.createPrivateKey(fs.readFileSync(keyPath)),
     productName: build.productName
   });

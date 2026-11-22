@@ -23,6 +23,22 @@ The app always downloads the full installer, so the `.blockmap` file is not need
 
 Upload `latest.yml` only after signing. A release without a signature is announced, but the app refuses to install it.
 
+## Build on GitHub
+
+The **Release build** workflow (Actions tab, **Run workflow**) builds the same installer on a GitHub runner and leaves it, with a `latest.yml` that describes it, as a workflow artifact. It publishes nothing.
+
+With **Sign the installer** ticked it also sends the installer to SignPath for a code signature and waits up to an hour for an approver to confirm the request there. That needs the repository secret `SIGNPATH_API_TOKEN` and the variables `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG` and `SIGNPATH_SIGNING_POLICY_SLUG`. See the [code signing policy](code-signing-policy.md).
+
+The update signature is still added on your own PC, since the private key stays out of CI. Download the artifact into an empty folder, then run from `desktop/`:
+
+```bash
+npm run sign:update -- <path to the private key> <that folder>
+```
+
+Upload the two files from that folder to the GitHub release.
+
+A code signature changes the installer file. If you sign an installer any other way after the build, run `node scripts/describe-installer.js <installer> <latest.yml>` before `sign:update`, so `latest.yml` describes the file that ships.
+
 ## The signing key
 
 The private key signs every update, so anyone who has it can ship code to every install. Keep it out of the repo and out of CI secrets, and keep an offline backup.
@@ -34,4 +50,4 @@ The private key signs every update, so anyone who has it can ship code to every 
 
 A signature never expires. Someone who takes over the GitHub account cannot ship new code, but can publish any past signed release again, and the app offers it to users on an older version. It can also hold users back by keeping a past release as the latest. A signed release can only be revoked by changing the key.
 
-Windows still sees the app as unsigned, so a first install from the release page shows a SmartScreen warning.
+Until a release is code-signed, Windows sees the app as unsigned, so a first install from the release page shows a SmartScreen warning.
