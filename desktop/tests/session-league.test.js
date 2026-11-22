@@ -288,7 +288,7 @@ function loadMain({ journal = journalWithRun(), priceService = fakePriceService(
   const backend = { journal, stored: { results }, calls: [] };
   const context = loadFunctions(mainSource, [
     'normalizePositiveRate', 'readLocalChaosPrice', 'updateSessionMapResult', 'getLeaguePriceLookup', 'moveSessionLeague',
-    'updateMovedRunResult', 'saveMapResultHistory'
+    'moveSessionLeagueNow', 'updateMovedRunResult', 'saveMapResultHistory', 'findSessionMapResultIndex'
   ], {
     localJournal,
     getTopLootOutputs,
@@ -296,6 +296,7 @@ function loadMain({ journal = journalWithRun(), priceService = fakePriceService(
     appendMapResult,
     KEPT_FULL_LIST_STANDS_MS: PriceSnapshotStore.FULL_LIST_STANDS_MS,
     movedRunRates: new Map(),
+    leagueMoveQueue: Promise.resolve(),
     priceService,
     priceSnapshots: {
       load: async (poeVersion, league) => {
@@ -617,14 +618,21 @@ test('main answers move-session-league only for a signed-in user, and the window
   vm.runInContext(block, vm.createContext({
     ipcMain: { handle: (channel, handler) => { handlers[channel] = handler; } },
     assertDesktopUserAuthenticated: () => { if (!signedIn) throw new Error('Sign in first'); },
-    moveSessionLeague: async (sessionId, league) => { moves.push([sessionId, league]); return { success: true }; },
+    moveSessionLeague: async (sessionId, league, options) => { moves.push([sessionId, league, options]); return { success: true }; },
     toRendererError: (error) => new Error(error.message)
   }));
 
   assert.deepEqual(plain(await handlers['move-session-league']({}, 'run-1', 'Runes of Aldur')), { success: true });
+  // Only an explicit byHand: true from the window is the player's own move.
+  await handlers['move-session-league']({}, 'run-1', 'Standard', { byHand: true });
+  await handlers['move-session-league']({}, 'run-1', 'Standard', { byHand: 'yes' });
   signedIn = false;
   await assert.rejects(handlers['move-session-league']({}, 'run-1', 'Runes of Aldur'), /Sign in first/);
-  assert.deepEqual(moves, [['run-1', 'Runes of Aldur']]);
+  assert.deepEqual(plain(moves), [
+    ['run-1', 'Runes of Aldur', { byHand: false }],
+    ['run-1', 'Standard', { byHand: true }],
+    ['run-1', 'Standard', { byHand: false }]
+  ]);
 
   // The preload bridge sends the window's call on that channel.
   let exposed = null;
@@ -636,8 +644,229 @@ test('main answers move-session-league only for a signed-in user, and the window
     }),
     console
   }));
-  await exposed.moveSessionLeague('run-1', 'Runes of Aldur');
-  assert.deepEqual(invokes, [['move-session-league', 'run-1', 'Runes of Aldur']]);
+  await exposed.moveSessionLeague('run-1', 'Runes of Aldur', { byHand: true });
+  assert.deepEqual(invokes, [['move-session-league', 'run-1', 'Runes of Aldur', { byHand: true }]]);
+});
+
+// --- A league set by hand, moves one at a time, and runs changed during a wait --------------------------------------
+
+const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
+
+test('a league the player sets is kept on the run, and refuses every move that is not the player own', () => {
+  const byHand = localJournal.changeSessionLeague(journalWithRun(), 'run-1', 'Runes of Aldur', { priceOf: aldurPriceOf, now: NOW, byHand: true });
+  assert.equal(byHand.session.leagueSetByHand, true);
+
+  assert.throws(
+    () => localJournal.changeSessionLeague(byHand.journal, 'run-1', 'Forbidden Rites', { priceOf: aldurPriceOf, now: NOW }),
+    (error) => error.code === 'SESSION_LEAGUE_SET_BY_HAND'
+  );
+  // The player may change it again; an automatic move never sets the mark.
+  const again = localJournal.changeSessionLeague(byHand.journal, 'run-1', 'Standard', { priceOf: aldurPriceOf, now: NOW, byHand: true });
+  assert.equal(again.session.league, 'Standard');
+  assert.equal('leagueSetByHand' in localJournal.changeSessionLeague(journalWithRun(), 'run-1', 'Standard', { priceOf: aldurPriceOf, now: NOW }).session, false);
+  // Ending and resuming keep it.
+  const ended = localJournal.changeSessionLeague(journalWithRun({ active: true }), 'run-1', 'Runes of Aldur', { priceOf: aldurPriceOf, now: NOW, byHand: true });
+  const closed = localJournal.endSession(ended.journal, 'run-1', { endedAt: ENDED_AT }, { now: NOW });
+  assert.equal(localJournal.resumeSession(closed.journal, 'run-1', { now: NOW }).session.leagueSetByHand, true);
+});
+
+test('main refuses an automatic move of a run set by hand before loading any prices', async () => {
+  const journal = localJournal.changeSessionLeague(journalWithRun(), 'run-1', 'Runes of Aldur', { priceOf: aldurPriceOf, now: NOW, byHand: true }).journal;
+  const { context, backend } = loadMain({ journal, syncTo: { league: 'Forbidden Rites', prices: ALDUR_PRICES } });
+
+  assert.deepEqual(plain(await context.moveSessionLeague('run-1', 'Forbidden Rites')), { success: false, code: 'SESSION_LEAGUE_SET_BY_HAND' });
+  assert.deepEqual(backend.calls, []);
+
+  const mine = await context.moveSessionLeague('run-1', 'Forbidden Rites', { byHand: true });
+  assert.equal(mine.success, true);
+  assert.equal(mine.session.leagueSetByHand, true);
+});
+
+// main with a sync that waits until the test lets it finish.
+function loadMainWithSlowSync() {
+  let finishSync = null;
+  const priceService = fakePriceService({ league: 'Forbidden Rites', prices: { 'divine orb': { chaosValue: 400 } } });
+  const loaded = loadMain({
+    priceService,
+    snapshots: { 'poe2:Runes of Aldur': snapshotOf('Runes of Aldur', ALDUR_PRICES) }
+  });
+  loaded.context.loadSessionPrices = (session) => {
+    loaded.backend.calls.push(['loadSessionPrices', session.league]);
+    return new Promise((resolve) => {
+      finishSync = () => {
+        priceService.league = session.league;
+        priceService.prices = { 'divine orb': { chaosValue: 100 } };
+        priceService.fullySynced = true;
+        resolve();
+      };
+    });
+  };
+  return { ...loaded, finishSync: () => finishSync() };
+}
+
+test('moves run one at a time: a move asked during another waits for it, and the later one writes last', async () => {
+  // An automatic move to Standard waits for its sync; the player's own move to Runes of Aldur comes meanwhile.
+  const { context, backend, finishSync } = loadMainWithSlowSync();
+  const automatic = context.moveSessionLeague('run-1', 'Standard');
+  const mine = context.moveSessionLeague('run-1', 'Runes of Aldur', { byHand: true });
+  await nextTurn();
+  // The player's move has not even looked for prices yet.
+  assert.deepEqual(backend.calls.filter((call) => Array.isArray(call)), [['snapshot', 'poe2', 'Standard'], ['loadSessionPrices', 'Standard']]);
+
+  finishSync();
+  assert.equal((await automatic).success, true);
+  assert.equal((await mine).success, true);
+  const run = localJournal.getSession(backend.journal, 'run-1');
+  assert.equal(run.league, 'Runes of Aldur');
+  assert.equal(run.leagueSetByHand, true);
+  assert.equal(run.totalLootChaos, 315);
+});
+
+test('an automatic move asked while the player own move is under way is refused once that move is written', async () => {
+  const { context, backend, finishSync } = loadMainWithSlowSync();
+  const mine = context.moveSessionLeague('run-1', 'Standard', { byHand: true });
+  const automatic = context.moveSessionLeague('run-1', 'Runes of Aldur');
+  await nextTurn();
+
+  finishSync();
+  assert.equal((await mine).success, true);
+  assert.deepEqual(plain(await automatic), { success: false, code: 'SESSION_LEAGUE_SET_BY_HAND' });
+  assert.equal(localJournal.getSession(backend.journal, 'run-1').league, 'Standard');
+
+  // A move that fails does not hold up the next one.
+  const failing = loadMain();
+  await assert.rejects(failing.context.moveSessionLeague('nope', 'Standard'), (error) => error.code === 'SESSION_NOT_FOUND');
+  failing.context.priceService.league = 'Runes of Aldur';
+  failing.context.priceService.prices = ALDUR_PRICES;
+  assert.equal((await failing.context.moveSessionLeague('run-1', 'Runes of Aldur')).success, true);
+});
+
+test('main keeps the moved rates only for a finished run whose result is not saved yet, and drops them once it is', async () => {
+  const unsaved = loadMain({ priceService: fakePriceService({ league: 'Runes of Aldur', prices: ALDUR_PRICES }) });
+  await unsaved.context.moveSessionLeague('run-1', 'Runes of Aldur');
+  assert.equal(unsaved.context.movedRunRates.size, 1);
+  unsaved.context.saveMapResultHistory(storedResult());
+  assert.equal(unsaved.context.movedRunRates.size, 0);
+
+  // Its result is there already, so it was updated in place and nothing waits for it.
+  const saved = loadMain({ priceService: fakePriceService({ league: 'Runes of Aldur', prices: ALDUR_PRICES }), results: [storedResult()] });
+  await saved.context.moveSessionLeague('run-1', 'Runes of Aldur');
+  assert.equal(saved.context.movedRunRates.size, 0);
+
+  // A running run's result is made from the moved run itself when it ends.
+  const journal = journalWithRun({ active: true });
+  const running = loadMain({ journal, currentSession: localJournal.getSession(journal, 'run-1'), priceService: fakePriceService({ league: 'Runes of Aldur', prices: ALDUR_PRICES }) });
+  await running.context.moveSessionLeague('run-1', 'Runes of Aldur');
+  assert.equal(running.context.movedRunRates.size, 0);
+});
+
+test('a changed farm type cost reaching a run that moved league during the rate lookup uses the new league rate', async () => {
+  const journal = localJournal.startSession({ sessions: [] }, {
+    mapName: 'Savannah', poeVersion: 'poe2', league: 'Forbidden Rites', farmTypeId: 'breach', costSource: 'farmType'
+  }, { id: 'run-1', now: NOW }).journal;
+  const backend = { journal, lookups: [] };
+  const context = loadFunctions(mainSource, ['convertFarmTypeCostToChaos', 'applyFarmTypeCostToRunningSession'], {
+    localJournal,
+    readJournal: () => backend.journal,
+    writeJournal: (next) => { backend.journal = next; },
+    updateOverlayWindow: () => {},
+    mainWindow: null,
+    currentSession: localJournal.getSession(journal, 'run-1'),
+    // The run moves while the first lookup waits.
+    getDivineChaosRate: async (poeVersion, league) => {
+      backend.lookups.push(league);
+      if (backend.lookups.length === 1) {
+        backend.journal = localJournal.changeSessionLeague(backend.journal, 'run-1', 'Runes of Aldur', { priceOf: aldurPriceOf, now: NOW }).journal;
+        context.currentSession = localJournal.getSession(backend.journal, 'run-1');
+      }
+      return league === 'Runes of Aldur' ? 150 : 400;
+    }
+  });
+
+  await context.applyFarmTypeCostToRunningSession('breach', { amount: 1, unit: 'divine' });
+
+  assert.deepEqual(backend.lookups, ['Forbidden Rites', 'Runes of Aldur']);
+  assert.equal(context.currentSession.costChaos, 150);
+  assert.equal(localJournal.getSession(backend.journal, 'run-1').costChaos, 150);
+});
+
+// endCurrentSession over the real journal model; `duringRate` runs while the Divine rate lookup waits.
+function loadEndRun(backend, { duringRate = () => {}, rate = (league) => (league === 'Forbidden Rites' ? 400 : 150) } = {}) {
+  return loadFunctions(mainSource, ['convertFarmTypeCostToChaos', 'settleCostPending', 'endCurrentSession'], {
+    localJournal,
+    readJournal: () => backend.journal,
+    writeJournal: (next) => { backend.journal = next; },
+    currentSession: localJournal.getActiveSession(backend.journal),
+    inventoryWatcher: null,
+    getDivineChaosRate: async (poeVersion, league) => {
+      duringRate();
+      return rate(league);
+    },
+    appendAuditTrail() {},
+    showNotification() {},
+    t: (key) => key,
+    updateOverlayWindow() {},
+    mainWindow: null
+  });
+}
+
+function pendingRun() {
+  return localJournal.startSession({ sessions: [] }, {
+    mapName: 'Savannah', poeVersion: 'poe2', league: 'Forbidden Rites', costSource: 'farmType', costPending: { amount: 0.5, unit: 'divine' },
+    startedAt: '2026-11-22T10:00:00.000Z'
+  }, { id: 'run-1', now: NOW }).journal;
+}
+
+test('ending a run keeps loot added while its pending cost was settled, and settles with the rate of its league', async () => {
+  const backend = { journal: pendingRun() };
+  const context = loadEndRun(backend, {
+    duringRate: () => {
+      backend.journal = localJournal.addLoot(backend.journal, 'run-1', [{ itemName: 'Divine Orb', chaosValue: 400, quantity: 1 }], {
+        createId: () => 'late-loot',
+        now: NOW
+      }).journal;
+    }
+  });
+
+  const ended = await context.endCurrentSession({ endedAt: ENDED_AT });
+
+  const run = localJournal.getSession(backend.journal, 'run-1');
+  assert.equal(run.status, 'completed');
+  assert.deepEqual(run.lootEntries.map((loot) => loot.id), ['late-loot']);
+  assert.equal(run.costChaos, 200);
+  assert.deepEqual(plain(run.costEntry), { amount: 0.5, unit: 'divine' });
+  assert.equal(run.profitChaos, 200);
+  assert.equal(ended.profitChaos, 200);
+});
+
+test('ending a run that moved league while its cost was settled does not take the old league rate', async () => {
+  const backend = { journal: pendingRun() };
+  const context = loadEndRun(backend, {
+    duringRate: () => {
+      backend.journal = localJournal.changeSessionLeague(backend.journal, 'run-1', 'Runes of Aldur', { priceOf: aldurPriceOf, now: NOW }).journal;
+    }
+  });
+
+  await context.endCurrentSession({ endedAt: ENDED_AT });
+
+  const run = localJournal.getSession(backend.journal, 'run-1');
+  assert.equal(run.status, 'completed');
+  assert.equal(run.league, 'Runes of Aldur');
+  // Still pending: the rate read was Forbidden Rites', so it is not used.
+  assert.equal(run.costChaos, 0);
+  assert.deepEqual(plain(run.costPending), { amount: 0.5, unit: 'divine' });
+});
+
+test('inventory loot for a run that is not there says so with the journal error', async () => {
+  const context = loadFunctions(mainSource, ['addInventoryLoot'], {
+    localJournal,
+    readJournal: () => ({ sessions: [] }),
+    loadSessionPrices: () => assert.fail('no prices are loaded for a missing run'),
+    withTimeout: (promise) => promise,
+    SESSION_PRICES_WAIT_MS: 5000
+  });
+
+  await assert.rejects(context.addInventoryLoot('nope', [{ name: 'Exalted Orb', quantity: 1 }]), (error) => error.code === 'SESSION_NOT_FOUND');
 });
 
 // --- The window: runs started before the character was confirmed ---------------------------------------------------
@@ -783,6 +1012,25 @@ test('the callers say where a confirmation came from (wiring)', () => {
   assert.match(appSource, /confirmActiveCharacter\(version, currentId, \{ source: 'api-current' \}\)/);
 });
 
+test('the window skips a run main marked as set by hand, and takes main refusing one as nothing to do', async () => {
+  const warnings = [];
+  const { context, state, calls } = loadRenderer({
+    moveResult: (sessionId) => (sessionId === 'run-2' ? { success: false, code: 'SESSION_LEAGUE_SET_BY_HAND' } : { success: true, session: { id: sessionId } })
+  });
+  context.console = { warn: (...args) => warnings.push(args), log() {} };
+  state.characterSession = { poeVersion: 'poe2', confirmed: false };
+  // run-1 resumes after a new Play with the mark main keeps; run-2 was set by hand while this confirmation was coming.
+  context.trackUnconfirmedRun({ id: 'run-1', poeVersion: 'poe2', league: 'Standard', leagueSetByHand: true });
+  context.trackUnconfirmedRun({ id: 'run-2', poeVersion: 'poe2', league: 'Forbidden Rites' });
+
+  context.confirmActiveCharacter('poe2', 'aldur-char', { source: 'log' });
+  await settle();
+
+  assert.deepEqual(calls.filter((call) => call[0] === 'move'), [['move', 'run-2', 'Runes of Aldur']]);
+  assert.deepEqual(warnings, []);
+  assert.equal(calls.some((call) => call[0] === 'refreshTrackerData'), false);
+});
+
 test('a league set by hand in Edit is final, even for a run started again before the confirmation', async () => {
   const { context, state, calls } = loadRenderer();
   state.characterSession = { poeVersion: 'poe2', confirmed: false };
@@ -862,8 +1110,8 @@ function loadLeagueField({ moveResult = async (sessionId, league) => ({ success:
           calls.push(['getCurrencyLeagues', poeVersion]);
           return new Promise((resolve) => { answerLeagues = resolve; });
         },
-        moveSessionLeague: async (sessionId, league) => {
-          calls.push(['move', sessionId, league]);
+        moveSessionLeague: async (sessionId, league, options) => {
+          calls.push(['move', sessionId, league, plain(options)]);
           return moveResult(sessionId, league);
         }
       }
@@ -902,8 +1150,8 @@ test('picking another league moves the run through main and says its loot was pr
 
   await field.context.handleSessionLeagueChange(event);
 
-  assert.deepEqual(field.calls.filter((call) => call[0] !== 'getCurrencyLeagues'), [
-    ['move', 'run-1', 'Runes of Aldur'],
+  assert.deepEqual(plain(field.calls.filter((call) => call[0] !== 'getCurrencyLeagues')), [
+    ['move', 'run-1', 'Runes of Aldur', { byHand: true }],
     ['redraw', { kind: 'league' }],
     ['announce', 'sessions.leagueRepriced:{"league":"Runes of Aldur"}'],
     ['refreshTrackerData', { includeSessions: true, immediate: true }]

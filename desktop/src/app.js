@@ -4301,12 +4301,15 @@ function trackUnconfirmedRun(session) {
   }
   const runs = characterSession.runs || [];
   if (!runs.some((run) => run.id === session.id)) {
-    characterSession.runs = [...runs, { id: session.id, league: session.league || null }];
+    // A run whose league the player set (main keeps the mark) is final.
+    characterSession.runs = [...runs, session.leagueSetByHand
+      ? { id: session.id, league: null, handSet: true }
+      : { id: session.id, league: session.league || null }];
   }
 }
 
-// A league the player set in a run's Edit is final: the confirmation of the played character leaves that run alone,
-// also when it is started again (a resume) before the confirmation comes.
+// A league the player set in a run's Edit is final. Main keeps the mark on the run and refuses any other move of it;
+// here the confirmation of the played character skips the run, also when it is started again before that comes.
 function keepHandSetLeague(sessionId) {
   const characterSession = state.characterSession;
   if (!characterSession || characterSession.leagueSettled) {
@@ -4329,6 +4332,10 @@ async function moveUnconfirmedRuns(runs, league) {
   let moved = false;
   for (const run of moving) {
     const result = await window.electronAPI.moveSessionLeague(run.id, leagueName).catch(() => null);
+    // The player set this run's league in its Edit meanwhile: nothing to do.
+    if (result?.code === 'SESSION_LEAGUE_SET_BY_HAND') {
+      continue;
+    }
     if (!result?.success) {
       // Without prices for that league the run stays as it is; its Edit can move it later.
       console.warn('Could not move a run to the played character league', result?.code || null);
@@ -9154,7 +9161,7 @@ async function handleSessionLeagueChange(event) {
   select.disabled = true;
   let result = null;
   try {
-    result = await window.electronAPI.moveSessionLeague(session.id, league);
+    result = await window.electronAPI.moveSessionLeague(session.id, league, { byHand: true });
   } catch (error) {
     result = { success: false, error };
   } finally {

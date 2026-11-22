@@ -404,8 +404,9 @@
   // { chaosValue, divineValue, icon } from that league's list, or null for an item it has no price for: that item
   // counts 0, as unpriced loot does when it is read. Art is the same in every league, so an entry keeps its art when
   // the list has none. A run whose totals came from a stash diff cannot be priced again from its loot, so it is refused
-  // and left as it is. The cost is the subject of movedCost.
-  function changeSessionLeague(journal, sessionId, league, { priceOf, now }) {
+  // and left as it is. The cost is the subject of movedCost. `byHand` says the player chose the league: the run keeps
+  // `leagueSetByHand`, and a move that is not the player's own is refused for it from then on.
+  function changeSessionLeague(journal, sessionId, league, { priceOf, now, byHand = false }) {
     const leagueName = normalizeLeagueName(league);
     if (!leagueName) {
       throw journalError('League is required', 'LEAGUE_INVALID');
@@ -415,6 +416,9 @@
     const session = requireSession(current, sessionId);
     if (session.status !== 'active' && session.status !== 'completed') {
       throw journalError('Only an active or ended run can change its league', 'SESSION_NOT_MOVABLE');
+    }
+    if (session.leagueSetByHand && !byHand) {
+      throw journalError('The player set this run\'s league', 'SESSION_LEAGUE_SET_BY_HAND');
     }
 
     const timestamp = now.toISOString();
@@ -436,7 +440,7 @@
     }
 
     const cost = movedCost(session, priceOf('Divine Orb')?.chaosValue);
-    let updated = { ...retotaled, league: leagueName };
+    let updated = { ...retotaled, league: leagueName, ...(byHand ? { leagueSetByHand: true } : {}) };
     if (cost) {
       updated = withCostEntry({
         ...updated,

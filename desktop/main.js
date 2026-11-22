@@ -501,7 +501,10 @@ let apiClient = null;
 let poeApiClient = null;
 let priceService = null;
 let priceSnapshots = null;
-// Run id -> the Divine and Mirror rates of the league it was moved to this launch, for a result the window saves later.
+// The league moves of runs, one after another (see moveSessionLeague).
+let leagueMoveQueue = Promise.resolve();
+// Run id -> the Divine and Mirror rates of the league a finished run was moved to before the window saved its result.
+// An entry goes once that result is saved with it.
 const movedRunRates = new Map();
 // Per game, the promise of a lowercase item name -> art index over the newest kept price list. A new kept list drops it.
 const itemIconIndexes = { poe1: null, poe2: null };
@@ -1222,6 +1225,10 @@ async function applyFarmTypeCostToRunningSession(farmTypeId, entry) {
   if (currentSession?.id !== running.id) {
     return;
   }
+  // Or moved to another league: the cost is worked out again with that league's rate, never this one.
+  if (currentSession.league !== running.league || currentSession.poeVersion !== running.poeVersion) {
+    return applyFarmTypeCostToRunningSession(farmTypeId, entry);
+  }
 
   const { journal, session } = localJournal.updateCost(readJournal(), running.id, costChaos ?? 0, {
     source: 'farmType',
@@ -1779,9 +1786,16 @@ async function getLeaguePriceLookup(poeVersion, league, sessionId) {
 // Moves a run of the signed-in profile to another league of its game and prices its loot again with that league's
 // prices (see localJournal.changeSessionLeague). Answers { success: true, session }, or { success: false, code } when
 // there is no price list for that league (LEAGUE_NO_PRICES), the run's totals came from a stash diff
-// (SESSION_TOTALS_FIXED) or its farm type cost cannot be converted again (SESSION_COST_UNKNOWN); the run is left as it
-// was then.
-async function moveSessionLeague(sessionId, league) {
+// (SESSION_TOTALS_FIXED), its farm type cost cannot be converted again (SESSION_COST_UNKNOWN) or the player set its
+// league and this move is not theirs (SESSION_LEAGUE_SET_BY_HAND); the run is left as it was then. `byHand` says the
+// player chose the league in the run's Edit. Moves run one at a time, so two moves of a run cannot interleave writes.
+function moveSessionLeague(sessionId, league, { byHand = false } = {}) {
+  const move = leagueMoveQueue.then(() => moveSessionLeagueNow(sessionId, league, byHand === true));
+  leagueMoveQueue = move.catch(() => {});
+  return move;
+}
+
+async function moveSessionLeagueNow(sessionId, league, byHand) {
   // The name the run keeps, so its prices are looked up under the same name.
   const leagueName = localJournal.normalizeLeagueName(league);
   if (!leagueName) {
@@ -1791,6 +1805,10 @@ async function moveSessionLeague(sessionId, league) {
   if (!session) {
     throw Object.assign(new Error('Session not found'), { code: 'SESSION_NOT_FOUND' });
   }
+  // Before any price loading; changeSessionLeague checks it again on the journal it writes.
+  if (session.leagueSetByHand && !byHand) {
+    return { success: false, code: 'SESSION_LEAGUE_SET_BY_HAND' };
+  }
 
   const priceOf = await getLeaguePriceLookup(session.poeVersion, leagueName, session.id);
   if (!priceOf) {
@@ -1799,9 +1817,9 @@ async function moveSessionLeague(sessionId, league) {
   let moved = null;
   try {
     // Read again: loot may have been added while the prices loaded.
-    moved = localJournal.changeSessionLeague(readJournal(), sessionId, leagueName, { priceOf, now: new Date() });
+    moved = localJournal.changeSessionLeague(readJournal(), sessionId, leagueName, { priceOf, now: new Date(), byHand });
   } catch (error) {
-    if (error?.code === 'SESSION_TOTALS_FIXED' || error?.code === 'SESSION_COST_UNKNOWN') {
+    if (['SESSION_TOTALS_FIXED', 'SESSION_COST_UNKNOWN', 'SESSION_LEAGUE_SET_BY_HAND'].includes(error?.code)) {
       return { success: false, code: error.code };
     }
     throw error;
@@ -1812,7 +1830,10 @@ async function moveSessionLeague(sessionId, league) {
     divineChaos: priceOf('Divine Orb')?.chaosValue || null,
     mirrorChaos: priceOf('Mirror of Kalandra')?.chaosValue || null
   };
-  movedRunRates.set(updated.id, rates);
+  // Only a finished run whose result the window has not saved yet needs them later (see updateMovedRunResult).
+  if (updated.status !== 'active' && findSessionMapResultIndex(getStoredMapResults(), updated) === -1) {
+    movedRunRates.set(updated.id, rates);
+  }
 
   if (currentSession?.id === updated.id) {
     currentSession = updated;
@@ -1838,7 +1859,12 @@ async function moveSessionLeague(sessionId, league) {
 function updateMovedRunResult(result) {
   const session = result?.sessionId ? localJournal.getSession(readJournal(), result.sessionId) : null;
   const rates = session ? movedRunRates.get(session.id) : null;
-  if (!rates || session.status === 'active' || session.league === result.league) {
+  if (!rates || session.status === 'active') {
+    return false;
+  }
+  // The run's result is saved now, so its rates are not needed again.
+  movedRunRates.delete(session.id);
+  if (session.league === result.league) {
     return false;
   }
   updateSessionMapResult(session, { league: session.league, inputValue: session.costChaos, profitCurrencyRates: rates });
@@ -4982,6 +5008,9 @@ async function settlePoe1Inventory(session) {
 
 async function addInventoryLoot(sessionId, items, mapCount = 1, unread = false, unreadCandidates = [], unreadOther = false) {
   const before = localJournal.getSession(readJournal(), sessionId);
+  if (!before) {
+    throw Object.assign(new Error('Session not found'), { code: 'SESSION_NOT_FOUND' });
+  }
   await withTimeout(loadSessionPrices(before), SESSION_PRICES_WAIT_MS).catch(() => null);
   // The run may have moved to another league during the wait (moveSessionLeague): its loot takes the league it has now.
   let session = localJournal.getSession(readJournal(), sessionId) || before;
@@ -5354,7 +5383,22 @@ async function endCurrentSession(options = {}) {
       : localJournal.getActiveSession(journal));
     if (!activeSession) return;
     if (activeSession.costPending) {
-      ({ journal, session: activeSession } = await settleCostPending(journal, activeSession));
+      const pending = activeSession;
+      const settled = await settleCostPending(journal, pending);
+      // The rate lookup waits, and loot or a league move can land meanwhile: the run ends from the journal as it is now.
+      // The settled cost counts only while the run still has that cost pending in the league its rate was read for.
+      journal = readJournal();
+      activeSession = localJournal.getSession(journal, pending.id) || pending;
+      const stillPending = activeSession.league === pending.league
+        && activeSession.costPending?.amount === pending.costPending.amount
+        && activeSession.costPending?.unit === pending.costPending.unit;
+      if (!settled.session.costPending && stillPending) {
+        ({ journal, session: activeSession } = localJournal.updateCost(journal, activeSession.id, settled.session.costChaos, {
+          source: 'farmType',
+          now: new Date(),
+          entry: activeSession.costPending
+        }));
+      }
     }
 
     const endedAt = options.endedAt || new Date().toISOString();
@@ -6289,10 +6333,10 @@ function setupIPC() {
     }
   });
 
-  ipcMain.handle('move-session-league', async (event, sessionId, league) => {
+  ipcMain.handle('move-session-league', async (event, sessionId, league, options = {}) => {
     try {
       assertDesktopUserAuthenticated();
-      return await moveSessionLeague(sessionId, league);
+      return await moveSessionLeague(sessionId, league, { byHand: options?.byHand === true });
     } catch (error) {
       throw toRendererError(error, 'Failed to change the league');
     }
