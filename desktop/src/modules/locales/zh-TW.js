@@ -319,6 +319,7 @@
       'sessions.leagueRepriced': '已依 {league} 的價格重新計算戰利品。',
       'sessions.leagueNoPrices': '無法載入 {league} 的價格，因此這個場次保留原聯盟。',
       'sessions.leagueStashTotals': '這個場次的合計來自倉庫比對，因此無法重新計算戰利品。',
+      'sessions.leagueCostUnknown': '這個場次的入場成本來自其刷圖類型，當時應用程式還沒有保存成本的單位，因此無法換算到其他聯盟。請先手動設定成本。',
       'sessions.totalLoot': '戰利品總額',
       'sessions.game': '遊戲',
       'sessions.startedAt': '開始',

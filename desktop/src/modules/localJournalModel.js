@@ -114,6 +114,19 @@
       : null;
   }
 
+  // League names are kept to 50 characters; a lookup by league must use the same name the run keeps.
+  function normalizeLeagueName(value) {
+    return normalizeOptionalText(value, 50);
+  }
+
+  // `costEntry` is the farm type cost, as typed, that a farm type cost in chaos was converted from, so a move to
+  // another league can convert a Divine cost again with that league's rate. Only a farm type cost has one.
+  function withCostEntry(session, entry) {
+    const { costEntry, ...rest } = session;
+    const normalized = session.costSource === 'farmType' ? normalizeCostPending(entry) : null;
+    return normalized ? { ...rest, costEntry: normalized } : rest;
+  }
+
   function startSession(journal, input = {}, { id, now }) {
     const current = normalizeJournal(journal);
     if (getActiveSession(current)) {
@@ -154,7 +167,8 @@
       lootEntries: []
     };
 
-    return { journal: { ...current, sessions: [session, ...current.sessions] }, session };
+    const started = withCostEntry(session, input.costEntry);
+    return { journal: { ...current, sessions: [started, ...current.sessions] }, session: started };
   }
 
   // Totals sent with the completion win; otherwise they come from the session's loot, as on the server.
@@ -225,8 +239,9 @@
 
   // Sets the cost of one map and moves its profit by the opposite of the change. That holds for every kind of session:
   // one whose totals came from a stash diff keeps them, and one whose totals follow the loot keeps profit == total - cost.
-  // `pending` keeps a typed cost that could not be converted yet; without it the pending cost is cleared.
-  function updateCost(journal, sessionId, costChaos, { source = 'manual', now, pending = null }) {
+  // `pending` keeps a typed cost that could not be converted yet; without it the pending cost is cleared. `entry` is
+  // the farm type cost a farm type cost was converted from (see withCostEntry).
+  function updateCost(journal, sessionId, costChaos, { source = 'manual', now, pending = null, entry = null }) {
     if (typeof costChaos !== 'number' || !Number.isFinite(costChaos) || costChaos < 0 || costChaos > MAX_COST_CHAOS) {
       throw journalError('Cost must be a number from 0 to 10000000', 'COST_INVALID');
     }
@@ -234,14 +249,14 @@
     const current = normalizeJournal(journal);
     const session = requireSession(current, sessionId);
     const delta = costChaos - toNumber(session.costChaos);
-    const updated = {
+    const updated = withCostEntry({
       ...session,
       costChaos,
       costSource: COST_SOURCES.has(source) ? source : 'manual',
       costPending: normalizeCostPending(pending),
       profitChaos: toNumber(session.profitChaos) - delta,
       updatedAt: now.toISOString()
-    };
+    }, entry);
 
     return { journal: replaceSession(current, updated), session: updated, delta };
   }
@@ -388,10 +403,10 @@
   // Moves a run to another league and prices its loot again with that league's prices. `priceOf(itemName)` answers
   // { chaosValue, divineValue, icon } from that league's list, or null for an item it has no price for: that item
   // counts 0, as unpriced loot does when it is read. Art is the same in every league, so an entry keeps its art when
-  // the list has none. The cost stays. A run whose totals came from a stash diff cannot be priced again from its loot,
-  // so it is refused and left as it is.
+  // the list has none. A run whose totals came from a stash diff cannot be priced again from its loot, so it is refused
+  // and left as it is. The cost is the subject of movedCost.
   function changeSessionLeague(journal, sessionId, league, { priceOf, now }) {
-    const leagueName = normalizeOptionalText(league, 50);
+    const leagueName = normalizeLeagueName(league);
     if (!leagueName) {
       throw journalError('League is required', 'LEAGUE_INVALID');
     }
@@ -420,8 +435,39 @@
       throw journalError('This run\'s totals came from a stash diff', 'SESSION_TOTALS_FIXED');
     }
 
-    const updated = { ...retotaled, league: leagueName };
+    const cost = movedCost(session, priceOf('Divine Orb')?.chaosValue);
+    let updated = { ...retotaled, league: leagueName };
+    if (cost) {
+      updated = withCostEntry({
+        ...updated,
+        costChaos: cost.costChaos,
+        costPending: cost.costPending,
+        profitChaos: toNumber(updated.totalLootChaos) - cost.costChaos
+      }, cost.costEntry);
+    }
     return { journal: replaceSession(current, updated), session: updated };
+  }
+
+  // The cost of a run moved to another league, or null when it stays: a cost in chaos (typed by hand, or a farm type
+  // cost in chaos), none, or one still pending, which converts with the run's league when its rate is known. A farm
+  // type cost in Divine converts again with the new league's rate; without one it waits as a pending cost, as it does
+  // when a map starts without a rate. A farm type cost from before runs kept what it was converted from cannot be told
+  // apart from chaos, so that run is refused rather than given a guessed cost.
+  function movedCost(session, divineChaos) {
+    if (session.costSource !== 'farmType' || toNumber(session.costChaos) === 0 || normalizeCostPending(session.costPending)) {
+      return null;
+    }
+    const entry = normalizeCostPending(session.costEntry);
+    if (!entry) {
+      throw journalError('This run\'s entry cost cannot be converted to another league', 'SESSION_COST_UNKNOWN');
+    }
+    if (entry.unit !== 'divine') {
+      return null;
+    }
+    const rate = Number(divineChaos);
+    return Number.isFinite(rate) && rate > 0
+      ? { costChaos: Math.min(Math.round(entry.amount * rate * 100) / 100, MAX_COST_CHAOS), costPending: null, costEntry: entry }
+      : { costChaos: 0, costPending: entry, costEntry: null };
   }
 
   function listSessions(journal, params = {}) {
@@ -523,6 +569,7 @@
     listRecentLoot,
     listSessions,
     normalizeJournal,
+    normalizeLeagueName,
     resumeSession,
     startSession,
     updateCost,

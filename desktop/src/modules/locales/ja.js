@@ -319,6 +319,7 @@
       'sessions.leagueRepriced': '戦利品を {league} の価格で再計算しました。',
       'sessions.leagueNoPrices': '{league} の価格を読み込めなかったため、このランのリーグは変わりません。',
       'sessions.leagueStashTotals': 'このランの合計はスタッシュの比較から出したものなので、戦利品を再計算できません。',
+      'sessions.leagueCostUnknown': 'このランの参加コストは、アプリがコストの単位を保存する前のファームタイプから来ているため、別のリーグで換算できません。先にコストを手動で設定してください。',
       'sessions.totalLoot': '戦利品合計',
       'sessions.game': 'ゲーム',
       'sessions.startedAt': '開始',

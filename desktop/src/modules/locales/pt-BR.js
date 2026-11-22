@@ -319,6 +319,7 @@
       'sessions.leagueRepriced': 'Loot avaliado de novo com os preços de {league}.',
       'sessions.leagueNoPrices': 'Não foi possível carregar preços de {league}, então a run mantém a liga.',
       'sessions.leagueStashTotals': 'Os totais desta run vieram de uma comparação do baú, então o loot não pode ser avaliado de novo.',
+      'sessions.leagueCostUnknown': 'O custo de entrada desta run veio do tipo de farm antes de o app guardar a unidade do custo, então ele não pode ser convertido em outra liga. Defina o custo à mão primeiro.',
       'sessions.totalLoot': 'Loot total',
       'sessions.game': 'Jogo',
       'sessions.startedAt': 'Início',

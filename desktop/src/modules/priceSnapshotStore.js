@@ -1,9 +1,10 @@
 /**
  * The last complete poe.ninja list per game and league, on disk, so the Currency page has rows to show right after a
- * launch while its sync runs. The page says how old the list is. Loot and profit read the price service's own list;
- * only a run moved to a league the service does not hold has its loot priced from that league's kept list. A newer sync that read every type it asked for
- * replaces the league's file, unless it is a quick sync and the file holds a full list from the last day: a quick sync
- * skips some tabs. The oldest files go past MAX_SNAPSHOTS.
+ * launch while its sync runs. The page says how old the list is. Loot and profit read the price service's own list.
+ * One exception: a run moved to a league the service does not hold is priced from that league's kept list, when it is
+ * a full list younger than FULL_LIST_STANDS_MS. A newer sync that read every type it asked for replaces the league's
+ * file. A quick sync does not when the file holds a full list from the last day, since a quick sync skips some tabs.
+ * The oldest files go past MAX_SNAPSHOTS.
  */
 
 const crypto = require('crypto');
@@ -126,5 +127,8 @@ class PriceSnapshotStore {
     this.stopped = false;
   }
 }
+
+// How long a kept full list stands; main prices a moved run from one only this young.
+PriceSnapshotStore.FULL_LIST_STANDS_MS = FULL_LIST_STANDS_MS;
 
 module.exports = PriceSnapshotStore;

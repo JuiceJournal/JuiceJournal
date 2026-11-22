@@ -319,6 +319,7 @@
       'sessions.leagueRepriced': 'Butin réévalué avec les prix de {league}.',
       'sessions.leagueNoPrices': "Aucun prix n'a pu être chargé pour {league}, le run garde donc sa ligue.",
       'sessions.leagueStashTotals': "Les totaux de ce run viennent d'une comparaison du coffre, son butin ne peut donc pas être réévalué.",
+      'sessions.leagueCostUnknown': "Le coût d'entrée de ce run vient de son type de farm, d'avant que l'app garde l'unité du coût : il ne peut donc pas être converti dans une autre ligue. Indique d'abord le coût à la main.",
       'sessions.totalLoot': 'Butin total',
       'sessions.game': 'Jeu',
       'sessions.startedAt': 'Début',

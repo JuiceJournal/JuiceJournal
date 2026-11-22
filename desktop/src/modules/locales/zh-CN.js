@@ -319,6 +319,7 @@
       'sessions.leagueRepriced': '已按 {league} 的价格重新计算战利品。',
       'sessions.leagueNoPrices': '无法加载 {league} 的价格，因此这条记录保留原赛季。',
       'sessions.leagueStashTotals': '这条记录的合计来自仓库对比，因此无法重新计算战利品。',
+      'sessions.leagueCostUnknown': '这条记录的入场成本来自其刷图类型，当时应用还没有保存成本的单位，因此无法换算到其他赛季。请先手动设置成本。',
       'sessions.totalLoot': '战利品总计',
       'sessions.game': '游戏',
       'sessions.startedAt': '开始时间',

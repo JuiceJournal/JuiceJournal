@@ -319,6 +319,7 @@
       'sessions.leagueRepriced': 'Loot rivalutato con i prezzi di {league}.',
       'sessions.leagueNoPrices': 'Impossibile caricare i prezzi di {league}, quindi la run resta nella sua lega.',
       'sessions.leagueStashTotals': 'I totali di questa run vengono da un confronto dello stash, quindi il suo loot non può essere rivalutato.',
+      'sessions.leagueCostUnknown': "Il costo d'ingresso di questa run viene dal suo tipo di farm, da prima che l'app salvasse l'unità del costo, quindi non può essere convertito in un'altra lega. Imposta prima il costo a mano.",
       'sessions.totalLoot': 'Loot totale',
       'sessions.game': 'Gioco',
       'sessions.startedAt': 'Iniziata',

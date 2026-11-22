@@ -319,6 +319,7 @@
       'sessions.leagueRepriced': 'Botín valorado de nuevo con los precios de {league}.',
       'sessions.leagueNoPrices': 'No se pudieron cargar precios de {league}, así que la sesión mantiene su liga.',
       'sessions.leagueStashTotals': 'Los totales de esta sesión vienen de una comparación del alijo, así que su botín no se puede valorar de nuevo.',
+      'sessions.leagueCostUnknown': 'El costo de entrada de esta sesión vino de su tipo de farmeo antes de que la app guardara la unidad del costo, así que no se puede valorar en otra liga. Fija primero el costo a mano.',
       'sessions.totalLoot': 'Botín total',
       'sessions.game': 'Juego',
       'sessions.startedAt': 'Inicio',

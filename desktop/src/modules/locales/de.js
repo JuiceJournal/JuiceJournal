@@ -319,6 +319,7 @@
       'sessions.leagueRepriced': 'Loot mit den Preisen von {league} neu bewertet.',
       'sessions.leagueNoPrices': 'Für {league} konnten keine Preise geladen werden, der Run bleibt in seiner Liga.',
       'sessions.leagueStashTotals': 'Die Summen dieses Runs stammen aus einem Truhen-Vergleich, sein Loot kann nicht neu bewertet werden.',
+      'sessions.leagueCostUnknown': 'Die Eintrittskosten dieses Runs stammen aus seinem Farmtyp, bevor die App die Einheit der Kosten gespeichert hat, daher können sie in einer anderen Liga nicht umgerechnet werden. Leg die Kosten zuerst von Hand fest.',
       'sessions.totalLoot': 'Loot gesamt',
       'sessions.game': 'Spiel',
       'sessions.startedAt': 'Gestartet',

@@ -3238,7 +3238,7 @@ function setupIPCListeners() {
   // Session olaylari
   window.electronAPI.onSessionStarted((session) => {
     state.currentSession = session;
-    if (state.characterSession?.confirmed === false) {
+    if (state.characterSession && !state.characterSession.leagueSettled) {
       trackUnconfirmedRun(session);
     }
     // A map started another way (the tray, the Dashboard) drops a start card without an answer: stop waiting for one.
@@ -4084,7 +4084,7 @@ function handleCharacterChosen({ poeVersion, characterId } = {}) {
   const version = normalizePoeVersion(poeVersion);
   const known = (state.account?.charactersByGame?.[version] || []).some((character) => character.id === characterId);
   if (known) {
-    confirmActiveCharacter(version, characterId);
+    confirmActiveCharacter(version, characterId, { source: 'pick' });
   }
 }
 
@@ -4105,7 +4105,7 @@ async function handleCharacterLogLine({ poeVersion, name, kind, level } = {}) {
       const levels = state.loggedLevelsByGame[version] || {};
       state.loggedLevelsByGame = { ...state.loggedLevelsByGame, [version]: { ...levels, [character.id]: Math.max(levels[character.id] || 0, level) } };
     }
-    confirmActiveCharacter(version, character.id);
+    confirmActiveCharacter(version, character.id, { source: 'log' });
   }
 }
 
@@ -4145,7 +4145,7 @@ async function refreshDeviceCharacters(poeVersion) {
 
   const sessionConfirmed = state.characterSession?.poeVersion === version && state.characterSession.confirmed;
   if (currentId && currentId !== previousCurrentId && !sessionConfirmed) {
-    confirmActiveCharacter(version, currentId);
+    confirmActiveCharacter(version, currentId, { source: 'api-current' });
   } else {
     refreshAccountStateFromCurrentUser();
     renderCharacterSummaryCard();
@@ -4261,7 +4261,10 @@ async function handleConnectPoeDevice() {
   }
 }
 
-function confirmActiveCharacter(poeVersion, characterId) {
+// `source` says what confirmed it: 'log' (a Client.txt line naming the character), 'pick' (the card) or 'api-current'
+// (GGG's `current` flag, which moves only minutes after Play). Only a log line or a pick is sure enough to move the runs
+// started since Play to the character's league; until one comes they stay tracked.
+function confirmActiveCharacter(poeVersion, characterId, { source = null } = {}) {
   const cache = state.settings.lastKnownAccountState || {};
   // A character GGG just listed is in the device list before the account state has it.
   const character = [...(state.deviceCharactersByGame?.[poeVersion] || []), ...(state.account?.charactersByGame?.[poeVersion] || [])]
@@ -4273,9 +4276,12 @@ function confirmActiveCharacter(poeVersion, characterId) {
   };
   let unconfirmedRuns = [];
   if (state.characterSession?.poeVersion === poeVersion) {
-    unconfirmedRuns = state.characterSession.confirmed ? [] : state.characterSession.runs || [];
     state.characterSession.confirmed = true;
-    delete state.characterSession.runs;
+    if ((source === 'log' || source === 'pick') && !state.characterSession.leagueSettled) {
+      unconfirmedRuns = state.characterSession.runs || [];
+      state.characterSession.leagueSettled = true;
+      delete state.characterSession.runs;
+    }
   }
 
   refreshAccountStateFromCurrentUser();
@@ -4286,11 +4292,11 @@ function confirmActiveCharacter(poeVersion, characterId) {
   }
 }
 
-// Until this Play's character is confirmed, a run starts in the league of the character held then, which may be
-// another league's. Such runs are kept with the league they started in, so the confirmation can move them.
+// Until a log line or a pick names this Play's character, a run starts in the league of the character held then, which
+// may be another league's. Such runs are kept with the league they started in, so that confirmation can move them.
 function trackUnconfirmedRun(session) {
   const characterSession = state.characterSession;
-  if (!session?.id || !characterSession || characterSession.confirmed || session.poeVersion !== characterSession.poeVersion) {
+  if (!session?.id || !characterSession || characterSession.leagueSettled || session.poeVersion !== characterSession.poeVersion) {
     return;
   }
   const runs = characterSession.runs || [];
@@ -4299,12 +4305,23 @@ function trackUnconfirmedRun(session) {
   }
 }
 
+// A league the player set in a run's Edit is final: the confirmation of the played character leaves that run alone,
+// also when it is started again (a resume) before the confirmation comes.
+function keepHandSetLeague(sessionId) {
+  const characterSession = state.characterSession;
+  if (!characterSession || characterSession.leagueSettled) {
+    return;
+  }
+  const runs = (characterSession.runs || []).filter((run) => run.id !== sessionId);
+  characterSession.runs = [...runs, { id: sessionId, league: null, handSet: true }];
+}
+
 // The played character is confirmed: the runs started before that in another league move to its league, and main
 // prices their loot again with that league's prices. One at a time, so each reads the journal the last one wrote.
 async function moveUnconfirmedRuns(runs, league) {
   const leagueName = typeof league === 'string' ? league.trim() : '';
   const sameLeague = (value) => String(value ?? '').trim().toLowerCase() === leagueName.toLowerCase();
-  const moving = leagueName ? runs.filter((run) => !sameLeague(run.league)) : [];
+  const moving = leagueName ? runs.filter((run) => !run.handSet && !sameLeague(run.league)) : [];
   if (!moving.length || typeof window.electronAPI?.moveSessionLeague !== 'function') {
     return;
   }
@@ -9143,13 +9160,20 @@ async function handleSessionLeagueChange(event) {
   } finally {
     state.sessionLeagueBusy = false;
   }
+  if (result?.success) {
+    keepHandSetLeague(session.id);
+  }
 
   // The player may have opened another run while main was writing.
   if (state.selectedSession?.id === session.id) {
     if (result?.success) {
       state.selectedSession = result.session;
     }
-    const failureKey = { LEAGUE_NO_PRICES: 'sessions.leagueNoPrices', SESSION_TOTALS_FIXED: 'sessions.leagueStashTotals' }[result?.code];
+    const failureKey = {
+      LEAGUE_NO_PRICES: 'sessions.leagueNoPrices',
+      SESSION_TOTALS_FIXED: 'sessions.leagueStashTotals',
+      SESSION_COST_UNKNOWN: 'sessions.leagueCostUnknown'
+    }[result?.code];
     const text = result?.success
       ? window.t('sessions.leagueRepriced', { league })
       : (failureKey ? window.t(failureKey, { league }) : getUserFacingErrorMessage(result?.error, 'toast.tryAgain'));
