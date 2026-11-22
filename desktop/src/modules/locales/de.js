@@ -92,6 +92,7 @@
       'overlay.dismiss': 'Ausblenden',
       'overlay.switchCharacter': 'Charakter wechseln',
       'overlay.keepCharacter': 'Behalten',
+      'overlay.moreCharacters': 'Weitere',
       'dashboard.characterSummary': 'Charakterübersicht',
       'dashboard.playingAs': 'Du spielst',
       'dashboard.characterConfirmed': 'Im Spiel bestätigt',

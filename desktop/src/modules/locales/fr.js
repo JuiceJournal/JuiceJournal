@@ -92,6 +92,7 @@
       'overlay.dismiss': 'Fermer',
       'overlay.switchCharacter': 'Changer de personnage',
       'overlay.keepCharacter': 'Garder',
+      'overlay.moreCharacters': 'Plus',
       'dashboard.characterSummary': 'Résumé du personnage',
       'dashboard.playingAs': 'Tu joues avec',
       'dashboard.characterConfirmed': 'Confirmé en jeu',

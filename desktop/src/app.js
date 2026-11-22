@@ -4052,17 +4052,19 @@ function handleGameSessionEntered({ poeVersion } = {}) {
     }
   }, CHARACTER_RECONCILE_DELAY_MS);
 
-  // Ask in the overlay only when there is a choice to make.
+  // Ask in the overlay only when there is a choice to make in this league: the last played character's, else the
+  // Dashboard's league for this game.
   const characters = state.account?.activePoeVersion === version ? state.account.charactersByGame?.[version] || [] : [];
-  const selectedId = state.account?.selectedCharacter?.id;
-  if (characters.length > 1 && selectedId) {
-    window.electronAPI?.showCharacterPromptOverlay?.({
-      poeVersion: version,
-      selectedId,
-      characters: [...characters]
-        .sort((a, b) => (b.level || 0) - (a.level || 0))
-        .map(({ id, name, className, level }) => ({ id, name, className, level }))
-    })?.catch(() => {});
+  const selected = state.account?.selectedCharacter;
+  const trackerContext = typeof getSelectedTrackerContext === 'function' ? getSelectedTrackerContext() : null;
+  const prompt = getAccountStateModel().buildCharacterPrompt({
+    characters,
+    selectedId: selected?.id,
+    league: (selected?.poeVersion === version && selected.league)
+      || (trackerContext?.poeVersion === version ? trackerContext.league : null)
+  });
+  if (prompt) {
+    window.electronAPI?.showCharacterPromptOverlay?.({ poeVersion: version, ...prompt })?.catch(() => {});
   }
 }
 

@@ -92,6 +92,7 @@
       'overlay.dismiss': '关闭',
       'overlay.switchCharacter': '切换角色',
       'overlay.keepCharacter': '保留',
+      'overlay.moreCharacters': '更多',
       'dashboard.characterSummary': '角色概况',
       'dashboard.playingAs': '当前角色',
       'dashboard.characterConfirmed': '已在游戏中确认',

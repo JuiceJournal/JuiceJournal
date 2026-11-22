@@ -413,8 +413,9 @@
       text-transform: none;
     }
 
-    /* The entry cost the farm type applies, quieter than its name. */
-    .jj-chip-cost {
+    /* The entry cost the farm type applies, or another league's name on a character, quieter than the name. */
+    .jj-chip-cost,
+    .jj-chip-league {
       margin-left: 6px;
       color: var(--text-muted);
       font-weight: 500;
@@ -668,7 +669,10 @@
           <span data-i18n="overlay.switchCharacter">Switch character</span>
           <div class="jj-chips" role="group" aria-label="Character" data-i18n-aria="overlay.characterAria" data-overlay-characters></div>
         </div>
+        <!-- More sits beside Keep, not among the chips: long names wrap the chips onto rows that scroll, and More must
+             stay in view. -->
         <div class="jj-form-actions">
+          <button class="jj-form-btn" type="button" data-overlay-character-more data-i18n="overlay.moreCharacters" hidden>More</button>
           <button class="jj-form-btn primary" type="button" data-overlay-character-keep data-i18n="overlay.keepCharacter">Keep</button>
         </div>
       </div>

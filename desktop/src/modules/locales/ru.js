@@ -92,6 +92,7 @@
       'overlay.dismiss': 'Скрыть',
       'overlay.switchCharacter': 'Сменить персонажа',
       'overlay.keepCharacter': 'Оставить',
+      'overlay.moreCharacters': 'Ещё',
       'dashboard.characterSummary': 'Сводка по персонажу',
       'dashboard.playingAs': 'Играешь за',
       'dashboard.characterConfirmed': 'Подтверждено в игре',

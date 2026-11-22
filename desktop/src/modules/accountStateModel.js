@@ -223,10 +223,52 @@
     ];
   }
 
+  // Chips the Play prompt shows before its More chip, so a long character list does not crowd the card.
+  const CHARACTER_PROMPT_CHIP_LIMIT = 6;
+
+  // The Play prompt offers the current league's characters, the last played first and then by level; the other
+  // leagues' characters wait behind More. `league` is set only on those, as the label the card shows after the name.
+  // With no league known it offers every character by level. No prompt when there is nothing to choose.
+  function buildCharacterPrompt({ characters = [], selectedId = null, league = null } = {}) {
+    const leagueKey = (value) => String(value ?? '').trim().toLowerCase();
+    const currentLeague = leagueKey(league);
+    const byLevel = (Array.isArray(characters) ? characters : [])
+      .filter((character) => character?.id)
+      .sort((a, b) => (b.level || 0) - (a.level || 0));
+    const offered = currentLeague
+      ? byLevel.filter((character) => leagueKey(character.league) === currentLeague)
+      : byLevel;
+    if (!selectedId || offered.length < 2) {
+      return null;
+    }
+
+    const selected = offered.find((character) => character.id === selectedId);
+    const ordered = currentLeague
+      ? [
+        ...(selected ? [selected] : []),
+        ...offered.filter((character) => character !== selected),
+        ...byLevel.filter((character) => !offered.includes(character))
+      ]
+      : offered;
+
+    return {
+      selectedId,
+      shownCount: Math.min(offered.length, CHARACTER_PROMPT_CHIP_LIMIT),
+      characters: ordered.map(({ id, name, className, level, league: characterLeague }) => ({
+        id,
+        name,
+        className,
+        level,
+        league: currentLeague && leagueKey(characterLeague) !== currentLeague ? characterLeague : null
+      }))
+    };
+  }
+
   return {
     deriveAccountState,
     createAccountStateCache,
     findCharacterByName,
-    withDeviceCharacters
+    withDeviceCharacters,
+    buildCharacterPrompt
   };
 });

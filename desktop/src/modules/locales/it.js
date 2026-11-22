@@ -92,6 +92,7 @@
       'overlay.dismiss': 'Chiudi',
       'overlay.switchCharacter': 'Cambia personaggio',
       'overlay.keepCharacter': 'Tieni',
+      'overlay.moreCharacters': 'Altri',
       'dashboard.characterSummary': 'Riepilogo personaggio',
       'dashboard.playingAs': 'Giochi come',
       'dashboard.characterConfirmed': 'Confermato in gioco',

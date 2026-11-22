@@ -4007,11 +4007,14 @@ function showCharacterPromptOverlay(prompt = {}) {
     .slice(0, 40)
     .map(normalizeOverlayCharacter)
     .filter((character) => character?.id && character.name);
+  // The card shows this many chips and keeps the rest behind its More chip.
+  const shownCount = Number(prompt.shownCount);
 
   overlayCharacterPromptState = {
     poeVersion: normalizePoeVersion(prompt.poeVersion),
     selectedId: typeof prompt.selectedId === 'string' ? prompt.selectedId.trim() || null : null,
     characters,
+    shownCount: Number.isInteger(shownCount) && shownCount > 0 ? Math.min(shownCount, characters.length) : characters.length,
     expiresAt: Date.now() + CHARACTER_PROMPT_OVERLAY_DURATION_MS
   };
   overlayCharacterPromptTimer = setTimeout(() => {

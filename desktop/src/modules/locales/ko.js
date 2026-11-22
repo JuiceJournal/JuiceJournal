@@ -92,6 +92,7 @@
       'overlay.dismiss': '닫기',
       'overlay.switchCharacter': '캐릭터 변경',
       'overlay.keepCharacter': '유지',
+      'overlay.moreCharacters': '더 보기',
       'dashboard.characterSummary': '캐릭터 요약',
       'dashboard.playingAs': '플레이 중인 캐릭터',
       'dashboard.characterConfirmed': '게임에서 확인됨',

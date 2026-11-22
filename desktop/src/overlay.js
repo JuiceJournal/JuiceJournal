@@ -17,7 +17,8 @@
     startCancel: document.querySelector('[data-overlay-start-cancel]'),
     characterForm: document.querySelector('[data-overlay-character-form]'),
     characters: document.querySelector('[data-overlay-characters]'),
-    characterKeep: document.querySelector('[data-overlay-character-keep]')
+    characterKeep: document.querySelector('[data-overlay-character-keep]'),
+    characterMore: document.querySelector('[data-overlay-character-more]')
   };
 
   var lastRenderedMode = 'runtime';
@@ -35,6 +36,10 @@
   var startCostTyping = false;
   var renderedCharactersKey = null;
   var promptedCharacterId = '';
+  // The character prompt on the card, and whether its More chip was pressed.
+  var shownCharacterPrompt = null;
+  var charactersPromptKey = null;
+  var charactersExpanded = false;
   // Main pushes state only on events, so a running map or session counts up here: one 1 Hz timer that only
   // swaps the meta text (no transition), and only while the state has a clock and the card is shown.
   var clockTimer = null;
@@ -590,20 +595,43 @@
     if (!el.characterForm) return;
     var prompt = state.mode === 'character-prompt' && state.visibility !== 'hidden' ? state.characterPrompt : null;
     el.characterForm.hidden = !prompt;
+    shownCharacterPrompt = prompt;
     if (!prompt) {
       renderedCharactersKey = null;
+      charactersPromptKey = null;
       return;
     }
     promptedCharacterId = prompt.selectedId || '';
+    // A new prompt starts with its first chips again.
+    var promptKey = JSON.stringify([prompt.selectedId, prompt.characters, prompt.shownCount]);
+    if (promptKey !== charactersPromptKey) {
+      charactersPromptKey = promptKey;
+      charactersExpanded = false;
+    }
+    drawCharacterChips(prompt, promptKey);
+  }
+
+  function drawCharacterChips(prompt, promptKey) {
     // Same rule as the farm type chips: rebuild only on change so a state push cannot swallow a click.
-    var charactersKey = JSON.stringify([prompt.selectedId, prompt.characters]);
+    var charactersKey = JSON.stringify([promptKey, charactersExpanded]);
     if (el.characters && charactersKey !== renderedCharactersKey) {
       renderedCharactersKey = charactersKey;
-      el.characters.innerHTML = (prompt.characters || []).map(function (c) {
+      var characters = prompt.characters || [];
+      var shown = charactersExpanded ? characters : characters.slice(0, prompt.shownCount);
+      el.characters.innerHTML = shown.map(function (c) {
         return '<button class="jj-chip" type="button" data-character-id="' + escapeHTML(c.id) + '" aria-pressed="' +
-          (c.id === prompt.selectedId ? 'true' : 'false') + '">' + escapeHTML(c.name) + (c.level ? ' ' + c.level : '') + '</button>';
+          (c.id === prompt.selectedId ? 'true' : 'false') + '">' + escapeHTML(c.name) + (c.level ? ' ' + c.level : '') +
+          (c.league ? '<span class="jj-chip-league">· ' + escapeHTML(c.league) + '</span>' : '') + '</button>';
       }).join('');
+      if (el.characterMore) el.characterMore.hidden = shown.length >= characters.length;
     }
+  }
+
+  // More shows the whole list in the same card; it scrolls inside the chips.
+  function showAllCharacters() {
+    if (!shownCharacterPrompt) return;
+    charactersExpanded = true;
+    drawCharacterChips(shownCharacterPrompt, charactersPromptKey);
   }
 
   function chooseCharacter(characterId) {
@@ -817,6 +845,10 @@
       setStartMapPromptBusy(true);
       root.electronAPI.cancelStartMapPromptOverlay().finally(function () { setStartMapPromptBusy(false); });
     });
+  }
+
+  if (el.characterMore) {
+    el.characterMore.addEventListener('click', showAllCharacters);
   }
 
   if (el.characters) {

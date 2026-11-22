@@ -92,6 +92,7 @@
       'overlay.dismiss': '閉じる',
       'overlay.switchCharacter': 'キャラクター切替',
       'overlay.keepCharacter': 'このまま',
+      'overlay.moreCharacters': 'その他',
       'dashboard.characterSummary': 'キャラクター概要',
       'dashboard.playingAs': 'プレイ中',
       'dashboard.characterConfirmed': 'ゲーム内で確認済み',
