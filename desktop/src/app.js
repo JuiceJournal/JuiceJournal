@@ -58,6 +58,11 @@ const state = {
   sessionLootAddSuggestions: [],
   sessionLootAddBusy: false,
   sessionLootAddError: null,
+  // Edit mode's League field: the leagues offered per game (a promise while they load), whether a move is running, and
+  // the line under the field after one.
+  sessionLeagueOptions: {},
+  sessionLeagueBusy: false,
+  sessionLeagueNote: null,
   // The unit the Cost box of the open run reads in, and whether a cost save is running.
   sessionCostUnit: 'chaos',
   sessionCostBusy: false,
@@ -3031,6 +3036,7 @@ function setupEventListeners() {
     elements.sessionDrawerSummary.addEventListener('keydown', handleSessionCostKeydown);
     elements.sessionDrawerSummary.addEventListener('focusout', handleSessionCostChange);
     elements.sessionDrawerSummary.addEventListener('change', handleSessionCostUnitChange);
+    elements.sessionDrawerSummary.addEventListener('change', handleSessionLeagueChange);
   }
   if (elements.sessionDrawerLoot) {
     elements.sessionDrawerLoot.addEventListener('click', handleSessionLootClick);
@@ -3232,6 +3238,9 @@ function setupIPCListeners() {
   // Session olaylari
   window.electronAPI.onSessionStarted((session) => {
     state.currentSession = session;
+    if (state.characterSession && !state.characterSession.leagueSettled) {
+      trackUnconfirmedRun(session);
+    }
     // A map started another way (the tray, the Dashboard) drops a start card without an answer: stop waiting for one.
     state.stopStartMapPrompt?.();
     updateActiveSessionUI();
@@ -4038,6 +4047,7 @@ function handleGameSessionEntered({ poeVersion } = {}) {
     return;
   }
 
+  // The runs started while it is not confirmed join it as `runs` (see trackUnconfirmedRun).
   state.characterSession = { poeVersion: version, confirmed: false };
   refreshAccountStateFromCurrentUser();
   renderCharacterSummaryCard();
@@ -4052,17 +4062,20 @@ function handleGameSessionEntered({ poeVersion } = {}) {
     }
   }, CHARACTER_RECONCILE_DELAY_MS);
 
-  // Ask in the overlay only when there is a choice to make.
+  // Ask in the overlay only when there is a choice to make. The league is the last played character's, else the
+  // Dashboard's league for this game; each other league offers its own last played character.
   const characters = state.account?.activePoeVersion === version ? state.account.charactersByGame?.[version] || [] : [];
-  const selectedId = state.account?.selectedCharacter?.id;
-  if (characters.length > 1 && selectedId) {
-    window.electronAPI?.showCharacterPromptOverlay?.({
-      poeVersion: version,
-      selectedId,
-      characters: [...characters]
-        .sort((a, b) => (b.level || 0) - (a.level || 0))
-        .map(({ id, name, className, level }) => ({ id, name, className, level }))
-    })?.catch(() => {});
+  const selected = state.account?.selectedCharacter;
+  const trackerContext = typeof getSelectedTrackerContext === 'function' ? getSelectedTrackerContext() : null;
+  const prompt = getAccountStateModel().buildCharacterPrompt({
+    characters,
+    selectedId: selected?.id,
+    league: (selected?.poeVersion === version && selected.league)
+      || (trackerContext?.poeVersion === version ? trackerContext.league : null),
+    lastPlayedByLeague: state.account?.lastPlayedByLeague?.[version] || {}
+  });
+  if (prompt) {
+    window.electronAPI?.showCharacterPromptOverlay?.({ poeVersion: version, ...prompt })?.catch(() => {});
   }
 }
 
@@ -4071,7 +4084,7 @@ function handleCharacterChosen({ poeVersion, characterId } = {}) {
   const version = normalizePoeVersion(poeVersion);
   const known = (state.account?.charactersByGame?.[version] || []).some((character) => character.id === characterId);
   if (known) {
-    confirmActiveCharacter(version, characterId);
+    confirmActiveCharacter(version, characterId, { source: 'pick' });
   }
 }
 
@@ -4092,7 +4105,7 @@ async function handleCharacterLogLine({ poeVersion, name, kind, level } = {}) {
       const levels = state.loggedLevelsByGame[version] || {};
       state.loggedLevelsByGame = { ...state.loggedLevelsByGame, [version]: { ...levels, [character.id]: Math.max(levels[character.id] || 0, level) } };
     }
-    confirmActiveCharacter(version, character.id);
+    confirmActiveCharacter(version, character.id, { source: 'log' });
   }
 }
 
@@ -4132,7 +4145,7 @@ async function refreshDeviceCharacters(poeVersion) {
 
   const sessionConfirmed = state.characterSession?.poeVersion === version && state.characterSession.confirmed;
   if (currentId && currentId !== previousCurrentId && !sessionConfirmed) {
-    confirmActiveCharacter(version, currentId);
+    confirmActiveCharacter(version, currentId, { source: 'api-current' });
   } else {
     refreshAccountStateFromCurrentUser();
     renderCharacterSummaryCard();
@@ -4248,19 +4261,95 @@ async function handleConnectPoeDevice() {
   }
 }
 
-function confirmActiveCharacter(poeVersion, characterId) {
+// `source` says what confirmed it: 'log' (a Client.txt line naming the character), 'pick' (the card) or 'api-current'
+// (GGG's `current` flag, which moves only minutes after Play). Only a log line or a pick is sure enough to move the runs
+// started since Play to the character's league; until one comes they stay tracked.
+function confirmActiveCharacter(poeVersion, characterId, { source = null } = {}) {
   const cache = state.settings.lastKnownAccountState || {};
+  // A character GGG just listed is in the device list before the account state has it.
+  const character = [...(state.deviceCharactersByGame?.[poeVersion] || []), ...(state.account?.charactersByGame?.[poeVersion] || [])]
+    .find((entry) => entry?.id === characterId) || null;
   state.settings.lastKnownAccountState = {
     ...cache,
-    confirmedCharacterByGame: { ...cache.confirmedCharacterByGame, [poeVersion]: characterId }
+    confirmedCharacterByGame: { ...cache.confirmedCharacterByGame, [poeVersion]: characterId },
+    lastPlayedByLeague: getAccountStateModel().recordLastPlayed(cache.lastPlayedByLeague, poeVersion, character)
   };
+  let unconfirmedRuns = [];
   if (state.characterSession?.poeVersion === poeVersion) {
     state.characterSession.confirmed = true;
+    if ((source === 'log' || source === 'pick') && !state.characterSession.leagueSettled) {
+      unconfirmedRuns = state.characterSession.runs || [];
+      state.characterSession.leagueSettled = true;
+      delete state.characterSession.runs;
+    }
   }
 
   refreshAccountStateFromCurrentUser();
   renderCharacterSummaryCard();
   refreshRendererOverlayState();
+  if (unconfirmedRuns.length) {
+    void moveUnconfirmedRuns(unconfirmedRuns, character?.league);
+  }
+}
+
+// Until a log line or a pick names this Play's character, a run starts in the league of the character held then, which
+// may be another league's. Such runs are kept with the league they started in, so that confirmation can move them.
+function trackUnconfirmedRun(session) {
+  const characterSession = state.characterSession;
+  if (!session?.id || !characterSession || characterSession.leagueSettled || session.poeVersion !== characterSession.poeVersion) {
+    return;
+  }
+  const runs = characterSession.runs || [];
+  if (!runs.some((run) => run.id === session.id)) {
+    // A run whose league the player set (main keeps the mark) is final.
+    characterSession.runs = [...runs, session.leagueSetByHand
+      ? { id: session.id, league: null, handSet: true }
+      : { id: session.id, league: session.league || null }];
+  }
+}
+
+// A league the player set in a run's Edit is final. Main keeps the mark on the run and refuses any other move of it;
+// here the confirmation of the played character skips the run, also when it is started again before that comes.
+function keepHandSetLeague(sessionId) {
+  const characterSession = state.characterSession;
+  if (!characterSession || characterSession.leagueSettled) {
+    return;
+  }
+  const runs = (characterSession.runs || []).filter((run) => run.id !== sessionId);
+  characterSession.runs = [...runs, { id: sessionId, league: null, handSet: true }];
+}
+
+// The played character is confirmed: the runs started before that in another league move to its league, and main
+// prices their loot again with that league's prices. One at a time, so each reads the journal the last one wrote.
+async function moveUnconfirmedRuns(runs, league) {
+  const leagueName = typeof league === 'string' ? league.trim() : '';
+  const sameLeague = (value) => String(value ?? '').trim().toLowerCase() === leagueName.toLowerCase();
+  const moving = leagueName ? runs.filter((run) => !run.handSet && !sameLeague(run.league)) : [];
+  if (!moving.length || typeof window.electronAPI?.moveSessionLeague !== 'function') {
+    return;
+  }
+
+  let moved = false;
+  for (const run of moving) {
+    const result = await window.electronAPI.moveSessionLeague(run.id, leagueName).catch(() => null);
+    // The player set this run's league in its Edit meanwhile: nothing to do.
+    if (result?.code === 'SESSION_LEAGUE_SET_BY_HAND') {
+      continue;
+    }
+    if (!result?.success) {
+      // Without prices for that league the run stays as it is; its Edit can move it later.
+      console.warn('Could not move a run to the played character league', result?.code || null);
+      continue;
+    }
+    moved = true;
+    if (state.selectedSession?.id === run.id) {
+      state.selectedSession = result.session;
+      redrawSessionLoot();
+    }
+  }
+  if (moved) {
+    await refreshTrackerData({ includeSessions: true, immediate: true });
+  }
 }
 
 // Main keeps one character cache per profile and hands out the signed-in profile's one.
@@ -8456,6 +8545,7 @@ function renderSessionDrawer({ keepForm = false } = {}) {
     </div>
     <dl class="session-drawer-facts">
       ${fact('sessions.game', contextLabel)}
+      ${lootEditing && typeof sessionLeagueEditHTML === 'function' ? fact('sessions.league', sessionLeagueEditHTML(session)) : ''}
       ${fact('sessions.cost', lootEditing ? sessionCostEditHTML(session) : `${formatProfit(cost, 14, poeVersion, rateOptions)}${costNote}`)}
       ${fact('sessions.totalLoot', formatProfit(totalLoot, 14, poeVersion, rateOptions))}
       ${fact('sessions.startedAt', session.startedAt ? new Date(session.startedAt).toLocaleString() : '-')}
@@ -8732,6 +8822,7 @@ function resetSessionLootEditing() {
   state.sessionLootAddDraft = { name: '', quantity: '1' };
   state.sessionLootAddSuggestions = [];
   state.sessionLootAddError = null;
+  state.sessionLeagueNote = null;
 }
 
 // A redraw replaces the rows, so the control the player was on is found again by its loot id. A box keeps what was
@@ -8741,6 +8832,7 @@ function getFocusedSessionLootControl(node = document.activeElement) {
   if (node && elements.sessionDrawerSummary?.contains?.(node)) {
     if (node.classList.contains('session-drawer-cost-input')) return { kind: 'cost', value: node.value };
     if (node.classList.contains('session-drawer-cost-unit')) return { kind: 'costUnit' };
+    if (node.classList.contains('session-drawer-league')) return { kind: 'league' };
   }
   if (node && elements.sessionDrawerLoot.contains(node) && node.closest?.('[data-session-loot-add]')) {
     return { kind: node.name === 'quantity' ? 'addQty' : 'addName' };
@@ -8756,6 +8848,8 @@ function focusSessionLootControl(target) {
   let node = null;
   if (target.kind === 'cost' || target.kind === 'costUnit') {
     node = elements.sessionDrawerSummary.querySelector(target.kind === 'cost' ? '.session-drawer-cost-input' : '.session-drawer-cost-unit');
+  } else if (target.kind === 'league') {
+    node = elements.sessionDrawerSummary.querySelector('.session-drawer-league');
   } else if (target.kind === 'addName' || target.kind === 'addQty') {
     node = elements.sessionDrawerLoot.querySelector(`[data-session-loot-add] [name="${target.kind === 'addQty' ? 'quantity' : 'itemName'}"]`);
   } else if (target.kind === 'toggle') {
@@ -9021,6 +9115,82 @@ async function changeSessionCost(costChaos, focusBefore = getFocusedSessionLootC
       : String(costChaos)
   }));
   await refreshTrackerData({ includeSessions: true, immediate: true });
+}
+
+// The leagues a run's Edit offers are the Market picker's for the run's game, read once per game; the drawer is drawn
+// again when they arrive.
+function ensureSessionLeagueOptions(poeVersion) {
+  if (state.sessionLeagueOptions[poeVersion]) return;
+  state.sessionLeagueOptions[poeVersion] = getKnownLeagues(poeVersion).then(({ allLeagues }) => {
+    state.sessionLeagueOptions[poeVersion] = allLeagues;
+    if (state.sessionLootEditing && state.selectedSession?.poeVersion === poeVersion) redrawSessionLoot();
+  });
+}
+
+// The League fact in Edit mode: the run's league and the others known for its game. Picking one moves the run there
+// (see handleSessionLeagueChange); the line under the field says how the last move went.
+function sessionLeagueEditHTML(session) {
+  const poeVersion = session.poeVersion === 'poe2' ? 'poe2' : 'poe1';
+  ensureSessionLeagueOptions(poeVersion);
+  const known = state.sessionLeagueOptions[poeVersion];
+  const current = session.league || 'Standard';
+  const leagues = [current, ...(Array.isArray(known) ? known : []).filter((league) => league !== current)];
+  const disabledAttr = state.sessionLeagueBusy ? ' disabled' : '';
+  const note = state.sessionLeagueNote?.sessionId === session.id
+    ? `<span class="session-drawer-cost-note">${escapeHTML(state.sessionLeagueNote.text)}</span>`
+    : '';
+  return `<select class="session-drawer-league" aria-label="${window.t('sessions.league')}"${disabledAttr}>${leagues
+    .map((league) => `<option value="${escapeHTML(league)}"${league === current ? ' selected' : ''}>${escapeHTML(league)}</option>`)
+    .join('')}</select>${note}`;
+}
+
+// A league picked in Edit moves the run there, and main prices its loot again with that league's prices. A run main
+// cannot move keeps its league, and the line under the field says why.
+async function handleSessionLeagueChange(event) {
+  const select = event.target?.closest?.('.session-drawer-league');
+  const session = state.selectedSession;
+  if (!select || !session?.id) return;
+  const league = select.value;
+  // While another change of this run saves, the field shows the run's league again.
+  if (!league || league === session.league || state.sessionLeagueBusy || state.sessionLootBusyId || state.sessionCostBusy) {
+    select.value = session.league || 'Standard';
+    return;
+  }
+
+  state.sessionLeagueBusy = true;
+  select.disabled = true;
+  let result = null;
+  try {
+    result = await window.electronAPI.moveSessionLeague(session.id, league, { byHand: true });
+  } catch (error) {
+    result = { success: false, error };
+  } finally {
+    state.sessionLeagueBusy = false;
+  }
+  if (result?.success) {
+    keepHandSetLeague(session.id);
+  }
+
+  // The player may have opened another run while main was writing.
+  if (state.selectedSession?.id === session.id) {
+    if (result?.success) {
+      state.selectedSession = result.session;
+    }
+    const failureKey = {
+      LEAGUE_NO_PRICES: 'sessions.leagueNoPrices',
+      SESSION_TOTALS_FIXED: 'sessions.leagueStashTotals',
+      SESSION_COST_UNKNOWN: 'sessions.leagueCostUnknown'
+    }[result?.code];
+    const text = result?.success
+      ? window.t('sessions.leagueRepriced', { league })
+      : (failureKey ? window.t(failureKey, { league }) : getUserFacingErrorMessage(result?.error, 'toast.tryAgain'));
+    state.sessionLeagueNote = { sessionId: session.id, text };
+    redrawSessionLoot({ kind: 'league' });
+    announceStatus(text);
+  }
+  if (result?.success) {
+    await refreshTrackerData({ includeSessions: true, immediate: true });
+  }
 }
 
 async function handleSessionMetadataSave() {
@@ -9505,14 +9675,12 @@ async function loadCurrencyPage() {
 const FALLBACK_POE1_LEAGUES = ['Mirage', 'Hardcore Mirage', 'SSF Mirage', 'HC SSF Mirage', 'Standard', 'Hardcore'];
 const FALLBACK_POE2_LEAGUES = ['Fate of the Vaal', 'HC Fate of the Vaal', 'Standard', 'Hardcore'];
 
-async function loadCurrencyLeagues() {
-  const select = document.getElementById('currency-league');
-  if (!select) return;
-
+// The leagues the Market picker offers for a game: poe.ninja's active ones first, then the server's, the league of the
+// newest kept list and the fallback names. A run's Edit offers the same list.
+async function getKnownLeagues(poeVersion) {
   let allLeagues = [];
   let activeLeagueNames = [];
   let lastKnownLeague = null;
-  const { poeVersion } = currencyState;
 
   try {
     // res = { activeLeagues: [...] } from poe.ninja
@@ -9536,14 +9704,24 @@ async function loadCurrencyLeagues() {
     if (lastKnownLeague && !allLeagues.includes(lastKnownLeague)) allLeagues.push(lastKnownLeague);
   } catch { }
 
-  // The page moved to another game meanwhile, and that game's own list decides the league.
-  if (poeVersion !== currencyState.poeVersion) return;
-
   // Always merge fallback leagues so standard options are available
   const fallback = poeVersion === 'poe2' ? FALLBACK_POE2_LEAGUES : FALLBACK_POE1_LEAGUES;
   for (const l of fallback) {
     if (!allLeagues.includes(l)) allLeagues.push(l);
   }
+
+  return { allLeagues, activeLeagueNames, lastKnownLeague };
+}
+
+async function loadCurrencyLeagues() {
+  const select = document.getElementById('currency-league');
+  if (!select) return;
+
+  const { poeVersion } = currencyState;
+  const { allLeagues, activeLeagueNames, lastKnownLeague } = await getKnownLeagues(poeVersion);
+
+  // The page moved to another game meanwhile, and that game's own list decides the league.
+  if (poeVersion !== currencyState.poeVersion) return;
 
   select.innerHTML = allLeagues.map(l => `<option value="${escapeHTML(l)}">${escapeHTML(l)}</option>`).join('');
 

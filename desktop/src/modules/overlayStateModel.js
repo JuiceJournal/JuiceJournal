@@ -318,11 +318,18 @@
         const name = normalizeString(entry?.name);
         const level = Number(entry?.level);
         return id && name
-          ? { id, name, className: normalizeString(entry.className), level: Number.isFinite(level) && level > 0 ? level : null }
+          ? {
+            id,
+            name,
+            className: normalizeString(entry.className),
+            level: Number.isFinite(level) && level > 0 ? level : null,
+            league: normalizeString(entry.league)
+          }
           : null;
       })
       .filter(Boolean);
     const selected = characters.find((entry) => entry.id === normalizeString(characterPrompt.selectedId));
+    const shownCount = Number(characterPrompt.shownCount);
 
     // With a single character there is nothing to choose.
     if (characters.length < 2 || !selected) {
@@ -333,6 +340,8 @@
       poeVersion: normalizeString(characterPrompt.poeVersion),
       selectedId: selected.id,
       characters,
+      // The chips shown before More; the rest show once it is pressed.
+      shownCount: Number.isInteger(shownCount) && shownCount > 0 ? Math.min(shownCount, characters.length) : characters.length,
       expiresAt: normalizeTimestamp(characterPrompt.expiresAt)
     };
   }

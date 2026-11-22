@@ -93,6 +93,9 @@ const COACH_TICK_MS = 1_000;
 // Inventory loot waits this long for poe.ninja prices; loot without a price counts as 0.
 const SESSION_PRICES_WAIT_MS = 5_000;
 const SESSION_PRICES_RETRY_MS = 5 * 60_000;
+// A run moved to another league is priced from a kept list only while a sync would still keep that full list over a
+// quick one (see PriceSnapshotStore).
+const KEPT_FULL_LIST_STANDS_MS = PriceSnapshotStore.FULL_LIST_STANDS_MS;
 // Settings > Data's Delete everything waits this long for each browser data clear; longer counts as a failed step.
 const BROWSER_DATA_CLEAR_TIMEOUT_MS = 15_000;
 // Delete everything tries each folder this often, this far apart. rm's own retries repeat at every folder level, so a
@@ -498,6 +501,11 @@ let apiClient = null;
 let poeApiClient = null;
 let priceService = null;
 let priceSnapshots = null;
+// The league moves of runs, one after another (see moveSessionLeague).
+let leagueMoveQueue = Promise.resolve();
+// Run id -> the Divine and Mirror rates of the league a finished run was moved to before the window saved its result.
+// An entry goes once that result is saved with it.
+const movedRunRates = new Map();
 // Per game, the promise of a lowercase item name -> art index over the newest kept price list. A new kept list drops it.
 const itemIconIndexes = { poe1: null, poe2: null };
 let iconCache = null;
@@ -1191,7 +1199,7 @@ async function resolveStartCost(input, farmTypeId, poeVersion, league) {
   const costChaos = convertFarmTypeCostToChaos(entry, divineChaos);
   return costChaos === null
     ? { costChaos: 0, costSource: 'farmType', costPending: entry }
-    : { costChaos, costSource: 'farmType', costPending: null };
+    : { costChaos, costSource: 'farmType', costPending: null, costEntry: entry };
 }
 
 // A map started while the divine rate was unknown takes its farm type's cost once the rate is known.
@@ -1201,7 +1209,7 @@ async function settleCostPending(journal, session) {
     return { journal, session };
   }
 
-  return localJournal.updateCost(journal, session.id, costChaos, { source: 'farmType', now: new Date() });
+  return localJournal.updateCost(journal, session.id, costChaos, { source: 'farmType', now: new Date(), entry: session.costPending });
 }
 
 // A farm type's new cost also reaches the map running of that type, unless the player set that map's cost by hand.
@@ -1217,11 +1225,16 @@ async function applyFarmTypeCostToRunningSession(farmTypeId, entry) {
   if (currentSession?.id !== running.id) {
     return;
   }
+  // Or moved to another league: the cost is worked out again with that league's rate, never this one.
+  if (currentSession.league !== running.league || currentSession.poeVersion !== running.poeVersion) {
+    return applyFarmTypeCostToRunningSession(farmTypeId, entry);
+  }
 
   const { journal, session } = localJournal.updateCost(readJournal(), running.id, costChaos ?? 0, {
     source: 'farmType',
     now: new Date(),
-    pending: costChaos === null ? entry : null
+    pending: costChaos === null ? entry : null,
+    entry: costChaos === null ? null : entry
   });
   writeJournal(journal);
   currentSession = session;
@@ -1623,8 +1636,9 @@ function getStoredMapResults() {
 }
 
 // A finished map's saved result follows its loot: the values the loot produced are recomputed in place, so its
-// place in the history and its publish state stay.
-function updateSessionMapResult(session) {
+// place in the history and its publish state stay. `changes` are set on it as well; new rates replace the rate
+// snapshot the ledger normalizer would read first.
+function updateSessionMapResult(session, changes = {}) {
   const storeKey = getMapResultsStoreKey();
   if (!storeKey || !session?.id) {
     return;
@@ -1641,8 +1655,13 @@ function updateSessionMapResult(session) {
   const netProfit = Number(session.profitChaos) || 0;
   // The stored profit, top items and status are dropped so the ledger normalizer derives them from the new values.
   const { profitChaos, topLootItems, calculationStatus, ...stored } = results[index];
+  if (changes.profitCurrencyRates) {
+    delete stored.priceContext;
+    delete stored.profitCurrencyRateSnapshot;
+  }
   const nextResult = normalizeMapResultForLedger({
     ...stored,
+    ...changes,
     // A map whose loot was counted (or added by hand) since has loot now.
     noLoot: lootEntries.length > 0 ? false : Boolean(stored.noLoot),
     outputValue: Number(session.totalLootChaos) || 0,
@@ -1728,6 +1747,130 @@ function editSessionLoot(sessionId, lootId, { quantity, remove = false } = {}) {
   return session;
 }
 
+// Item name -> { chaosValue, divineValue, icon } in a game and league, or null when no complete list for it can be
+// had. The loaded list counts when it holds that league and every type was synced. A kept list counts when it is a
+// full one younger than KEPT_FULL_LIST_STANDS_MS. Otherwise the league is synced first. The price service holds one
+// league, so it syncs another only for the run that is running or with no run running; a running run of another
+// league would read 0 for its loot meanwhile.
+async function getLeaguePriceLookup(poeVersion, league, sessionId) {
+  const holdsLeague = () => priceService.poeVersion === poeVersion
+    && priceService.league === league
+    && priceService.fullySynced
+    && priceService.getStatus().itemCount > 0;
+  const fromLoadedList = (name) => {
+    const info = priceService.getPriceInfo(name);
+    return info ? { chaosValue: readLocalChaosPrice(name, poeVersion) || 0, divineValue: info.divineValue ?? null, icon: info.icon || null } : null;
+  };
+  if (holdsLeague()) {
+    return fromLoadedList;
+  }
+
+  const snapshot = await priceSnapshots.load(poeVersion, league);
+  if (snapshot?.full && Date.now() - snapshot.syncedAt < KEPT_FULL_LIST_STANDS_MS) {
+    const byName = new Map(snapshot.entries.map((entry) => [entry.name.toLowerCase().trim(), entry]));
+    return (name) => {
+      const entry = byName.get(String(name || '').toLowerCase().trim());
+      return entry ? { chaosValue: normalizePositiveRate(entry.chaosValue) || 0, divineValue: entry.divineValue ?? null, icon: entry.icon || null } : null;
+    };
+  }
+
+  if (!currentSession || currentSession.id === sessionId) {
+    await loadSessionPrices({ poeVersion, league });
+    if (holdsLeague()) {
+      return fromLoadedList;
+    }
+  }
+  return null;
+}
+
+// Moves a run of the signed-in profile to another league of its game and prices its loot again with that league's
+// prices (see localJournal.changeSessionLeague). Answers { success: true, session }, or { success: false, code } when
+// there is no price list for that league (LEAGUE_NO_PRICES), the run's totals came from a stash diff
+// (SESSION_TOTALS_FIXED), its farm type cost cannot be converted again (SESSION_COST_UNKNOWN) or the player set its
+// league and this move is not theirs (SESSION_LEAGUE_SET_BY_HAND); the run is left as it was then. `byHand` says the
+// player chose the league in the run's Edit. Moves run one at a time, so two moves of a run cannot interleave writes.
+function moveSessionLeague(sessionId, league, { byHand = false } = {}) {
+  const move = leagueMoveQueue.then(() => moveSessionLeagueNow(sessionId, league, byHand === true));
+  leagueMoveQueue = move.catch(() => {});
+  return move;
+}
+
+async function moveSessionLeagueNow(sessionId, league, byHand) {
+  // The name the run keeps, so its prices are looked up under the same name.
+  const leagueName = localJournal.normalizeLeagueName(league);
+  if (!leagueName) {
+    throw Object.assign(new Error('League is required'), { code: 'LEAGUE_INVALID' });
+  }
+  const session = localJournal.getSession(readJournal(), sessionId);
+  if (!session) {
+    throw Object.assign(new Error('Session not found'), { code: 'SESSION_NOT_FOUND' });
+  }
+  // Before any price loading; changeSessionLeague checks it again on the journal it writes.
+  if (session.leagueSetByHand && !byHand) {
+    return { success: false, code: 'SESSION_LEAGUE_SET_BY_HAND' };
+  }
+
+  const priceOf = await getLeaguePriceLookup(session.poeVersion, leagueName, session.id);
+  if (!priceOf) {
+    return { success: false, code: 'LEAGUE_NO_PRICES' };
+  }
+  let moved = null;
+  try {
+    // Read again: loot may have been added while the prices loaded.
+    moved = localJournal.changeSessionLeague(readJournal(), sessionId, leagueName, { priceOf, now: new Date(), byHand });
+  } catch (error) {
+    if (['SESSION_TOTALS_FIXED', 'SESSION_COST_UNKNOWN', 'SESSION_LEAGUE_SET_BY_HAND'].includes(error?.code)) {
+      return { success: false, code: error.code };
+    }
+    throw error;
+  }
+  writeJournal(moved.journal);
+  const updated = moved.session;
+  const rates = {
+    divineChaos: priceOf('Divine Orb')?.chaosValue || null,
+    mirrorChaos: priceOf('Mirror of Kalandra')?.chaosValue || null
+  };
+  // Only a finished run whose result the window has not saved yet needs them later (see updateMovedRunResult).
+  if (updated.status !== 'active' && findSessionMapResultIndex(getStoredMapResults(), updated) === -1) {
+    movedRunRates.set(updated.id, rates);
+  }
+
+  if (currentSession?.id === updated.id) {
+    currentSession = updated;
+    updateOverlayWindow();
+    // Loot read from now on is priced in the new league too.
+    void loadSessionPrices(updated);
+  }
+  if (updated.status !== 'active') {
+    // The saved result takes the new league, its numbers, its cost and its Divine and Mirror rates in place.
+    updateSessionMapResult(updated, { league: updated.league, inputValue: updated.costChaos, profitCurrencyRates: rates });
+  }
+  // A result card the overlay still shows has the old league's numbers.
+  if (overlayMapResultState?.result?.sessionId === updated.id) {
+    overlayMapResultState = null;
+    clearOverlayMapResultDismissTimer();
+    updateOverlayWindow();
+  }
+  return { success: true, session: updated };
+}
+
+// The window saves a run's result from the run it was sent as the run ended. A move to another league can land before
+// that save and find no result to update; the saved result then takes the run's league, numbers and rates now.
+function updateMovedRunResult(result) {
+  const session = result?.sessionId ? localJournal.getSession(readJournal(), result.sessionId) : null;
+  const rates = session ? movedRunRates.get(session.id) : null;
+  if (!rates || session.status === 'active') {
+    return false;
+  }
+  // The run's result is saved now, so its rates are not needed again.
+  movedRunRates.delete(session.id);
+  if (session.league === result.league) {
+    return false;
+  }
+  updateSessionMapResult(session, { league: session.league, inputValue: session.costChaos, profitCurrencyRates: rates });
+  return true;
+}
+
 function saveMapResultHistory(result) {
   const storeKey = getMapResultsStoreKey();
   if (!storeKey) {
@@ -1737,7 +1880,7 @@ function saveMapResultHistory(result) {
   const normalizedResult = normalizeMapResultForLedger(result);
   const nextResults = appendMapResult(getStoredMapResults(), normalizedResult, { maxResults: 100 });
   store.set(storeKey, nextResults);
-  return nextResults;
+  return typeof updateMovedRunResult === 'function' && updateMovedRunResult(normalizedResult) ? getStoredMapResults() : nextResults;
 }
 
 function resolveMapResultsForPublish({ resultIds = [], results = [] } = {}) {
@@ -4007,11 +4150,14 @@ function showCharacterPromptOverlay(prompt = {}) {
     .slice(0, 40)
     .map(normalizeOverlayCharacter)
     .filter((character) => character?.id && character.name);
+  // The card shows this many chips and keeps the rest behind its More chip.
+  const shownCount = Number(prompt.shownCount);
 
   overlayCharacterPromptState = {
     poeVersion: normalizePoeVersion(prompt.poeVersion),
     selectedId: typeof prompt.selectedId === 'string' ? prompt.selectedId.trim() || null : null,
     characters,
+    shownCount: Number.isInteger(shownCount) && shownCount > 0 ? Math.min(shownCount, characters.length) : characters.length,
     expiresAt: Date.now() + CHARACTER_PROMPT_OVERLAY_DURATION_MS
   };
   overlayCharacterPromptTimer = setTimeout(() => {
@@ -4861,8 +5007,17 @@ async function settlePoe1Inventory(session) {
 }
 
 async function addInventoryLoot(sessionId, items, mapCount = 1, unread = false, unreadCandidates = [], unreadOther = false) {
-  const session = localJournal.getSession(readJournal(), sessionId);
-  await withTimeout(loadSessionPrices(session), SESSION_PRICES_WAIT_MS).catch(() => null);
+  const before = localJournal.getSession(readJournal(), sessionId);
+  if (!before) {
+    throw Object.assign(new Error('Session not found'), { code: 'SESSION_NOT_FOUND' });
+  }
+  await withTimeout(loadSessionPrices(before), SESSION_PRICES_WAIT_MS).catch(() => null);
+  // The run may have moved to another league during the wait (moveSessionLeague): its loot takes the league it has now.
+  let session = localJournal.getSession(readJournal(), sessionId) || before;
+  if (session.league !== before.league || session.poeVersion !== before.poeVersion) {
+    await withTimeout(loadSessionPrices(session), SESSION_PRICES_WAIT_MS).catch(() => null);
+    session = localJournal.getSession(readJournal(), sessionId) || session;
+  }
   // Another league's prices would be written into this map's history for good; no price counts as 0.
   const priced = priceService.poeVersion === session.poeVersion && priceService.league === session.league;
   const entries = items.map(({ name, quantity }) => ({
@@ -4961,6 +5116,7 @@ async function startNewSession(input = {}) {
       costChaos: cost.costChaos,
       costSource: cost.costSource,
       costPending: cost.costPending,
+      costEntry: cost.costEntry,
       poeVersion,
       league,
       startedAt: input.startedAt
@@ -5227,7 +5383,22 @@ async function endCurrentSession(options = {}) {
       : localJournal.getActiveSession(journal));
     if (!activeSession) return;
     if (activeSession.costPending) {
-      ({ journal, session: activeSession } = await settleCostPending(journal, activeSession));
+      const pending = activeSession;
+      const settled = await settleCostPending(journal, pending);
+      // The rate lookup waits, and loot or a league move can land meanwhile: the run ends from the journal as it is now.
+      // The settled cost counts only while the run still has that cost pending in the league its rate was read for.
+      journal = readJournal();
+      activeSession = localJournal.getSession(journal, pending.id) || pending;
+      const stillPending = activeSession.league === pending.league
+        && activeSession.costPending?.amount === pending.costPending.amount
+        && activeSession.costPending?.unit === pending.costPending.unit;
+      if (!settled.session.costPending && stillPending) {
+        ({ journal, session: activeSession } = localJournal.updateCost(journal, activeSession.id, settled.session.costChaos, {
+          source: 'farmType',
+          now: new Date(),
+          entry: activeSession.costPending
+        }));
+      }
     }
 
     const endedAt = options.endedAt || new Date().toISOString();
@@ -6159,6 +6330,15 @@ function setupIPC() {
       return editSessionLoot(sessionId, lootId, { quantity: changes?.quantity });
     } catch (error) {
       throw toRendererError(error, 'Failed to update loot');
+    }
+  });
+
+  ipcMain.handle('move-session-league', async (event, sessionId, league, options = {}) => {
+    try {
+      assertDesktopUserAuthenticated();
+      return await moveSessionLeague(sessionId, league, { byHand: options?.byHand === true });
+    } catch (error) {
+      throw toRendererError(error, 'Failed to change the league');
     }
   });
 

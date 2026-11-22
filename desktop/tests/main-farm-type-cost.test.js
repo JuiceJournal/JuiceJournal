@@ -191,10 +191,14 @@ test('a map starts with its farm type cost converted with the divine rate of its
     divineChaos: 233.3
   });
 
-  assert.deepEqual(plainJson(await context.resolveStartCost({}, 'breach', 'poe2', 'Fate')), { costChaos: 349.95, costSource: 'farmType', costPending: null });
+  assert.deepEqual(plainJson(await context.resolveStartCost({}, 'breach', 'poe2', 'Fate')), {
+    costChaos: 349.95, costSource: 'farmType', costPending: null, costEntry: { amount: 1.5, unit: 'divine' }
+  });
   assert.deepEqual(rateCalls, [{ poeVersion: 'poe2', league: 'Fate', cacheOnly: true }]);
   // A cost in chaos needs no rate.
-  assert.deepEqual(plainJson(await context.resolveStartCost({ costChaos: null }, 'ritual', 'poe1', 'Mirage')), { costChaos: 12.35, costSource: 'farmType', costPending: null });
+  assert.deepEqual(plainJson(await context.resolveStartCost({ costChaos: null }, 'ritual', 'poe1', 'Mirage')), {
+    costChaos: 12.35, costSource: 'farmType', costPending: null, costEntry: { amount: 12.345, unit: 'chaos' }
+  });
   assert.equal(rateCalls.length, 1);
 });
 

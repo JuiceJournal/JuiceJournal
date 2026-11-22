@@ -687,7 +687,7 @@ function loadCurrencyGameSwitch(currencyState = {}) {
     updateTypeFilterDropdown: () => calls.push('rail'),
     loadCurrencyPrices: async () => calls.push(['prices', context.currencyState.poeVersion, context.currencyState.league])
   });
-  loadAppFunctions(context, ['currencyLoadingRowsHTML', 'markCurrencyRowsReplaced', 'showCurrencyLoadingRows', 'loadCurrencyLeagues', 'switchCurrencyGame']);
+  loadAppFunctions(context, ['currencyLoadingRowsHTML', 'markCurrencyRowsReplaced', 'showCurrencyLoadingRows', 'getKnownLeagues', 'loadCurrencyLeagues', 'switchCurrencyGame']);
   return { context, calls, leagues, tbody: elements['currency-table-body'], footer: elements['currency-footer'] };
 }
 
