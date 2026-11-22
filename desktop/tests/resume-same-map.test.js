@@ -119,8 +119,8 @@ function createMain({ profileId = 'p1' } = {}) {
     overlayInventoryStatus: null,
     publishRuntimeSessionEvent: (type) => log.published.push(type)
   });
-  vm.runInContext('let lastEndedRun = null; let enteredMapIdentity = null; let runEnding = null;', context);
-  loadFunctions(['isSameMapInstance', 'resumeEndedRun', 'rememberEndedRun', 'waitForRunEnding', 'handleMapEntered'], context);
+  vm.runInContext('let lastEndedRun = null; let enteredMapIdentity = null; let runEnding = null; let resumedRunId = null;', context);
+  loadFunctions(['isSameMapInstance', 'isResumedRunResult', 'resumeEndedRun', 'rememberEndedRun', 'waitForRunEnding', 'handleMapEntered'], context);
   const map = (seed, areaId = 'mapaugury') => ({ mapName: 'Augury', mapIdentity: { areaId, seed } });
   const endRun = () => {
     const ended = localJournal.endSession(env.journal, 's1', { endedAt: '2026-11-20T10:05:00.000Z' }, { now: new Date('2026-11-20T10:05:00.000Z') });
@@ -232,6 +232,46 @@ test('a run that could not be ended leaves nothing to resume, and a run already 
   await main.context.handleMapEntered(main.map('1366560895'));
   assert.equal(main.context.currentSession.id, 'other');
   assert.equal(localJournal.getSession(main.env.journal, 's1').status, 'completed');
+});
+
+test('the time away ends when the map was entered again, even when the entry waited for the run\'s end', async () => {
+  const main = createMain();
+  await main.context.handleMapEntered(main.map('1366560895'));
+  main.context.currentSession = localJournal.getActiveSession(main.env.journal);
+  main.exit();
+  // The end's wait (a Divine rate) lasted until 10:07; the player was back in the map at 10:06.
+  main.env.now = new Date('2026-11-20T10:07:00.000Z');
+  await main.context.handleMapEntered({ ...main.map('1366560895'), timestamp: new Date('2026-11-20T10:06:00.000Z') });
+  assert.equal(localJournal.getActiveSession(main.env.journal).pausedSec, 60);
+
+  // An entry time that cannot be read, or one later than now, falls back to now.
+  for (const timestamp of ['not a date', new Date('2026-11-20T11:00:00.000Z')]) {
+    const other = createMain();
+    await other.context.handleMapEntered(other.map('1366560895'));
+    other.context.currentSession = localJournal.getActiveSession(other.env.journal);
+    other.exit();
+    await other.context.handleMapEntered({ ...other.map('1366560895'), timestamp });
+    assert.equal(localJournal.getActiveSession(other.env.journal).pausedSec, 120, String(timestamp));
+  }
+});
+
+test('a first end still being saved or shown by the window is dropped once its run is running again', async () => {
+  const main = createMain();
+  await main.context.handleMapEntered(main.map('1366560895'));
+  main.context.currentSession = localJournal.getActiveSession(main.env.journal);
+  assert.equal(main.context.isResumedRunResult({ sessionId: 's1' }), false, 'a run never resumed keeps its results');
+  main.exit();
+  await main.context.handleMapEntered(main.map('1366560895'));
+
+  assert.equal(main.context.isResumedRunResult({ sessionId: 's1' }), true);
+  assert.equal(main.context.isResumedRunResult({ sessionId: 's0' }), false);
+  assert.equal(main.context.isResumedRunResult({}), false);
+  // Once the resumed run has ended for good, its result is saved and shown as any other.
+  main.context.currentSession = null;
+  assert.equal(main.context.isResumedRunResult({ sessionId: 's1' }), false);
+
+  assert.ok(mainSource.includes("if (app.isQuiting || isResumedRunResult(result)) {\n      return null;"));
+  assert.ok(mainSource.includes("    if (isResumedRunResult(result)) {\n      return getStoredMapResults();\n    }\n    return saveMapResultHistory(result);"));
 });
 
 test('main ends a resumed run with its whole length, and wires the exit to remember the run', () => {

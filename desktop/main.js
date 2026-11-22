@@ -4996,6 +4996,13 @@ async function startNewSession(input = {}) {
 // it after a death or a trip to the hideout, carries the run on.
 let lastEndedRun = null;
 let enteredMapIdentity = null;
+// The run carried on at the last resume. While it runs again, a result of its first end that the main window was
+// still saving or showing is no longer this run's result.
+let resumedRunId = null;
+
+function isResumedRunResult(result) {
+  return Boolean(result?.sessionId) && result.sessionId === resumedRunId && currentSession?.id === resumedRunId;
+}
 // The run end a map exit started and that has not finished yet. A map entered meanwhile waits for it, so the entry
 // knows which run was ended.
 let runEnding = null;
@@ -5008,7 +5015,7 @@ function isSameMapInstance(a, b) {
  * Opens the run of the map that was just left, when the map entered now is that same one. Returns the run, or null:
  * then the entry is a new map. Only a map the game named with a seed can be told apart from another map of its kind.
  */
-function resumeEndedRun(mapIdentity) {
+function resumeEndedRun(mapIdentity, enteredAt = null) {
   const ended = lastEndedRun;
   lastEndedRun = null;
   enteredMapIdentity = mapIdentity || null;
@@ -5021,9 +5028,15 @@ function resumeEndedRun(mapIdentity) {
     if (!stored || stored.status !== 'completed' || localJournal.getActiveSession(journal)) {
       return null;
     }
-    const resumed = localJournal.resumeSession(journal, ended.sessionId, { now: new Date() });
+    // The time away ends when the map was entered again, not when this runs: an entry can wait for the run's end to
+    // finish (a cost in Divine waits for its rate), and the player is back in the map meanwhile.
+    const now = new Date();
+    const entered = enteredAt ? new Date(enteredAt) : null;
+    const resumedAt = entered && Number.isFinite(entered.getTime()) && entered <= now ? entered : now;
+    const resumed = localJournal.resumeSession(journal, ended.sessionId, { now: resumedAt });
     writeJournal(resumed.journal);
     currentSession = resumed.session;
+    resumedRunId = resumed.session.id;
     // The result kept for the run's first end would stand beside the one its real end writes.
     const storeKey = getMapResultsStoreKey();
     if (storeKey) {
@@ -5070,7 +5083,7 @@ async function handleMapEntered(data) {
   if (typeof waitForRunEnding === 'function' && waitForRunEnding()) {
     await waitForRunEnding();
   }
-  const resumed = typeof resumeEndedRun === 'function' ? resumeEndedRun(data?.mapIdentity) : null;
+  const resumed = typeof resumeEndedRun === 'function' ? resumeEndedRun(data?.mapIdentity, data?.timestamp) : null;
   if (resumed) {
     inventoryWatcher?.mapResumed(resumed.id);
     if (typeof resumePoe1Entry === 'function') {
@@ -6677,8 +6690,9 @@ function setupIPC() {
 
   ipcMain.handle('show-map-result-overlay', async (event, result, options = {}) => {
     assertDesktopUserAuthenticated();
-    // A session closed while quitting is recorded, but the overlay is about to close.
-    if (app.isQuiting) {
+    // A session closed while quitting is recorded, but the overlay is about to close. The first end of a run that is
+    // running again has no card to show.
+    if (app.isQuiting || isResumedRunResult(result)) {
       return null;
     }
     return showMapResultOverlay(result, options || {});
@@ -6757,6 +6771,10 @@ function setupIPC() {
 
   ipcMain.handle('save-map-result', async (event, result) => {
     assertDesktopUserAuthenticated();
+    // The window may still be saving the first end of a run that was resumed meanwhile; its real end saves its own.
+    if (isResumedRunResult(result)) {
+      return getStoredMapResults();
+    }
     return saveMapResultHistory(result);
   });
 
