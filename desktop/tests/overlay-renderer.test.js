@@ -866,3 +866,297 @@ test('a result whose read left new items unread says so beside its loot line', (
   renderResult(overlay, { netProfit: 0, noLoot: true, durationSeconds: 250, lootItemCount: 0, topOutputs: [] });
   assert.equal(overlay.secondary.textContent, 'No loot counted');
 });
+
+// The start card's note box beside the cost box, and the result card's Note button and row, wired to a fake electronAPI.
+function loadNoteCard() {
+  const overlay = loadOverlay({
+    extraSelectors: [
+      '[data-overlay-start-form]', '[data-overlay-start-farm-types]', '[data-overlay-start-cost-note]',
+      '[data-overlay-start-cost-input]', '[data-overlay-start-cost-units]', '[data-overlay-start-submit]', '[data-overlay-start-cancel]',
+      '[data-overlay-start-note]', '[data-overlay-note]', '[data-overlay-result-note-form]', '[data-overlay-result-note]',
+      '[data-overlay-result-note-save]'
+    ]
+  });
+  const calls = [];
+  const unitButtons = ['chaos', 'divine'].map((unit) => {
+    const button = createElement('button');
+    button.setAttribute('data-cost-unit', unit);
+    return button;
+  });
+  overlay.elements['[data-overlay-start-cost-units]'].querySelectorAll = (selector) => (selector === 'button' || selector === '[data-cost-unit]' ? unitButtons : []);
+  const withFocus = (name, input) => {
+    input.value = '';
+    input.focus = () => { calls.push(['focus-' + name]); input.listeners.focus?.(); };
+    input.blur = () => { calls.push(['blur-' + name]); input.listeners.blur?.(); };
+    return input;
+  };
+  const startNote = withFocus('start-note', overlay.elements['[data-overlay-start-note]']);
+  const costInput = withFocus('cost', overlay.elements['[data-overlay-start-cost-input]']);
+  const resultNote = withFocus('result-note', overlay.elements['[data-overlay-result-note]']);
+  const answers = { save: (payload) => ({ ok: true, notes: payload.note.trim() || null }) };
+  overlay.window.electronAPI = {
+    confirmStartMapPromptOverlay: async (payload) => { calls.push(['confirm', JSON.parse(JSON.stringify(payload))]); return { action: 'confirm', ...payload }; },
+    engageStartMapPromptOverlay: async (options) => { calls.push(['engage', JSON.parse(JSON.stringify(options))]); return true; },
+    releaseStartMapPromptKeyboard: async () => { calls.push(['release']); return true; },
+    engageMapResultOverlayNote: async () => { calls.push(['engage-note']); return true; },
+    releaseMapResultOverlayNote: async () => { calls.push(['release-note']); return true; },
+    saveMapResultOverlayNote: async (payload) => { calls.push(['save-note', JSON.parse(JSON.stringify(payload))]); return answers.save(payload); }
+  };
+  const startCard = (createdAt = 1000, extra = {}) => overlay.renderState({
+    visibility: 'visible',
+    mode: 'start-map-prompt',
+    startMapPrompt: {
+      mapName: 'Burial Chambers',
+      farmTypeId: 'breach',
+      createdAt,
+      farmTypeOptions: [{ id: 'breach', label: 'Breach' }, { id: 'ritual', label: 'Ritual' }],
+      ...extra
+    }
+  });
+  const resultCard = (mapResult = {}, mode = 'map-result') => overlay.renderState({
+    visibility: 'visible',
+    mode,
+    mapResult: { visible: true, pinned: true, sessionId: 'run-1', notes: null, noteOpen: false, result: { netProfit: 10, topOutputs: [], durationSeconds: 60 }, ...mapResult }
+  });
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+  return {
+    overlay,
+    calls,
+    answers,
+    startNote,
+    costInput,
+    resultNote,
+    unitButtons,
+    startCard,
+    resultCard,
+    settle,
+    noteButton: overlay.elements['[data-overlay-note]'],
+    noteForm: overlay.elements['[data-overlay-result-note-form]'],
+    saveButton: overlay.elements['[data-overlay-result-note-save]'],
+    submitStart: () => overlay.elements['[data-overlay-start-form]'].listeners.submit({ preventDefault() {} }),
+    submitNote: () => overlay.elements['[data-overlay-result-note-form]'].listeners.submit({ preventDefault() {} })
+  };
+}
+
+test('the start card\'s note box borrows the keyboard on a click like the cost box does, and Esc gives it back', async () => {
+  const card = loadNoteCard();
+  card.startCard();
+
+  card.startNote.listeners.mousedown();
+  await card.settle();
+  assert.deepEqual(card.calls, [['engage', { keyboard: true }], ['focus-start-note']]);
+
+  let prevented = false;
+  card.startNote.listeners.keydown({ key: 'Escape', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.deepEqual(card.calls.slice(2), [['blur-start-note'], ['release']]);
+  // Other keys are the box's own.
+  card.startNote.listeners.keydown({ key: 'a', preventDefault() { assert.fail('only Esc is taken'); } });
+});
+
+test('a note typed on the start card goes with Start, trimmed, and nothing goes when the box is empty', async () => {
+  const card = loadNoteCard();
+  card.startCard();
+
+  card.submitStart();
+  await card.settle();
+  assert.deepEqual(card.calls.at(-1), ['confirm', { farmTypeId: 'breach' }], 'no note key without a note');
+
+  card.startNote.value = '  Tablets, 3 scarabs  ';
+  card.submitStart();
+  await card.settle();
+  assert.deepEqual(card.calls.at(-1), ['confirm', { farmTypeId: 'breach', note: 'Tablets, 3 scarabs' }]);
+
+  // With no farm type picked the note still goes, and it goes next to a cost that changed.
+  card.startNote.value = 'Just a note';
+  card.overlay.elements['[data-overlay-start-farm-types]'].listeners.click({ target: { closest: () => ({ getAttribute: () => '' }) } });
+  card.submitStart();
+  await card.settle();
+  assert.deepEqual(card.calls.at(-1), ['confirm', { farmTypeId: null, note: 'Just a note' }]);
+
+  card.startNote.value = 'Cost too';
+  card.overlay.elements['[data-overlay-start-farm-types]'].listeners.click({ target: { closest: () => ({ getAttribute: () => 'ritual' }) } });
+  card.costInput.value = '12';
+  card.submitStart();
+  await card.settle();
+  assert.deepEqual(card.calls.at(-1), ['confirm', { farmTypeId: 'ritual', note: 'Cost too', cost: { amount: 12, unit: 'chaos' } }]);
+
+  // A cost the card cannot read keeps the card up and sends nothing, note or not.
+  const before = card.calls.length;
+  card.costInput.value = 'abc';
+  card.submitStart();
+  await card.settle();
+  assert.equal(card.calls.length, before);
+});
+
+test('the start card\'s note is emptied for the next card but survives a redraw of the same card', async () => {
+  const card = loadNoteCard();
+  card.startCard(1000);
+
+  card.startNote.value = 'Delirium + 2 scarabs';
+  // A state push for the same card, with and without the countdown that the first click ends.
+  card.startCard(1000, { expiresAt: 8000 });
+  card.startCard(1000);
+  assert.equal(card.startNote.value, 'Delirium + 2 scarabs');
+
+  // Another map entry is another card.
+  card.startCard(2000);
+  assert.equal(card.startNote.value, '');
+
+  // So is the same card after another card (a result) took its place.
+  card.startNote.value = 'typed before the result';
+  card.resultCard();
+  card.startCard(2000);
+  assert.equal(card.startNote.value, '');
+});
+
+test('a unit click leaves the keyboard alone while the player types in the note box', async () => {
+  const card = loadNoteCard();
+  card.startCard();
+  const units = card.overlay.elements['[data-overlay-start-cost-units]'];
+
+  card.startNote.listeners.mousedown();
+  await card.settle();
+  card.calls.length = 0;
+  units.listeners.click({ target: { closest: () => card.unitButtons[1] } });
+  await card.settle();
+  assert.deepEqual(card.calls, []);
+
+  card.startNote.listeners.keydown({ key: 'Escape', preventDefault() {} });
+  card.calls.length = 0;
+  units.listeners.click({ target: { closest: () => card.unitButtons[0] } });
+  await card.settle();
+  assert.deepEqual(card.calls, [['engage', { keyboard: false }]]);
+});
+
+test('the start card has the note field under the cost box, with its translated placeholder and aria label', () => {
+  const html = fs.readFileSync(overlayHtmlPath, 'utf8');
+  assert.match(html, /<input class="jj-note-input" type="text" autocomplete="off" spellcheck="false" maxlength="200" placeholder="Scarabs, tablets, setup…" aria-label="Note for this map" data-i18n-placeholder="overlay\.noteStartPlaceholder" data-i18n-aria="overlay\.noteAria" data-overlay-start-note>/);
+  assert.match(html, /<input class="jj-note-input" type="text" autocomplete="off" spellcheck="false" maxlength="200" placeholder="Drops, mistakes, what to change…" aria-label="Note for this map" data-i18n-placeholder="overlay\.noteResultPlaceholder" data-i18n-aria="overlay\.noteAria" data-overlay-result-note>/);
+  assert.ok(html.indexOf('data-overlay-start-cost-note') < html.indexOf('data-overlay-start-note'), 'under the cost field');
+  assert.ok(html.indexOf('data-overlay-start-note') < html.indexOf('data-overlay-start-cancel'), 'above the buttons');
+  // The Note button is the first of the header's buttons, before Pin; Save uses the Settings label.
+  assert.ok(html.indexOf('data-overlay-note ') < html.indexOf('data-overlay-pin'));
+  // Three worded buttons do not fit the header in the longer languages: Note is a pencil, and the header row may be
+  // narrower than its kicker, which gives way.
+  assert.match(html, /<button class="jj-btn jj-btn-icon" type="button" data-overlay-note aria-label="Note" data-i18n-aria="overlay\.note" hidden><svg /);
+  assert.match(html.split('\r\n').join('\n'), /\.jj-header \{[^}]*min-width: 0;/);
+  assert.match(html, /data-overlay-result-note-save data-i18n="settings\.save">Save</);
+  // No inline styles or handlers were added for it.
+  assert.doesNotMatch(html, /<(input|button|form)[^>]*(style=|onclick=|onkeydown=|onsubmit=)/);
+});
+
+test('the Note button shows only for a run the card names whose note fits one line', () => {
+  const card = loadNoteCard();
+  const visibleFor = (mapResult, mode) => { card.resultCard(mapResult, mode); return !card.noteButton.hidden; };
+
+  assert.equal(visibleFor({}), true);
+  assert.equal(visibleFor({ sessionId: null }), false, 'no run');
+  assert.equal(visibleFor({ sessionId: '' }), false);
+  assert.equal(visibleFor({ notes: 'two\nlines' }), false);
+  assert.equal(visibleFor({ notes: 'two\r\nlines' }), false);
+  assert.equal(visibleFor({ notes: 'x'.repeat(200) }), true);
+  assert.equal(visibleFor({ notes: 'x'.repeat(201) }), false, 'never cut from the card');
+  assert.equal(visibleFor({}, 'runtime'), false, 'only on the result card');
+  card.overlay.renderState({ visibility: 'hidden', mode: 'map-result', mapResult: { visible: false, sessionId: 'run-1' } });
+  assert.equal(card.noteButton.hidden, true);
+
+  card.resultCard({ notes: null });
+  assert.equal(card.noteButton.getAttribute('title'), 'Note');
+  card.resultCard({ notes: '' });
+  assert.equal(card.noteButton.getAttribute('title'), 'Note');
+  card.resultCard({ notes: 'Scarab of Wisps' });
+  assert.equal(card.noteButton.getAttribute('title'), 'Edit note');
+  card.overlay.renderState({ visibility: 'visible', mode: 'map-result', language: 'tr', mapResult: { visible: true, sessionId: 'run-1', notes: 'x', result: { topOutputs: [] } } });
+  assert.equal(card.noteButton.getAttribute('title'), 'Notu düzenle');
+});
+
+test('Note asks main to pin the card and lend the keyboard, then the row opens filled with the run\'s note', async () => {
+  const card = loadNoteCard();
+  card.resultCard({ notes: 'old note', pinned: false });
+  assert.equal(card.noteForm.hidden, true);
+
+  card.noteButton.listeners.click();
+  await card.settle();
+  assert.deepEqual(card.calls, [['engage-note'], ['focus-result-note']]);
+
+  // Main pushes the state with the row open; a second push does not rewrite what is typed.
+  card.resultCard({ notes: 'old note', pinned: true, noteOpen: true });
+  assert.equal(card.noteForm.hidden, false);
+  assert.equal(card.resultNote.value, 'old note');
+  card.resultNote.value = 'new text';
+  card.resultCard({ notes: 'old note', pinned: true, noteOpen: true });
+  assert.equal(card.resultNote.value, 'new text');
+
+  // Closed and opened again, it starts from the saved note.
+  card.resultCard({ notes: 'old note', pinned: true, noteOpen: false });
+  assert.equal(card.noteForm.hidden, true);
+  card.resultCard({ notes: 'old note', pinned: true, noteOpen: true });
+  assert.equal(card.resultNote.value, 'old note');
+
+  // Another card, or a run the card cannot name, has no row even if main still says it is open.
+  card.resultCard({ sessionId: null, noteOpen: true });
+  assert.equal(card.noteForm.hidden, true);
+});
+
+test('Enter or Save saves the note through main, then the row closes and the button names the note', async () => {
+  const card = loadNoteCard();
+  card.resultCard({ noteOpen: true });
+  card.resultNote.value = '  Wisps, 4 tablets  ';
+
+  card.submitNote();
+  assert.equal(card.resultNote.disabled, true, 'busy while main saves');
+  assert.equal(card.saveButton.disabled, true);
+  await card.settle();
+  assert.deepEqual(card.calls.at(-1), ['save-note', { note: '  Wisps, 4 tablets  ' }]);
+  assert.equal(card.resultNote.disabled, false);
+  assert.equal(card.noteForm.hidden, true);
+  assert.equal(card.noteButton.getAttribute('title'), 'Edit note');
+
+  // Clearing the box removes the note: the button reads Note again.
+  card.resultCard({ notes: 'Wisps, 4 tablets', noteOpen: true });
+  card.resultNote.value = '   ';
+  card.submitNote();
+  await card.settle();
+  assert.deepEqual(card.calls.at(-1), ['save-note', { note: '   ' }]);
+  assert.equal(card.noteForm.hidden, true);
+  assert.equal(card.noteButton.getAttribute('title'), 'Note');
+});
+
+test('a note main cannot save keeps the row open with the text and says so on the card', async () => {
+  const card = loadNoteCard();
+  card.resultCard({ noteOpen: true });
+  card.resultNote.value = 'keep me';
+  card.answers.save = () => ({ ok: false, error: 'SESSION_NOT_FOUND' });
+
+  card.submitNote();
+  await card.settle();
+  assert.equal(card.noteForm.hidden, false);
+  assert.equal(card.resultNote.value, 'keep me');
+  assert.equal(card.resultNote.disabled, false);
+  assert.equal(card.resultNote.getAttribute('data-tone'), 'error');
+  assert.equal(card.overlay.secondary.textContent, 'The note could not be saved.');
+  assert.deepEqual(card.calls.at(-1), ['focus-result-note']);
+
+  // Typing again clears the error.
+  card.resultNote.listeners.input();
+  assert.equal(card.resultNote.getAttribute('data-tone'), null);
+  assert.notEqual(card.overlay.secondary.textContent, 'The note could not be saved.');
+});
+
+test('Esc closes the note row without saving and gives the keyboard back', async () => {
+  const card = loadNoteCard();
+  card.resultCard({ noteOpen: true });
+  card.resultNote.value = 'unsaved';
+
+  let prevented = false;
+  card.resultNote.listeners.keydown({ key: 'Escape', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.deepEqual(card.calls, [['blur-result-note'], ['release-note']]);
+  assert.equal(card.calls.some(([name]) => name === 'save-note'), false);
+  card.resultNote.listeners.keydown({ key: 'a', preventDefault() { assert.fail('only Esc is taken'); } });
+
+  // Main pushes the closed state and the row goes.
+  card.resultCard({ noteOpen: false });
+  assert.equal(card.noteForm.hidden, true);
+});

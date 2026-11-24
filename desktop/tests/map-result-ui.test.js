@@ -5207,3 +5207,105 @@ test('a price update forgets the names that had no art before it redraws the vie
 
   assert.deepEqual(order, ['clearMisses', 'history', 'recentLoot']);
 });
+
+test('a note typed on the start card is saved on the run that starts, and a card without one starts the run as before', async () => {
+  const run = async (details) => {
+    const startSessionCalls = [];
+    const context = loadFunctions(['normalizeSessionMapName', 'getRuntimeSessionMapName', 'handleStartSession'], {
+      state: { runtimeSession: { summary: { currentAreaName: 'Dunes Map' } } },
+      window: {
+        t: (key) => key,
+        electronAPI: {
+          startSession: async (payload) => { startSessionCalls.push({ ...payload }); return { id: 'session-1' }; },
+          setActiveFarmType: async () => {}
+        }
+      },
+      requestMapSessionDetails: async () => null,
+      getSelectedTrackerContext: () => ({ poeVersion: 'poe2', league: 'Fate of the Vaal', farmTypeId: 'breach' }),
+      updateActiveSessionUI: () => {},
+      refreshTrackerData: async () => {},
+      showToast: () => {},
+      getUserFacingErrorMessage: () => 'error'
+    });
+    await context.handleStartSession({ sessionDetails: details, source: 'map-detected-overlay' });
+    return startSessionCalls;
+  };
+
+  assert.deepEqual(await run({ mapName: 'Channel', farmTypeId: 'breach', notes: 'Wisps, 3 tablets' }), [{
+    mapName: 'Channel', poeVersion: 'poe2', league: 'Fate of the Vaal', farmTypeId: 'breach', notes: 'Wisps, 3 tablets'
+  }]);
+  for (const notes of [undefined, '', null]) {
+    const [payload] = await run({ mapName: 'Channel', farmTypeId: 'breach', notes });
+    assert.equal(Object.hasOwn(payload, 'notes'), false, `no notes key for ${JSON.stringify(notes)}`);
+  }
+});
+
+test('the note of a confirmed start card goes on to the session start, and none is added when the card had none', async () => {
+  const run = async (overlayResult) => {
+    const startCalls = [];
+    let overlayResultHandler = null;
+    const context = loadFunctions(['handleMapEnteredEvent'], {
+      START_MAP_PROMPT_OVERLAY_MS: 7000,
+      state: { currentSession: null, settings: { autoStartSession: true }, farmType: { selectedFarmTypeId: 'breach' } },
+      setRuntimeSessionState: () => {},
+      showToast: () => {},
+      getSelectedTrackerContext: () => ({ poeVersion: 'poe2', league: 'Fate of the Vaal', farmTypeId: 'breach' }),
+      getFarmTypeModel: () => ({ listFarmTypes: () => [{ id: 'breach', label: 'Breach' }, { id: 'expedition', label: 'Expedition' }] }),
+      window: {
+        t: (key) => key,
+        electronAPI: {
+          showStartMapPromptOverlay: async () => {
+            queueMicrotask(() => overlayResultHandler?.(overlayResult));
+            return { visibility: 'visible', mode: 'start-map-prompt' };
+          },
+          hideStartMapPromptOverlay: async () => {},
+          onStartMapPromptOverlayResult: (callback) => {
+            overlayResultHandler = callback;
+            return () => { overlayResultHandler = null; };
+          }
+        }
+      },
+      handleStartSession: async (options) => startCalls.push(JSON.parse(JSON.stringify(options)))
+    });
+    await context.handleMapEnteredEvent({ mapName: 'Channel' });
+    return startCalls;
+  };
+
+  assert.deepEqual(await run({ action: 'confirm', mapName: 'Channel', farmTypeId: 'expedition', notes: 'Delirium, 2 scarabs' }), [{
+    defaultMapName: 'Channel',
+    source: 'map-detected-overlay',
+    sessionDetails: { mapName: 'Channel', farmTypeId: 'expedition', notes: 'Delirium, 2 scarabs' }
+  }]);
+  assert.deepEqual(await run({ action: 'confirm', mapName: 'Channel', farmTypeId: 'expedition' }), [{
+    defaultMapName: 'Channel',
+    source: 'map-detected-overlay',
+    sessionDetails: { mapName: 'Channel', farmTypeId: 'expedition' }
+  }]);
+});
+
+test('a note saved on the result card shows in the open Sessions drawer unless the player has typed there', () => {
+  const source = fs.readFileSync(appJsPath, 'utf8');
+  const start = source.indexOf('window.electronAPI.onSessionCostUpdated((session) => {');
+  assert.notEqual(start, -1);
+  const handlerSource = source.slice(start + 'window.electronAPI.onSessionCostUpdated('.length, source.indexOf('\n    });', start) + '\n    }'.length).replace(/\r\n/g, '\n');
+
+  const run = ({ boxText, savedNotes }) => {
+    const state = { currentSession: null, selectedSession: { id: 'run-1', notes: 'old' } };
+    const elements = { sessionDrawerNotes: { value: boxText } };
+    const redraws = [];
+    const handler = vm.runInNewContext(`(${handlerSource})`, {
+      state,
+      elements,
+      updateActiveSessionUI: () => {},
+      redrawSessionLoot: () => redraws.push(elements.sessionDrawerNotes.value),
+      refreshTrackerData: () => {}
+    });
+    handler({ id: 'run-1', notes: savedNotes });
+    return { box: elements.sessionDrawerNotes.value, selected: state.selectedSession.notes, redraws };
+  };
+
+  assert.deepEqual(run({ boxText: 'old', savedNotes: 'from the card' }), { box: 'from the card', selected: 'from the card', redraws: ['from the card'] });
+  assert.deepEqual(run({ boxText: 'old', savedNotes: null }).box, '', 'a cleared note empties the box');
+  // Text the player typed and has not saved stays; the run's saved note is the card's.
+  assert.deepEqual(run({ boxText: 'half typed', savedNotes: 'from the card' }), { box: 'half typed', selected: 'from the card', redraws: ['half typed'] });
+});

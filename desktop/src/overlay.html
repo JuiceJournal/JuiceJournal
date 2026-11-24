@@ -113,9 +113,16 @@
       justify-content: space-between;
       gap: 10px;
       min-height: 18px;
+      /* A row of the card's grid: without this it is never narrower than its kicker and buttons side by side. */
+      min-width: 0;
     }
 
+    /* With the Note button the header can be wider than the card: the buttons stay whole and the kicker gives way. The
+       clip margin keeps the corners of its turned diamond. */
     .jj-label {
+      min-width: 0;
+      overflow: clip;
+      overflow-clip-margin: 2px;
       display: inline-flex;
       align-items: center;
       gap: 7px;
@@ -129,6 +136,8 @@
 
     .jj-label::before {
       content: "";
+      /* The mark stays whole when the kicker gives way. */
+      flex: none;
       width: 7px;
       height: 7px;
       background: currentColor;
@@ -168,6 +177,7 @@
 
     .jj-actions {
       display: flex;
+      flex-shrink: 0;
       gap: 6px;
       pointer-events: auto;
     }
@@ -217,6 +227,17 @@
       background: rgb(var(--brass-rgb) / 0.22);
       box-shadow: inset 0 0 0 1px var(--brass);
     }
+
+    /* Three worded buttons do not fit the header in the longer languages, so Note is a pencil. It turns brass once
+       the run has a note. */
+    .jj-btn-icon {
+      width: 28px;
+      padding: 0;
+    }
+
+    .jj-btn-icon svg { fill: currentColor; }
+
+    .jj-btn-icon[data-has-note] { color: var(--brass); }
 
     .jj-btn-dismiss:hover {
       box-shadow: inset 0 0 0 1px var(--loss);
@@ -440,7 +461,8 @@
       gap: 8px;
     }
 
-    .jj-cost-input {
+    .jj-cost-input,
+    .jj-note-input {
       width: 96px;
       min-height: 28px;
       padding: 0 10px;
@@ -458,15 +480,39 @@
       pointer-events: auto;
     }
 
-    .jj-cost-input:focus {
+    .jj-cost-input:focus,
+    .jj-note-input:focus {
       outline: none;
       box-shadow: inset 0 0 0 1px var(--ember-hot);
     }
 
-    .jj-cost-input:disabled {
+    .jj-cost-input:disabled,
+    .jj-note-input:disabled {
       opacity: 0.5;
       cursor: default;
     }
+
+    /* One line for a note on either card: the start card's field and the result card's row. */
+    .jj-note-input {
+      flex: 1;
+      width: 100%;
+      min-width: 0;
+      font-variant-numeric: normal;
+    }
+
+    .jj-note-input[data-tone="error"] {
+      box-shadow: inset 0 0 0 1px rgb(var(--loss-rgb));
+    }
+
+    /* The result card's note row sits under the secondary row; the window grows by its height (mapResultOverlayModel). */
+    .jj-note-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      pointer-events: auto;
+    }
+
+    .jj-note-row[hidden] { display: none; }
 
     .jj-chip[aria-pressed="true"] {
       color: var(--text-bright);
@@ -633,6 +679,7 @@
       <div class="jj-header">
         <span class="jj-label" data-overlay-kicker-label>Juice Journal</span>
         <div class="jj-actions">
+          <button class="jj-btn jj-btn-icon" type="button" data-overlay-note aria-label="Note" data-i18n-aria="overlay.note" hidden><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M11.4 1.6l3 3L5.2 13.8 1.6 14.4l.6-3.6z"/></svg></button>
           <button class="jj-btn" type="button" data-overlay-pin aria-pressed="false" hidden>Pin</button>
           <button class="jj-btn jj-btn-dismiss" type="button" data-overlay-dismiss data-i18n="overlay.dismiss" hidden>Dismiss</button>
         </div>
@@ -643,6 +690,10 @@
         <span class="jj-secondary" data-overlay-secondary>Waiting for runtime session</span>
         <span class="jj-meta" data-overlay-meta aria-live="off"></span>
       </div>
+      <form class="jj-note-row" data-overlay-result-note-form hidden>
+        <input class="jj-note-input" type="text" autocomplete="off" spellcheck="false" maxlength="200" placeholder="Drops, mistakes, what to change…" aria-label="Note for this map" data-i18n-placeholder="overlay.noteResultPlaceholder" data-i18n-aria="overlay.noteAria" data-overlay-result-note>
+        <button class="jj-btn" type="submit" data-overlay-result-note-save data-i18n="settings.save">Save</button>
+      </form>
       <form class="jj-form" data-overlay-start-form hidden>
         <div class="jj-field">
           <span data-i18n="dashboard.farmType">Farm Type</span>
@@ -658,6 +709,10 @@
             </div>
           </div>
           <span class="jj-start-note" data-overlay-start-cost-note hidden></span>
+        </div>
+        <div class="jj-field">
+          <span data-i18n="overlay.note">Note</span>
+          <input class="jj-note-input" type="text" autocomplete="off" spellcheck="false" maxlength="200" placeholder="Scarabs, tablets, setup…" aria-label="Note for this map" data-i18n-placeholder="overlay.noteStartPlaceholder" data-i18n-aria="overlay.noteAria" data-overlay-start-note>
         </div>
         <div class="jj-form-actions">
           <button class="jj-form-btn" type="button" data-overlay-start-cancel data-i18n="mapSession.cancel">Cancel</button>

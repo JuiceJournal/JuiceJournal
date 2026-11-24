@@ -3288,7 +3288,8 @@ function setupIPCListeners() {
     await refreshTrackerData({ includeSessions: true, immediate: true });
   });
 
-  // A change to the farm type's entry cost reached the map that is running.
+  // A change to a run reached this window: the farm type's entry cost on the map that is running, or a note saved on the
+  // overlay's result card.
   if (window.electronAPI.onSessionCostUpdated) {
     window.electronAPI.onSessionCostUpdated((session) => {
       if (state.currentSession?.id === session?.id) {
@@ -3296,6 +3297,10 @@ function setupIPCListeners() {
         updateActiveSessionUI();
       }
       if (state.selectedSession?.id === session?.id) {
+        // A note changed elsewhere (the overlay card) shows in the drawer, unless the player has typed in its box.
+        if (elements.sessionDrawerNotes && elements.sessionDrawerNotes.value === (state.selectedSession.notes || '')) {
+          elements.sessionDrawerNotes.value = session.notes || '';
+        }
         state.selectedSession = session;
         redrawSessionLoot();
       }
@@ -3648,7 +3653,9 @@ async function handleMapEnteredEvent(data = {}) {
               source: 'map-detected-overlay',
               sessionDetails: {
                 mapName: overlayMapName,
-                farmTypeId: overlayResult.farmTypeId || null
+                farmTypeId: overlayResult.farmTypeId || null,
+                // The note typed on the card is saved on the run that starts.
+                ...(overlayResult.notes ? { notes: overlayResult.notes } : {})
               }
             });
             return;
@@ -5672,6 +5679,9 @@ async function handleStartSession(options = {}) {
 
   if (farmTypeId) {
     sessionPayload.farmTypeId = farmTypeId;
+  }
+  if (typeof requestedSession?.notes === 'string' && requestedSession.notes) {
+    sessionPayload.notes = requestedSession.notes;
   }
 
   try {

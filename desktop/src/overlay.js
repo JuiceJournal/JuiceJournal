@@ -2,8 +2,12 @@
   var el = {
     card: document.querySelector('[data-overlay-state]'),
     kickerLabel: document.querySelector('[data-overlay-kicker-label]'),
+    note: document.querySelector('[data-overlay-note]'),
     pin: document.querySelector('[data-overlay-pin]'),
     dismiss: document.querySelector('[data-overlay-dismiss]'),
+    resultNoteForm: document.querySelector('[data-overlay-result-note-form]'),
+    resultNoteInput: document.querySelector('[data-overlay-result-note]'),
+    resultNoteSave: document.querySelector('[data-overlay-result-note-save]'),
     primary: document.querySelector('[data-overlay-primary]'),
     drops: document.querySelector('[data-overlay-drops]'),
     secondary: document.querySelector('[data-overlay-secondary]'),
@@ -13,6 +17,7 @@
     startCostNote: document.querySelector('[data-overlay-start-cost-note]'),
     startCostInput: document.querySelector('[data-overlay-start-cost-input]'),
     startCostUnits: document.querySelector('[data-overlay-start-cost-units]'),
+    startNoteInput: document.querySelector('[data-overlay-start-note]'),
     startSubmit: document.querySelector('[data-overlay-start-submit]'),
     startCancel: document.querySelector('[data-overlay-start-cancel]'),
     characterForm: document.querySelector('[data-overlay-character-form]'),
@@ -34,6 +39,13 @@
   var startCostBaseline = { text: '', unit: 'chaos' };
   var startCostError = '';
   var startCostTyping = false;
+  // The note box lends the keyboard like the cost box; a note belongs to one start card and is emptied with the next.
+  var startNoteTyping = false;
+  // The result card's note row is open while main says so; opening it fills the box with the run's note, and a state
+  // push never rewrites what is typed. The last state lets a saved note show at once.
+  var resultNoteOpen = false;
+  var resultNoteError = false;
+  var lastState = null;
   var renderedCharactersKey = null;
   var promptedCharacterId = '';
   // The character prompt on the card, and whether its More chip was pressed.
@@ -388,6 +400,51 @@
     return model.getProfitTier(result.netProfit, rates);
   }
 
+  // The card edits a note that fits its one-line box; a longer or multi-line note written in Sessions is left alone.
+  var NOTE_MAX_LENGTH = 200;
+
+  function isOneLineNote(notes) {
+    if (notes === null || notes === undefined || notes === '') return true;
+    return typeof notes === 'string' && notes.length <= NOTE_MAX_LENGTH && !/[\r\n]/.test(notes);
+  }
+
+  // The Note button needs the run the card shows. The row under it is open while main says so; main also pins the card
+  // and lends the keyboard then.
+  function renderResultNote(state) {
+    var mapResult = (state.mapResult && typeof state.mapResult === 'object') ? state.mapResult : {};
+    var shown = state.mode === 'map-result' && state.visibility !== 'hidden';
+    var editable = shown && typeof mapResult.sessionId === 'string' && mapResult.sessionId !== '' && isOneLineNote(mapResult.notes);
+    var notes = typeof mapResult.notes === 'string' ? mapResult.notes : '';
+    if (el.note) {
+      el.note.hidden = !editable;
+      // The button is a pencil, named Note in the page. Hovering says whether it adds a note or edits one.
+      var noteLabel = root.t(notes ? 'overlay.editNote' : 'overlay.note');
+      el.note.setAttribute('title', noteLabel);
+      if (notes) {
+        el.note.setAttribute('data-has-note', '');
+      } else {
+        el.note.removeAttribute('data-has-note');
+      }
+    }
+    var open = editable && mapResult.noteOpen === true;
+    if (open && !resultNoteOpen && el.resultNoteInput) {
+      el.resultNoteInput.value = notes;
+      el.resultNoteInput.disabled = false;
+    }
+    if (!open) resultNoteError = false;
+    if (el.resultNoteInput) {
+      if (resultNoteError) {
+        el.resultNoteInput.setAttribute('data-tone', 'error');
+      } else {
+        el.resultNoteInput.removeAttribute('data-tone');
+      }
+    }
+    if (el.resultNoteForm) el.resultNoteForm.hidden = !open;
+    // A failed save says so where the loot line is, so the card keeps the height main gave it.
+    if (resultNoteError) setSecondary(root.t('overlay.noteSaveError'));
+    resultNoteOpen = open;
+  }
+
   /* ── Mode: Inventory Status ── */
   function renderInventoryStatusMode(state) {
     setKicker(root.t('overlay.inventory'));
@@ -458,6 +515,8 @@
     startFarmTypeOptions = opts;
     if (newPrompt) {
       fillStartCost();
+      if (el.startNoteInput) el.startNoteInput.value = '';
+      startNoteTyping = false;
       setStartMapPromptBusy(false);
     } else {
       renderStartCostNote();
@@ -556,10 +615,10 @@
     return root.electronAPI.engageStartMapPromptOverlay({ keyboard: Boolean(keyboard) });
   }
 
-  // The keyboard goes to the cost box only while it is wanted there.
-  function focusStartCost() {
+  // The keyboard goes to the cost box or the note box only while it is wanted there.
+  function focusStartInput(input) {
     engageStartMapPrompt(true).then(function (engaged) {
-      if (engaged && el.startCostInput && !el.startCostInput.disabled) el.startCostInput.focus();
+      if (engaged && input && !input.disabled) input.focus();
     });
   }
 
@@ -666,6 +725,7 @@
       root.farmTypeModel.setCustomFarmTypes(input.customFarmTypes);
     }
     var state = deriveState(input);
+    lastState = state;
     applyLanguage(state.language);
     var visibility = state.visibility || 'waiting';
     var mode = state.mode || 'runtime';
@@ -705,6 +765,7 @@
 
     renderStartMapForm(state);
     renderCharacterForm(state);
+    renderResultNote(state);
     syncClock(state, visibility);
 
     if (el.pin) {
@@ -727,6 +788,9 @@
     var payload = selectedFarmTypeIds.length > 1
       ? { farmTypeIds: selectedFarmTypeIds.slice() }
       : { farmTypeId: selectedFarmTypeIds[0] || null };
+    // The note goes with the map even when no farm type is picked; main trims it and drops an empty one.
+    var note = el.startNoteInput ? String(el.startNoteInput.value || '').trim() : '';
+    if (note) payload.note = note;
     if (!el.startCostInput || !selectedFarmTypeIds.length) return payload;
     var text = String(el.startCostInput.value || '').trim();
     if (text === startCostBaseline.text && startCostUnit === startCostBaseline.unit) return payload;
@@ -746,6 +810,7 @@
     var units = el.startCostUnits ? Array.prototype.slice.call(el.startCostUnits.querySelectorAll('button')) : [];
     var noFarmType = !selectedFarmTypeIds.length;
     units.concat([el.startCostInput]).filter(Boolean).forEach(function (e) { e.disabled = busy || noFarmType; });
+    if (el.startNoteInput) el.startNoteInput.disabled = busy;
   }
 
   /* ── Event bindings ── */
@@ -765,6 +830,66 @@
     });
   }
 
+  // Note opens the row under the card's lines. Main pins the card so it stays while the player types, and lends the
+  // keyboard; the row itself opens from the state main pushes.
+  if (el.note) {
+    el.note.addEventListener('click', function () {
+      if (typeof root.electronAPI === 'undefined' || typeof root.electronAPI.engageMapResultOverlayNote !== 'function') return;
+      root.electronAPI.engageMapResultOverlayNote().then(function (engaged) {
+        if (engaged && el.resultNoteInput && !el.resultNoteInput.disabled) el.resultNoteInput.focus();
+      });
+    });
+  }
+
+  if (el.resultNoteForm) {
+    el.resultNoteForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (typeof root.electronAPI === 'undefined' || typeof root.electronAPI.saveMapResultOverlayNote !== 'function') return;
+      var input = el.resultNoteInput;
+      var setBusy = function (busy) {
+        if (input) input.disabled = busy;
+        if (el.resultNoteSave) el.resultNoteSave.disabled = busy;
+      };
+      setBusy(true);
+      // The box stays open, still holding what was typed.
+      var fail = function () {
+        setBusy(false);
+        resultNoteError = true;
+        if (lastState) renderState(lastState);
+        if (input) input.focus();
+      };
+      root.electronAPI.saveMapResultOverlayNote({ note: input ? String(input.value || '') : '' }).then(function (result) {
+        if (!result || result.ok !== true) {
+          fail();
+          return;
+        }
+        setBusy(false);
+        resultNoteError = false;
+        // Main closes the row and pushes the new note; this shows it without waiting for that push.
+        if (lastState && lastState.mapResult) {
+          renderState(Object.assign({}, lastState, { mapResult: Object.assign({}, lastState.mapResult, { notes: result.notes || null, noteOpen: false }) }));
+        }
+      }, fail);
+    });
+  }
+
+  // Esc closes the row without saving and gives the keyboard back to the game.
+  if (el.resultNoteInput) {
+    el.resultNoteInput.addEventListener('input', function () {
+      if (!resultNoteError) return;
+      resultNoteError = false;
+      if (lastState) renderState(lastState);
+    });
+    el.resultNoteInput.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      el.resultNoteInput.blur();
+      if (typeof root.electronAPI !== 'undefined' && typeof root.electronAPI.releaseMapResultOverlayNote === 'function') {
+        root.electronAPI.releaseMapResultOverlayNote();
+      }
+    });
+  }
+
   if (el.startFarmTypes) {
     el.startFarmTypes.addEventListener('click', function (event) {
       var button = event.target && event.target.closest ? event.target.closest('[data-farm-type-id]') : null;
@@ -775,7 +900,7 @@
   }
 
   if (el.startCostInput) {
-    el.startCostInput.addEventListener('mousedown', focusStartCost);
+    el.startCostInput.addEventListener('mousedown', function () { focusStartInput(el.startCostInput); });
     el.startCostInput.addEventListener('focus', function () {
       startCostTyping = true;
       renderStartCostNote();
@@ -813,7 +938,22 @@
       startCostUnit = button.getAttribute('data-cost-unit') === 'divine' ? 'divine' : 'chaos';
       renderStartCostUnits();
       // The box already holds the card while the player types in it, and asking main would end the typing.
-      if (!startCostTyping) engageStartMapPrompt(false);
+      if (!startCostTyping && !startNoteTyping) engageStartMapPrompt(false);
+    });
+  }
+
+  // Enter in the note box submits the form, as in the cost box; Esc gives the keyboard back to the game.
+  if (el.startNoteInput) {
+    el.startNoteInput.addEventListener('mousedown', function () { focusStartInput(el.startNoteInput); });
+    el.startNoteInput.addEventListener('focus', function () { startNoteTyping = true; });
+    el.startNoteInput.addEventListener('blur', function () { startNoteTyping = false; });
+    el.startNoteInput.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      el.startNoteInput.blur();
+      if (typeof root.electronAPI !== 'undefined' && typeof root.electronAPI.releaseStartMapPromptKeyboard === 'function') {
+        root.electronAPI.releaseStartMapPromptKeyboard();
+      }
     });
   }
 
