@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const localJournal = require('../src/modules/localJournalModel');
+const mapResultOverlayModel = require('../src/modules/mapResultOverlayModel');
 
 const mainJsPath = path.join(__dirname, '..', 'main.js');
 
@@ -332,6 +333,7 @@ test('main start-map overlay confirmation forwards the selected map details to t
   const context = loadFunctions([
     'normalizeStartMapPromptText',
     'normalizeStartMapPromptFarmTypeOptions',
+    'normalizeOverlayNote',
     'normalizeStartMapPromptResult',
     'emitStartMapPromptOverlayResult',
     'releaseStartMapPromptKeyboard',
@@ -395,8 +397,10 @@ function loadStartCardMain({ saveResult = { ok: true }, gameInFront = true, focu
   const context = loadFunctions([
     'normalizeStartMapPromptText',
     'normalizeStartMapPromptFarmTypeOptions',
+    'normalizeOverlayNote',
     'normalizeStartMapPromptResult',
     'emitStartMapPromptOverlayResult',
+    'lendOverlayKeyboard',
     'engageStartMapPromptOverlay',
     'releaseStartMapPromptKeyboard',
     'confirmStartMapPromptOverlay',
@@ -2615,3 +2619,255 @@ test('custom farm types reach the renderer through checked IPC and the overlay t
 function plainJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
+
+test('a start card note reaches the main window trimmed, on one line and at most 200 characters; empty or cancelled ones carry none', () => {
+  const { context, calls } = loadStartCardMain();
+  const noteOf = (note) => plainJson(context.normalizeStartMapPromptResult({ farmTypeId: 'ritual', note }, context.overlayStartMapPromptState, 'confirm')).notes;
+
+  assert.equal(noteOf('  Tablets, 3 scarabs  '), 'Tablets, 3 scarabs');
+  // Line breaks, tabs and other control characters become one space each run, so the note stays one line.
+  assert.equal(noteOf('one\r\ntwo\tthree\u0007four five'), 'one two three four five');
+  assert.equal(noteOf('x'.repeat(250)), 'x'.repeat(200));
+  assert.equal(noteOf(`${'x'.repeat(199)} tail`), 'x'.repeat(199), 'no trailing space left by the cut');
+  for (const empty of ['', '   ', '\r\n\t', null, undefined, 42, {}]) {
+    assert.equal(noteOf(empty), undefined, JSON.stringify(empty));
+  }
+  assert.equal(Object.hasOwn(plainJson(context.normalizeStartMapPromptResult({ note: '' }, context.overlayStartMapPromptState, 'confirm')), 'notes'), false);
+
+  // A cancelled card carries none, even if one was typed.
+  assert.equal(context.normalizeStartMapPromptResult({ note: 'typed' }, context.overlayStartMapPromptState, 'cancel').notes, undefined);
+
+  // The confirm that main sends to the window has it next to the farm type.
+  const result = context.confirmStartMapPromptOverlay({ farmTypeId: 'ritual', note: ' Wisps\n' });
+  assert.deepEqual(plainJson(result), { action: 'confirm', mapName: 'Channel', farmTypeId: 'ritual', source: 'map-detected', notes: 'Wisps' });
+  assert.deepEqual(calls.at(-1), ['send', 'start-map-prompt-overlay-result', plainJson(result)]);
+
+  const cancelled = loadStartCardMain().context.cancelStartMapPromptOverlay();
+  assert.equal(cancelled.notes, undefined);
+});
+
+test('the start card grows by the note field and the result card by the note row, in main\'s window sizes', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'overlay.html'), 'utf8');
+  // The 407 is the 350 of the farm types and cost box plus the field: a 15px label (11px at 1.35), a 6px gap, the 28px
+  // box and the form's 8px gap, read from the stylesheet so the two cannot drift apart.
+  assert.match(html, /\.jj-field \{\s*display: grid;\s*gap: 6px;[^}]*font-size: 11px;/);
+  assert.match(html, /\.jj-form \{\s*display: grid;\s*gap: 8px;/);
+  assert.match(html, /\.jj-cost-input,\s*\.jj-note-input \{\s*width: 96px;\s*min-height: 28px;/);
+  assert.match(html, /\.jj-btn,\s*\.jj-form-btn,\s*\.jj-chip \{[^}]*min-height: 28px;/);
+  assert.equal(Math.ceil(11 * 1.35) + 6 + 28 + 8, 57);
+  assert.match(source, /overlayState\.mode === 'start-map-prompt'\s*\? 407\b/);
+});
+
+// The result card's main side over the real journal model: a card that names its run, the note box, and the keyboard.
+function loadResultCardMain({ notes = null, resultSessionId = 'run-1' } = {}) {
+  const backend = createJournalBackend();
+  backend.start({ notes }, 'run-1');
+  const calls = [];
+  const overlayWindow = {
+    isDestroyed: () => false,
+    isVisible: () => true,
+    hide: () => calls.push(['hide']),
+    setIgnoreMouseEvents: () => {},
+    getBounds: () => ({ x: 0, y: 0, width: 360, height: 112 }),
+    setBounds: () => {},
+    showInactive: () => {},
+    setFocusable: (value) => calls.push(['setFocusable', value]),
+    focus: () => calls.push(['focus'])
+  };
+  const context = loadFunctions([
+    'normalizeOverlayNote', 'getMapResultNoteFields', 'showMapResultOverlay', 'scheduleOverlayMapResultDismiss',
+    'clearOverlayMapResultDismissTimer', 'toggleMapResultOverlayPin', 'dismissMapResultOverlay', 'engageMapResultOverlayNote',
+    'releaseMapResultOverlayNote', 'saveMapResultOverlayNote', 'lendOverlayKeyboard', 'releaseStartMapPromptKeyboard',
+    'applyOverlayWindowVisibility'
+  ], {
+    ...backend.context,
+    overlayWindow,
+    overlayKeyboardLent: false,
+    overlayKeyboardReturnsToGame: false,
+    overlayWindowIgnoresMouse: false,
+    overlayMapResultState: null,
+    overlayMapResultDismissTimer: null,
+    MAP_RESULT_OVERLAY_DURATION_MS: 10_000,
+    OVERLAY_CLICKABLE_MODES: new Set(['start-map-prompt', 'map-result', 'character-prompt']),
+    deriveMapResultOverlayState: mapResultOverlayModel.deriveMapResultOverlayState,
+    isOverlayEnabled: () => true,
+    getOverlayWindowBounds: () => ({ x: 0, y: 0, width: 360, height: 112 }),
+    isGameWindowInFront: () => true,
+    getGameProcessIds: () => [4242],
+    win32Probe: { focusProcessWindow: (pids) => calls.push(['focusGame', pids]) },
+    setTimeout: (callback, delay) => ({ callback, delay, cleared: false }),
+    clearTimeout: (timer) => { timer.cleared = true; },
+    mainWindow: { isDestroyed: () => false, webContents: { send: (channel, payload) => calls.push(['send', channel, payload && plainJson(payload)]) } },
+    // The overlay window as main redraws it: the same card state decides the keyboard.
+    updateOverlayWindow() {
+      calls.push(['update']);
+      const card = context.overlayMapResultState;
+      context.applyOverlayWindowVisibility(card ? { visibility: 'visible', mode: 'map-result', mapResult: card } : { visibility: 'hidden', mode: 'runtime' });
+    }
+  });
+  context.showMapResultOverlay({ sessionId: resultSessionId, mapName: 'Dunes Map', netProfit: 5 }, { now: 1000 });
+  calls.length = 0;
+  return { context, calls, backend, noteInJournal: () => backend.journal.sessions[0]?.notes };
+}
+
+test('the result card carries the run it shows with that run\'s note', () => {
+  const noted = loadResultCardMain({ notes: 'Wisps' });
+  assert.deepEqual(
+    plainJson({ sessionId: noted.context.overlayMapResultState.sessionId, notes: noted.context.overlayMapResultState.notes, noteOpen: noted.context.overlayMapResultState.noteOpen }),
+    { sessionId: 'run-1', notes: 'Wisps', noteOpen: false }
+  );
+  assert.equal(noted.context.overlayMapResultState.result.mapName, 'Dunes Map', 'the result itself is as it was');
+
+  assert.equal(loadResultCardMain().context.overlayMapResultState.notes, null);
+  // A result that names no run, or one the journal does not have, has no run on the card.
+  assert.equal(loadResultCardMain({ resultSessionId: null }).context.overlayMapResultState.sessionId, null);
+  assert.equal(loadResultCardMain({ resultSessionId: 'gone' }).context.overlayMapResultState.sessionId, null);
+
+  // An unreadable journal leaves the card without a run instead of failing the card.
+  const unreadable = loadResultCardMain({ notes: 'Wisps' });
+  unreadable.context.readJournal = () => { throw new Error('JOURNAL_UNREADABLE'); };
+  unreadable.context.showMapResultOverlay({ sessionId: 'run-1' }, { now: 2000 });
+  assert.equal(unreadable.context.overlayMapResultState.sessionId, null);
+  assert.equal(unreadable.context.overlayMapResultState.visible, true);
+});
+
+test('Note pins the card, keeps the dismiss timer off and lends the keyboard; the window grows with the open row', () => {
+  const { context, calls } = loadResultCardMain({ notes: 'Wisps' });
+  assert.equal(context.overlayMapResultState.pinned, false);
+  assert.notEqual(context.overlayMapResultDismissTimer, null, 'an unpinned card is on a timer');
+
+  assert.equal(context.engageMapResultOverlayNote(), true);
+  assert.equal(context.overlayMapResultState.pinned, true);
+  assert.equal(context.overlayMapResultState.noteOpen, true);
+  assert.equal(context.overlayKeyboardLent, true);
+  assert.deepEqual(calls.filter(([name]) => name !== 'update'), [['setFocusable', true], ['focus']]);
+  assert.equal(context.overlayMapResultDismissTimer, null, 'a pinned card has no dismiss timer');
+
+  // Another state push while the box is open does not take the keyboard back.
+  calls.length = 0;
+  context.updateOverlayWindow();
+  assert.deepEqual(calls, [['update']]);
+  assert.equal(context.overlayKeyboardLent, true);
+
+  // Pressing Pin cannot unpin a card whose box is open.
+  context.toggleMapResultOverlayPin();
+  assert.equal(context.overlayMapResultState.pinned, true);
+
+  // A card that names no run has no box to open.
+  const none = loadResultCardMain({ resultSessionId: null });
+  assert.equal(none.context.engageMapResultOverlayNote(), false);
+  assert.equal(none.context.overlayKeyboardLent, false);
+  const closed = loadResultCardMain();
+  closed.context.overlayMapResultState = null;
+  assert.equal(closed.context.engageMapResultOverlayNote(), false);
+});
+
+test('saving a note writes it to the run, closes the box, keeps the card pinned, gives the keyboard back and tells the main window', () => {
+  const { context, calls, noteInJournal } = loadResultCardMain({ notes: 'old' });
+  context.engageMapResultOverlayNote();
+  calls.length = 0;
+
+  const saved = plainJson(context.saveMapResultOverlayNote({ note: '  New\r\nnote  ', ignored: true }));
+
+  assert.deepEqual(saved, { ok: true, notes: 'New note' });
+  assert.equal(noteInJournal(), 'New note');
+  assert.equal(context.overlayMapResultState.notes, 'New note');
+  assert.equal(context.overlayMapResultState.noteOpen, false);
+  assert.equal(context.overlayMapResultState.pinned, true, 'pinned after saving, too');
+  assert.equal(context.overlayKeyboardLent, false);
+  assert.deepEqual(calls.slice(0, 2), [['setFocusable', false], ['focusGame', [4242]]]);
+  const sent = calls.find(([name]) => name === 'send');
+  assert.equal(sent[1], 'session-cost-updated', 'the channel the window already handles for a changed run');
+  assert.equal(sent[2].id, 'run-1');
+  assert.equal(sent[2].notes, 'New note');
+
+  // Clearing the box takes the note off the run.
+  context.engageMapResultOverlayNote();
+  assert.deepEqual(plainJson(context.saveMapResultOverlayNote({ note: '   ' })), { ok: true, notes: null });
+  assert.equal(noteInJournal(), null);
+  assert.equal(context.overlayMapResultState.notes, null);
+
+  // A note past 200 characters is cut to 200.
+  context.saveMapResultOverlayNote({ note: 'y'.repeat(300) });
+  assert.equal(noteInJournal().length, 200);
+});
+
+test('a note for a run the journal lost, or a card already gone, saves nothing and keeps the box open', () => {
+  const { context, calls, backend } = loadResultCardMain({ notes: 'old' });
+  context.engageMapResultOverlayNote();
+  calls.length = 0;
+  backend.journal = { sessions: [] };
+
+  assert.deepEqual(plainJson(context.saveMapResultOverlayNote({ note: 'lost' })), { ok: false, error: 'SESSION_NOT_FOUND' });
+  assert.equal(context.overlayMapResultState.noteOpen, true);
+  assert.equal(context.overlayKeyboardLent, true);
+  assert.deepEqual(calls, []);
+
+  // A write that fails is an error too, not a thrown IPC.
+  const broken = loadResultCardMain({ notes: 'old' });
+  broken.context.engageMapResultOverlayNote();
+  broken.context.writeJournal = () => { throw new Error('disk full'); };
+  assert.deepEqual(plainJson(broken.context.saveMapResultOverlayNote({ note: 'x' })), { ok: false, error: 'SAVE_FAILED' });
+  assert.equal(broken.context.overlayMapResultState.noteOpen, true);
+
+  const gone = loadResultCardMain();
+  gone.context.dismissMapResultOverlay();
+  assert.deepEqual(plainJson(gone.context.saveMapResultOverlayNote({ note: 'late' })), { ok: false, error: 'CARD_CLOSED' });
+  assert.equal(gone.noteInJournal(), null);
+});
+
+test('Esc on the note row saves nothing and gives the keyboard back; dismissing the card does too', () => {
+  const escaped = loadResultCardMain({ notes: 'old' });
+  escaped.context.engageMapResultOverlayNote();
+  escaped.calls.length = 0;
+
+  assert.equal(escaped.context.releaseMapResultOverlayNote(), true);
+  assert.equal(escaped.noteInJournal(), 'old');
+  assert.equal(escaped.context.overlayMapResultState.noteOpen, false);
+  assert.equal(escaped.context.overlayMapResultState.pinned, true);
+  assert.equal(escaped.context.overlayKeyboardLent, false);
+  assert.deepEqual(escaped.calls.slice(0, 2), [['setFocusable', false], ['focusGame', [4242]]]);
+  assert.equal(escaped.calls.some(([name]) => name === 'send'), false);
+
+  const dismissed = loadResultCardMain({ notes: 'old' });
+  dismissed.context.engageMapResultOverlayNote();
+  dismissed.calls.length = 0;
+  dismissed.context.dismissMapResultOverlay();
+  assert.equal(dismissed.context.overlayKeyboardLent, false);
+  assert.deepEqual(dismissed.calls.filter(([name]) => name === 'setFocusable' || name === 'focusGame'), [['setFocusable', false], ['focusGame', [4242]]]);
+  assert.equal(dismissed.noteInJournal(), 'old');
+});
+
+test('the overlay gives the keyboard back when the result card hides or another mode replaces it, but not while its note box is open', () => {
+  const states = [
+    [{ visibility: 'hidden', mode: 'map-result', mapResult: { noteOpen: true } }, true],
+    [{ visibility: 'visible', mode: 'runtime' }, true],
+    [{ visibility: 'visible', mode: 'map-result', mapResult: { noteOpen: false } }, true],
+    [{ visibility: 'visible', mode: 'map-result', mapResult: { noteOpen: true } }, false],
+    [{ visibility: 'visible', mode: 'start-map-prompt' }, false]
+  ];
+  for (const [state, released] of states) {
+    const { context, calls } = loadResultCardMain();
+    context.overlayKeyboardLent = true;
+    context.overlayKeyboardReturnsToGame = true;
+    context.applyOverlayWindowVisibility(state);
+    assert.equal(context.overlayKeyboardLent, !released, JSON.stringify(state));
+    assert.equal(calls.some(([name]) => name === 'setFocusable'), released, JSON.stringify(state));
+  }
+});
+
+test('the three note channels are for the overlay window only and are exposed by its preload', () => {
+  const source = fs.readFileSync(mainJsPath, 'utf8');
+  const scopes = source.slice(source.indexOf('const IPC_RENDERER_SCOPES'), source.indexOf('let validatedIpcHandleInstalled'));
+  const preload = fs.readFileSync(path.join(__dirname, '..', 'overlay-preload.js'), 'utf8');
+  for (const [channel, method] of [
+    ['engage-map-result-overlay-note', 'engageMapResultOverlayNote'],
+    ['release-map-result-overlay-note', 'releaseMapResultOverlayNote'],
+    ['save-map-result-overlay-note', 'saveMapResultOverlayNote']
+  ]) {
+    assert.match(scopes, new RegExp(`'${channel}': \\['overlay'\\]`));
+    assert.match(source, new RegExp(`ipcMain\\.handle\\('${channel}'`));
+    assert.match(preload, new RegExp(`${method}: \\([^)]*\\) => ipcRenderer\\.invoke\\('${channel}'`));
+  }
+});

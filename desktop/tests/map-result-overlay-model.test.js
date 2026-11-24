@@ -189,10 +189,15 @@ test('main sizes the overlay window to the map result card and keeps the other m
   assert.deepEqual(bounds({ mode: 'map-result', mapResult: { result: { topOutputs: [drop('a'), drop('b'), drop('c')] } } }), { width: 360, height: 188, x: 2176, y: 24 });
   assert.equal(bounds({ mode: 'map-result', mapResult: { result: { topOutputs: [] } } }).height, 112);
   assert.equal(bounds({ mode: 'map-result' }).height, 112);
+  // The result card's note row, while its box is open, adds a 4px gap and a 28px row, with or without drops.
+  assert.equal(bounds({ mode: 'map-result', mapResult: { noteOpen: true, result: { topOutputs: [] } } }).height, 144);
+  assert.equal(bounds({ mode: 'map-result', mapResult: { noteOpen: true, result: { topOutputs: [drop('a'), drop('b'), drop('c')] } } }).height, 220);
+  assert.equal(bounds({ mode: 'map-result', mapResult: { noteOpen: false, result: { topOutputs: [] } } }).height, 112);
   assert.equal(bounds({ mode: 'runtime' }).height, 112);
   assert.equal(bounds({ mode: 'inventory-status' }).height, 112);
-  // The start prompt has room for the entry cost box under its farm types.
-  assert.deepEqual(bounds({ mode: 'start-map-prompt' }), { width: 440, height: 350, x: 2096, y: 24 });
+  // The start prompt has room for the entry cost box and the note box under its farm types: the 350 of the cost box, and
+  // the note field's 15px label, 6px gap, 28px box and the form's 8px gap on top.
+  assert.deepEqual(bounds({ mode: 'start-map-prompt' }), { width: 440, height: 350 + 15 + 6 + 28 + 8, x: 2096, y: 24 });
   assert.deepEqual(bounds({ mode: 'character-prompt' }), { width: 440, height: 286, x: 2096, y: 24 });
 });
 
@@ -205,4 +210,14 @@ test('map result overlay card height is 112 plus the measured height of the list
   assert.equal(getMapResultCardHeight(createCompletedResult({ topOutputs: [drop('a'), drop('b')] })), 163);
   assert.equal(getMapResultCardHeight(createCompletedResult({ topOutputs: [drop('a'), drop('b'), drop('c'), drop('d')] })), 188);
   assert.equal(getMapResultCardHeight(undefined), 112);
+});
+
+test('map result overlay card grows by the 32px note row only while the note box is open', () => {
+  const getMapResultCardHeight = getMapResultOverlayModelExport('getMapResultCardHeight');
+  const drop = (label) => ({ label, valueDelta: 10 });
+
+  assert.equal(getMapResultCardHeight(createCompletedResult({ topOutputs: [] }), { noteOpen: true }), 112 + 32);
+  assert.equal(getMapResultCardHeight(createCompletedResult({ topOutputs: [drop('a'), drop('b')] }), { noteOpen: true }), 163 + 32);
+  assert.equal(getMapResultCardHeight(createCompletedResult({ topOutputs: [drop('a')] }), { noteOpen: false }), 138);
+  assert.equal(getMapResultCardHeight(createCompletedResult({ topOutputs: [drop('a')] }), {}), 138);
 });

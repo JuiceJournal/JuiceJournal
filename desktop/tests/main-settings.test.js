@@ -590,12 +590,15 @@ test('overlay has no mouse forwarding hook, no focus toggle outside the cost box
   };
 
   assert.doesNotMatch(source, /forward:\s*true/);
-  // The overlay takes the keyboard only when the player clicks the start card's cost box: one place lends it, only
-  // when asked for the keyboard. No other setFocusable call passes anything but false, and the overlay is focused once.
+  // The overlay takes the keyboard only when the player clicks a box on a card (the start card's cost or note box, the
+  // result card's note row): one place lends it, only when asked for the keyboard. No other setFocusable call passes
+  // anything but false, and the overlay is focused once.
   assert.equal((source.match(/setFocusable\((?!false\))/g) || []).length, 1);
   assert.equal((source.match(/overlayWindow\.focus\(/g) || []).length, 1);
-  assert.match(functionBody('engageStartMapPromptOverlay'), /if \(keyboard && overlayWindow[\s\S]*?overlayKeyboardLent = true;\n\s+overlayWindow\.setFocusable\(true\);\n\s+overlayWindow\.focus\(\);/);
-  for (const name of ['applyOverlayWindowVisibility', 'updateOverlayWindow', 'showStartMapPromptOverlay', 'createOverlayWindow']) {
+  assert.match(functionBody('lendOverlayKeyboard'), /overlayKeyboardLent = true;\n\s+overlayWindow\.setFocusable\(true\);\n\s+overlayWindow\.focus\(\);/);
+  assert.match(functionBody('engageStartMapPromptOverlay'), /if \(keyboard\) \{\n\s+lendOverlayKeyboard\(\);/);
+  assert.match(functionBody('engageMapResultOverlayNote'), /return lendOverlayKeyboard\(\);/);
+  for (const name of ['applyOverlayWindowVisibility', 'updateOverlayWindow', 'showStartMapPromptOverlay', 'createOverlayWindow', 'saveMapResultOverlayNote', 'releaseMapResultOverlayNote']) {
     assert.doesNotMatch(functionBody(name), /setFocusable\(true\)|\.focus\(\)/, name);
   }
   assert.match(functionBody('createOverlayWindow'), /focusable: false,/);

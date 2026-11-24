@@ -135,6 +135,9 @@ const TRUSTED_RENDERER_FILES = Object.freeze({
 const IPC_RENDERER_SCOPES = Object.freeze({
   'toggle-map-result-overlay-pin': ['main', 'overlay'],
   'dismiss-map-result-overlay': ['main', 'overlay'],
+  'engage-map-result-overlay-note': ['overlay'],
+  'release-map-result-overlay-note': ['overlay'],
+  'save-map-result-overlay-note': ['overlay'],
   'get-overlay-cursor-position': ['main', 'overlay'],
   'confirm-start-map-prompt-overlay': ['overlay'],
   'cancel-start-map-prompt-overlay': ['overlay'],
@@ -3751,13 +3754,15 @@ function getOverlayWindowBounds(overlayState = {}) {
   const workArea = display.workArea || display.bounds;
   const isInteractivePrompt = overlayState.mode === 'start-map-prompt' || overlayState.mode === 'character-prompt';
   const width = isInteractivePrompt ? 440 : 360;
-  // The start prompt has the entry cost box under its farm types.
+  // The start prompt has the entry cost box and the note box under its farm types: 350 held the farm types (up to three
+  // rows of chips before they scroll) and the cost box, and the note field adds a 15px label, a 6px gap, a 28px box and
+  // the form's 8px gap, which is 57.
   const height = overlayState.mode === 'start-map-prompt'
-    ? 350
+    ? 407
     : isInteractivePrompt
       ? 286
       : overlayState.mode === 'map-result'
-        ? getMapResultCardHeight(overlayState.mapResult?.result)
+        ? getMapResultCardHeight(overlayState.mapResult?.result, { noteOpen: overlayState.mapResult?.noteOpen === true })
         // A first-map step is a sentence or two, which wraps.
         : overlayState.mode === 'coach' ? 150 : 112;
 
@@ -3880,14 +3885,27 @@ function scheduleOverlayMapResultDismiss() {
   }, delay);
 }
 
+// The card's Note button edits the run it shows, so a shown card carries that run's id and its current note. A run the
+// journal cannot give (or an unreadable journal) leaves the card without a Note button.
+function getMapResultNoteFields(result) {
+  let session = null;
+  try {
+    session = result?.sessionId ? localJournal.getSession(readJournal(), result.sessionId) : null;
+  } catch {
+    session = null;
+  }
+  return { sessionId: session?.id || null, notes: session?.notes || null, noteOpen: false };
+}
+
 function showMapResultOverlay(result, options = {}) {
-  overlayMapResultState = deriveMapResultOverlayState({
+  const derived = deriveMapResultOverlayState({
     overlayEnabled: isOverlayEnabled(),
     completedResult: result,
     currentOverlayState: overlayMapResultState,
     now: options.now ?? Date.now(),
     durationMs: options.durationMs ?? MAP_RESULT_OVERLAY_DURATION_MS
   });
+  overlayMapResultState = derived.visible && derived.result ? { ...derived, ...getMapResultNoteFields(derived.result) } : derived;
 
   scheduleOverlayMapResultDismiss();
   return updateOverlayWindow();
@@ -3896,6 +3914,17 @@ function showMapResultOverlay(result, options = {}) {
 function normalizeStartMapPromptText(value, fallback = null) {
   const normalized = typeof value === 'string' ? value.trim() : '';
   return normalized || fallback;
+}
+
+// A note typed on an overlay card is one line of at most 200 characters: line breaks and other control characters
+// become spaces. Empty is none.
+function normalizeOverlayNote(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const note = value.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').trim().slice(0, 200).trimEnd();
+  return note || null;
 }
 
 function normalizeStartMapPromptFarmTypeOptions(value) {
@@ -3966,12 +3995,18 @@ function normalizeStartMapPromptResult(payload = {}, promptState = overlayStartM
     ? requestedFarmTypeId
     : null;
 
-  return {
+  const result = {
     action,
     mapName,
     farmTypeId,
     source: currentPrompt.source || 'overlay'
   };
+  // A note belongs to the map that starts; a cancelled card has none.
+  const notes = action === 'confirm' ? normalizeOverlayNote(payload.note) : null;
+  if (notes) {
+    result.notes = notes;
+  }
+  return result;
 }
 
 // A combo picked on the start card is named after its parts ("Abyss + Breach"), each part cut evenly to fit the name
@@ -4086,8 +4121,8 @@ function hideStartMapPromptOverlay() {
   return updateOverlayWindow();
 }
 
-// A player who works on the card (a farm type, the cost box) is answering it, so it stops counting down and the app
-// waits for Start or Cancel. Typing a cost needs the keyboard, which the overlay only takes for the cost box.
+// A player who works on the card (a farm type, the cost or note box) is answering it, so it stops counting down and the
+// app waits for Start or Cancel. Typing needs the keyboard, which the overlay only takes for those two boxes.
 function engageStartMapPromptOverlay({ keyboard = false } = {}) {
   if (!overlayStartMapPromptState) {
     return false;
@@ -4101,21 +4136,32 @@ function engageStartMapPromptOverlay({ keyboard = false } = {}) {
     updateOverlayWindow();
   }
 
-  if (keyboard && overlayWindow && !overlayWindow.isDestroyed()) {
-    if (!overlayKeyboardLent) {
-      overlayKeyboardReturnsToGame = isGameWindowInFront();
-    }
-    overlayKeyboardLent = true;
-    overlayWindow.setFocusable(true);
-    overlayWindow.focus();
-  } else if (!keyboard) {
+  if (keyboard) {
+    lendOverlayKeyboard();
+  } else {
     // A click elsewhere on the card (a farm type) ends the typing.
     releaseStartMapPromptKeyboard();
   }
   return true;
 }
 
-// The game had the keyboard before the cost box took it, so it gets it back.
+// The overlay window is not focusable. A box the player clicked (the start card's cost or note box, the result card's
+// note row) borrows the keyboard from the game; releaseStartMapPromptKeyboard gives it back.
+function lendOverlayKeyboard() {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return false;
+  }
+
+  if (!overlayKeyboardLent) {
+    overlayKeyboardReturnsToGame = isGameWindowInFront();
+  }
+  overlayKeyboardLent = true;
+  overlayWindow.setFocusable(true);
+  overlayWindow.focus();
+  return true;
+}
+
+// The game had the keyboard before a box on a card took it, so it gets it back.
 function releaseStartMapPromptKeyboard() {
   if (!overlayKeyboardLent) {
     return false;
@@ -4231,7 +4277,8 @@ function toggleMapResultOverlayPin() {
   overlayMapResultState = {
     ...overlayMapResultState,
     visible: true,
-    pinned: !overlayMapResultState.pinned
+    // A card whose note box is open stays pinned: unpinning would take it down under the player's typing.
+    pinned: overlayMapResultState.noteOpen ? true : !overlayMapResultState.pinned
   };
 
   if (!overlayMapResultState.pinned && overlayMapResultState.dismissAt && overlayMapResultState.dismissAt <= Date.now()) {
@@ -4246,6 +4293,54 @@ function dismissMapResultOverlay() {
   overlayMapResultState = null;
   clearOverlayMapResultDismissTimer();
   return updateOverlayWindow();
+}
+
+// Note on the result card opens a one-line box under its lines. The card is pinned, and stays pinned, so it is not taken
+// down while the player types, and the box borrows the keyboard like the start card's boxes do.
+function engageMapResultOverlayNote() {
+  if (!overlayMapResultState?.result || !overlayMapResultState.sessionId) {
+    return false;
+  }
+
+  overlayMapResultState = { ...overlayMapResultState, visible: true, pinned: true, noteOpen: true };
+  scheduleOverlayMapResultDismiss();
+  updateOverlayWindow();
+  return lendOverlayKeyboard();
+}
+
+// Esc closes the box without saving.
+function releaseMapResultOverlayNote() {
+  if (overlayMapResultState?.noteOpen) {
+    overlayMapResultState = { ...overlayMapResultState, noteOpen: false };
+  }
+  releaseStartMapPromptKeyboard();
+  updateOverlayWindow();
+  return true;
+}
+
+// An empty note takes the note off the run. The main window is told, so a Sessions view that is open shows the new note;
+// the run goes out on the channel a changed running map uses, which that window already handles for any run.
+function saveMapResultOverlayNote(payload = {}) {
+  const sessionId = overlayMapResultState?.result ? overlayMapResultState.sessionId : null;
+  if (!sessionId) {
+    return { ok: false, error: 'CARD_CLOSED' };
+  }
+
+  let saved = null;
+  try {
+    saved = localJournal.updateSession(readJournal(), sessionId, { notes: normalizeOverlayNote(payload.note) }, { now: new Date() });
+    writeJournal(saved.journal);
+  } catch (error) {
+    return { ok: false, error: error?.code === 'SESSION_NOT_FOUND' ? 'SESSION_NOT_FOUND' : 'SAVE_FAILED' };
+  }
+
+  overlayMapResultState = { ...overlayMapResultState, notes: saved.session.notes || null, noteOpen: false };
+  releaseStartMapPromptKeyboard();
+  updateOverlayWindow();
+  if (mainWindow && (typeof mainWindow.isDestroyed !== 'function' || !mainWindow.isDestroyed())) {
+    mainWindow.webContents.send('session-cost-updated', saved.session);
+  }
+  return { ok: true, notes: saved.session.notes || null };
 }
 
 function getActiveSessionOverlayState(session = currentSession) {
@@ -4321,8 +4416,11 @@ function applyOverlayWindowVisibility(overlayState) {
     return;
   }
 
-  // The cost box lends the keyboard only while the start card shows; any other card gives it back to the game.
-  if (overlayKeyboardLent && (overlayState.visibility === 'hidden' || overlayState.mode !== 'start-map-prompt')) {
+  // The boxes lend the keyboard only while their card shows: the start card, or the result card with its note row open.
+  // Any other card gives it back to the game.
+  const keyboardWanted = overlayState.visibility !== 'hidden'
+    && (overlayState.mode === 'start-map-prompt' || (overlayState.mode === 'map-result' && overlayState.mapResult?.noteOpen === true));
+  if (overlayKeyboardLent && !keyboardWanted) {
     releaseStartMapPromptKeyboard();
   }
 
@@ -6933,6 +7031,18 @@ function setupIPC() {
   ipcMain.handle('dismiss-map-result-overlay', async () => {
     assertDesktopUserAuthenticated();
     return dismissMapResultOverlay();
+  });
+
+  ipcMain.handle('engage-map-result-overlay-note', async () => {
+    assertDesktopUserAuthenticated();
+    return engageMapResultOverlayNote();
+  });
+
+  ipcMain.handle('release-map-result-overlay-note', async () => releaseMapResultOverlayNote());
+
+  ipcMain.handle('save-map-result-overlay-note', async (event, payload = {}) => {
+    assertDesktopUserAuthenticated();
+    return saveMapResultOverlayNote(payload || {});
   });
 
   ipcMain.handle('get-overlay-cursor-position', async () => {

@@ -227,7 +227,7 @@ const MAIN_FUNCTIONS = [
   'normalizeFarmTypeCostEntry', 'getStoredFarmTypeCosts', 'isKnownFarmTypeCostId', 'setStoredFarmTypeCost',
   'normalizeStoredFarmTypeId', 'resolveFarmTypeLabel', 'saveCustomFarmType', 'getStartMapPromptComboLabel',
   'resolveStartMapPromptCombo', 'normalizeStartMapPromptText', 'normalizeStartMapPromptFarmTypeOptions',
-  'normalizeStartMapPromptResult', 'emitStartMapPromptOverlayResult', 'releaseStartMapPromptKeyboard',
+  'normalizeOverlayNote', 'normalizeStartMapPromptResult', 'emitStartMapPromptOverlayResult', 'releaseStartMapPromptKeyboard',
   'confirmStartMapPromptOverlay'
 ];
 

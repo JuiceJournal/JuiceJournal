@@ -69,6 +69,9 @@
   const DROP_LIST_GAP = 4;
   const DROP_ROW_HEIGHT = 22;
   const DROP_ROW_GAP = 3;
+  // The note row under the card's lines, while its box is open: 4px of gap and a 28px row (input and Save button).
+  const NOTE_ROW_GAP = 4;
+  const NOTE_ROW_HEIGHT = 28;
 
   // The drops the card lists: the first few top outputs that have a name and are worth something.
   function getMapResultDrops(result) {
@@ -84,12 +87,13 @@
       }));
   }
 
-  // The overlay window grows by one row per listed drop.
-  function getMapResultCardHeight(result) {
+  // The overlay window grows by one row per listed drop, and by the note row while the note box is open.
+  function getMapResultCardHeight(result, { noteOpen = false } = {}) {
     const rows = getMapResultDrops(result).length;
-    return rows === 0
-      ? BASE_CARD_HEIGHT
-      : BASE_CARD_HEIGHT + DROP_LIST_GAP + DROP_ROW_HEIGHT * rows + DROP_ROW_GAP * (rows - 1);
+    const dropsHeight = rows === 0
+      ? 0
+      : DROP_LIST_GAP + DROP_ROW_HEIGHT * rows + DROP_ROW_GAP * (rows - 1);
+    return BASE_CARD_HEIGHT + dropsHeight + (noteOpen ? NOTE_ROW_GAP + NOTE_ROW_HEIGHT : 0);
   }
 
   return {
