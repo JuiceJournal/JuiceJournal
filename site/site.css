@@ -270,7 +270,9 @@ h3 {
 .overlay-section {
   position: relative;
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   place-items: center;
+  gap: 2rem;
   min-height: 17rem;
   padding: 2rem 1rem;
   clip-path: var(--cut);
@@ -286,7 +288,7 @@ h3 {
   background: repeating-linear-gradient(115deg, rgb(244 235 224 / 0.025) 0 2px, transparent 2px 26px);
 }
 .overlay { position: relative; margin: 0; }
-.overlay img { width: min(100%, 345px); margin-inline: auto; filter: drop-shadow(0 0.6rem 1.4rem rgb(0 0 0 / 0.6)); }
+.overlay img { width: auto; max-width: 100%; margin-inline: auto; filter: drop-shadow(0 0.6rem 1.4rem rgb(0 0 0 / 0.6)); }
 
 /* Farm types: the switches of Settings on the left, the overlay's start card on the right. The card follows the
    switches through :has(), with no script. The colours are the app's farm colours. */
